@@ -1,0 +1,18 @@
+extend = "../../pyproject.toml"
+indent-width = 2
+target-version = "py313"
+extend-exclude = ["*.ipynb"]
+
+[format]
+indent-style = "space"
+
+[lint]
+select = ["E", "F", "I", "UP", "ANN"]
+# Incompatible with indent-width = 2 and the formatter (see Ruff formatter docs).
+ignore = ["E111", "E114", "E117", "W191"]
+
+[lint.per-file-ignores]
+"pyfem/v3/__init__.py" = ["UP036"]
+"pyfem/v3/fem/quadrature.py" = ["ANN001", "ANN201", "ANN202"]
+"test/v3/*.py" = ["UP036"]
+"notebooks/v3/*.py" = ["F821", "UP036"]
