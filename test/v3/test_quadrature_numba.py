@@ -8,15 +8,16 @@ import sys
 
 import numpy as np
 import pytest
-from numba import njit
-from numba.core.errors import TypingError
-from numba.core.registry import CPUDispatcher
 from scipy.special import roots_legendre
 
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
 pytest.importorskip("numba")
+
+from numba import njit
+from numba.core.errors import TypingError
+from numba.core.registry import CPUDispatcher
 
 from pyfem.v3.fem.quadrature import (
   _meshgrid_2d,
