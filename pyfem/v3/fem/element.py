@@ -6,6 +6,7 @@ import numpy as np
 from numba import njit, prange
 
 from pyfem.v3.fem.kinematics import physical_gradients, strain_displacement
+from pyfem.v3.fem.parallel import PRANGE_MIN_ELEMS
 from pyfem.v3.fem.quadrature import gauss_tensor_product_2d
 from pyfem.v3.fem.shapes import serendipity_quad8
 from pyfem.v3.types import F64
@@ -23,10 +24,16 @@ def _stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
   n_dof = b.shape[-1]
   stiffness = np.zeros((n_elems, n_dof, n_dof))
 
-  for e in prange(n_elems):
-    for p in range(n_gp):
-      weight = parent_w[p] * abs(det_j[e, p])
-      stiffness[e] += weight * (b[e, p].T @ constitutive @ b[e, p])
+  if n_elems < PRANGE_MIN_ELEMS:
+    for e in range(n_elems):
+      for p in range(n_gp):
+        weight = parent_w[p] * abs(det_j[e, p])
+        stiffness[e] += weight * (b[e, p].T @ constitutive @ b[e, p])
+  else:
+    for e in prange(n_elems):
+      for p in range(n_gp):
+        weight = parent_w[p] * abs(det_j[e, p])
+        stiffness[e] += weight * (b[e, p].T @ constitutive @ b[e, p])
 
   return stiffness
 

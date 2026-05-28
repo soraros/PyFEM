@@ -38,7 +38,7 @@ Holds `problem: ProblemDefinition` plus metadata (`element_type`, `material_type
 2. **Shapes** — `@njit` Serendipity Q8 `N`, `∂N/∂ξ`.
 3. **Kinematics** — `@njit` `∂N/∂x` and `|J|` via 2×2 `@` / `linalg` on each Gauss point; `prange` over elements.
 4. **Element** — `@njit` staged `B` then semantic `(elem×gp)` quadrature of `w |J| Bᵀ C B`; `prange` over elements; Python wrapper adds a leading axis for one element.
-5. **Assembly** — batched element matrices → COO global stiffness.
+5. **Assembly** — `@njit` batched element stiffness → COO scatter (`prange` when `n_elems ≥ 32`).
 
 ## Solver
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 from numba import njit, prange
 
+from pyfem.v3.fem.parallel import PRANGE_MIN_ELEMS
 from pyfem.v3.types import F64
 
 
@@ -35,12 +36,20 @@ def physical_gradients(
   n_nodes = nodal_coords.shape[1]
   grad_n = np.empty((n_elems, n_pts, n_nodes, 2))
   det_j = np.empty((n_elems, n_pts))
-  for e in prange(n_elems):
-    xt = nodal_coords[e].T
-    for p in range(n_pts):
-      jac = xt @ parent_gradients[p]
-      det_j[e, p] = np.linalg.det(jac)
-      grad_n[e, p] = parent_gradients[p] @ np.linalg.inv(jac)
+  if n_elems < PRANGE_MIN_ELEMS:
+    for e in range(n_elems):
+      xt = nodal_coords[e].T
+      for p in range(n_pts):
+        jac = xt @ parent_gradients[p]
+        det_j[e, p] = np.linalg.det(jac)
+        grad_n[e, p] = parent_gradients[p] @ np.linalg.inv(jac)
+  else:
+    for e in prange(n_elems):
+      xt = nodal_coords[e].T
+      for p in range(n_pts):
+        jac = xt @ parent_gradients[p]
+        det_j[e, p] = np.linalg.det(jac)
+        grad_n[e, p] = parent_gradients[p] @ np.linalg.inv(jac)
   return grad_n, det_j
 
 

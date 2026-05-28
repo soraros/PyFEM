@@ -7,6 +7,8 @@
 - [x] SoA mesh + `.dat` reader + `problem.toml` loader
 - [x] Plane stress + Q8 small-strain element + linear solver
 - [x] Skim fixtures + parity test vs legacy
+- [x] `@njit` Q8 element path (`shapes`, `kinematics`, `element`) with `prange` over elements
+- [x] `@njit` COO stiffness scatter in `fem/assembly.py`
 
 ## Next
 
@@ -15,7 +17,7 @@
 3. **Constraints** — Native v3 `Constrainer` (prescribed + MPC) without legacy import.
 4. **I/O** — Safe `.pro` subset; optional meshio path for Gmsh.
 5. **CI** — `pytest test/v3` job on branch `v3` with `uv sync --group v3`.
-6. **Performance** — Widen Numba coverage; optional parallel element loop.
+6. **Performance** — Solver/constraint hot paths; optional CI perf smoke from `test/v3/_bench_*.py`.
 
 ## Explicitly deferred
 
