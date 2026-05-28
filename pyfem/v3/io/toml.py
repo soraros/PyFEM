@@ -18,7 +18,7 @@ def read_problem_toml(path: Path) -> LoadedProblem:
     data = tomllib.load(fh)
 
   mesh_path = (base / data["mesh"]).resolve()
-  mesh, constraints = read_dat_mesh(mesh_path)
+  mesh, constraints, loads = read_dat_mesh(mesh_path)
   dof_map = build_dof_map(mesh)
   material = data["material"]
 
@@ -29,6 +29,7 @@ def read_problem_toml(path: Path) -> LoadedProblem:
       float(material["E"]),
       float(material["nu"]),
       constraints,
+      loads,
     ),
     name=str(data.get("name", path.stem)),
     element_type=str(data["element_type"]),

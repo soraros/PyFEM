@@ -37,7 +37,7 @@ def assemble_linear_system(
     val,
   )
 
-  load = np.zeros(n_dofs, dtype=np.float64)
+  load = np.ascontiguousarray(problem.external_load, dtype=np.float64)
   stiffness = coo_array(
     (val, (row, col)),
     shape=(n_dofs, n_dofs),

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pyfem.v3.types import Mesh, PrescribedDof
+from pyfem.v3.types import Mesh, NodalLoad, PrescribedDof
 
 
 def _parse_float(text: str) -> float:
@@ -18,12 +18,26 @@ def _parse_int(text: str) -> int:
   return int(text.strip())
 
 
-def read_dat_mesh(path: Path) -> tuple[Mesh, tuple[PrescribedDof, ...]]:
-  """Read ``<Nodes>``, ``<Elements>``, and ``<NodeConstraints>`` sections."""
+def _parse_dof_assignment(line: str) -> tuple[str, int, float] | None:
+  chunk = line.strip()
+  if not chunk or "=" not in chunk:
+    return None
+  lhs, rhs = chunk.split("=", 1)
+  dof_type, node_part = lhs.split("[", 1)
+  node_id = _parse_int(node_part.split("]")[0])
+  value = _parse_float(rhs)
+  return dof_type.strip(), node_id, value
+
+
+def read_dat_mesh(
+  path: Path,
+) -> tuple[Mesh, tuple[PrescribedDof, ...], tuple[NodalLoad, ...]]:
+  """Read mesh, constraints, and external forces from a legacy ``.dat`` file."""
   node_ids: list[int] = []
   coords: list[list[float]] = []
   elements: list[tuple[int, str, list[int]]] = []
   constraints: list[PrescribedDof] = []
+  loads: list[NodalLoad] = []
 
   section: str | None = None
   text = path.read_text(encoding="utf-8")
@@ -45,6 +59,10 @@ def read_dat_mesh(path: Path) -> tuple[Mesh, tuple[PrescribedDof, ...]]:
       elif line.startswith("<NodeConstraints"):
         section = "constraints"
       elif line == "</NodeConstraints>":
+        section = None
+      elif line == "<ExternalForces>":
+        section = "forces"
+      elif line == "</ExternalForces>":
         section = None
       else:
         section = None
@@ -73,20 +91,21 @@ def read_dat_mesh(path: Path) -> tuple[Mesh, tuple[PrescribedDof, ...]]:
 
     elif section == "constraints":
       for chunk in line.rstrip(";").split(";"):
-        chunk = chunk.strip()
-        if not chunk or "=" not in chunk:
+        parsed = _parse_dof_assignment(chunk)
+        if parsed is None:
           continue
-        lhs, rhs = chunk.split("=", 1)
-        dof_type, node_part = lhs.split("[", 1)
-        node_id = _parse_int(node_part.split("]")[0])
-        value = _parse_float(rhs)
+        dof_type, node_id, value = parsed
         constraints.append(
-          PrescribedDof(
-            node_id=node_id,
-            dof_type=dof_type.strip(),
-            value=value,
-          ),
+          PrescribedDof(node_id=node_id, dof_type=dof_type, value=value),
         )
+
+    elif section == "forces":
+      for chunk in line.rstrip(";").split(";"):
+        parsed = _parse_dof_assignment(chunk)
+        if parsed is None:
+          continue
+        dof_type, node_id, value = parsed
+        loads.append(NodalLoad(node_id=node_id, dof_type=dof_type, value=value))
 
   if not node_ids:
     msg = f"No nodes found in {path}"
@@ -120,4 +139,4 @@ def read_dat_mesh(path: Path) -> tuple[Mesh, tuple[PrescribedDof, ...]]:
     msg = "Inconsistent mesh rank"
     raise ValueError(msg)
 
-  return mesh, tuple(constraints)
+  return mesh, tuple(constraints), tuple(loads)

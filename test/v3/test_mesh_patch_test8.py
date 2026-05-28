@@ -21,7 +21,7 @@ DAT = ROOT / "examples" / "ch02" / "PatchTest8.dat"
 
 
 def test_mesh_matches_legacy_node_coords() -> None:
-  mesh, _constraints = read_dat_mesh(DAT)
+  mesh, _constraints, _loads = read_dat_mesh(DAT)
 
   legacy = NodeSet()
   legacy.readFromFile(str(DAT))

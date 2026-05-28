@@ -1,0 +1,10 @@
+name = "patch_test8_loaded"
+mesh = "PatchTest8_loaded.dat"
+element_type = "SmallStrainContinuum"
+material_type = "PlaneStress"
+solver_type = "LinearSolver"
+element_group = "ContElem"
+
+[material]
+E = 1.0e6
+nu = 0.25

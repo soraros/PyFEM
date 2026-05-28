@@ -34,6 +34,15 @@ class PrescribedDof:
   value: float
 
 
+@dataclass(frozen=True)
+class NodalLoad:
+  """Nodal force on a node (I/O only)."""
+
+  node_id: int
+  dof_type: str
+  value: float
+
+
 @dataclass
 class Mesh:
   """Structure-of-arrays mesh (built at load time)."""
@@ -90,6 +99,7 @@ class ProblemDefinition(NamedTuple):
   constitutive: F64
   constraint_dof: I32
   constraint_val: F64
+  external_load: F64
 
   @property
   def n_nodes(self) -> int:
