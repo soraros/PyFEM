@@ -26,8 +26,7 @@ def _stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
   for e in prange(n_elems):
     for p in range(n_gp):
       jac = jacobian[e, p]
-      det_j = jac[0, 0] * jac[1, 1] - jac[0, 1] * jac[1, 0]
-      weight = parent_w[p] * abs(det_j)
+      weight = parent_w[p] * abs(np.linalg.det(jac))
       stiffness[e] += weight * (b[e, p].T @ constitutive @ b[e, p])
 
   return stiffness

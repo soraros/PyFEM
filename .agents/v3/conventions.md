@@ -44,11 +44,9 @@ Do not introduce Java-style names (`ContElem`) in public v3 APIs.
 ## Style
 
 - Plain-Python FEM kernels use vectorized NumPy (`einsum`, broadcasting).
-- ``@njit`` kernels use the nopython subset: 2D ``@``, slice assign inline (not ``einsum``);
-  parallelize independent element work with ``prange`` on the ``n_elems`` axis (one site
-  per pipeline—e.g. integration only, not nested with kinematics); prefer explicit 2×2
-  ``det``/``inv`` over ``linalg.det``/``inv`` in hot loops; prefer semantic ``(elem×gp)``
-  loops over ``None`` axis padding for quadrature; do not wrap a single ``@`` in a helper.
+- ``@njit`` kernels use the nopython subset: 2D ``@``, slice assign inline (not
+  ``einsum``); ``prange`` on the ``n_elems`` axis; semantic ``(elem×gp)`` loops for
+  quadrature; no ``None`` axis padding; do not wrap a single ``@`` in a helper.
 - One-off Numba benchmarks (not pytest): ``test/v3/_bench_numba_stiffness.py``,
   ``test/v3/_bench_prange_investigation.py``.
 - Name functions after the quantity they return (`strain_displacement`, `plane_stress_matrix`).

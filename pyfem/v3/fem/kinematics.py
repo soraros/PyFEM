@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import numpy as np
-from numba import njit
+from numba import njit, prange
 
 from pyfem.v3.types import F64
 
 
-@njit(cache=True)
+@njit(cache=True, parallel=True)
 def physical_gradients(
   nodal_coords: F64,
   parent_gradients: F64,
@@ -28,22 +28,16 @@ def physical_gradients(
   n_nodes = nodal_coords.shape[1]
   jacobian = np.empty((n_elems, n_pts, 2, 2))
   grad_n = np.empty((n_elems, n_pts, n_nodes, 2))
-  for e in range(n_elems):
+  for e in prange(n_elems):
     xt = nodal_coords[e].T
     for p in range(n_pts):
       jac = xt @ parent_gradients[p]
       jacobian[e, p] = jac
-      det = jac[0, 0] * jac[1, 1] - jac[0, 1] * jac[1, 0]
-      inv = np.empty((2, 2))
-      inv[0, 0] = jac[1, 1] / det
-      inv[0, 1] = -jac[0, 1] / det
-      inv[1, 0] = -jac[1, 0] / det
-      inv[1, 1] = jac[0, 0] / det
-      grad_n[e, p] = parent_gradients[p] @ inv
+      grad_n[e, p] = parent_gradients[p] @ np.linalg.inv(jac)
   return jacobian, grad_n
 
 
-@njit(cache=True)
+@njit(cache=True, parallel=True)
 def strain_displacement(grad_n: F64) -> F64:
   """
   Plane 2D strain–displacement operator B.
