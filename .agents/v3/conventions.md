@@ -45,8 +45,9 @@ Do not introduce Java-style names (`ContElem`) in public v3 APIs.
 
 - Plain-Python FEM kernels use vectorized NumPy (`einsum`, broadcasting).
 - ``@njit`` kernels use the nopython subset: 2D ``@``, slice assign inline (not
-  ``einsum``);   ``prange`` on the ``n_elems`` axis when ``n_elems ≥ 32`` (see ``fem/parallel.py``);
-  semantic ``(elem×gp)`` loops for quadrature; no ``None`` axis padding; do not
+  ``einsum``); one ``prange`` site per top-level stiffness call — the quadrature loop
+  in ``element.py``; kinematics and COO scatter stay serial ``@njit`` with ``range``.
+  Semantic ``(elem×gp)`` loops for quadrature; no ``None`` axis padding; do not
   wrap a single ``@`` in a helper. Vectorized slice kernels (e.g. ``strain_displacement``)
   stay serial ``@njit`` without ``prange``.
 - Dev Numba benchmarks (not pytest-collected): ``test/v3/_bench_numba_stiffness.py``,

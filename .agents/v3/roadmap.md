@@ -7,7 +7,7 @@
 - [x] SoA mesh + `.dat` reader + `problem.toml` loader
 - [x] Plane stress + Q8 small-strain element + linear solver
 - [x] Skim fixtures + parity test vs legacy
-- [x] `@njit` Q8 element path (`shapes`, `kinematics`, `element`) with `prange` over elements
+- [x] `@njit` Q8 element path (`shapes`, `kinematics`, `element`); `prange` only on quadrature in `element.py`
 - [x] `@njit` COO stiffness scatter in `fem/assembly.py`
 
 ## Next
