@@ -7,7 +7,10 @@ from scipy.sparse.linalg import spsolve
 
 from pyfem.v3.assembly import assemble_linear_system, assemble_loaded
 from pyfem.v3.registry import resolve_solver_type
-from pyfem.v3.solver.constraints import build_constrainer
+from pyfem.v3.solver.constraints import (
+  apply_prescribed_to_state,
+  build_prescribed_constraints,
+)
 from pyfem.v3.types import F64, LoadedProblem, ProblemDefinition
 
 
@@ -40,17 +43,17 @@ def solve_linear(
     )
     definition = problem
 
-  cons = build_constrainer(definition)
+  constraints = build_prescribed_constraints(definition)
   k = system.stiffness.tocsr()
   b = system.load
   n = system.n_dofs
 
   a = np.zeros(n, dtype=np.float64)
-  cons.addConstrainedValues(a)
+  apply_prescribed_to_state(a, constraints)
 
-  k_red = cons.C.T @ (k @ cons.C)
-  b_red = cons.C.T @ (b - k @ a)
+  k_red = constraints.C.T @ (k @ constraints.C)
+  b_red = constraints.C.T @ (b - k @ a)
   x_red = spsolve(k_red, b_red)
-  state = cons.C @ x_red
-  cons.addConstrainedValues(state)
+  state = constraints.C @ x_red
+  apply_prescribed_to_state(state, constraints)
   return np.asarray(state, dtype=np.float64)

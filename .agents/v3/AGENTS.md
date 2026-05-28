@@ -27,7 +27,7 @@ Importing `pyfem.v3` on Python &lt; 3.13 raises `ImportError`.
 | Registry | `registry.py` | Legacy `.pro` type strings → implementations |
 | FEM math | `fem/quadrature.py`, `fem/shapes.py`, `fem/kinematics.py`, `fem/element.py` | `@njit` Gauss rules, N, B, K_e = ∫ Bᵀ C B; `prange` only on quadrature in `element.py` |
 | Assembly | `fem/assembly.py` | Batched element stiffness + serial `@njit` COO scatter |
-| Solver | `solver/linear.py` | SciPy `spsolve` + `coo_array`; legacy `Constrainer` for BCs |
+| Solver | `solver/linear.py`, `solver/constraints.py` | SciPy `spsolve` + `coo_array`; native prescribed BCs (MPC deferred) |
 
 `ProblemDefinition` is a **`NamedTuple`** of `F64`/`I32` fields — pass it to `@njit` directly or unpack arrays. No jitclass wrapper.
 

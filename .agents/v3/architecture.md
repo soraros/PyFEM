@@ -43,7 +43,7 @@ Holds `problem: ProblemDefinition` plus metadata (`element_type`, `material_type
 ## Solver
 
 - Global system: SciPy `coo_array` + `spsolve`.
-- BCs: legacy `Constrainer` bridge (`solver/constraints.py`) until native v3 constraints land.
+- BCs: native prescribed displacements (`solver/constraints.py`); MPC/ties deferred.
 
 ## Skims
 

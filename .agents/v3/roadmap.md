@@ -9,15 +9,16 @@
 - [x] Skim fixtures + parity test vs legacy
 - [x] `@njit` Q8 element path (`shapes`, `kinematics`, `element`); `prange` only on quadrature in `element.py`
 - [x] `@njit` COO stiffness scatter in `fem/assembly.py`
+- [x] CI `test-v3` job (Python 3.13, `uv sync --group v3`, `pytest test/v3`)
+- [x] Native prescribed-displacement constraints (`solver/constraints.py`)
 
 ## Next
 
 1. **Nonlinear** — Newton loop with typed `SolverState`; no `eval` load functions.
 2. **More elements** — Quad4, Tria3 via registry; shared integration tables.
-3. **Constraints** — Native v3 `Constrainer` (prescribed + MPC) without legacy import.
+3. **MPC constraints** — Ties and multi-point constraints without legacy `Constrainer`.
 4. **I/O** — Safe `.pro` subset; optional meshio path for Gmsh.
-5. **CI** — `pytest test/v3` job on branch `v3` with `uv sync --group v3`.
-6. **Performance** — Solver/constraint hot paths; optional CI perf smoke from `test/v3/_bench_*.py`.
+5. **Performance** — Solver hot paths; optional CI perf smoke from `test/v3/_bench_*.py`.
 
 ## Explicitly deferred
 
