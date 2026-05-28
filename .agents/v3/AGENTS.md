@@ -45,7 +45,7 @@ Importing `pyfem.v3` on Python &lt; 3.13 raises `ImportError`.
 | B | `skims/<case>/problem.toml` → v3 canonical |
 | C | `ProblemDefinition` NamedTuple |
 
-First case: `skims/patch_test8/` vs `examples/ch02/PatchTest8.*`. See [parity.md](parity.md).
+Skims: `patch_test8`, `patch_test8_loaded`, `patch_test4`, `patch_test3`. Session kickoff: `Work on the next item per .agents/v3/roadmap.md` — see [WORKFLOW.md](WORKFLOW.md).
 
 ## Notebooks
 

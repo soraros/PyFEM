@@ -23,6 +23,7 @@ Array-only bundle for assembly and future `@njit` kernels:
 | `constitutive` | `F64` (3, 3) | Plane-stress D matrix |
 | `constraint_dof` | `I32` | Prescribed DOF indices |
 | `constraint_val` | `F64` | Prescribed values |
+| `external_load` | `F64` (n_dof,) | Nodal force vector (`fhat`) |
 
 Properties: `n_nodes`, `n_elems`, `n_dofs`.
 
