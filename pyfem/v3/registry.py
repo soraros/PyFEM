@@ -6,7 +6,7 @@ from typing import Final
 
 # Legacy input names (Java-style) -> v3 modules (snake_case packages).
 ELEMENT_TYPES: Final[dict[str, str]] = {
-  "SmallStrainContinuum": "small_strain_quad8",
+  "SmallStrainContinuum": "small_strain_continuum",
 }
 
 MATERIAL_TYPES: Final[dict[str, str]] = {

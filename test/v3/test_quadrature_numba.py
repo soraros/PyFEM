@@ -23,6 +23,7 @@ from pyfem.v3.fem.quadrature import (
   _meshgrid_2d,
   gauss_legendre_1d,
   gauss_tensor_product_2d,
+  gauss_tria3,
 )
 from pyfem.v3.types import F64
 
@@ -65,6 +66,36 @@ def test_gauss_tensor_product_2d_dispatcher_matches_scipy(order: int) -> None:
 def test_quadrature_exports_are_numba_dispatchers() -> None:
   assert isinstance(gauss_legendre_1d, CPUDispatcher)
   assert isinstance(gauss_tensor_product_2d, CPUDispatcher)
+  assert isinstance(gauss_tria3, CPUDispatcher)
+
+
+def test_gauss_tria3_order1_tabulated() -> None:
+  points, weights = gauss_tria3(1)
+  np.testing.assert_allclose(points, [[1.0 / 3.0, 1.0 / 3.0]], rtol=0, atol=0.0)
+  np.testing.assert_allclose(weights, [0.5], rtol=0, atol=0.0)
+
+
+@njit(cache=True)
+def _probe_gauss_tria3_order1() -> tuple[F64, F64]:
+  return gauss_tria3(1)
+
+
+def test_gauss_tria3_njit_literal_order_matches_tabulated() -> None:
+  points, weights = _probe_gauss_tria3_order1()
+  assert gauss_tria3.signatures
+  np.testing.assert_allclose(points, [[1.0 / 3.0, 1.0 / 3.0]], rtol=0, atol=0.0)
+  np.testing.assert_allclose(weights, [0.5], rtol=0, atol=0.0)
+
+
+@njit(cache=True)
+def _probe_gauss_tria3_variable_in_loop() -> None:
+  for order in range(1, 3):
+    gauss_tria3(order)
+
+
+def test_gauss_tria3_rejects_non_literal_order_in_njit_loop() -> None:
+  with pytest.raises(TypingError, match="literal"):
+    _probe_gauss_tria3_variable_in_loop()
 
 
 @njit(cache=True)

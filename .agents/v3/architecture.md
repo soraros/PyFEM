@@ -34,11 +34,19 @@ Holds `problem: ProblemDefinition` plus metadata (`element_type`, `material_type
 
 ## FEM stack
 
-1. **Quadrature** — `@njit` Gauss–Legendre (`@overload` + compile-time literal `order`); 2D rule composes 1D with `_meshgrid_2d` (loop tensor product, no `meshgrid`).
-2. **Shapes** — `@njit` Serendipity Q8 `N`, `∂N/∂ξ`.
-3. **Kinematics** — serial `@njit` `∂N/∂x` and `|J|` via 2×2 `@` / `linalg` on each Gauss point.
-4. **Element** — `@njit` staged `B` then semantic `(elem×gp)` quadrature of `w |J| Bᵀ C B`; **`prange` over elements** (sole parallel region); Python wrapper adds a leading axis for one element.
-5. **Assembly** — serial `@njit` COO scatter after batched element stiffness.
+Legacy `SmallStrainContinuum` maps to one v3 continuum kernel; **element family is inferred from `conn.shape[1]`** (3 / 4 / 8 nodes).
+
+| Family | Shapes | Quadrature (literal) | DOFs/elem |
+|--------|--------|----------------------|-----------|
+| Q8 | `serendipity_quad8` | `gauss_tensor_product_2d(3)` | 16 |
+| Quad4 | `bilinear_quad4` | `gauss_tensor_product_2d(2)` | 8 |
+| Tria3 | `linear_tria3` | `gauss_tria3(1)` | 6 |
+
+1. **Quadrature** — `@njit` Gauss–Legendre on `[-1,1]` (`@overload` + `literally(order)`); 2D quads via `_meshgrid_2d`; Tria3 via tabulated order-1 rule.
+2. **Shapes** — `@njit` reference-element `N`, `∂N/∂ξ` per family.
+3. **Kinematics** — serial `@njit` `∂N/∂x` and `|J|` via 2×2 `@` / `linalg` on each Gauss point (shared across families).
+4. **Element** — `@njit` staged `B` then `(elem×gp)` quadrature of `w |J| Bᵀ C B`; **`prange` over elements** only; Python wrapper adds a leading axis for one element.
+5. **Assembly** — dispatch stiffness by nodes/elem; generic `@njit` COO scatter (`n_dof` at runtime).
 
 ## Solver
 

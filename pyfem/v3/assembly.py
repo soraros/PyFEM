@@ -5,11 +5,9 @@ from __future__ import annotations
 import numpy as np
 from scipy.sparse import coo_array
 
-from pyfem.v3.fem.assembly import assemble_stiffness_coo
+from pyfem.v3.fem.assembly import assemble_stiffness_coo, entries_per_elem
 from pyfem.v3.registry import resolve_element_type, resolve_material_type
 from pyfem.v3.types import LinearSystem, LoadedProblem, ProblemDefinition
-
-_ENTRIES_PER_ELEM = 16 * 16
 
 
 def assemble_linear_system(
@@ -23,7 +21,7 @@ def assemble_linear_system(
   resolve_material_type(material_type)
 
   n_dofs = problem.n_dofs
-  nnz = problem.n_elems * _ENTRIES_PER_ELEM
+  nnz = problem.n_elems * entries_per_elem(problem.conn)
 
   row = np.empty(nnz, dtype=np.int32)
   col = np.empty(nnz, dtype=np.int32)

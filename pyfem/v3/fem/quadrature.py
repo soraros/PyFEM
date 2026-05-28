@@ -56,3 +56,29 @@ def _meshgrid_2d(xi: F64, wx: F64) -> tuple[F64, F64]:
 def gauss_tensor_product_2d(order: int) -> tuple[F64, F64]:
   xi, wx = gauss_legendre_1d(order)
   return _meshgrid_2d(xi, wx)
+
+
+def _gauss_tria3_impl(order: int) -> tuple[F64, F64]:  # type: ignore
+  pass
+
+
+@overload(_gauss_tria3_impl)
+def _gauss_tria3(order):
+  if not isinstance(order, types.IntegerLiteral):
+    raise TypingError("The 'order' argument must be a compile-time literal integer.")
+
+  if order.literal_value != 1:
+    raise TypingError("Only literal order 1 is supported for Tria3 quadrature.")
+
+  points = np.array([[1.0 / 3.0, 1.0 / 3.0]], dtype=np.float64)
+  weights = np.array([0.5], dtype=np.float64)
+
+  def impl(order):
+    return points, weights
+
+  return impl
+
+
+@njit(cache=True)
+def gauss_tria3(order: int) -> tuple[F64, F64]:
+  return _gauss_tria3_impl(literally(order))
