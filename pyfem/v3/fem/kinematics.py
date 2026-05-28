@@ -22,22 +22,29 @@ def physical_gradients(
       ``(n_elems, n_nodes, spatial_dim)``.
   parent_gradients
       ``(n_points, n_nodes, spatial_dim)`` ∂N/∂(xi, eta, ...).
+
+  Returns
+  -------
+  grad_n
+      ``(n_elems, n_points, n_nodes, 2)`` with columns ∂N/∂x, ∂N/∂y.
+  det_j
+      ``(n_elems, n_points)`` Jacobian determinants at each quadrature point.
   """
   n_elems = nodal_coords.shape[0]
   n_pts = parent_gradients.shape[0]
   n_nodes = nodal_coords.shape[1]
-  jacobian = np.empty((n_elems, n_pts, 2, 2))
   grad_n = np.empty((n_elems, n_pts, n_nodes, 2))
+  det_j = np.empty((n_elems, n_pts))
   for e in prange(n_elems):
     xt = nodal_coords[e].T
     for p in range(n_pts):
       jac = xt @ parent_gradients[p]
-      jacobian[e, p] = jac
+      det_j[e, p] = np.linalg.det(jac)
       grad_n[e, p] = parent_gradients[p] @ np.linalg.inv(jac)
-  return jacobian, grad_n
+  return grad_n, det_j
 
 
-@njit(cache=True, parallel=True)
+@njit(cache=True)
 def strain_displacement(grad_n: F64) -> F64:
   """
   Plane 2D strain–displacement operator B.

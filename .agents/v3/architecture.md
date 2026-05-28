@@ -36,8 +36,8 @@ Holds `problem: ProblemDefinition` plus metadata (`element_type`, `material_type
 
 1. **Quadrature** — `@njit` Gauss–Legendre (`@overload` + compile-time literal `order`); 2D rule composes 1D with `_meshgrid_2d` (loop tensor product, no `meshgrid`).
 2. **Shapes** — `@njit` Serendipity Q8 `N`, `∂N/∂ξ`.
-3. **Kinematics** — `@njit` `B = ∂N/∂x` via `∂N/∂ξ · J⁻¹` (batched ranks).
-4. **Element** — `@njit` batched `K_e = Σ w |J| Bᵀ C B`; Python wrapper adds a leading axis for one element.
+3. **Kinematics** — `@njit` `∂N/∂x` and `|J|` via 2×2 `@` / `linalg` on each Gauss point; `prange` over elements.
+4. **Element** — `@njit` staged `B` then semantic `(elem×gp)` quadrature of `w |J| Bᵀ C B`; `prange` over elements; Python wrapper adds a leading axis for one element.
 5. **Assembly** — batched element matrices → COO global stiffness.
 
 ## Solver
