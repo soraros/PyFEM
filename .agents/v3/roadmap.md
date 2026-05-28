@@ -13,12 +13,13 @@ Phased delivery toward v1 feature parity. Each phase exits when its skim parity 
 - [x] CI: `uv sync --group v3` in main `test` matrix; `pytest test/v3` (skips on Python &lt; 3.13)
 - [x] Native prescribed-displacement constraints (`solver/constraints.py`)
 
-## P1 — Linear 2D breadth (MPC remaining)
+## P1 — Linear 2D breadth (done)
 
 - [x] Nodal loads from `<ExternalForces>` → `patch_test8_loaded` skim
 - [x] Quad4 element + `patch_test4` skim
 - [x] Tria3 element + `patch_test3` skim
-- [ ] MPC / multi-point ties (no legacy `Constrainer`)
+- [x] MPC / multi-point ties (no legacy `Constrainer`)
+- [x] Scale hardening: uniform Q8 patch generator, fused Q8 kernel, chunked assembly, factorized solve context, `_bench_solve_scale.py` ([scaling.md](scaling.md))
 
 ## P2 — Linear extensions
 

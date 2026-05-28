@@ -38,5 +38,7 @@ def test_problem_definition_field_access() -> None:
   assert p.coords.ndim == 2
   assert p.conn.shape[1] == 8
   assert len(p.constraint_dof) == len(p.constraint_val)
+  assert len(p.mpc_slave_dof) == len(p.mpc_master_dof) == len(p.mpc_factor)
+  assert len(p.mpc_slave_dof) == len(p.mpc_offset)
   assert p.external_load.shape == (p.n_dofs,)
   assert p.external_load.dtype == np.float64

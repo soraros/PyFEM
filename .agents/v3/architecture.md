@@ -46,13 +46,18 @@ Legacy `SmallStrainContinuum` maps to one v3 continuum kernel; **element family 
 1. **Quadrature** — `@njit` Gauss–Legendre on `[-1,1]` (`@overload` + `literally(order)`); 2D quads via `_meshgrid_2d`; Tria3 via tabulated order-1 rule.
 2. **Shapes** — `@njit` reference-element `N`, `∂N/∂ξ` per family.
 3. **Kinematics** — serial `@njit` `∂N/∂x` and `|J|` via 2×2 `@` / `linalg` on each Gauss point (shared across families).
-4. **Element** — `@njit` staged `B` then `(elem×gp)` quadrature of `w |J| Bᵀ C B`; **`prange` over elements** only; Python wrapper adds a leading axis for one element.
-5. **Assembly** — dispatch stiffness by nodes/elem; generic `@njit` COO scatter (`n_dof` at runtime).
+4. **Element** — Q8: fused ``@njit`` loop (``J``, ``B``, quadrature in one ``prange``); Quad4/Tria3: staged kinematics + integration ``prange``.
+5. **Assembly** — dispatch stiffness by nodes/elem; chunked COO scatter when ``n_elems > 2048``; generic serial ``@njit`` COO fill.
 
 ## Solver
 
 - Global system: SciPy `coo_array` + `spsolve`.
-- BCs: native prescribed displacements (`solver/constraints.py`); MPC/ties deferred.
+- BCs: native prescribed displacements and MPC ties (`solver/constraints.py`).
+- Repeated solves: experimental `LinearSolutionContext` in `solver/context.py` (`prepare_linear_solve`).
+
+## Scale
+
+See [scaling.md](scaling.md). Uniform Q8 patch meshes: `pyfem/v3/mesh/refined_patch.py`.
 
 ## Skims
 

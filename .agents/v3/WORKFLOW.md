@@ -94,7 +94,7 @@ Follow the agent workflow in `.agents/v3/WORKFLOW.md` (resolve target → implem
 
 | Phase | Open focus (see roadmap for truth) |
 |-------|-------------------------------------|
-| P1 | MPC / multi-point ties |
+| P1 | — (complete) |
 | P2 | Plane strain, 3D continuum, `PatchTest8_3D` skim |
 | P3+ | Nonlinear, structures, materials — see [feature-parity.md](feature-parity.md) |
 

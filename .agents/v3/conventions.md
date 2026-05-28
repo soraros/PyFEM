@@ -45,13 +45,12 @@ Do not introduce Java-style names (`ContElem`) in public v3 APIs.
 
 - Plain-Python FEM kernels use vectorized NumPy (`einsum`, broadcasting).
 - ``@njit`` kernels use the nopython subset: 2D ``@``, slice assign inline (not
-  ``einsum``); one ``prange`` site per top-level stiffness call — the quadrature loop
-  in ``element.py``; kinematics and COO scatter stay serial ``@njit`` with ``range``.
-  Semantic ``(elem×gp)`` loops for quadrature; no ``None`` axis padding; do not
-  wrap a single ``@`` in a helper. Vectorized slice kernels (e.g. ``strain_displacement``)
-  stay serial ``@njit`` without ``prange``.
+  ``einsum``); one ``prange`` site per top-level stiffness call — fused Q8 integrates
+  ``B`` inside the element loop; Quad4/Tria3 still use staged kinematics + ``prange``
+  on integration; COO scatter stays serial ``@njit`` with ``range``.
 - Dev Numba benchmarks (not pytest-collected): ``test/v3/_bench_numba_stiffness.py``,
-  ``test/v3/_bench_prange_investigation.py`` — run manually with ``uv run python ...``.
+  ``test/v3/_bench_prange_investigation.py``, ``test/v3/_bench_solve_scale.py`` — run
+  manually with ``uv run python ...``. See [scaling.md](scaling.md).
 - Name functions after the quantity they return (`strain_displacement`, `plane_stress_matrix`).
 - Keep setup/I/O in plain Python; only numerical kernels need to be dense and array-oriented.
 - Do not add v3-only deps to the default runtime list until v3 is promoted.

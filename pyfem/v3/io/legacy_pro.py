@@ -36,7 +36,7 @@ def read_legacy_pro(path: Path) -> LoadedProblem:
     raise ValueError(msg)
 
   mesh_path = (base / input_match.group(1)).resolve()
-  mesh, constraints, loads = read_dat_mesh(mesh_path)
+  mesh, constraints, ties, loads = read_dat_mesh(mesh_path)
   dof_map = build_dof_map(mesh)
 
   return LoadedProblem(
@@ -46,6 +46,7 @@ def read_legacy_pro(path: Path) -> LoadedProblem:
       float(e_match.group(1)),
       float(nu_match.group(1)),
       constraints,
+      ties,
       loads,
     ),
     name=path.stem,

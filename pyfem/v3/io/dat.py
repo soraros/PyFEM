@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pyfem.v3.types import Mesh, NodalLoad, PrescribedDof
+from pyfem.v3.types import Mesh, MpcTie, NodalLoad, PrescribedDof
 
 
 def _parse_float(text: str) -> float:
@@ -18,25 +18,93 @@ def _parse_int(text: str) -> int:
   return int(text.strip())
 
 
-def _parse_dof_assignment(line: str) -> tuple[str, int, float] | None:
+def _parse_dof_lhs(line: str) -> tuple[str, int] | None:
   chunk = line.strip()
   if not chunk or "=" not in chunk:
     return None
-  lhs, rhs = chunk.split("=", 1)
+  lhs = chunk.split("=", 1)[0]
+  if "[" not in lhs:
+    return None
   dof_type, node_part = lhs.split("[", 1)
   node_id = _parse_int(node_part.split("]")[0])
-  value = _parse_float(rhs)
-  return dof_type.strip(), node_id, value
+  return dof_type.strip(), node_id
+
+
+def _parse_prescribed_rhs(rhs: str) -> float:
+  return _parse_float(rhs.strip().rstrip(";"))
+
+
+def _parse_mpc_rhs(rhs: str) -> tuple[float, float, str, int]:
+  """Parse ``offset + factor * master_dof`` without ``eval``."""
+  chunk = rhs.strip().rstrip(";")
+  normalized = chunk.replace(" ", "").replace("+", " +").replace("-", " -")
+  raw_tokens = [token for token in normalized.split(" ") if token]
+  tokens: list[str] = []
+  for token in raw_tokens:
+    if "*" in token:
+      tokens.extend(part for part in token.split("*") if part)
+    else:
+      tokens.append(token)
+
+  offset = 0.0
+  factor = 1.0
+  sign = 1.0
+  master_type: str | None = None
+  master_node: int | None = None
+
+  index = 0
+  while index < len(tokens):
+    token = tokens[index]
+    if token == "+":
+      sign = 1.0
+      index += 1
+      continue
+    if token == "-":
+      sign = -1.0
+      index += 1
+      continue
+
+    master_match = re.fullmatch(r"([uvw])\[(\d+)\]", token)
+    if master_match is not None:
+      master_type = master_match.group(1)
+      master_node = int(master_match.group(2))
+      factor *= sign
+      break
+
+    if index + 1 < len(tokens) and tokens[index + 1] == "*":
+      factor = sign * _parse_float(token)
+      index += 2
+      continue
+
+    if index + 1 < len(tokens) and re.fullmatch(
+      r"([uvw])\[(\d+)\]",
+      tokens[index + 1],
+    ):
+      factor = sign * _parse_float(token)
+      sign = 1.0
+      index += 1
+      continue
+
+    offset += sign * _parse_float(token)
+    sign = 1.0
+    index += 1
+
+  if master_type is None or master_node is None:
+    msg = f"No master DOF in MPC tie: {rhs!r}"
+    raise ValueError(msg)
+
+  return offset, factor, master_type, master_node
 
 
 def read_dat_mesh(
   path: Path,
-) -> tuple[Mesh, tuple[PrescribedDof, ...], tuple[NodalLoad, ...]]:
-  """Read mesh, constraints, and external forces from a legacy ``.dat`` file."""
+) -> tuple[Mesh, tuple[PrescribedDof, ...], tuple[MpcTie, ...], tuple[NodalLoad, ...]]:
+  """Read mesh, constraints, MPC ties, and external forces from a legacy ``.dat``."""
   node_ids: list[int] = []
   coords: list[list[float]] = []
   elements: list[tuple[int, str, list[int]]] = []
   constraints: list[PrescribedDof] = []
+  ties: list[MpcTie] = []
   loads: list[NodalLoad] = []
 
   section: str | None = None
@@ -91,20 +159,45 @@ def read_dat_mesh(
 
     elif section == "constraints":
       for chunk in line.rstrip(";").split(";"):
-        parsed = _parse_dof_assignment(chunk)
-        if parsed is None:
+        chunk = chunk.strip()
+        if not chunk:
           continue
-        dof_type, node_id, value = parsed
-        constraints.append(
-          PrescribedDof(node_id=node_id, dof_type=dof_type, value=value),
-        )
+        lhs = _parse_dof_lhs(chunk)
+        if lhs is None:
+          continue
+        slave_dof_type, slave_node_id = lhs
+        rhs = chunk.split("=", 1)[1]
+        if "[" in rhs:
+          offset, factor, master_dof_type, master_node_id = _parse_mpc_rhs(rhs)
+          ties.append(
+            MpcTie(
+              slave_node_id=slave_node_id,
+              slave_dof_type=slave_dof_type,
+              offset=offset,
+              master_node_id=master_node_id,
+              master_dof_type=master_dof_type,
+              factor=factor,
+            ),
+          )
+        else:
+          constraints.append(
+            PrescribedDof(
+              node_id=slave_node_id,
+              dof_type=slave_dof_type,
+              value=_parse_prescribed_rhs(rhs),
+            ),
+          )
 
     elif section == "forces":
       for chunk in line.rstrip(";").split(";"):
-        parsed = _parse_dof_assignment(chunk)
-        if parsed is None:
+        chunk = chunk.strip()
+        if not chunk:
           continue
-        dof_type, node_id, value = parsed
+        lhs = _parse_dof_lhs(chunk)
+        if lhs is None:
+          continue
+        dof_type, node_id = lhs
+        value = _parse_prescribed_rhs(chunk.split("=", 1)[1])
         loads.append(NodalLoad(node_id=node_id, dof_type=dof_type, value=value))
 
   if not node_ids:
@@ -139,4 +232,4 @@ def read_dat_mesh(
     msg = "Inconsistent mesh rank"
     raise ValueError(msg)
 
-  return mesh, tuple(constraints), tuple(loads)
+  return mesh, tuple(constraints), tuple(ties), tuple(loads)

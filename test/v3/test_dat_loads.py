@@ -23,12 +23,12 @@ PATCH8_DAT = ROOT / "examples" / "ch02" / "PatchTest8.dat"
 
 
 def test_patch_test8_dat_has_no_nodal_loads() -> None:
-  _mesh, _constraints, loads = read_dat_mesh(PATCH8_DAT)
+  _mesh, _constraints, _ties, loads = read_dat_mesh(PATCH8_DAT)
   assert loads == ()
 
 
 def test_loaded_dat_parses_nodal_load() -> None:
-  mesh, _constraints, loads = read_dat_mesh(LOADED_DAT)
+  mesh, _constraints, _ties, loads = read_dat_mesh(LOADED_DAT)
   assert len(loads) == 1
   assert loads[0].node_id == 13
   assert loads[0].dof_type == "v"
@@ -36,9 +36,9 @@ def test_loaded_dat_parses_nodal_load() -> None:
 
 
 def test_pack_maps_load_to_global_dof() -> None:
-  mesh, constraints, loads = read_dat_mesh(LOADED_DAT)
+  mesh, constraints, _ties, loads = read_dat_mesh(LOADED_DAT)
   dof_map = build_dof_map(mesh)
-  problem = pack_problem(mesh, dof_map, 1.0e6, 0.25, constraints, loads)
+  problem = pack_problem(mesh, dof_map, 1.0e6, 0.25, constraints, loads=loads)
   dof_idx = dof_map.dof_index(13, "v")
   assert problem.external_load[dof_idx] == pytest.approx(1000.0)
   assert problem.external_load.sum() == pytest.approx(1000.0)

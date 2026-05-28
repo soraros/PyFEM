@@ -26,7 +26,7 @@ Phases **P0–P8** are defined in [roadmap.md](roadmap.md). Parity skims live un
 | Nodal forces (`ExternalForces`) | `external_load` in `ProblemDefinition` | done | `patch_test8_loaded` | P1 |
 | Quad4 continuum | `quad4` in `fem/element.py` | done | `patch_test4` | P1 |
 | Tria3 continuum | `tria3` in `fem/element.py` | done | `patch_test3` | P1 |
-| MPC / ties | extend constraints | next | — | P1, after loads |
+| MPC / ties | extend constraints | done | `patch_test8_mpc` | P1 |
 | `PlaneStrain` | `plane_strain` | deferred | — | P2 |
 | 3D continuum (hex/tet) | 3D kernels | deferred | `PatchTest8_3D` | P2 |
 

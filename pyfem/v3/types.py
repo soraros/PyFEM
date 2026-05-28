@@ -43,6 +43,18 @@ class NodalLoad:
   value: float
 
 
+@dataclass(frozen=True)
+class MpcTie:
+  """Multi-point tie: slave DOF follows master (I/O only)."""
+
+  slave_node_id: int
+  slave_dof_type: str
+  offset: float
+  master_node_id: int
+  master_dof_type: str
+  factor: float
+
+
 @dataclass
 class Mesh:
   """Structure-of-arrays mesh (built at load time)."""
@@ -99,6 +111,10 @@ class ProblemDefinition(NamedTuple):
   constitutive: F64
   constraint_dof: I32
   constraint_val: F64
+  mpc_slave_dof: I32
+  mpc_master_dof: I32
+  mpc_factor: F64
+  mpc_offset: F64
   external_load: F64
 
   @property
