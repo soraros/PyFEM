@@ -34,9 +34,9 @@ Phases **P0–P8** are defined in [roadmap.md](roadmap.md). Parity skims live un
 
 | v1 capability | v3 target | Status | Skim / example | Notes |
 |---------------|-----------|--------|----------------|-------|
-| `NonlinearSolver` (Newton) | `solve_nonlinear` + `SolverState` | deferred | ch.3 cantilever | P3 |
-| Load ramp / `loadCases` | typed load tables | deferred | — | P3 |
-| `FiniteStrainContinuum` | TL kernel | deferred | ch.3 | P3 |
+| `NonlinearSolver` (Newton) | `solve_nonlinear` + `SolverState` | done | `patch_test8_nonlinear*` skims | SmallStrain + linear elastic; `loadTable` in skim `.pro` |
+| Load ramp / `loadCases` | typed load tables | done | `patch_test8_nonlinear_ramp` | `loadTable` only; `loadFunc=t`; no `loadCases` / `eval` |
+| `FiniteStrainContinuum` | TL kernel | next | ch.3 cantilever | P3 skim blocked until TL kernel |
 | `RiksSolver` | arc-length driver | deferred | ch.4 | P4 |
 | Truss / spring (linear) | structural elements | deferred | ch.4 | P4 |
 

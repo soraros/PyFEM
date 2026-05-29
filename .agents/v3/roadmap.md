@@ -29,9 +29,10 @@ Phased delivery toward v1 feature parity. Each phase exits when its skim parity 
 
 ## P3 — Nonlinear static
 
-- [ ] `SolverState`, internal force + tangent assembly
-- [ ] Newton loop; load factor / tables (no `eval`)
-- [ ] Skims: ch.3 cantilever, ch.4 truss (subset)
+- [x] `SolverState`, internal force + tangent assembly
+- [x] Tangent assembly scale hardening ([tangent_assembly.md](tangent_assembly.md))
+- [x] Newton loop; load factor / tables (no `eval`)
+- [ ] Skims: ch.3 cantilever (`FiniteStrainContinuum`), ch.4 truss (`Truss`/`RiksSolver`) — blocked on P3 TL / P4 structures
 
 ## P4 — Path following & structures
 

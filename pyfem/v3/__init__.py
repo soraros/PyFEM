@@ -11,6 +11,7 @@ if sys.version_info < (3, 13):
 from pyfem.v3.loader import load_problem
 from pyfem.v3.pack import pack_problem
 from pyfem.v3.solver.linear import solve_linear
+from pyfem.v3.solver.nonlinear import solve_nonlinear
 from pyfem.v3.types import F64, I32, LoadedProblem, ProblemDefinition
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
   "load_problem",
   "pack_problem",
   "solve_linear",
+  "solve_nonlinear",
 ]

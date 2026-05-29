@@ -51,6 +51,8 @@ Do not introduce Java-style names (`ContElem`) in public v3 APIs.
 - Dev Numba benchmarks (not pytest-collected): ``test/v3/_bench_numba_stiffness.py``,
   ``test/v3/_bench_prange_investigation.py``, ``test/v3/_bench_solve_scale.py`` — run
   manually with ``uv run python ...``. See [scaling.md](scaling.md).
+- **Scale-first performance:** optimize for mid-large meshes; no small-problem fallbacks
+  or dual code paths without proven large-scale need ([scaling.md](scaling.md)).
 - Name functions after the quantity they return (`strain_displacement`, `plane_stress_matrix`).
 - Keep setup/I/O in plain Python; only numerical kernels need to be dense and array-oriented.
 - Do not add v3-only deps to the default runtime list until v3 is promoted.

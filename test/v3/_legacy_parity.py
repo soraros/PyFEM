@@ -12,6 +12,7 @@ from scipy.sparse import coo_matrix
 from pyfem.fem.Assembly import assembleExternalForce, assembleTangentStiffness
 from pyfem.io.InputReader import InputRead
 from pyfem.solvers.LinearSolver import LinearSolver
+from pyfem.solvers.NonlinearSolver import NonlinearSolver
 from pyfem.util.dataStructures import elementData
 
 
@@ -21,10 +22,40 @@ def legacy_state(pro_path: Path) -> np.ndarray:
   return np.asarray(globdat.state)
 
 
+def legacy_nonlinear_state(pro_path: Path) -> np.ndarray:
+  """Run legacy ``NonlinearSolver`` until ``globdat.active`` is false."""
+  from pyfem.v3.io.solver_pro import parse_nonlinear_solver_settings
+
+  props, globdat = InputRead(str(pro_path))
+  solver = NonlinearSolver(props, globdat)
+  settings = parse_nonlinear_solver_settings(pro_path.read_text(encoding="utf-8"))
+  if settings is not None:
+    solver.tol = settings.tol
+    solver.iterMax = settings.iter_max
+    solver.maxCycle = settings.max_cycle
+    solver.dtime = settings.dtime
+    if settings.load_table is not None:
+      solver.loadTable = settings.load_table
+  while globdat.active:
+    solver.run(props, globdat)
+  return np.asarray(globdat.state)
+
+
 def legacy_stiffness_coo(pro_path: Path) -> coo_matrix:
   props, globdat = InputRead(str(pro_path))
   matrix, _ = assembleTangentStiffness(props, globdat)
   return matrix.tocoo()
+
+
+def legacy_tangent_at_state(
+  pro_path: Path,
+  state: np.ndarray,
+) -> tuple[coo_matrix, np.ndarray]:
+  """Legacy tangent stiffness and internal force at a given displacement."""
+  props, globdat = InputRead(str(pro_path))
+  globdat.state[:] = state
+  matrix, internal_force = assembleTangentStiffness(props, globdat)
+  return matrix.tocoo(), np.asarray(internal_force)
 
 
 def legacy_external_load(pro_path: Path) -> np.ndarray:

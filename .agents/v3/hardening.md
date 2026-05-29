@@ -197,7 +197,8 @@ Out of scope: [list].
 | P1 (done) | 2D Q8 scale, linear solve | Uniform patch mesh, fused kernel, chunked COO, `LinearSolutionContext`, [scaling.md](scaling.md) |
 | P2 plane strain (done) | Plane strain at Q8 scale | `build_uniform_q8_loaded`, `_bench_plane_strain_scale.py`, [plane_strain.md](plane_strain.md) |
 | P2 3D (pass A done; pass B optional) | Hex8/Tet4 at scale | Uniform hex grid generator, `_bench_*_3d*.py`; `patch_test8_3d` skim stays parity |
-| P3+ | Nonlinear repeat solves | `SolverState`, tangent reuse, Newton loop bench, load-step context |
+| P3 tangent (done) | Fused `K_e` + `f_int`, cached matvec | [tangent_assembly.md](tangent_assembly.md), `_bench_tangent_assembly.py` |
+| P3+ | Newton / nonlinear | Newton loop bench, load-step context after pass A |
 
 ## Lessons from P1
 

@@ -158,6 +158,18 @@ class ProblemDefinition(NamedTuple):
 
 
 @dataclass(frozen=True)
+class NonlinearSolverSettings:
+  """Nonlinear static solver controls (parsed from skim ``.pro``)."""
+
+  tol: float = 1.0e-3
+  iter_max: int = 10
+  max_cycle: int = 5
+  dtime: float = 1.0
+  load_func: str = "t"
+  load_table: F64 | None = None
+
+
+@dataclass
 class LoadedProblem:
   """Result of ``load_problem``: jitable data plus registry metadata."""
 
@@ -168,6 +180,7 @@ class LoadedProblem:
   solver_type: str
   element_group: str
   mesh_path: Path | None = None
+  nonlinear_settings: NonlinearSolverSettings | None = None
 
 
 @dataclass
@@ -176,4 +189,21 @@ class LinearSystem:
 
   stiffness: coo_array
   load: F64
+  n_dofs: int
+
+
+@dataclass
+class SolverState:
+  """Global displacement state for nonlinear static solves."""
+
+  state: F64
+  state_increment: F64
+
+
+@dataclass
+class TangentSystem:
+  """Assembled tangent stiffness and internal force at the current state."""
+
+  stiffness: coo_array
+  internal_force: F64
   n_dofs: int

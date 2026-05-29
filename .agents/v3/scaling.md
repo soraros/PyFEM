@@ -4,12 +4,33 @@ How to interpret performance and memory for the P1 linear 2D stack. **Do not ext
 
 Hardening workflow for other phases: [hardening.md](hardening.md).
 
+## Scale-first performance
+
+Optimize for **mid-to-large meshes** (hundreds–thousands of elements; 10³–10⁴+ DOFs). That is where batched Numba, chunked COO, and factorization reuse matter.
+
+- **Small book skims** (e.g. 5 elements) are for parity correctness only—not perf targets.
+- **Do not add cheeky fallbacks** (serial-vs-parallel thresholds, dual paths for tiny `n_elems`) unless a large-scale regression is proven. Prefer one clear hot path.
+- **Bench at 16×16 and up** when judging assembly or solver changes; see tables below.
+
+### Numba discipline (production kernels)
+
+- One `prange` site per top-level stiffness call; Q8 uses a fused element loop (J, B, quadrature).
+- No `einsum` / `tensordot` in `@njit`; COO scatter stays serial.
+- `cache=True`; Gauss order via compile-time `@overload`.
+
+### v1 vs v3 (qualitative)
+
+- **Assembly:** v3 batched Numba is orders of magnitude faster than legacy Python element loops at scale (see `_bench_prange_investigation.py` Q6).
+- **Solve:** both use SciPy direct methods; wins come from `factorized` reuse (`LinearSolutionContext`, Newton with cached `K`).
+- **Newton (P3):** cached tangent → `f_int = K @ u`; factorize `K_red` once per load step when `K` is constant.
+
 ## Run scale benchmarks
 
 ```bash
 uv sync --group v3
 uv run python test/v3/_bench_solve_scale.py
 uv run python test/v3/_bench_plane_strain_scale.py
+uv run python test/v3/_bench_tangent_assembly.py
 uv run python test/v3/_bench_numba_stiffness.py
 uv run python test/v3/_bench_prange_investigation.py
 ```
@@ -61,7 +82,8 @@ Outer-boundary nodes receive the PatchTest8 prescribed displacement field. Grid 
 | Uniform Q8 patch mesh | `pyfem/v3/mesh/refined_patch.py` | Benchmark / programmatic problems |
 | Loaded Q8 patch problem | `build_uniform_q8_loaded(..., material_type=...)` | Scale sweeps for PlaneStress / PlaneStrain |
 | Chunked assembly | `pyfem/v3/assembly.py` | Auto when `n_elems > 2048`, `chunk_size=4096` |
-| Factorized reuse | `pyfem/v3/solver/context.py` | `prepare_linear_solve` → `LinearSolutionContext` (experimental) |
+| Factorized reuse | `pyfem/v3/solver/context.py` | `factorized_reduced_solve`; `prepare_linear_solve` → `LinearSolutionContext` |
+| Tangent + `f_int` | `pyfem/v3/assembly.py`, `solver/tangent_context.py`, `solver/nonlinear.py` | Fused `K_e`; cached `K @ u`; factorized `K_red` per NR load step — [tangent_assembly.md](tangent_assembly.md) |
 | Parity path | `solve_linear` | Unchanged; always full assemble + solve |
 
 ## Accuracy

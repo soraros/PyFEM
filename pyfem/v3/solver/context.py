@@ -19,6 +19,15 @@ from pyfem.v3.solver.constraints import (
 from pyfem.v3.types import F64, LinearSystem, LoadedProblem, ProblemDefinition
 
 
+def factorized_reduced_solve(
+  constraints: PrescribedConstraints,
+  k_csr: csr_matrix,
+) -> Callable[[F64], F64]:
+  """Factorize the reduced stiffness ``C.T @ K @ C`` for repeated back-solves."""
+  k_red = constraints.C.T @ (k_csr @ constraints.C)
+  return factorized(k_red.tocsr())
+
+
 @dataclass
 class LinearSolutionContext:
   """
@@ -63,8 +72,7 @@ class LinearSolutionContext:
   ) -> LinearSolutionContext:
     constraints = build_prescribed_constraints(problem)
     k_csr = system.stiffness.tocsr()
-    k_red = constraints.C.T @ (k_csr @ constraints.C)
-    solve_red = factorized(k_red.tocsr())
+    solve_red = factorized_reduced_solve(constraints, k_csr)
     return cls(
       factorized_solve=solve_red,
       constraints=constraints,

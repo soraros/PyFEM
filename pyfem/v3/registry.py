@@ -17,6 +17,7 @@ MATERIAL_TYPES: Final[dict[str, str]] = {
 
 SOLVER_TYPES: Final[dict[str, str]] = {
   "LinearSolver": "linear",
+  "NonlinearSolver": "nonlinear",
 }
 
 

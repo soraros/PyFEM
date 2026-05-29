@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from pyfem.v3.io.dat import read_dat_mesh
+from pyfem.v3.io.solver_pro import parse_nonlinear_solver_settings
 from pyfem.v3.mesh import build_dof_map
 from pyfem.v3.pack import pack_problem
 from pyfem.v3.types import LoadedProblem
@@ -56,4 +57,5 @@ def read_legacy_pro(path: Path) -> LoadedProblem:
     solver_type=solver_match.group(1),
     element_group="ContElem",
     mesh_path=mesh_path,
+    nonlinear_settings=parse_nonlinear_solver_settings(text),
   )

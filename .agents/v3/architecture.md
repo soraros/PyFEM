@@ -58,6 +58,8 @@ Legacy `SmallStrainContinuum` maps to one v3 continuum kernel; **element family 
 - Global system: SciPy `coo_array` + `spsolve`.
 - BCs: native prescribed displacements and MPC ties (`solver/constraints.py`).
 - Repeated solves: experimental `LinearSolutionContext` in `solver/context.py` (`prepare_linear_solve`).
+- Tangent + internal force: `assemble_tangent_loaded`; fused `assemble_tangent_coo`; experimental `TangentAssemblyContext` in `solver/tangent_context.py` (linear `K`, fast `f_int = K @ u`).
+- Nonlinear static: `solve_nonlinear` in `solver/nonlinear.py`; `loadTable` / `loadFunc=t` via `io/load_ramp.py` (no `eval`); residual norm on free DOFs (`C.T @ residual`).
 
 ## Scale
 
