@@ -9,8 +9,9 @@ Plan files live in the repo—not in chat. Branch: `v3`. Legacy `pyfem/` on `mai
 | [roadmap.md](roadmap.md) | **Default.** Phases P0–P8 and checkboxes; agent picks the next open item |
 | [feature-parity.md](feature-parity.md) | v1 vs v3 matrix; use when scoping “what’s missing” before coding |
 | [parity.md](parity.md) | Skim layers A/B/C; read when adding or extending a parity case |
+| [hardening.md](hardening.md) | **Pass B.** After skim parity: scale, bench, hot paths, docs — see below |
 
-Supporting context (read as needed): [AGENTS.md](AGENTS.md), [architecture.md](architecture.md), [conventions.md](conventions.md).
+Supporting context (read as needed): [AGENTS.md](AGENTS.md), [architecture.md](architecture.md), [conventions.md](conventions.md), [scaling.md](scaling.md) (P1 example).
 
 ## What you say (one line)
 
@@ -39,6 +40,20 @@ Continue v3: next skim + parity per .agents/v3/roadmap.md and .agents/v3/parity.
 ```
 
 No need to paste the long template below unless you want to override scope.
+
+### Hardening (pass B, after parity)
+
+When a checkbox is done on book skims but not credible at the next scale, use [hardening.md](hardening.md):
+
+```text
+Harden [phase/item] per .agents/v3/hardening.md — plan only, no implementation yet.
+```
+
+```text
+Implement the hardening plan (attached). Do NOT edit the plan file.
+```
+
+See [hardening.md](hardening.md) for the full prompt set, Cursor plan shape, checklist, and P1 reference.
 
 ## What the agent does (workflow)
 

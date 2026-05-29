@@ -17,12 +17,12 @@ from pyfem.v3.mesh import build_dof_map
 from pyfem.v3.mesh.refined_patch import (
   PATCH_HEIGHT,
   PATCH_WIDTH,
+  build_uniform_q8_loaded,
   build_uniform_q8_patch,
   patch_displacement,
 )
 from pyfem.v3.pack import pack_problem
 from pyfem.v3.solver.context import prepare_linear_solve
-from pyfem.v3.types import LoadedProblem
 
 
 def test_single_element_patch_counts() -> None:
@@ -96,18 +96,33 @@ def test_stiffness_diagonal_nonzero() -> None:
 
 
 def test_factorized_solve_2x2() -> None:
-  mesh, constraints = build_uniform_q8_patch(2, 2)
-  dof_map = build_dof_map(mesh)
-  problem = pack_problem(mesh, dof_map, 1.0e6, 0.25, constraints)
-  loaded = LoadedProblem(
-    problem=problem,
-    name="patch_2x2",
-    element_type="SmallStrainContinuum",
-    material_type="PlaneStress",
-    solver_type="LinearSolver",
-    element_group="ContElem",
-    mesh_path=None,
-  )
+  loaded = build_uniform_q8_loaded(2, 2)
   ctx = prepare_linear_solve(loaded)
   state = ctx.solve()
-  assert state.shape[0] == problem.n_dofs
+  assert state.shape[0] == loaded.problem.n_dofs
+
+
+def test_plane_strain_stiffness_diagonal_nonzero() -> None:
+  loaded = build_uniform_q8_loaded(2, 2, material_type="PlaneStrain")
+  system = assemble_linear_system(
+    loaded.problem,
+    element_type="SmallStrainContinuum",
+    material_type="PlaneStrain",
+  )
+  k_diag = system.stiffness.diagonal()
+  assert k_diag.shape[0] == loaded.problem.n_dofs
+  assert np.all(k_diag > 0.0)
+
+
+def test_plane_strain_factorized_solve_2x2() -> None:
+  loaded = build_uniform_q8_loaded(2, 2, material_type="PlaneStrain")
+  ctx = prepare_linear_solve(loaded)
+  state = ctx.solve()
+  assert state.shape[0] == loaded.problem.n_dofs
+  assert np.linalg.norm(state) > 0.0
+
+
+def test_plane_strain_constitutive_differs_from_plane_stress() -> None:
+  stress = build_uniform_q8_loaded(2, 2, material_type="PlaneStress")
+  strain = build_uniform_q8_loaded(2, 2, material_type="PlaneStrain")
+  assert not np.allclose(stress.problem.constitutive, strain.problem.constitutive)

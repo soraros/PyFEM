@@ -15,11 +15,38 @@ F64 = NDArray[np.float64]
 I32 = NDArray[np.int32]
 
 DOF_TYPES_2D: tuple[str, ...] = ("u", "v")
+DOF_TYPES_3D: tuple[str, ...] = ("u", "v", "w")
+
+
+def dof_types_for_rank(rank: int) -> tuple[str, ...]:
+  """Return nodal DOF type names for a spatial rank."""
+  if rank == 2:
+    return DOF_TYPES_2D
+  if rank == 3:
+    return DOF_TYPES_3D
+  msg = f"Unsupported spatial rank {rank}"
+  raise ValueError(msg)
 
 
 @dataclass(frozen=True)
 class PlaneStressMaterial:
   """Linear plane-stress Hooke material (I/O only)."""
+
+  youngs_modulus: float
+  poisson_ratio: float
+
+
+@dataclass(frozen=True)
+class PlaneStrainMaterial:
+  """Linear plane-strain Hooke material (I/O only)."""
+
+  youngs_modulus: float
+  poisson_ratio: float
+
+
+@dataclass(frozen=True)
+class IsotropicMaterial:
+  """Linear 3D isotropic Hooke material (I/O only)."""
 
   youngs_modulus: float
   poisson_ratio: float

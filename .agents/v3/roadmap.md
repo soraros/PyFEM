@@ -23,9 +23,9 @@ Phased delivery toward v1 feature parity. Each phase exits when its skim parity 
 
 ## P2 — Linear extensions
 
-- [ ] Plane strain material
-- [ ] 3D continuum (hex / tet)
-- [ ] Skim e.g. `PatchTest8_3D` when 3D kernel exists
+- [x] Plane strain material + scale hardening ([plane_strain.md](plane_strain.md))
+- [x] 3D continuum (hex / tet)
+- [x] Skim e.g. `PatchTest8_3D` when 3D kernel exists
 
 ## P3 — Nonlinear static
 

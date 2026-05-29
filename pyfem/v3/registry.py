@@ -11,6 +11,8 @@ ELEMENT_TYPES: Final[dict[str, str]] = {
 
 MATERIAL_TYPES: Final[dict[str, str]] = {
   "PlaneStress": "plane_stress",
+  "PlaneStrain": "plane_strain",
+  "Isotropic": "isotropic",
 }
 
 SOLVER_TYPES: Final[dict[str, str]] = {

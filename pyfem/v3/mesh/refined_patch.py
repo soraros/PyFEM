@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from pyfem.v3.types import Mesh, PrescribedDof
+from pyfem.v3.types import LoadedProblem, Mesh, PrescribedDof
 
 PATCH_WIDTH = 0.24
 PATCH_HEIGHT = 0.12
@@ -103,3 +103,39 @@ def build_uniform_q8_patch(
     constraints.append(PrescribedDof(node_id=int(node_id), dof_type="v", value=v))
 
   return mesh, tuple(constraints)
+
+
+def build_uniform_q8_loaded(
+  nx: int,
+  ny: int,
+  *,
+  width: float = PATCH_WIDTH,
+  height: float = PATCH_HEIGHT,
+  youngs_modulus: float = 1.0e6,
+  poisson_ratio: float = 0.25,
+  material_type: str = "PlaneStress",
+) -> LoadedProblem:
+  """Uniform Q8 patch as a :class:`LoadedProblem` for assembly and solve benches."""
+  from pyfem.v3.mesh import build_dof_map
+  from pyfem.v3.pack import pack_problem
+
+  mesh, constraints = build_uniform_q8_patch(nx, ny, width=width, height=height)
+  dof_map = build_dof_map(mesh)
+  problem = pack_problem(
+    mesh,
+    dof_map,
+    youngs_modulus,
+    poisson_ratio,
+    constraints,
+    material_type=material_type,
+  )
+  tag = material_type.removeprefix("Plane").lower()
+  return LoadedProblem(
+    problem=problem,
+    name=f"patch_{nx}x{ny}_{tag}",
+    element_type="SmallStrainContinuum",
+    material_type=material_type,
+    solver_type="LinearSolver",
+    element_group="ContElem",
+    mesh_path=None,
+  )

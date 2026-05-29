@@ -156,3 +156,135 @@ def linear_tria3(parent_coords: F64) -> tuple[F64, F64]:
 
   dN = np.stack((dxi, deta), axis=2)
   return n, dN
+
+
+@njit(cache=True)
+def trilinear_hex8(parent_coords: F64) -> tuple[F64, F64]:
+  """
+  Trilinear 8-node hexahedron on [-1, 1]³.
+
+  Parameters
+  ----------
+  parent_coords
+      ``(n_points, 3)`` with columns ``(xi, eta, zeta)``.
+  """
+  xi = parent_coords[:, 0]
+  eta = parent_coords[:, 1]
+  zeta = parent_coords[:, 2]
+
+  n = np.stack(
+    (
+      0.125 * (1.0 - xi) * (1.0 - eta) * (1.0 - zeta),
+      0.125 * (1.0 + xi) * (1.0 - eta) * (1.0 - zeta),
+      0.125 * (1.0 + xi) * (1.0 + eta) * (1.0 - zeta),
+      0.125 * (1.0 - xi) * (1.0 + eta) * (1.0 - zeta),
+      0.125 * (1.0 - xi) * (1.0 - eta) * (1.0 + zeta),
+      0.125 * (1.0 + xi) * (1.0 - eta) * (1.0 + zeta),
+      0.125 * (1.0 + xi) * (1.0 + eta) * (1.0 + zeta),
+      0.125 * (1.0 - xi) * (1.0 + eta) * (1.0 + zeta),
+    ),
+    axis=1,
+  )
+
+  dxi = np.stack(
+    (
+      -0.125 * (1.0 - eta) * (1.0 - zeta),
+      0.125 * (1.0 - eta) * (1.0 - zeta),
+      0.125 * (1.0 + eta) * (1.0 - zeta),
+      -0.125 * (1.0 + eta) * (1.0 - zeta),
+      -0.125 * (1.0 - eta) * (1.0 + zeta),
+      0.125 * (1.0 - eta) * (1.0 + zeta),
+      0.125 * (1.0 + eta) * (1.0 + zeta),
+      -0.125 * (1.0 + eta) * (1.0 + zeta),
+    ),
+    axis=1,
+  )
+
+  deta = np.stack(
+    (
+      -0.125 * (1.0 - xi) * (1.0 - zeta),
+      -0.125 * (1.0 + xi) * (1.0 - zeta),
+      0.125 * (1.0 + xi) * (1.0 - zeta),
+      0.125 * (1.0 - xi) * (1.0 - zeta),
+      -0.125 * (1.0 - xi) * (1.0 + zeta),
+      -0.125 * (1.0 + xi) * (1.0 + zeta),
+      0.125 * (1.0 + xi) * (1.0 + zeta),
+      0.125 * (1.0 - xi) * (1.0 + zeta),
+    ),
+    axis=1,
+  )
+
+  dzeta = np.stack(
+    (
+      -0.125 * (1.0 - xi) * (1.0 - eta),
+      -0.125 * (1.0 + xi) * (1.0 - eta),
+      -0.125 * (1.0 + xi) * (1.0 + eta),
+      -0.125 * (1.0 - xi) * (1.0 + eta),
+      0.125 * (1.0 - xi) * (1.0 - eta),
+      0.125 * (1.0 + xi) * (1.0 - eta),
+      0.125 * (1.0 + xi) * (1.0 + eta),
+      0.125 * (1.0 - xi) * (1.0 + eta),
+    ),
+    axis=1,
+  )
+
+  dN = np.stack((dxi, deta, dzeta), axis=2)
+  return n, dN
+
+
+@njit(cache=True)
+def linear_tet4(parent_coords: F64) -> tuple[F64, F64]:
+  """
+  Linear 4-node tetrahedron in parent coordinates (ξ, η, ζ).
+
+  Parameters
+  ----------
+  parent_coords
+      ``(n_points, 3)`` with columns ``(xi, eta, zeta)``.
+  """
+  xi = parent_coords[:, 0]
+  eta = parent_coords[:, 1]
+  zeta = parent_coords[:, 2]
+
+  n = np.stack(
+    (
+      1.0 - xi - eta - zeta,
+      xi,
+      eta,
+      zeta,
+    ),
+    axis=1,
+  )
+
+  dxi = np.stack(
+    (
+      -1.0 * np.ones(xi.shape[0]),
+      np.ones(xi.shape[0]),
+      np.zeros(xi.shape[0]),
+      np.zeros(xi.shape[0]),
+    ),
+    axis=1,
+  )
+
+  deta = np.stack(
+    (
+      -1.0 * np.ones(xi.shape[0]),
+      np.zeros(xi.shape[0]),
+      np.ones(xi.shape[0]),
+      np.zeros(xi.shape[0]),
+    ),
+    axis=1,
+  )
+
+  dzeta = np.stack(
+    (
+      -1.0 * np.ones(xi.shape[0]),
+      np.zeros(xi.shape[0]),
+      np.zeros(xi.shape[0]),
+      np.ones(xi.shape[0]),
+    ),
+    axis=1,
+  )
+
+  dN = np.stack((dxi, deta, dzeta), axis=2)
+  return n, dN

@@ -22,7 +22,8 @@ def _assemble_coo_buffers(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
   conn = problem.conn[conn_slice]
   n_elems = conn.shape[0]
-  nnz = n_elems * entries_per_elem(conn)
+  spatial_dim = int(problem.coords.shape[1])
+  nnz = n_elems * entries_per_elem(conn, spatial_dim)
   row = np.empty(nnz, dtype=np.int32)
   col = np.empty(nnz, dtype=np.int32)
   val = np.empty(nnz, dtype=np.float64)

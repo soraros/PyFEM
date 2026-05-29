@@ -30,7 +30,14 @@ def _legacy_coo(pro_path: Path) -> coo_matrix:
 
 @pytest.mark.parametrize(
   "skim_name",
-  ["patch_test8", "patch_test4"],
+  [
+    "patch_test8",
+    "patch_test4",
+    "patch_test3",
+    "patch_test8_3d",
+    "patch_test8_plane_strain",
+    "patch_test8_mpc",
+  ],
 )
 def test_assembly_coo_matches_legacy(skim_name: str) -> None:
   skim_pro = ROOT / "skims" / skim_name / "skim.pro"

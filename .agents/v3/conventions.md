@@ -28,7 +28,7 @@ Do not introduce Java-style names (`ContElem`) in public v3 APIs.
 - Use **`F64`** / **`I32`** (`NDArray[np.float64]` / `NDArray[np.int32]`) from `types.py` for array annotations.
 - **`ProblemDefinition`**: `typing.NamedTuple` of arrays only (jitable bundle).
 - **`LoadedProblem`**: `dataclass` for metadata (strings, paths, registry).
-- `frozen=True` on other immutable value objects (`PlaneStressMaterial`, `PrescribedDof`).
+- `frozen=True` on other immutable value objects (`PlaneStressMaterial`, `PlaneStrainMaterial`, `IsotropicMaterial`, `PrescribedDof`).
 - Ship `pyfem/v3/py.typed` when the surface stabilizes.
 
 ## Python version

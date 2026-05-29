@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from pyfem.v3.materials.isotropic import isotropic_matrix
+from pyfem.v3.materials.plane_strain import plane_strain_matrix
 from pyfem.v3.materials.plane_stress import plane_stress_matrix
+from pyfem.v3.registry import resolve_material_type
 from pyfem.v3.types import (
   DofMap,
   Mesh,
@@ -86,6 +89,30 @@ def _resolve_mpc_ties(
   return resolved_constraints, unresolved
 
 
+def _constitutive_matrix(
+  material_type: str,
+  youngs_modulus: float,
+  poisson_ratio: float,
+  *,
+  spatial_rank: int,
+) -> np.ndarray:
+  key = resolve_material_type(material_type)
+  if spatial_rank == 2:
+    if key == "plane_stress":
+      return plane_stress_matrix(youngs_modulus, poisson_ratio)
+    if key == "plane_strain":
+      return plane_strain_matrix(youngs_modulus, poisson_ratio)
+    msg = f"Material {material_type!r} not supported for 2D meshes"
+    raise ValueError(msg)
+  if spatial_rank == 3:
+    if key == "isotropic":
+      return isotropic_matrix(youngs_modulus, poisson_ratio)
+    msg = f"Material {material_type!r} not supported for 3D meshes"
+    raise ValueError(msg)
+  msg = f"Unsupported spatial rank {spatial_rank}"
+  raise ValueError(msg)
+
+
 def pack_problem(
   mesh: Mesh,
   dof_map: DofMap,
@@ -94,9 +121,16 @@ def pack_problem(
   constraints: tuple[PrescribedDof, ...] = (),
   ties: tuple[MpcTie, ...] = (),
   loads: tuple[NodalLoad, ...] = (),
+  *,
+  material_type: str = "PlaneStress",
 ) -> ProblemDefinition:
   """Build a jitable :class:`ProblemDefinition` from load-time structures."""
-  constitutive = plane_stress_matrix(youngs_modulus, poisson_ratio)
+  constitutive = _constitutive_matrix(
+    material_type,
+    youngs_modulus,
+    poisson_ratio,
+    spatial_rank=mesh.rank,
+  )
   n_dofs = dof_map.n_dofs
   external_load = np.zeros(n_dofs, dtype=np.float64)
   for load in loads:

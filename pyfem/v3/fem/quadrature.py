@@ -58,6 +58,57 @@ def gauss_tensor_product_2d(order: int) -> tuple[F64, F64]:
   return _meshgrid_2d(xi, wx)
 
 
+@njit(cache=True)
+def _meshgrid_3d(xi: F64, wx: F64) -> tuple[F64, F64]:
+  """Tensor product of identical 1D rules (Numba-safe, no ``meshgrid``)."""
+  m = xi.shape[0]
+  n = m * m * m
+  points = np.empty((n, 3), dtype=np.float64)
+  weights = np.empty(n, dtype=np.float64)
+  for i in range(m):
+    for j in range(m):
+      for k in range(m):
+        idx = i * m * m + j * m + k
+        points[idx, 0] = xi[i]
+        points[idx, 1] = xi[j]
+        points[idx, 2] = xi[k]
+        weights[idx] = wx[i] * wx[j] * wx[k]
+  return points, weights
+
+
+@njit(cache=True)
+def gauss_tensor_product_3d(order: int) -> tuple[F64, F64]:
+  xi, wx = gauss_legendre_1d(order)
+  return _meshgrid_3d(xi, wx)
+
+
+def _gauss_tet4_impl(order: int) -> tuple[F64, F64]:  # type: ignore
+  pass
+
+
+@overload(_gauss_tet4_impl)
+def _gauss_tet4(order):
+  if not isinstance(order, types.IntegerLiteral):
+    raise TypingError("The 'order' argument must be a compile-time literal integer.")
+
+  if order.literal_value != 1:
+    raise TypingError("Only literal order 1 is supported for Tet4 quadrature.")
+
+  third = 1.0 / 3.0
+  points = np.array([[third, third, third]], dtype=np.float64)
+  weights = np.array([0.5 * third], dtype=np.float64)
+
+  def impl(order):
+    return points, weights
+
+  return impl
+
+
+@njit(cache=True)
+def gauss_tet4(order: int) -> tuple[F64, F64]:
+  return _gauss_tet4_impl(literally(order))
+
+
 def _gauss_tria3_impl(order: int) -> tuple[F64, F64]:  # type: ignore
   pass
 

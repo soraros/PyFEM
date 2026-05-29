@@ -1,4 +1,4 @@
-"""One-off scale benchmark: v3 assembly/solve vs mesh size (not collected by pytest)."""
+"""Plane-strain scale benchmark on uniform Q8 patches (not collected by pytest)."""
 
 from __future__ import annotations
 
@@ -13,18 +13,13 @@ import numpy as np
 if sys.version_info < (3, 13):
   raise SystemExit("requires Python 3.13+")
 
-from pyfem.fem.Assembly import assembleExternalForce, assembleTangentStiffness, prepare
-from pyfem.io.InputReader import InputRead
-from pyfem.v3 import load_problem
+from pyfem.v3 import load_problem, solve_linear
 from pyfem.v3.assembly import assemble_loaded
 from pyfem.v3.mesh.refined_patch import build_uniform_q8_loaded
 from pyfem.v3.solver.context import prepare_linear_solve
-from pyfem.v3.solver.linear import solve_linear
-from pyfem.v3.types import LoadedProblem
 
 ROOT = Path(__file__).resolve().parents[2]
-SKIM_PRO = ROOT / "skims" / "patch_test8" / "skim.pro"
-LOADED_SKIM_PRO = ROOT / "skims" / "patch_test8_loaded" / "skim.pro"
+SKIM_PRO = ROOT / "skims" / "patch_test8_plane_strain" / "skim.pro"
 
 
 @dataclass
@@ -55,24 +50,8 @@ def _timeit(fn, *, warmup: int, repeats: int) -> float:
   return (time.perf_counter() - t0) / repeats * 1e3
 
 
-def _make_loaded_patch(nx: int, ny: int) -> LoadedProblem:
-  return build_uniform_q8_loaded(nx, ny, material_type="PlaneStress")
-
-
-def _legacy_solve_ms() -> float | None:
-  props, globdat = InputRead(str(SKIM_PRO))
-
-  def run_once() -> None:
-    prepare(props, globdat)
-    k, _ = assembleTangentStiffness(props, globdat)
-    fext = assembleExternalForce(props, globdat)
-    globdat.dofs.solve(k, fext)
-
-  return _timeit(run_once, warmup=2, repeats=20)
-
-
 def _benchmark_patch(label: str, nx: int, ny: int) -> ScaleRow:
-  loaded = _make_loaded_patch(nx, ny)
+  loaded = build_uniform_q8_loaded(nx, ny, material_type="PlaneStrain")
   problem = loaded.problem
   nnz_coo = problem.n_elems * 256
   asm = _timeit(lambda: assemble_loaded(loaded), warmup=3, repeats=20)
@@ -105,7 +84,7 @@ def _print_table(rows: list[ScaleRow]) -> None:
 
 
 def main() -> None:
-  print("=== v3 uniform Q8 patch scale (warm Numba) ===")
+  print("=== v3 uniform Q8 patch scale — PlaneStrain (warm Numba) ===")
   sizes = [
     ("2x2", 2, 2),
     ("4x4", 4, 4),
@@ -124,22 +103,18 @@ def main() -> None:
 
   _print_table(rows)
 
-  print("\n=== legacy PatchTest8 skim (5 elems, reference) ===")
-  leg_ms = _legacy_solve_ms()
-  if leg_ms is not None:
-    print(f"  legacy solve-only: {leg_ms:.3f} ms/call")
-
-  print("\n=== patch_test8_loaded context repeat (5 elems) ===")
-  loaded_context = load_problem(LOADED_SKIM_PRO)
-  ctx = prepare_linear_solve(loaded_context)
-  ctx.solve()
-  repeat_loaded = _timeit(lambda: ctx.solve(), warmup=0, repeats=50)
-  print(f"  repeat solve: {repeat_loaded:.3f} ms/call")
-
-  print("\n=== skim parity spot-check (5 elems) ===")
+  print("\n=== skim parity spot-check (5 elems, PlaneStrain) ===")
   loaded_skim = load_problem(SKIM_PRO)
   v3_state = solve_linear(loaded_skim)
   print(f"  v3 skim solve ok, ||u||={np.linalg.norm(v3_state):.6e}")
+
+  print("\n=== 16x16 stress vs strain assembly (same mesh, different C) ===")
+  stress = build_uniform_q8_loaded(16, 16, material_type="PlaneStress")
+  strain = build_uniform_q8_loaded(16, 16, material_type="PlaneStrain")
+  asm_stress = _timeit(lambda: assemble_loaded(stress), warmup=3, repeats=20)
+  asm_strain = _timeit(lambda: assemble_loaded(strain), warmup=3, repeats=20)
+  print(f"  PlaneStress asm: {asm_stress:.3f} ms/call")
+  print(f"  PlaneStrain asm: {asm_strain:.3f} ms/call")
 
 
 if __name__ == "__main__":

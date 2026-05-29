@@ -27,8 +27,8 @@ Phases **P0–P8** are defined in [roadmap.md](roadmap.md). Parity skims live un
 | Quad4 continuum | `quad4` in `fem/element.py` | done | `patch_test4` | P1 |
 | Tria3 continuum | `tria3` in `fem/element.py` | done | `patch_test3` | P1 |
 | MPC / ties | extend constraints | done | `patch_test8_mpc` | P1 |
-| `PlaneStrain` | `plane_strain` | deferred | — | P2 |
-| 3D continuum (hex/tet) | 3D kernels | deferred | `PatchTest8_3D` | P2 |
+| `PlaneStrain` | `plane_strain` | done | `patch_test8_plane_strain` | P2; scale notes in [plane_strain.md](plane_strain.md) |
+| 3D continuum (hex/tet) | rank-aware dispatch | done | `patch_test8_3d` | Hex8 + Tet4; `Isotropic` 6×6 |
 
 ## 3. Nonlinear static (ch.3–4)
 

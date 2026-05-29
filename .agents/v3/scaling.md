@@ -2,11 +2,14 @@
 
 How to interpret performance and memory for the P1 linear 2D stack. **Do not extrapolate from 5-element parity skims alone.**
 
+Hardening workflow for other phases: [hardening.md](hardening.md).
+
 ## Run scale benchmarks
 
 ```bash
 uv sync --group v3
 uv run python test/v3/_bench_solve_scale.py
+uv run python test/v3/_bench_plane_strain_scale.py
 uv run python test/v3/_bench_numba_stiffness.py
 uv run python test/v3/_bench_prange_investigation.py
 ```
@@ -56,6 +59,7 @@ Outer-boundary nodes receive the PatchTest8 prescribed displacement field. Grid 
 | Component | Location | Notes |
 |-----------|----------|-------|
 | Uniform Q8 patch mesh | `pyfem/v3/mesh/refined_patch.py` | Benchmark / programmatic problems |
+| Loaded Q8 patch problem | `build_uniform_q8_loaded(..., material_type=...)` | Scale sweeps for PlaneStress / PlaneStrain |
 | Chunked assembly | `pyfem/v3/assembly.py` | Auto when `n_elems > 2048`, `chunk_size=4096` |
 | Factorized reuse | `pyfem/v3/solver/context.py` | `prepare_linear_solve` → `LinearSolutionContext` (experimental) |
 | Parity path | `solve_linear` | Unchanged; always full assemble + solve |

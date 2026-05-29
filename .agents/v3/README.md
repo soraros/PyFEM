@@ -23,7 +23,9 @@ uv run pytest test/v3 -q
 | [parity.md](parity.md) | Skims A+B+C and regression targets |
 | [feature-parity.md](feature-parity.md) | v1 vs v3 capability matrix |
 | [roadmap.md](roadmap.md) | Phased delivery (P0–P8) |
-| [WORKFLOW.md](WORKFLOW.md) | How to prompt agents against the plan |
+| [WORKFLOW.md](WORKFLOW.md) | Pass A: feature delivery prompts |
+| [hardening.md](hardening.md) | Pass B: scale/bench/hot-path hardening after parity |
+| [scaling.md](scaling.md) | P1 scale benchmark notes (hardening example) |
 
 ## Entry points
 

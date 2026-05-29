@@ -67,3 +67,57 @@ def strain_displacement(grad_n: F64) -> F64:
   b[..., 2, 0::2] = grad_n[..., :, 1]
   b[..., 2, 1::2] = grad_n[..., :, 0]
   return b
+
+
+@njit(cache=True)
+def physical_gradients_3d(
+  nodal_coords: F64,
+  parent_gradients: F64,
+) -> tuple[F64, F64]:
+  """
+  Map shape-function gradients to physical space (3D, batched).
+
+  Returns
+  -------
+  grad_n
+      ``(n_elems, n_points, n_nodes, 3)``.
+  det_j
+      ``(n_elems, n_points)``.
+  """
+  n_elems = nodal_coords.shape[0]
+  n_pts = parent_gradients.shape[0]
+  n_nodes = nodal_coords.shape[1]
+  grad_n = np.empty((n_elems, n_pts, n_nodes, 3))
+  det_j = np.empty((n_elems, n_pts))
+  for e in range(n_elems):
+    xt = nodal_coords[e].T
+    for p in range(n_pts):
+      jac = xt @ parent_gradients[p]
+      det_j[e, p] = np.linalg.det(jac)
+      grad_n[e, p] = parent_gradients[p] @ np.linalg.inv(jac)
+  return grad_n, det_j
+
+
+@njit(cache=True)
+def strain_displacement_3d(grad_n: F64) -> F64:
+  """
+  3D strain–displacement operator B.
+
+  Returns
+  -------
+  B
+      ``(n_elems, n_points, 6, 3 * n_nodes)``.
+  """
+  n_elems, n_pts, n_nodes, _ = grad_n.shape
+  n_dof = 3 * n_nodes
+  b = np.zeros((n_elems, n_pts, 6, n_dof), dtype=np.float64)
+  b[..., 0, 0::3] = grad_n[..., :, 0]
+  b[..., 1, 1::3] = grad_n[..., :, 1]
+  b[..., 2, 2::3] = grad_n[..., :, 2]
+  b[..., 3, 1::3] = grad_n[..., :, 2]
+  b[..., 3, 2::3] = grad_n[..., :, 1]
+  b[..., 4, 0::3] = grad_n[..., :, 2]
+  b[..., 4, 2::3] = grad_n[..., :, 0]
+  b[..., 5, 0::3] = grad_n[..., :, 1]
+  b[..., 5, 1::3] = grad_n[..., :, 0]
+  return b
