@@ -32,13 +32,15 @@ Phased delivery toward v1 feature parity. Each phase exits when its skim parity 
 - [x] `SolverState`, internal force + tangent assembly
 - [x] Tangent assembly scale hardening ([tangent_assembly.md](tangent_assembly.md))
 - [x] Newton loop; load factor / tables (no `eval`)
-- [ ] Skims: ch.3 cantilever (`FiniteStrainContinuum`), ch.4 truss (`Truss`/`RiksSolver`) — blocked on P3 TL / P4 structures
+- [x] Skim ch.3 cantilever (`FiniteStrainContinuum` / TL Q8)
+- [x] Skim ch.4 truss (`Truss`/`RiksSolver`)
 
 ## P4 — Path following & structures
 
-- [ ] Riks arc-length
-- [ ] Linear truss / beam elements
-- [ ] ch.4 Riks examples (subset)
+- [x] Riks arc-length
+- [x] Linear truss / beam elements
+- [x] ch.4 Riks examples (subset)
+- [x] Structural scale hardening ([structural.md](structural.md))
 
 ## P5 — Advanced materials
 

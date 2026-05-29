@@ -22,6 +22,8 @@ Three layers share one schema (`ProblemDefinition`):
 | `patch_test8_nonlinear` | [`skim.pro`](../../skims/patch_test8_nonlinear/skim.pro) + loaded `.dat` | Q8 + `NonlinearSolver` | [`test_nonlinear_solver.py`](../../test/v3/test_nonlinear_solver.py) |
 | `patch_test8_nonlinear_ramp` | multi-step `loadTable` | Q8 + ramp | same |
 | `patch_test8_nonlinear_prescribed` | PatchTest8 `.dat` + ramp | prescribed-driven | same |
+| `cantilever8` | [`cantilever8.pro`](../../examples/ch03/cantilever8.pro) + [`cantilever8.dat`](../../examples/ch03/cantilever8.dat) | Q8 + `FiniteStrainContinuum` | [`test_parity_cantilever8.py`](../../test/v3/test_parity_cantilever8.py) |
+| `shallow_truss_riks` | [`ShallowtrussRiks.pro`](../../examples/ch04/ShallowtrussRiks.pro) + [`ShallowtrussRiks.dat`](../../examples/ch04/ShallowtrussRiks.dat) | Truss + Spring + `RiksSolver` | [`test_parity_shallow_truss_riks.py`](../../test/v3/test_parity_shallow_truss_riks.py) |
 
 ## Running parity
 

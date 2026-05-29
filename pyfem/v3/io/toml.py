@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pyfem.v3.io.dat import read_dat_mesh
 from pyfem.v3.mesh import build_dof_map
-from pyfem.v3.pack import pack_problem
+from pyfem.v3.pack import make_loaded, pack_problem
 from pyfem.v3.types import LoadedProblem
 
 
@@ -22,8 +22,8 @@ def read_problem_toml(path: Path) -> LoadedProblem:
   dof_map = build_dof_map(mesh)
   material = data["material"]
 
-  return LoadedProblem(
-    problem=pack_problem(
+  return make_loaded(
+    pack_problem(
       mesh,
       dof_map,
       float(material["E"]),

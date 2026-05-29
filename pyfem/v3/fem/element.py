@@ -40,6 +40,25 @@ def _wrap_batched(
 
 
 @njit(cache=True, parallel=True)
+def _integrate_btcb_batched(
+  parent_w: F64,
+  det_j: F64,
+  b: F64,
+  constitutive: F64,
+) -> F64:
+  """Integrate ``B.T @ C @ B`` over Gauss points for a batched mesh."""
+  n_elems = det_j.shape[0]
+  n_gp = parent_w.shape[0]
+  n_dof = b.shape[-1]
+  stiffness = np.zeros((n_elems, n_dof, n_dof), dtype=np.float64)
+  for e in prange(n_elems):
+    for p in range(n_gp):
+      weight = parent_w[p] * abs(det_j[e, p])
+      stiffness[e] += weight * (b[e, p].T @ constitutive @ b[e, p])
+  return stiffness
+
+
+@njit(cache=True, parallel=True)
 def _quad8_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
   """Batched Q8 stiffness, ``nodal_coords`` shape ``(n_elems, 8, 2)``."""
   parent_pts, parent_w = gauss_tensor_product_2d(3)
@@ -48,7 +67,7 @@ def _quad8_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -
   n_gp = parent_w.shape[0]
   n_nodes = nodal_coords.shape[1]
   n_dof = 2 * n_nodes
-  stiffness = np.zeros((n_elems, n_dof, n_dof))
+  stiffness = np.zeros((n_elems, n_dof, n_dof), dtype=np.float64)
 
   for e in prange(n_elems):
     xt = nodal_coords[e].T
@@ -69,120 +88,87 @@ def _quad8_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -
 
 @njit(cache=True, parallel=True)
 def _quad4_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
-  """Batched Quad4 stiffness, ``nodal_coords`` shape ``(n_elems, 4, 2)``."""
   parent_pts, parent_w = gauss_tensor_product_2d(2)
   _, dN = bilinear_quad4(parent_pts)
   grad_n, det_j = physical_gradients(nodal_coords, dN)
   b = strain_displacement(grad_n)
-
-  n_elems, n_gp = nodal_coords.shape[0], parent_w.shape[0]
-  n_dof = b.shape[-1]
-  stiffness = np.zeros((n_elems, n_dof, n_dof))
-
-  for e in prange(n_elems):
-    for p in range(n_gp):
-      weight = parent_w[p] * abs(det_j[e, p])
-      stiffness[e] += weight * (b[e, p].T @ constitutive @ b[e, p])
-
-  return stiffness
+  return _integrate_btcb_batched(parent_w, det_j, b, constitutive)
 
 
 @njit(cache=True, parallel=True)
 def _tria3_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
-  """Batched Tria3 stiffness, ``nodal_coords`` shape ``(n_elems, 3, 2)``."""
   parent_pts, parent_w = gauss_tria3(1)
   _, dN = linear_tria3(parent_pts)
   grad_n, det_j = physical_gradients(nodal_coords, dN)
   b = strain_displacement(grad_n)
-
-  n_elems, n_gp = nodal_coords.shape[0], parent_w.shape[0]
-  n_dof = b.shape[-1]
-  stiffness = np.zeros((n_elems, n_dof, n_dof))
-
-  for e in prange(n_elems):
-    for p in range(n_gp):
-      weight = parent_w[p] * abs(det_j[e, p])
-      stiffness[e] += weight * (b[e, p].T @ constitutive @ b[e, p])
-
-  return stiffness
-
-
-def quad8_plane_stress_stiffness(
-  nodal_coords: F64,
-  constitutive: F64,
-) -> F64:
-  r"""Element stiffness K_e = ∫_Ω Bᵀ C B dΩ (plane stress, Q8)."""
-  return _wrap_batched(_quad8_stiffness_from_coords_batched, nodal_coords, constitutive)
-
-
-def quad4_plane_stress_stiffness(
-  nodal_coords: F64,
-  constitutive: F64,
-) -> F64:
-  r"""Element stiffness K_e = ∫_Ω Bᵀ C B dΩ (plane stress, Quad4)."""
-  return _wrap_batched(_quad4_stiffness_from_coords_batched, nodal_coords, constitutive)
-
-
-def tria3_plane_stress_stiffness(
-  nodal_coords: F64,
-  constitutive: F64,
-) -> F64:
-  r"""Element stiffness K_e = ∫_Ω Bᵀ C B dΩ (plane stress, Tria3)."""
-  return _wrap_batched(_tria3_stiffness_from_coords_batched, nodal_coords, constitutive)
+  return _integrate_btcb_batched(parent_w, det_j, b, constitutive)
 
 
 @njit(cache=True, parallel=True)
 def _hex8_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
-  """Batched Hex8 stiffness, ``nodal_coords`` shape ``(n_elems, 8, 3)``."""
   parent_pts, parent_w = gauss_tensor_product_3d(2)
   _, dN = trilinear_hex8(parent_pts)
   grad_n, det_j = physical_gradients_3d(nodal_coords, dN)
   b = strain_displacement_3d(grad_n)
-
-  n_elems, n_gp = nodal_coords.shape[0], parent_w.shape[0]
-  n_dof = b.shape[-1]
-  stiffness = np.zeros((n_elems, n_dof, n_dof))
-
-  for e in prange(n_elems):
-    for p in range(n_gp):
-      weight = parent_w[p] * abs(det_j[e, p])
-      stiffness[e] += weight * (b[e, p].T @ constitutive @ b[e, p])
-
-  return stiffness
+  return _integrate_btcb_batched(parent_w, det_j, b, constitutive)
 
 
 @njit(cache=True, parallel=True)
 def _tet4_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
-  """Batched Tet4 stiffness, ``nodal_coords`` shape ``(n_elems, 4, 3)``."""
   parent_pts, parent_w = gauss_tet4(1)
   _, dN = linear_tet4(parent_pts)
   grad_n, det_j = physical_gradients_3d(nodal_coords, dN)
   b = strain_displacement_3d(grad_n)
-
-  n_elems, n_gp = nodal_coords.shape[0], parent_w.shape[0]
-  n_dof = b.shape[-1]
-  stiffness = np.zeros((n_elems, n_dof, n_dof))
-
-  for e in prange(n_elems):
-    for p in range(n_gp):
-      weight = parent_w[p] * abs(det_j[e, p])
-      stiffness[e] += weight * (b[e, p].T @ constitutive @ b[e, p])
-
-  return stiffness
+  return _integrate_btcb_batched(parent_w, det_j, b, constitutive)
 
 
-def hex8_stiffness(
+def continuum_stiffness_batched(
   nodal_coords: F64,
   constitutive: F64,
 ) -> F64:
+  """Dispatch batched small-strain continuum stiffness by mesh rank and nodes/elem."""
+  spatial_dim = int(nodal_coords.shape[-1])
+  n_nodes = int(nodal_coords.shape[-2])
+  if spatial_dim == 2:
+    if n_nodes == 8:
+      return _quad8_stiffness_from_coords_batched(nodal_coords, constitutive)
+    if n_nodes == 4:
+      return _quad4_stiffness_from_coords_batched(nodal_coords, constitutive)
+    if n_nodes == 3:
+      return _tria3_stiffness_from_coords_batched(nodal_coords, constitutive)
+  elif spatial_dim == 3:
+    if n_nodes == 8:
+      return _hex8_stiffness_from_coords_batched(nodal_coords, constitutive)
+    if n_nodes == 4:
+      return _tet4_stiffness_from_coords_batched(nodal_coords, constitutive)
+  msg = (
+    f"Unsupported element with {n_nodes} nodes per element "
+    f"in {spatial_dim}D"
+  )
+  raise ValueError(msg)
+
+
+def quad8_plane_stress_stiffness(nodal_coords: F64, constitutive: F64) -> F64:
+  r"""Element stiffness K_e = ∫_Ω Bᵀ C B dΩ (plane stress, Q8)."""
+  return _wrap_batched(_quad8_stiffness_from_coords_batched, nodal_coords, constitutive)
+
+
+def quad4_plane_stress_stiffness(nodal_coords: F64, constitutive: F64) -> F64:
+  r"""Element stiffness K_e = ∫_Ω Bᵀ C B dΩ (plane stress, Quad4)."""
+  return _wrap_batched(_quad4_stiffness_from_coords_batched, nodal_coords, constitutive)
+
+
+def tria3_plane_stress_stiffness(nodal_coords: F64, constitutive: F64) -> F64:
+  r"""Element stiffness K_e = ∫_Ω Bᵀ C B dΩ (plane stress, Tria3)."""
+  return _wrap_batched(_tria3_stiffness_from_coords_batched, nodal_coords, constitutive)
+
+
+def hex8_stiffness(nodal_coords: F64, constitutive: F64) -> F64:
   r"""Element stiffness K_e = ∫_Ω Bᵀ C B dΩ (3D, Hex8)."""
   return _wrap_batched(_hex8_stiffness_from_coords_batched, nodal_coords, constitutive)
 
 
-def tet4_stiffness(
-  nodal_coords: F64,
-  constitutive: F64,
-) -> F64:
+def tet4_stiffness(nodal_coords: F64, constitutive: F64) -> F64:
   r"""Element stiffness K_e = ∫_Ω Bᵀ C B dΩ (3D, Tet4)."""
   return _wrap_batched(_tet4_stiffness_from_coords_batched, nodal_coords, constitutive)
 

@@ -4,15 +4,14 @@
 
 from __future__ import annotations
 
-import sys
-
 import numpy as np
 import pytest
 
-if sys.version_info < (3, 13):
-  pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
-
-from pyfem.v3.assembly import assemble_linear_system
+from pyfem.v3.assembly import (
+  assemble_linear_system,
+  assemble_loaded,
+  assemble_tangent_loaded,
+)
 from pyfem.v3.mesh import build_dof_map
 from pyfem.v3.mesh.refined_patch import (
   PATCH_HEIGHT,
@@ -22,7 +21,8 @@ from pyfem.v3.mesh.refined_patch import (
   patch_displacement,
 )
 from pyfem.v3.pack import pack_problem
-from pyfem.v3.solver.context import prepare_linear_solve
+from pyfem.v3.solver.context import prepare_cached_linear
+from pyfem.v3.solver.state import initial_solver_state
 
 
 def test_single_element_patch_counts() -> None:
@@ -97,7 +97,7 @@ def test_stiffness_diagonal_nonzero() -> None:
 
 def test_factorized_solve_2x2() -> None:
   loaded = build_uniform_q8_loaded(2, 2)
-  ctx = prepare_linear_solve(loaded)
+  ctx = prepare_cached_linear(loaded)
   state = ctx.solve()
   assert state.shape[0] == loaded.problem.n_dofs
 
@@ -116,7 +116,7 @@ def test_plane_strain_stiffness_diagonal_nonzero() -> None:
 
 def test_plane_strain_factorized_solve_2x2() -> None:
   loaded = build_uniform_q8_loaded(2, 2, material_type="PlaneStrain")
-  ctx = prepare_linear_solve(loaded)
+  ctx = prepare_cached_linear(loaded)
   state = ctx.solve()
   assert state.shape[0] == loaded.problem.n_dofs
   assert np.linalg.norm(state) > 0.0
@@ -126,3 +126,33 @@ def test_plane_strain_constitutive_differs_from_plane_stress() -> None:
   stress = build_uniform_q8_loaded(2, 2, material_type="PlaneStress")
   strain = build_uniform_q8_loaded(2, 2, material_type="PlaneStrain")
   assert not np.allclose(stress.problem.constitutive, strain.problem.constitutive)
+
+
+@pytest.mark.parametrize("nx, ny", [(2, 2), (8, 8)])
+def test_plane_strain_uniform_patch_assembles_and_solves(nx: int, ny: int) -> None:
+  loaded = build_uniform_q8_loaded(nx, ny, material_type="PlaneStrain")
+  system = assemble_loaded(loaded)
+  assert system.stiffness.shape[0] == loaded.problem.n_dofs
+  assert np.all(system.stiffness.diagonal() > 0.0)
+  state = prepare_cached_linear(loaded).solve()
+  assert state.shape[0] == loaded.problem.n_dofs
+  assert np.linalg.norm(state) > 0.0
+
+
+@pytest.mark.parametrize("nx, ny", [(2, 2), (8, 8)])
+def test_tangent_uniform_patch_assembles(nx: int, ny: int) -> None:
+  loaded = build_uniform_q8_loaded(nx, ny)
+  solver_state = initial_solver_state(loaded.problem)
+  system = assemble_tangent_loaded(loaded, solver_state.state)
+  assert system.stiffness.shape[0] == loaded.problem.n_dofs
+  assert np.all(system.stiffness.diagonal() > 0.0)
+  assert system.internal_force.shape[0] == loaded.problem.n_dofs
+
+
+def test_tangent_context_internal_force_at_solution() -> None:
+  loaded = build_uniform_q8_loaded(8, 8)
+  state = prepare_cached_linear(loaded).solve()
+  tangent = assemble_tangent_loaded(loaded, state)
+  ctx = prepare_cached_linear(loaded)
+  fint = ctx.internal_force(state)
+  np.testing.assert_allclose(fint, tangent.internal_force, rtol=0.0, atol=1e-8)

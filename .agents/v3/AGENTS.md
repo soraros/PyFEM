@@ -36,6 +36,7 @@ Importing `pyfem.v3` on Python &lt; 3.13 raises `ImportError`.
 - PEP 8 `snake_case` / `PascalCase`; legacy names only in `registry.py`
 - Annotate arrays with **`F64`** / **`I32`**; use `np.float64` / `np.int32` for `dtype=`
 - Ruff: `pyfem/v3/ruff.toml` (`indent-width = 2`, `target-version = "py313"`)
+- **Numerical kernels:** short math-aligned names (`ke`, `lam`, `bl`, `du`) so lines stay dense; descriptive names at public/I/O boundaries — see [conventions.md](conventions.md#short-names-in-numerical-kernels)
 
 ## Parity (skims)
 

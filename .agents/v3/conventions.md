@@ -57,6 +57,59 @@ Do not introduce Java-style names (`ContElem`) in public v3 APIs.
 - Keep setup/I/O in plain Python; only numerical kernels need to be dense and array-oriented.
 - Do not add v3-only deps to the default runtime list until v3 is promoted.
 
+### Numba-safe abstraction
+
+Unify and deduplicate code **without** patterns that block future `@njit` fusion or inlining.
+
+**Python-only shell** (OK to use dicts, strings, dataclasses, `Callable`, dynamic `*args`):
+
+- I/O, registry, `make_loaded`, `CachedLinearSystem`, COO buffer allocation, group loops in `assembly.py`.
+- Dispatch from mesh metadata to a **fixed** kernel by rank / nodes-per-element / group kind.
+
+**Inside or adjacent to `@njit` hot paths** (must stay nopython-safe):
+
+- Array-only arguments; no closures, no dict-of-callables, no `Callable` parameters.
+- Shared integration: one staged helper (e.g. `_integrate_btcb_batched`) called directly from each element kernel.
+- Element-type dispatch: **`if` / `elif` on literal rank and node count**, calling `@njit` functions by name — not a runtime map of callables.
+- State gather → kernel: allocate `element_states`, call `_gather_element_states`, then call the batched kernel **directly** (no generic `batch_fn(...)` wrapper).
+
+**Rule of thumb:** if a refactor would need object mode or `numba.extending` to compile, keep the abstraction in the Python shell and duplicate a few lines at the `@njit` boundary instead.
+
+### Short names in numerical kernels
+
+In `@njit` FEM math and other hot, array-oriented code, **prefer short variable names** when they are unambiguous or match standard notation. The goal is **one line, dense with meaning** — avoid breaking expressions across lines just to satisfy long PEP 8 names.
+
+| Context | Prefer | Over |
+|---------|--------|------|
+| Element stiffness / force | `ke`, `fe`, `k`, `f` | `element_stiffness`, `internal_force_local` |
+| Local / global state | `a`, `u`, `da` | `element_displacement`, `displacement_increment` |
+| Strain / stress scalars | `du`, `dv`, `eps`, `sig` | `axial_strain_increment`, `cauchy_stress` |
+| Geometry | `l0`, `dx`, `dy` | `reference_length`, `delta_x` |
+| Load / arc-length | `lam`, `dlam`, `fhat` | `load_factor`, `external_load_reference` |
+| B-matrix / shape | `bl`, `N`, `dN` | `strain_displacement_row`, `shape_function` |
+| Loop indices | `e`, `gp`, `i`, `j` | `elem_index`, `gauss_point` |
+
+**Where this applies:** inside `fem/*` kernels, assembly inner loops, Newton/Riks increment math, and staged helpers that mirror textbook symbols.
+
+**Where it does not apply:** public APIs, I/O, dataclass fields, registry keys, and test names — keep those descriptive (`assemble_tangent_loaded`, `ProblemDefinition`, `build_truss_fan`).
+
+**Rule of thumb:** if a reviewer would recognize the symbol from FEM texts (B, K, u, λ, ε, σ) or from the immediately surrounding three lines, shorten it. If the name would need a comment to decode, spell it out.
+
+Example (good — matches math, stays on one line):
+
+```python
+kl = youngs_modulus * area * l0 * np.outer(bl, bl)
+f_bar = l0 * sigma * area * bl
+```
+
+Example (avoid in kernels — forces needless wraps):
+
+```python
+linear_stiffness_matrix = (
+  youngs_modulus * cross_section_area * reference_length * np.outer(strain_displacement_row, strain_displacement_row)
+)
+```
+
 ## Notebooks
 
 - Jupytext config in root `pyproject.toml` (`py:percent` ↔ `ipynb`).

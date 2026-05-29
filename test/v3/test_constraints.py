@@ -85,6 +85,9 @@ def test_mpc_tie_links_slave_to_free_master() -> None:
     mpc_factor=np.array([1.5], dtype=np.float64),
     mpc_offset=np.array([0.1], dtype=np.float64),
     external_load=np.zeros(4, dtype=np.float64),
+    elem_group_id=np.zeros(1, dtype=np.int32),
+    group_kind=np.array([0], dtype=np.int32),
+    group_props=np.zeros((1, 2), dtype=np.float64),
   )
   constraints = build_prescribed_constraints(problem)
   x_free = np.array([2.0, 3.0], dtype=np.float64)

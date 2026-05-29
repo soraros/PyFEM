@@ -17,7 +17,6 @@ from _legacy_parity import legacy_state, legacy_tangent_at_state
 
 from pyfem.v3 import load_problem, solve_linear
 from pyfem.v3.assembly import assemble_loaded, assemble_tangent_loaded
-from pyfem.v3.fem.assembly import assemble_internal_force
 from pyfem.v3.solver.constraints import build_prescribed_constraints
 from pyfem.v3.solver.state import initial_solver_state
 
@@ -84,21 +83,13 @@ def test_internal_force_balances_external_load_at_solution() -> None:
   np.testing.assert_allclose(residual, 0.0, atol=1e-8)
 
 
-def test_fused_tangent_matches_separate_internal_force_path() -> None:
+def test_fused_tangent_matches_matvec_internal_force() -> None:
   skim_pro = ROOT / "skims" / "patch_test8" / "skim.pro"
   loaded = load_problem(skim_pro)
   state = solve_linear(loaded)
   fused = assemble_tangent_loaded(loaded, state)
   linear = assemble_loaded(loaded)
-  fint_ref = np.zeros(loaded.problem.n_dofs, dtype=np.float64)
-  assemble_internal_force(
-    loaded.problem.coords,
-    loaded.problem.conn,
-    loaded.problem.global_dofs,
-    loaded.problem.constitutive,
-    state,
-    fint_ref,
-  )
+  fint_ref = linear.stiffness @ state
   v3_coo = fused.stiffness.tocoo()
   linear_coo = linear.stiffness.tocoo()
   np.testing.assert_allclose(v3_coo.data, linear_coo.data, rtol=0.0, atol=1e-8)

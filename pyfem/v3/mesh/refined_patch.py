@@ -117,7 +117,7 @@ def build_uniform_q8_loaded(
 ) -> LoadedProblem:
   """Uniform Q8 patch as a :class:`LoadedProblem` for assembly and solve benches."""
   from pyfem.v3.mesh import build_dof_map
-  from pyfem.v3.pack import pack_problem
+  from pyfem.v3.pack import make_loaded, pack_problem
 
   mesh, constraints = build_uniform_q8_patch(nx, ny, width=width, height=height)
   dof_map = build_dof_map(mesh)
@@ -130,12 +130,10 @@ def build_uniform_q8_loaded(
     material_type=material_type,
   )
   tag = material_type.removeprefix("Plane").lower()
-  return LoadedProblem(
-    problem=problem,
+  return make_loaded(
+    problem,
     name=f"patch_{nx}x{ny}_{tag}",
     element_type="SmallStrainContinuum",
     material_type=material_type,
     solver_type="LinearSolver",
-    element_group="ContElem",
-    mesh_path=None,
   )

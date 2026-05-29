@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.sparse.linalg import spsolve
 
 from pyfem.v3.assembly import assemble_tangent_loaded
 from pyfem.v3.io.load_ramp import load_factor, n_load_steps
@@ -12,12 +11,12 @@ from pyfem.v3.registry import (
   resolve_material_type,
   resolve_solver_type,
 )
+from pyfem.v3.solver._settings import nonlinear_settings
 from pyfem.v3.solver.constraints import (
   PrescribedConstraints,
   build_prescribed_constraints,
 )
-from pyfem.v3.solver.context import factorized_reduced_solve
-from pyfem.v3.solver.tangent_context import TangentAssemblyContext
+from pyfem.v3.solver.context import CachedLinearSystem, solve_reduced_displacement
 from pyfem.v3.types import (
   F64,
   LoadedProblem,
@@ -28,13 +27,9 @@ from pyfem.v3.types import (
 
 _PRESCRIBED_NORM_TOL = 1.0e-16
 _LINEAR_ELEMENT = "SmallStrainContinuum"
+_FINITE_STRAIN_ELEMENT = "FiniteStrainContinuum"
+_NONLINEAR_ELEMENTS = frozenset({_LINEAR_ELEMENT, _FINITE_STRAIN_ELEMENT})
 _LINEAR_MATERIALS = frozenset({"PlaneStress", "PlaneStrain", "Isotropic"})
-
-
-def _solver_settings(loaded: LoadedProblem) -> NonlinearSolverSettings:
-  if loaded.nonlinear_settings is not None:
-    return loaded.nonlinear_settings
-  return NonlinearSolverSettings()
 
 
 def _prescribed_dof_ids(problem: ProblemDefinition) -> np.ndarray:
@@ -85,7 +80,7 @@ def newton_step(
   *,
   settings: NonlinearSolverSettings,
   constraints: PrescribedConstraints,
-  tangent_ctx: TangentAssemblyContext | None = None,
+  tangent_ctx: CachedLinearSystem | None = None,
 ) -> F64:
   """Run one load step (Newton loop) and return the converged displacement."""
   problem = loaded.problem
@@ -97,7 +92,6 @@ def newton_step(
   use_cache = tangent_ctx is not None
   if use_cache:
     f_int = tangent_ctx.internal_force(state)
-    k_csr = tangent_ctx.k_csr
   else:
     tangent = assemble_tangent_loaded(loaded, state)
     f_int = tangent.internal_force
@@ -105,7 +99,6 @@ def newton_step(
 
   error = residual_norm(f_ext, f_int, constraints)
   iteration = 0
-  solve_red = factorized_reduced_solve(constraints, k_csr) if use_cache else None
 
   while error > settings.tol:
     iteration += 1
@@ -113,13 +106,11 @@ def newton_step(
       msg = "Newton-Raphson iterations did not converge!"
       raise RuntimeError(msg)
 
-    b_red = constraints.C.T @ (f_ext - f_int)
-    if solve_red is not None:
-      da_red = solve_red(b_red)
+    res = f_ext - f_int
+    if use_cache:
+      da = tangent_ctx.solve_increment(res)
     else:
-      k_red = constraints.C.T @ (k_csr @ constraints.C)
-      da_red = spsolve(k_red, b_red)
-    da = constraints.C @ da_red
+      da = solve_reduced_displacement(constraints, k_csr, res)
 
     state += da
     set_prescribed_displacements(state, problem, constraints, lam)
@@ -140,18 +131,19 @@ def solve_nonlinear(loaded: LoadedProblem) -> SolverState:
   """
   Solve a nonlinear static problem with load ramping and Newton–Raphson.
 
-  Requires ``SmallStrainContinuum`` and a linear elastic material for the
-  current implementation.
+  Requires ``SmallStrainContinuum`` or ``FiniteStrainContinuum`` with a linear
+  elastic material for the current implementation.
   """
   resolve_solver_type(loaded.solver_type)
   resolve_element_type(loaded.element_type)
   resolve_material_type(loaded.material_type)
 
-  if loaded.element_type != _LINEAR_ELEMENT:
-    msg = f"Nonlinear solve supports {_LINEAR_ELEMENT!r} only"
+  if loaded.element_type not in _NONLINEAR_ELEMENTS:
+    supported = ", ".join(sorted(_NONLINEAR_ELEMENTS))
+    msg = f"Nonlinear solve supports {supported} only"
     raise ValueError(msg)
 
-  settings = _solver_settings(loaded)
+  settings = nonlinear_settings(loaded)
   constraints = build_prescribed_constraints(loaded.problem)
   n_steps = n_load_steps(settings)
 
@@ -159,7 +151,7 @@ def solve_nonlinear(loaded: LoadedProblem) -> SolverState:
   state_increment = np.zeros(loaded.problem.n_dofs, dtype=np.float64)
 
   tangent_ctx = (
-    TangentAssemblyContext.from_loaded(loaded) if _can_cache_tangent(loaded) else None
+    CachedLinearSystem.from_loaded(loaded) if _can_cache_tangent(loaded) else None
   )
 
   for step in range(1, n_steps + 1):

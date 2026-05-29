@@ -153,7 +153,7 @@ def read_dat_mesh(
           continue
         parts = chunk.split()
         eid = _parse_int(parts[0])
-        group = parts[1].strip('"')
+        group = parts[1].strip().strip('"').strip("'")
         nodes = [_parse_int(x) for x in parts[2:]]
         elements.append((eid, group, nodes))
 
@@ -211,10 +211,12 @@ def read_dat_mesh(
   conn = np.zeros((len(elements), len(elements[0][2])), dtype=np.int32)
   elem_group_ids = np.zeros(len(elements), dtype=np.int32)
   group_names: dict[str, int] = {}
+  group_name_list: list[str] = []
 
   for i, (_eid, group, nodes) in enumerate(elements):
     if group not in group_names:
       group_names[group] = len(group_names)
+      group_name_list.append(group)
     elem_group_ids[i] = group_names[group]
     conn[i, :] = np.asarray(
       [node_id_to_index[n] for n in nodes],
@@ -226,6 +228,7 @@ def read_dat_mesh(
     conn=conn,
     node_ids=np.asarray(node_ids, dtype=np.int32),
     elem_group_id=elem_group_ids,
+    group_names=tuple(group_name_list),
     node_id_to_index=node_id_to_index,
   )
   if mesh.rank != rank:

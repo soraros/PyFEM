@@ -1,4 +1,4 @@
-"""Cached factorization for repeated linear solves."""
+"""Cached linear system: stiffness, factorized solve, and matvec."""
 
 from __future__ import annotations
 
@@ -28,12 +28,22 @@ def factorized_reduced_solve(
   return factorized(k_red.tocsr())
 
 
-@dataclass
-class LinearSolutionContext:
-  """
-  Cached reduced-system factorization for repeated solves.
+def solve_reduced_displacement(
+  constraints: PrescribedConstraints,
+  k_csr: csr_matrix,
+  rhs: F64,
+) -> F64:
+  """Solve ``K @ da = rhs`` on free DOFs and return the full increment."""
+  solve_red = factorized_reduced_solve(constraints, k_csr)
+  return constraints.C @ solve_red(constraints.C.T @ rhs)
 
-  Valid only while mesh, constraints, and stiffness sparsity pattern are fixed.
+
+@dataclass
+class CachedLinearSystem:
+  """
+  Cached linear stiffness with factorized reduced solve and fast matvec.
+
+  Valid while mesh, constraints, and sparsity pattern are fixed.
   """
 
   factorized_solve: Callable[[F64], F64]
@@ -41,6 +51,19 @@ class LinearSolutionContext:
   k_csr: csr_matrix
   n_dofs: int
   base_load: F64
+
+  def matvec(self, state: F64) -> F64:
+    """Return ``K @ state`` using the cached tangent."""
+    state = np.ascontiguousarray(state, dtype=np.float64)
+    return np.asarray(self.k_csr @ state, dtype=np.float64)
+
+  def internal_force(self, state: F64) -> F64:
+    """Alias for :meth:`matvec` (Newton internal-force updates)."""
+    return self.matvec(state)
+
+  def solve_increment(self, rhs: F64) -> F64:
+    """Solve ``K @ da = rhs`` on free DOFs and return the full increment."""
+    return self.constraints.C @ self.factorized_solve(self.constraints.C.T @ rhs)
 
   def solve(self, load: F64 | None = None) -> F64:
     """Solve with optional replacement load vector."""
@@ -59,7 +82,7 @@ class LinearSolutionContext:
     loaded: LoadedProblem,
     *,
     chunk_size: int | None = None,
-  ) -> LinearSolutionContext:
+  ) -> CachedLinearSystem:
     resolve_solver_type(loaded.solver_type)
     system = assemble_loaded(loaded, chunk_size=chunk_size)
     return cls.from_system(loaded.problem, system)
@@ -69,7 +92,7 @@ class LinearSolutionContext:
     cls,
     problem: ProblemDefinition,
     system: LinearSystem,
-  ) -> LinearSolutionContext:
+  ) -> CachedLinearSystem:
     constraints = build_prescribed_constraints(problem)
     k_csr = system.stiffness.tocsr()
     solve_red = factorized_reduced_solve(constraints, k_csr)
@@ -82,17 +105,21 @@ class LinearSolutionContext:
     )
 
 
-def prepare_linear_solve(
+LinearSolutionContext = CachedLinearSystem
+TangentAssemblyContext = CachedLinearSystem
+
+
+def prepare_cached_linear(
   problem: ProblemDefinition | LoadedProblem,
   *,
   element_type: str | None = None,
   material_type: str | None = None,
   solver_type: str | None = None,
   chunk_size: int | None = None,
-) -> LinearSolutionContext:
-  """Assemble and factorize once for repeated solves."""
+) -> CachedLinearSystem:
+  """Assemble linear ``K`` and factorize once for repeated solves or matvecs."""
   if isinstance(problem, LoadedProblem):
-    return LinearSolutionContext.from_loaded(problem, chunk_size=chunk_size)
+    return CachedLinearSystem.from_loaded(problem, chunk_size=chunk_size)
 
   if not all((element_type, material_type, solver_type)):
     msg = "element_type, material_type, and solver_type are required"
@@ -104,4 +131,8 @@ def prepare_linear_solve(
     material_type=material_type,
     chunk_size=chunk_size,
   )
-  return LinearSolutionContext.from_system(problem, system)
+  return CachedLinearSystem.from_system(problem, system)
+
+
+prepare_linear_solve = prepare_cached_linear
+prepare_tangent_assembly = prepare_cached_linear

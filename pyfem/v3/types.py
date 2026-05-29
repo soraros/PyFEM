@@ -17,6 +17,10 @@ I32 = NDArray[np.int32]
 DOF_TYPES_2D: tuple[str, ...] = ("u", "v")
 DOF_TYPES_3D: tuple[str, ...] = ("u", "v", "w")
 
+GROUP_CONTINUUM = 0
+GROUP_TRUSS = 1
+GROUP_SPRING = 2
+
 
 def dof_types_for_rank(rank: int) -> tuple[str, ...]:
   """Return nodal DOF type names for a spatial rank."""
@@ -82,6 +86,15 @@ class MpcTie:
   factor: float
 
 
+@dataclass(frozen=True)
+class ElementGroupSpec:
+  """Element group metadata from skim ``.pro`` (I/O only)."""
+
+  name: str
+  element_type: str
+  props: tuple[float, ...]
+
+
 @dataclass
 class Mesh:
   """Structure-of-arrays mesh (built at load time)."""
@@ -91,6 +104,7 @@ class Mesh:
   node_ids: I32
   elem_group_id: I32
   node_id_to_index: dict[int, int] = field(repr=False)
+  group_names: tuple[str, ...] = ()
 
   @property
   def n_nodes(self) -> int:
@@ -143,6 +157,9 @@ class ProblemDefinition(NamedTuple):
   mpc_factor: F64
   mpc_offset: F64
   external_load: F64
+  elem_group_id: I32
+  group_kind: I32
+  group_props: F64
 
   @property
   def n_nodes(self) -> int:
@@ -169,6 +186,18 @@ class NonlinearSolverSettings:
   load_table: F64 | None = None
 
 
+@dataclass(frozen=True)
+class RiksSolverSettings:
+  """Riks arc-length solver controls (parsed from skim ``.pro``)."""
+
+  tol: float = 1.0e-5
+  iter_max: int = 10
+  opt_iter: int = 5
+  fixed_step: bool = False
+  max_lam: float = 1.0e20
+  max_factor: float = 1.0e20
+
+
 @dataclass
 class LoadedProblem:
   """Result of ``load_problem``: jitable data plus registry metadata."""
@@ -181,6 +210,8 @@ class LoadedProblem:
   element_group: str
   mesh_path: Path | None = None
   nonlinear_settings: NonlinearSolverSettings | None = None
+  riks_settings: RiksSolverSettings | None = None
+  groups: tuple[ElementGroupSpec, ...] = ()
 
 
 @dataclass

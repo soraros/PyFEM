@@ -60,10 +60,11 @@ Legacy `SmallStrainContinuum` maps to one v3 continuum kernel; **element family 
 - Repeated solves: experimental `LinearSolutionContext` in `solver/context.py` (`prepare_linear_solve`).
 - Tangent + internal force: `assemble_tangent_loaded`; fused `assemble_tangent_coo`; experimental `TangentAssemblyContext` in `solver/tangent_context.py` (linear `K`, fast `f_int = K @ u`).
 - Nonlinear static: `solve_nonlinear` in `solver/nonlinear.py`; `loadTable` / `loadFunc=t` via `io/load_ramp.py` (no `eval`); residual norm on free DOFs (`C.T @ residual`).
+- Structural: unified 2-node link kernel (`fem/link2.py`: Truss + Spring); Riks driver in `solver/riks.py`.
 
 ## Scale
 
-See [scaling.md](scaling.md) (P1 plane-stress Q8) and [plane_strain.md](plane_strain.md) (P2 plane-strain). Uniform Q8 patch meshes: `pyfem/v3/mesh/refined_patch.py` (`build_uniform_q8_patch`, `build_uniform_q8_loaded`). 3D parity: `patch_test8_3d` skim; uniform Hex8 scale benches are optional pass B ([hardening.md](hardening.md)).
+See [scaling.md](scaling.md) (P1 plane-stress Q8) and [plane_strain.md](plane_strain.md) (P2 plane-strain). Uniform Q8 patch meshes: `pyfem/v3/mesh/refined_patch.py` (`build_uniform_q8_patch`, `build_uniform_q8_loaded`). Structural fan meshes: `pyfem/v3/mesh/truss_fan.py` ([structural.md](structural.md)). 3D parity: `patch_test8_3d` skim; uniform Hex8 scale benches are optional pass B ([hardening.md](hardening.md)).
 
 ## Skims
 

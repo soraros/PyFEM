@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,12 @@ from pyfem.io.InputReader import InputRead
 from pyfem.solvers.LinearSolver import LinearSolver
 from pyfem.solvers.NonlinearSolver import NonlinearSolver
 from pyfem.util.dataStructures import elementData
+
+
+def load_parity_tolerances(skim_dir: Path) -> tuple[float, float]:
+  with (skim_dir / "parity.toml").open("rb") as fh:
+    data = tomllib.load(fh)
+  return float(data["rtol"]), float(data["atol"])
 
 
 def legacy_state(pro_path: Path) -> np.ndarray:
@@ -36,6 +43,26 @@ def legacy_nonlinear_state(pro_path: Path) -> np.ndarray:
     solver.dtime = settings.dtime
     if settings.load_table is not None:
       solver.loadTable = settings.load_table
+  while globdat.active:
+    solver.run(props, globdat)
+  return np.asarray(globdat.state)
+
+
+def legacy_riks_state(pro_path: Path) -> np.ndarray:
+  """Run legacy ``RiksSolver`` until ``globdat.active`` is false."""
+  from pyfem.solvers.RiksSolver import RiksSolver
+  from pyfem.v3.io.solver_pro import parse_riks_solver_settings
+
+  props, globdat = InputRead(str(pro_path))
+  solver = RiksSolver(props, globdat)
+  settings = parse_riks_solver_settings(pro_path.read_text(encoding="utf-8"))
+  if settings is not None:
+    solver.tol = settings.tol
+    solver.iterMax = settings.iter_max
+    solver.optiter = settings.opt_iter
+    solver.fixedStep = settings.fixed_step
+    solver.maxLam = settings.max_lam
+    solver.maxFactor = settings.max_factor
   while globdat.active:
     solver.run(props, globdat)
   return np.asarray(globdat.state)

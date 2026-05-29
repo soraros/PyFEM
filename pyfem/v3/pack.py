@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
 from pyfem.v3.materials.isotropic import isotropic_matrix
 from pyfem.v3.materials.plane_strain import plane_strain_matrix
 from pyfem.v3.materials.plane_stress import plane_stress_matrix
-from pyfem.v3.registry import resolve_material_type
+from pyfem.v3.registry import group_kind_for, group_props_for, resolve_material_type
 from pyfem.v3.types import (
+  GROUP_CONTINUUM,
   DofMap,
+  ElementGroupSpec,
+  LoadedProblem,
   Mesh,
   MpcTie,
   NodalLoad,
+  NonlinearSolverSettings,
   PrescribedDof,
   ProblemDefinition,
+  RiksSolverSettings,
 )
 
 
@@ -113,6 +120,7 @@ def _constitutive_matrix(
   raise ValueError(msg)
 
 
+
 def pack_problem(
   mesh: Mesh,
   dof_map: DofMap,
@@ -123,14 +131,30 @@ def pack_problem(
   loads: tuple[NodalLoad, ...] = (),
   *,
   material_type: str = "PlaneStress",
+  groups: tuple[ElementGroupSpec, ...] = (),
 ) -> ProblemDefinition:
   """Build a jitable :class:`ProblemDefinition` from load-time structures."""
-  constitutive = _constitutive_matrix(
-    material_type,
-    youngs_modulus,
-    poisson_ratio,
-    spatial_rank=mesh.rank,
-  )
+  if groups:
+    group_kind = np.array(
+      [group_kind_for(g.element_type) for g in groups],
+      dtype=np.int32,
+    )
+    group_props = np.array(
+      [group_props_for(g) for g in groups],
+      dtype=np.float64,
+    )
+    constitutive = np.zeros((3, 3), dtype=np.float64)
+  else:
+    constitutive = _constitutive_matrix(
+      material_type,
+      youngs_modulus,
+      poisson_ratio,
+      spatial_rank=mesh.rank,
+    )
+    group_kind = np.array([GROUP_CONTINUUM], dtype=np.int32)
+    group_props = np.zeros((1, 2), dtype=np.float64)
+
+  elem_group_id = np.ascontiguousarray(mesh.elem_group_id, dtype=np.int32)
   n_dofs = dof_map.n_dofs
   external_load = np.zeros(n_dofs, dtype=np.float64)
   for load in loads:
@@ -177,4 +201,35 @@ def pack_problem(
     mpc_factor=mpc_factor,
     mpc_offset=mpc_offset,
     external_load=np.ascontiguousarray(external_load, dtype=np.float64),
+    elem_group_id=elem_group_id,
+    group_kind=group_kind,
+    group_props=group_props,
+  )
+
+
+def make_loaded(
+  problem: ProblemDefinition,
+  *,
+  name: str,
+  element_type: str,
+  material_type: str,
+  solver_type: str,
+  element_group: str = "ContElem",
+  mesh_path: Path | None = None,
+  nonlinear_settings: NonlinearSolverSettings | None = None,
+  riks_settings: RiksSolverSettings | None = None,
+  groups: tuple[ElementGroupSpec, ...] = (),
+) -> LoadedProblem:
+  """Wrap a :class:`ProblemDefinition` with registry metadata."""
+  return LoadedProblem(
+    problem=problem,
+    name=name,
+    element_type=element_type,
+    material_type=material_type,
+    solver_type=solver_type,
+    element_group=element_group,
+    mesh_path=mesh_path,
+    nonlinear_settings=nonlinear_settings,
+    riks_settings=riks_settings,
+    groups=groups,
   )

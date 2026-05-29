@@ -36,9 +36,9 @@ Phases **P0–P8** are defined in [roadmap.md](roadmap.md). Parity skims live un
 |---------------|-----------|--------|----------------|-------|
 | `NonlinearSolver` (Newton) | `solve_nonlinear` + `SolverState` | done | `patch_test8_nonlinear*` skims | SmallStrain + linear elastic; `loadTable` in skim `.pro` |
 | Load ramp / `loadCases` | typed load tables | done | `patch_test8_nonlinear_ramp` | `loadTable` only; `loadFunc=t`; no `loadCases` / `eval` |
-| `FiniteStrainContinuum` | TL kernel | next | ch.3 cantilever | P3 skim blocked until TL kernel |
-| `RiksSolver` | arc-length driver | deferred | ch.4 | P4 |
-| Truss / spring (linear) | structural elements | deferred | ch.4 | P4 |
+| `FiniteStrainContinuum` | TL kernel (2D Q8) | done | `cantilever8` | PlaneStress; ch.4 truss still P4 |
+| `RiksSolver` | arc-length driver | done | `shallow_truss_riks` | P4 |
+| Truss / spring (linear) | structural elements | done | `shallow_truss_riks` | P4 |
 
 ## 4. Dynamics & eigen
 
@@ -64,7 +64,7 @@ Phases **P0–P8** are defined in [roadmap.md](roadmap.md). Parity skims live un
 
 | v1 capability | v3 target | Status | Skim / example | Notes |
 |---------------|-----------|--------|----------------|-------|
-| Truss, Spring | 1D elements | deferred | ch.4 | P4 |
+| Truss, Spring | 1D elements | done | `shallow_truss_riks` | P4 |
 | Kirchhoff / Timoshenko / BeamNL | beam kernels | deferred | ch.9 | P4+ |
 | `Plate`, `ReissnerMindlinShell`, SLS | shell/plate | deferred | `examples/plate/` | P4+ |
 
