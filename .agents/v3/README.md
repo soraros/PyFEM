@@ -26,6 +26,7 @@ uv run pytest test/v3 -q
 | [WORKFLOW.md](WORKFLOW.md) | Pass A: feature delivery prompts |
 | [hardening.md](hardening.md) | Pass B: scale/bench/hot-path hardening after parity |
 | [scaling.md](scaling.md) | P1 scale benchmark notes (hardening example) |
+| [plane_strain.md](plane_strain.md) | P2 plane-strain scale benchmark notes |
 
 ## Entry points
 

@@ -11,7 +11,7 @@ Plan files live in the repo—not in chat. Branch: `v3`. Legacy `pyfem/` on `mai
 | [parity.md](parity.md) | Skim layers A/B/C; read when adding or extending a parity case |
 | [hardening.md](hardening.md) | **Pass B.** After skim parity: scale, bench, hot paths, docs — see below |
 
-Supporting context (read as needed): [AGENTS.md](AGENTS.md), [architecture.md](architecture.md), [conventions.md](conventions.md), [scaling.md](scaling.md) (P1 example).
+Supporting context (read as needed): [AGENTS.md](AGENTS.md), [architecture.md](architecture.md), [conventions.md](conventions.md), [scaling.md](scaling.md), [plane_strain.md](plane_strain.md).
 
 ## What you say (one line)
 
@@ -28,11 +28,11 @@ Work on the next open checkbox in .agents/v3/roadmap.md.
 ```
 
 ```text
-Work on phase P2 per .agents/v3/roadmap.md — only unchecked items in that phase.
+Work on phase P3 per .agents/v3/roadmap.md — only unchecked items in that phase.
 ```
 
 ```text
-Work on “MPC / multi-point ties” per .agents/v3/roadmap.md.
+Work on nonlinear static per .agents/v3/roadmap.md.
 ```
 
 ```text

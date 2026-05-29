@@ -71,6 +71,6 @@ Parity skims (`rtol=1e-10`, `atol=1e-12`) remain on book-scale meshes. Uniform p
 ## Out of scope here
 
 - Iterative / AMG solvers
-- 3D continuum (P2)
+- 3D Hex8 scale sweeps (optional P2 pass B; parity via `patch_test8_3d` skim)
 - Gmsh-in-v3 (P8)
 - Quad4/Tria3 fused kernels

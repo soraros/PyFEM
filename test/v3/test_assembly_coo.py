@@ -9,23 +9,16 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from scipy.sparse import coo_matrix
 
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
-from pyfem.fem.Assembly import assembleTangentStiffness
-from pyfem.io.InputReader import InputRead
+from _legacy_parity import legacy_stiffness_coo
+
 from pyfem.v3 import load_problem
 from pyfem.v3.assembly import assemble_loaded
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def _legacy_coo(pro_path: Path) -> coo_matrix:
-  props, globdat = InputRead(str(pro_path))
-  matrix, _ = assembleTangentStiffness(props, globdat)
-  return matrix.tocoo()
 
 
 @pytest.mark.parametrize(
@@ -43,7 +36,7 @@ def test_assembly_coo_matches_legacy(skim_name: str) -> None:
   skim_pro = ROOT / "skims" / skim_name / "skim.pro"
   loaded = load_problem(skim_pro)
   v3 = assemble_loaded(loaded).stiffness.tocoo()
-  legacy = _legacy_coo(skim_pro)
+  legacy = legacy_stiffness_coo(skim_pro)
 
   assert v3.shape == legacy.shape
   np.testing.assert_array_equal(v3.row, legacy.row)

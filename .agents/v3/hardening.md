@@ -195,8 +195,8 @@ Out of scope: [list].
 | Phase | Hardening focus | Likely todos |
 |-------|-----------------|--------------|
 | P1 (done) | 2D Q8 scale, linear solve | Uniform patch mesh, fused kernel, chunked COO, `LinearSolutionContext`, [scaling.md](scaling.md) |
-| P2 (plane strain done) | Plane strain at Q8 scale | `build_uniform_q8_loaded`, `_bench_plane_strain_scale.py`, [plane_strain.md](plane_strain.md) |
-| P2 (remaining) | 3D continuum, plane strain | Hex/tet generator, 3D DOF map, assembly scatter at scale, `PatchTest8_3D` skim stays parity |
+| P2 plane strain (done) | Plane strain at Q8 scale | `build_uniform_q8_loaded`, `_bench_plane_strain_scale.py`, [plane_strain.md](plane_strain.md) |
+| P2 3D (pass A done; pass B optional) | Hex8/Tet4 at scale | Uniform hex grid generator, `_bench_*_3d*.py`; `patch_test8_3d` skim stays parity |
 | P3+ | Nonlinear repeat solves | `SolverState`, tangent reuse, Newton loop bench, load-step context |
 
 ## Lessons from P1

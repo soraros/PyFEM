@@ -27,7 +27,7 @@ Importing `pyfem.v3` on Python &lt; 3.13 raises `ImportError`.
 | Registry | `registry.py` | Legacy `.pro` type strings → implementations |
 | FEM math | `fem/quadrature.py`, `fem/shapes.py`, `fem/kinematics.py`, `fem/element.py` | `@njit` Gauss rules, N, B, K_e = ∫ Bᵀ C B; `prange` only on quadrature in `element.py` |
 | Assembly | `fem/assembly.py` | Batched element stiffness + serial `@njit` COO scatter |
-| Solver | `solver/linear.py`, `solver/constraints.py` | SciPy `spsolve` + `coo_array`; native prescribed BCs (MPC deferred) |
+| Solver | `solver/linear.py`, `solver/constraints.py` | SciPy `spsolve` + `coo_array`; native prescribed BCs and MPC ties |
 
 `ProblemDefinition` is a **`NamedTuple`** of `F64`/`I32` fields — pass it to `@njit` directly or unpack arrays. No jitclass wrapper.
 
@@ -45,7 +45,7 @@ Importing `pyfem.v3` on Python &lt; 3.13 raises `ImportError`.
 | B | `skims/<case>/problem.toml` → v3 canonical |
 | C | `ProblemDefinition` NamedTuple |
 
-Skims: `patch_test8`, `patch_test8_loaded`, `patch_test4`, `patch_test3`. Session kickoff: `Work on the next item per .agents/v3/roadmap.md` — see [WORKFLOW.md](WORKFLOW.md).
+Skims: `patch_test8`, `patch_test8_loaded`, `patch_test4`, `patch_test3`, `patch_test8_mpc`, `patch_test8_plane_strain`, `patch_test8_3d`. Session kickoff: `Work on the next item per .agents/v3/roadmap.md` — see [WORKFLOW.md](WORKFLOW.md).
 
 ## Notebooks
 

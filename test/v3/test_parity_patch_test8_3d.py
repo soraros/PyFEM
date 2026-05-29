@@ -14,21 +14,18 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
-from pyfem.v3 import load_problem, solve_linear
-from pyfem.v3.assembly import assemble_loaded
-from pyfem.v3.fem.element import hex8_stiffness, tet4_stiffness
-from pyfem.v3.materials.isotropic import isotropic_matrix
-from pyfem.v3.types import LoadedProblem
-
-_V3_TEST = Path(__file__).resolve().parent
-if str(_V3_TEST) not in sys.path:
-  sys.path.insert(0, str(_V3_TEST))
-from _legacy_parity import (  # noqa: E402
+from _legacy_parity import (
   legacy_element_stiffness,
   legacy_external_load,
   legacy_state,
   legacy_stiffness_coo,
 )
+
+from pyfem.v3 import load_problem, solve_linear
+from pyfem.v3.assembly import assemble_loaded
+from pyfem.v3.fem.element import hex8_stiffness, tet4_stiffness
+from pyfem.v3.materials.isotropic import isotropic_matrix
+from pyfem.v3.types import LoadedProblem
 
 ROOT = Path(__file__).resolve().parents[2]
 SKIM_DIR = ROOT / "skims" / "patch_test8_3d"

@@ -61,7 +61,7 @@ Legacy `SmallStrainContinuum` maps to one v3 continuum kernel; **element family 
 
 ## Scale
 
-See [scaling.md](scaling.md) (P1 plane-stress Q8) and [plane_strain.md](plane_strain.md) (P2 plane-strain). Uniform Q8 patch meshes: `pyfem/v3/mesh/refined_patch.py` (`build_uniform_q8_patch`, `build_uniform_q8_loaded`).
+See [scaling.md](scaling.md) (P1 plane-stress Q8) and [plane_strain.md](plane_strain.md) (P2 plane-strain). Uniform Q8 patch meshes: `pyfem/v3/mesh/refined_patch.py` (`build_uniform_q8_patch`, `build_uniform_q8_loaded`). 3D parity: `patch_test8_3d` skim; uniform Hex8 scale benches are optional pass B ([hardening.md](hardening.md)).
 
 ## Skims
 
