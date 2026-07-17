@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: P0-F integrated; P0-G identity/storage repair active
+- Status: P0-F integrated; P0-G provenance follow-up active before integration
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -14,13 +14,13 @@
 
 ## Exact next safe action
 
-Review and integrate P0-G's bounded identity/storage repair after its direct
-callback, rerun the combined gates, then repeat the spec and identity/storage
-critics from one exact repaired head. P0-F is integrated and green at its focused,
-static, and v3 gates. R0-G system-failed without an acceptable terminal report;
-R0-I independently reproduced and classified its useful leads. Do not start the
-model compiler until both repeated critics are green at one exact combined
-foundation commit.
+Review P0-G's bounded provenance follow-up after its direct callback, then integrate
+the source and follow-up commits serially, rerun the combined gates, and repeat the
+spec and identity/storage critics from one exact repaired head. P0-F is integrated
+and green. P0-G's first source commit is broad-green but is not yet integrated
+because integration-owner hostile probes found four exact-carrier gaps. Do not
+start the model compiler until the follow-up and both repeated critics are green at
+one exact combined foundation commit.
 
 Blocked condition: a critic demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -357,8 +357,10 @@ Evidence and exclusions:
 
 ### P0-G — Close polymorphic identity/storage semantic drift
 
-State: `IMPLEMENTING` in task `019f7146-e871-76c2-a3e6-75d87fac83fd`,
-dispatched from exact base `7d1ededb6d11fc183ff506b989b6d1f72fd12600`.
+State: source `95044678c54a5d9f5141bed504d160fd1bfbbd33` is complete in task
+`019f7146-e871-76c2-a3e6-75d87fac83fd` from exact base
+`7d1ededb6d11fc183ff506b989b6d1f72fd12600`; one bounded follow-up is
+`IMPLEMENTING` directly on that source commit before integration.
 
 Outcome and invariant:
 
@@ -411,15 +413,33 @@ restore/transaction changes, callable introspection, arbitrary foreign equality
 control, deliberate write-flag hardening, compiler/program/solver/public API work,
 shared-document/config/dependency edits, merge, or push.
 
+Integration audit follow-up:
+
+- a normal 5,001-digit exact Python integer leaks the interpreter's raw decimal
+  conversion-limit `ValueError`, although exact integers are documented supported;
+- forged exact float carrier text can leak `OverflowError` from `float.fromhex`;
+- a forged exact v1 float-array payload containing `NaN` passes validation even
+  though constructor capture rejects non-finite values; and
+- a forged exact unordered carrier can contain a non-mapping node without its
+  declared ID key, unique identity, or canonical identity ordering.
+
+The follow-up owns only `pyfem/v3/model/provenance.py` and the focused identity
+test. It must preserve all existing v1 bytes and the manifest identifier, encode
+arbitrary exact integers losslessly without changing Python's global conversion
+setting, and make reused exact carriers accept only constructor-reachable canonical
+payloads. It must be one child commit of `95044678c54a5d9f5141bed504d160fd1bfbbd33`
+with the same focused, static, v3, full-repository, diff, and clean-worktree gates.
+
 ## Merge and continuation order
 
 1. Completed: review and integrate P0-A.
 2. Completed: review P0-B and P0-C independently against the Horizon Gate.
 3. Completed: integrate P0-B/P0-C, repair the six accepted original critic
    findings, and rerun combined v3 plus full repository tests.
-4. Active: P0-F repaired the R0-H diagnostic blocker and is integrated; R0-I
-   accepted five disjoint identity/storage blockers for P0-G. Integrate P0-G, then
-   repeat both critics from one exact combined head.
+4. Active: P0-F repaired the R0-H diagnostic blocker and is integrated; P0-G's
+   first source repaired the five R0-I seams, but its integration audit requires one
+   provenance follow-up. Integrate both P0-G commits serially, then repeat both
+   critics from one exact combined head.
 5. Then dispatch the dependent compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
@@ -452,7 +472,7 @@ thread status are available.
 | `R0-H · model spec — canonical boundary attacked` | `019f711d-c79c-7652-96dc-f07e55fdb71b` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Fresh read-only P0-E critic | Complete; 1 accepted exact-integer rendering blocker; 35 focused passed |
 | `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Complete; 5 accepted blockers; 18 focused passed |
 | `P0-F · model spec — integer diagnostics total` | `019f7136-c2f1-77b2-81bb-f9aa41627a92` | `f9e1867a2c458531b61fd3d8e5107445c0229733` | Bounded exact-integer diagnostic repair | Complete; source `c0b3c57`, integrated `461a8a8`; 42 focused, 190 v3, 379 full tests passed |
-| `P0-G · identity/storage — exact boundaries enforced` | `019f7146-e871-76c2-a3e6-75d87fac83fd` | `7d1ededb6d11fc183ff506b989b6d1f72fd12600` | Close five accepted R0-I semantic-drift seams | `IMPLEMENTING`; repair round 0; direct callback required |
+| `P0-G · identity/storage — exact boundaries enforced` | `019f7146-e871-76c2-a3e6-75d87fac83fd` | `7d1ededb6d11fc183ff506b989b6d1f72fd12600` | Close five accepted R0-I seams plus integration-audit carrier gaps | Source `9504467` complete: 42 focused, 207 v3, 396 full passed; provenance follow-up active before integration |
 
 ## Active watchdogs
 
@@ -489,6 +509,17 @@ P0-F integration evidence at
 - both v3 Ruff gates, focused format, and `git diff --check` passed; and
 - the worker's exact source commit additionally passed seven selected tests under
   a 640-digit interpreter limit and the full 379-test repository suite.
+
+P0-G source evidence at `95044678c54a5d9f5141bed504d160fd1bfbbd33`
+before integration:
+
+- exact one-commit ancestry and four-path ownership from the declared base pass;
+- 42 focused identity tests, 207 v3 tests, and 396 full-repository tests pass;
+- both Ruff gates, focused format, committed `git diff --check`, and the worker's
+  clean worktree pass; and
+- the four integration-audit probes above remain accepted blockers until the
+  focused child repair is reviewed, so this source is deliberately not cherry-picked
+  alone.
 
 ## Accepted later-phase obligations
 
@@ -618,3 +649,11 @@ integration decision; do not bridge it with a compatibility carrier.
   Ruff gates, focused format, and `git diff --check` pass on the integration branch.
   The worker additionally proved seven selected cases under a 640-digit conversion
   limit and 379 full-repository tests. P0-G remains the only active writer.
+- 2026-07-18: P0-G completed its first source as
+  `95044678c54a5d9f5141bed504d160fd1bfbbd33`, exactly one four-path commit over its
+  declared base. Its 42 focused, 207 v3, and 396 full-repository tests plus static
+  gates pass. Integration-owner probes nevertheless reproduced an ordinary huge-int
+  conversion-limit escape, an overflow float escape, non-finite ndarray acceptance,
+  and structurally invalid unordered-carrier acceptance. Integration is withheld;
+  the same Sol/max task is producing one provenance/test-only child repair without
+  changing manifest v1.
