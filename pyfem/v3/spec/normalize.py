@@ -125,16 +125,15 @@ def _validate_nodes(
 def _validate_connectivity(
   block: CellBlockSpec,
   cell: CellSpec,
+  observed_arity: int,
   node_ids: set[SpecId],
   validator: _Validator,
 ) -> None:
-  if _positive_int(block.geometry_node_count) and (
-    len(cell.node_ids) != block.geometry_node_count
-  ):
+  if len(cell.node_ids) != observed_arity:
     validator.error(
       "connectivity-arity",
       f"cell {cell.id!r} has {len(cell.node_ids)} nodes; "
-      f"{block.geometry_interpolation!r} requires {block.geometry_node_count}",
+      f"block {block.id!r} first observed arity {observed_arity}",
       cell.source,
     )
   seen: set[SpecId] = set()
@@ -145,7 +144,8 @@ def _validate_connectivity(
         f"cell {cell.id!r} contains an invalid node ID",
         cell.source,
       )
-    elif node_id in seen:
+      continue
+    if node_id in seen:
       validator.error(
         "duplicate-node-reference",
         f"cell {cell.id!r} references node {node_id!r} more than once",
@@ -164,9 +164,8 @@ def _validate_block_metadata(
   block: CellBlockSpec,
   coordinate_dimension: int | None,
   topology_dimensions: dict[str, tuple[int, SourceContext]],
-  interpolation_arities: dict[tuple[str, str], tuple[int, SourceContext]],
   validator: _Validator,
-) -> None:
+) -> tuple[bool, bool]:
   topology_ok = validator.text(
     block.reference_topology,
     code="invalid-reference-topology",
@@ -215,12 +214,6 @@ def _validate_block_metadata(
       f"mesh coordinate dimension {coordinate_dimension}",
       block.source,
     )
-  if not _positive_int(block.geometry_node_count):
-    validator.error(
-      "invalid-geometry-node-count",
-      "geometry node count must be a positive integer",
-      block.source,
-    )
   if topology_ok and topology_dimension_ok:
     first = topology_dimensions.setdefault(
       block.reference_topology,
@@ -233,19 +226,7 @@ def _validate_block_metadata(
         f"{first[1].render()} and {block.topological_dimension} here",
         block.source,
       )
-  if topology_ok and interpolation_ok and _positive_int(block.geometry_node_count):
-    key = (block.reference_topology, block.geometry_interpolation)
-    first = interpolation_arities.setdefault(
-      key,
-      (block.geometry_node_count, block.source),
-    )
-    if first[0] != block.geometry_node_count:
-      validator.error(
-        "geometry-interpolation-collision",
-        f"interpolation {block.geometry_interpolation!r} has {first[0]} nodes "
-        f"at {first[1].render()} and {block.geometry_node_count} here",
-        block.source,
-      )
+  return topology_ok, interpolation_ok
 
 
 def _validate_blocks(
@@ -271,11 +252,10 @@ def _validate_blocks(
       kind="cell-block",
       registry=block_sources,
     )
-    _validate_block_metadata(
+    topology_ok, interpolation_ok = _validate_block_metadata(
       block,
       coordinate_dimension,
       topology_dimensions,
-      interpolation_arities,
       validator,
     )
     if not block.cells:
@@ -283,6 +263,13 @@ def _validate_blocks(
         "empty-cell-block",
         f"cell block {block.id!r} must contain at least one cell",
         block.source,
+      )
+    observed_arity = len(block.cells[0].node_ids) if block.cells else None
+    if observed_arity == 0:
+      validator.error(
+        "empty-connectivity",
+        f"cell block {block.id!r} contains a cell with no node IDs",
+        block.cells[0].source,
       )
     cell_sources: dict[SpecId, SourceContext] = {}
     for cell in block.cells:
@@ -292,7 +279,27 @@ def _validate_blocks(
         kind="cell",
         registry=cell_sources,
       )
-      _validate_connectivity(block, cell, node_ids, validator)
+      if observed_arity is not None:
+        _validate_connectivity(
+          block,
+          cell,
+          observed_arity,
+          node_ids,
+          validator,
+        )
+    if topology_ok and interpolation_ok and observed_arity is not None:
+      key = (block.reference_topology, block.geometry_interpolation)
+      first = interpolation_arities.setdefault(
+        key,
+        (observed_arity, block.source),
+      )
+      if first[0] != observed_arity:
+        validator.error(
+          "geometry-interpolation-collision",
+          f"interpolation {block.geometry_interpolation!r} has observed arity "
+          f"{first[0]} at {first[1].render()} and {observed_arity} here",
+          block.source,
+        )
     if unique_block:
       cells_by_block[block.id] = set(cell_sources)
   return cells_by_block
@@ -417,20 +424,22 @@ def _validate_cell_refs(
     )
   seen: set[tuple[SpecId, SpecId]] = set()
   for cell_ref in region.cell_refs:
-    key = (cell_ref.block_id, cell_ref.cell_id)
     if not _valid_id(cell_ref.block_id):
       validator.error(
         "invalid-cell-block-reference",
         f"region {region.id!r} contains an invalid cell block ID",
         region.source,
       )
-    elif not _valid_id(cell_ref.cell_id):
+      continue
+    if not _valid_id(cell_ref.cell_id):
       validator.error(
         "invalid-cell-reference",
         f"region {region.id!r} contains an invalid cell ID",
         region.source,
       )
-    elif key in seen:
+      continue
+    key = (cell_ref.block_id, cell_ref.cell_id)
+    if key in seen:
       validator.error(
         "duplicate-cell-reference",
         f"region {region.id!r} repeats cell reference {key!r}",
@@ -471,7 +480,8 @@ def _validate_field_refs(
         f"region {region.id!r} contains an invalid field ID",
         region.source,
       )
-    elif field_id in seen:
+      continue
+    if field_id in seen:
       validator.error(
         "duplicate-field-reference",
         f"region {region.id!r} repeats field {field_id!r}",

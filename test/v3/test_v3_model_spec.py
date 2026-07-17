@@ -49,7 +49,6 @@ def _quad_block() -> CellBlockSpec:
     topological_dimension=2,
     embedding_dimension=2,
     geometry_interpolation="quad4",
-    geometry_node_count=4,
     cells=(
       CellSpec(
         id=10,
@@ -138,7 +137,6 @@ def test_tet4_volume_and_quad4_surface_in_3d_do_not_collide_by_node_count() -> N
     topological_dimension=3,
     embedding_dimension=3,
     geometry_interpolation="tet4",
-    geometry_node_count=4,
     cells=(CellSpec(id="tet-1", node_ids=(1, 2, 3, 4)),),
   )
   quad_block = CellBlockSpec(
@@ -147,7 +145,6 @@ def test_tet4_volume_and_quad4_surface_in_3d_do_not_collide_by_node_count() -> N
     topological_dimension=2,
     embedding_dimension=3,
     geometry_interpolation="quad4",
-    geometry_node_count=4,
     cells=(CellSpec(id="quad-1", node_ids=(5, 6, 7, 8)),),
   )
   model = ModelSpec(
@@ -183,7 +180,7 @@ def test_tet4_volume_and_quad4_surface_in_3d_do_not_collide_by_node_count() -> N
   normalized = normalize_model_spec(model)
   tet, quad = normalized.mesh.cell_blocks
 
-  assert tet.geometry_node_count == quad.geometry_node_count == 4
+  assert len(tet.cells[0].node_ids) == len(quad.cells[0].node_ids) == 4
   assert (tet.reference_topology, tet.topological_dimension) == (
     "tetrahedron",
     3,
@@ -202,7 +199,6 @@ def test_mixed_quad4_tri3_connectivity_is_unpadded_and_has_no_sentinel_nodes() -
     topological_dimension=2,
     embedding_dimension=2,
     geometry_interpolation="tri3",
-    geometry_node_count=3,
     cells=(CellSpec(id=20, node_ids=(1, 2, 3)),),
   )
   model = replace(
@@ -420,11 +416,16 @@ def test_bad_connectivity_fails_deterministically_with_source_context() -> None:
     cells=(
       CellSpec(
         id=10,
+        node_ids=(1, 2, 3, 4),
+        source=_source("cells:10"),
+      ),
+      CellSpec(
+        id=11,
         node_ids=(1, 2, 3),
         source=_source("cells:bad-arity"),
       ),
       CellSpec(
-        id=11,
+        id=12,
         node_ids=(1, 2, 3, 99),
         source=_source("cells:unknown-node"),
       ),
@@ -493,6 +494,87 @@ def test_invalid_region_references_fail_deterministically_with_source_context() 
     assert expected_source in str(caught.value)
 
 
+def test_unhashable_runtime_reference_ids_fail_with_source_context() -> None:
+  base = _valid_model()
+  unhashable_node = replace(
+    base,
+    mesh=replace(
+      base.mesh,
+      cell_blocks=(
+        replace(
+          _quad_block(),
+          cells=(
+            CellSpec(
+              id=10,
+              node_ids=([1], 2, 3, 4),
+              source=_source("cells:unhashable-node"),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+  cases = (
+    (
+      unhashable_node,
+      "invalid-node-reference",
+      "cells:unhashable-node",
+    ),
+    (
+      replace(
+        base,
+        regions=(
+          replace(
+            _region(),
+            cell_refs=(CellRef(block_id=["quad-cells"], cell_id=10),),
+            source=_source("regions:unhashable-block"),
+          ),
+        ),
+      ),
+      "invalid-cell-block-reference",
+      "regions:unhashable-block",
+    ),
+    (
+      replace(
+        base,
+        regions=(
+          replace(
+            _region(),
+            cell_refs=(CellRef(block_id="quad-cells", cell_id=[10]),),
+            source=_source("regions:unhashable-cell"),
+          ),
+        ),
+      ),
+      "invalid-cell-reference",
+      "regions:unhashable-cell",
+    ),
+    (
+      replace(
+        base,
+        regions=(
+          replace(
+            _region(),
+            field_ids=(["displacement"],),
+            source=_source("regions:unhashable-field"),
+          ),
+        ),
+      ),
+      "invalid-field-reference",
+      "regions:unhashable-field",
+    ),
+  )
+
+  for model, expected_code, expected_source in cases:
+    with pytest.raises(ModelSpecValidationError) as first:
+      normalize_model_spec(model)
+    with pytest.raises(ModelSpecValidationError) as second:
+      normalize_model_spec(model)
+
+    assert _diagnostic_codes(first.value) == (expected_code,)
+    assert first.value.diagnostics == second.value.diagnostics
+    assert expected_source in str(first.value)
+
+
 def test_topology_embedding_collisions_fail_deterministically_with_source_context() -> (
   None
 ):
@@ -516,6 +598,12 @@ def test_topology_embedding_collisions_fail_deterministically_with_source_contex
     cells=(CellSpec(id=20, node_ids=(1, 2, 3, 4)),),
     source=_source("blocks:topology-name-collision"),
   )
+  interpolation_arity_collision = replace(
+    _quad_block(),
+    id="short-quad-cells",
+    cells=(CellSpec(id=20, node_ids=(1, 2, 3)),),
+    source=_source("blocks:interpolation-arity-collision"),
+  )
   cases = (
     (
       replace(base, mesh=replace(base.mesh, cell_blocks=(invalid_topology,))),
@@ -537,6 +625,17 @@ def test_topology_embedding_collisions_fail_deterministically_with_source_contex
       ),
       "reference-topology-collision",
       "blocks:topology-name-collision",
+    ),
+    (
+      replace(
+        base,
+        mesh=replace(
+          base.mesh,
+          cell_blocks=(_quad_block(), interpolation_arity_collision),
+        ),
+      ),
+      "geometry-interpolation-collision",
+      "blocks:interpolation-arity-collision",
     ),
   )
 

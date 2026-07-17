@@ -89,7 +89,6 @@ class CellBlockSpec:
   topological_dimension: int
   embedding_dimension: int
   geometry_interpolation: str
-  geometry_node_count: int
   cells: tuple[CellSpec, ...]
   source: SourceContext = field(default_factory=SourceContext)
 
