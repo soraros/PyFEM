@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: R0-H complete; P0-F spec repair and R0-I identity review active
+- Status: P0-F spec repair active; R0-I complete with five accepted model-boundary blockers
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -13,13 +13,12 @@
 
 ## Exact next safe action
 
-Commit the P0-F Horizon card and dispatch its bounded spec-diagnostic repair while
-R0-I completes the disjoint identity/storage review. Consume and adjudicate R0-I's
-terminal callback, then review and integrate required repairs serially and repeat
-each affected critic. R0-G system-failed without an acceptable terminal report, so
-its partial observations remain leads that R0-I must reproduce independently. Do
-not start the model compiler until both boundaries are green at one exact combined
-foundation commit.
+Commit the P0-G Horizon card and dispatch its bounded identity/storage repair while
+P0-F continues on the disjoint spec boundary. Review and integrate both commits
+serially, rerun the combined gates, then repeat R0-H and R0-I from one exact repaired
+head. R0-G system-failed without an acceptable terminal report; R0-I independently
+reproduced and classified its useful leads. Do not start the model compiler until
+both repeated critics are green at one exact combined foundation commit.
 
 Blocked condition: a critic demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -35,8 +34,18 @@ Decided:
   line is not silently imported.
 - Full migration uses the bounded packet conveyor in `migration_workflow.md`, direct
   terminal callbacks, serial integration, and independent adversarial proof.
-- Thread IDs are never reused. `R0-C` and `R0-D` belong to the current foundation
-  re-reviews; future legacy-breadth and compiler critics use `R0-E` and `R0-F`.
+- Thread IDs are never reused. `R0-E` and `R0-F` remain reserved for the planned
+  legacy-breadth and compiler critics; replacement/follow-up foundation reviews use
+  the next otherwise-unreserved IDs, hence `R0-G`, `R0-H`, and `R0-I`.
+- dtype metadata is outside the current v1 manifest/finalization boundary and must
+  fail closed; do not invent a recursive dtype-metadata schema or manifest v2 before
+  an executable compiler slice demonstrates that semantic requirement;
+- structured arrays remain unsupported by manifest v1, while metadata-free
+  structured finalization may remain only if it preserves full dtype/value ownership;
+  and
+- total `FinalizedArray` identity semantics cover the carrier and standard NumPy
+  comparison protocols, not arbitrary hostile unrelated left operands whose own
+  equality method controls dispatch.
 
 Open and not implicitly decided:
 
@@ -308,14 +317,103 @@ Forbidden: new ID-range policy, global interpreter-setting changes, compiler/
 program/section work, double-reconstruction optimization, public exports,
 dependency/config changes, shared-document edits, merge, or push.
 
+### R0-I — Re-falsify identity, provenance, registry, and storage repairs
+
+State: `COMPLETE` in task `019f711f-339b-7300-aa1c-17e6e7ea9974`, reviewed
+read-only from exact base `13c68e302cf8f4e0f7e211f8af46eff09c863368`.
+
+Accepted foundation blockers:
+
+1. semantic NumPy scalar subclasses execute conversion methods during manifest
+   capture, and nested semantic ndarray subclasses such as `MaskedArray` lose their
+   meaning when hidden inside a list passed to `finalize_array`;
+2. dtype metadata is omitted from fingerprints and its nested mutable objects remain
+   caller-aliased across finalizations;
+3. `FinalizedArray` comparison becomes elementwise under standard NumPy reverse/
+   ufunc dispatch, and a public carrier subclass can spoof base-carrier equality;
+4. canonical carriers plus mapping/list subclasses retain polymorphic execution
+   paths, `ContentFingerprint` subclasses spoof equality, and invalid `id_key`
+   values can escape as raw exceptions; and
+5. `RegistrySnapshot` accepts and retains descriptor/key/source subclasses, allowing
+   exposed key/binding meaning to drift under a stable snapshot fingerprint.
+
+Evidence and exclusions:
+
+- 18 focused identity tests passed in 2.06 seconds; independent hostile probes
+  reproduced all five blockers under NumPy 2.3.5; ordinary exact scalar/array,
+  endian/stride, cycle, detachment, and registry-rebinding cases held;
+- exact forged identity fields required `object.__new__` plus deliberate
+  `object.__setattr__` and are not a current primitive blocker; restore/rebind must
+  validate exact `UUID`/integer fields before comparing externally reconstructed
+  identity values;
+- arbitrary unrelated left-operand equality and deliberate re-enabling of an owning
+  NumPy array's write flag remain outside the carrier's accidental-mutation contract;
+  and
+- no depth-probe output was obtained, so R0-I makes no deep-acyclic-manifest claim.
+
+### P0-G — Close polymorphic identity/storage semantic drift
+
+State: `READY`; dispatch from the next exact committed ledger state.
+
+Outcome and invariant:
+
+- only exact supported NumPy scalar/array and builtin container forms cross generic
+  canonicalization/finalization boundaries; semantic subclasses fail before any
+  user conversion, iteration, mapping, array, or ufunc behavior executes;
+- every accepted dtype is fully represented by existing manifest v1 semantics and
+  detached by finalization. Any dtype metadata at any nested dtype level rejects
+  deterministically rather than colliding or aliasing;
+- `FinalizedArray` is runtime-final and has scalar identity-only equality/hash
+  semantics for both orders of standard ndarray and NumPy equal/not-equal dispatch;
+- canonical manifest/fingerprint/unordered-declaration carriers are runtime-final,
+  consumed only as exact trusted values, and exact builtin mapping/sequence policy
+  cannot execute subclass methods; and
+- registry snapshots accept exact keys, sources, and runtime-final exact descriptors
+  only, so later source mutation cannot alter exposed key/binding meaning under a
+  stable fingerprint.
+
+Owned paths:
+
+- `pyfem/v3/model/arrays.py`
+- `pyfem/v3/model/provenance.py`
+- `pyfem/v3/model/registry.py`
+- `test/v3/test_v3_model_identity.py`
+
+Required dangerous cases and evidence:
+
+- NumPy integer/float subclasses with conversion bombs reject at every nested
+  manifest position, while exact `float16`/`float32`/`float64` and integers retain
+  the documented lossless behavior;
+- top-level and list/tuple-nested `MaskedArray`/custom ndarray subclasses reject
+  before `np.array(..., subok=False)` can erase semantics;
+- arrays/dtypes with metadata, including metadata nested in structured/subdtypes,
+  reject in both provenance and finalization without changing the manifest-v1 tag;
+- plain ndarray endian/stride/order/value ownership and metadata-free structured
+  finalization, if retained, remain detached and exact;
+- `FinalizedArray` subclass creation fails; standard ndarray equality/inequality and
+  NumPy ufunc comparison return scalar identity booleans in either order; hashes
+  remain object identity;
+- canonical-carrier, mapping, list, fingerprint, descriptor, source-mapping, and
+  tuple-key subclasses reject without executing overrides; `id_key` is an exact
+  nonempty string before lookup; ordinary cycles still reject deterministically;
+- ordinary registry source clearing/rebinding/nested metadata mutation remains
+  detached, while a descriptor cannot change exposed key/binding meaning; and
+- focused identity tests, both v3 Ruff configurations, focused format, `pytest -q
+  test/v3`, full `pytest -q`, `git diff --check`, and a clean worker worktree pass.
+
+Forbidden: manifest-v2/schema invention, dtype-metadata lowering, identity.py/
+restore/transaction changes, callable introspection, arbitrary foreign equality
+control, deliberate write-flag hardening, compiler/program/solver/public API work,
+shared-document/config/dependency edits, merge, or push.
+
 ## Merge and continuation order
 
 1. Completed: review and integrate P0-A.
 2. Completed: review P0-B and P0-C independently against the Horizon Gate.
 3. Completed: integrate P0-B/P0-C, repair the six accepted original critic
    findings, and rerun combined v3 plus full repository tests.
-4. Active: R0-H accepted one bounded diagnostic blocker; dispatch P0-F while
-   replacement identity critic R0-I completes, then repeat affected critics.
+4. Active: P0-F repairs the R0-H diagnostic blocker; R0-I accepted five disjoint
+   identity/storage blockers for P0-G. Integrate both serially, then repeat critics.
 5. Then dispatch the dependent compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
@@ -346,8 +444,9 @@ thread status are available.
 | `R0-G · identity/storage — repairs falsified` | `019f70b1-793c-7c90-a051-07911fff3134` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Exact R0-D replacement, same read-only lens | System-failed before terminal report; partial observations are unaccepted leads |
 | `P0-E · model spec — canonical tree owned` | `019f70b8-3e74-7d82-b27b-67991cf50e3c` | `47e94752e93b7424c73e4d2979bebbe0f7567291` | `pyfem/v3/spec/**`, focused spec tests | Complete; source `246114b`, integrated `108552d`; 35 focused, 183 v3, 372 full tests passed |
 | `R0-H · model spec — canonical boundary attacked` | `019f711d-c79c-7652-96dc-f07e55fdb71b` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Fresh read-only P0-E critic | Complete; 1 accepted exact-integer rendering blocker; 35 focused passed |
-| `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Active; terminal callback required |
+| `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Complete; 5 accepted blockers; 18 focused passed |
 | `P0-F · model spec — integer diagnostics total` | `019f7136-c2f1-77b2-81bb-f9aa41627a92` | `f9e1867a2c458531b61fd3d8e5107445c0229733` | Bounded exact-integer diagnostic repair | `IMPLEMENTING`; repair round 0; direct callback required |
+| `P0-G · identity/storage — exact boundaries enforced` | pending dispatch | next committed ledger state | Close five accepted R0-I semantic-drift seams | Ready; repair round 0; direct callback required |
 
 ## Active watchdogs
 
@@ -372,8 +471,8 @@ Current combined evidence at
 - 372 full-repository tests passed with the same 44 warnings;
 - both v3 Ruff gates, focused format, and `git diff --check` passed; and
 - all accepted R0-A/R0-B/R0-C blockers are repaired under implementation gates;
-  R0-H accepted one new spec-diagnostic blocker for P0-F, and R0-I remains open
-  before compiler integration.
+  R0-H accepted one spec-diagnostic blocker for P0-F, and R0-I accepted five
+  identity/storage blockers for P0-G before compiler integration.
 
 ## Accepted later-phase obligations
 
@@ -391,6 +490,13 @@ Current combined evidence at
   memory 2.37 times retained. This preserves the ownership contract and is not a
   foundation blocker; remeasure at compiler-scale proof before optimizing, and
   retain hostile detachment tests through any change.
+- Exact forged `InstanceId`/`StateGeneration` fields can bypass helpers or raise raw
+  exceptions after deliberate `object.__new__`/`object.__setattr__` construction.
+  This is not an authored/live primitive blocker; future restore/rebind decoding
+  must validate exact `UUID`/integer fields before invoking identity comparisons.
+- Deep acyclic manifest behavior remains unproven because R0-I obtained no depth
+  probe output. Bound or iteratively prove it before accepting untrusted detached
+  manifest/restore input; do not widen P0-G solely for this missing evidence.
 
 ## Blocked condition
 
@@ -480,3 +586,8 @@ integration decision; do not bridge it with a compatibility carrier.
   and dispatched Sol/max task `019f7136-c2f1-77b2-81bb-f9aa41627a92` with exclusive
   spec diagnostics/normalization/test ownership. It confirmed the exact clean base;
   R0-I remains the only concurrent read-only identity critic.
+- 2026-07-18: R0-I completed after one report-only resume from a system-erroring
+  probe turn. Eighteen focused tests passed, but five ordinary subclass/dtype/
+  equality/snapshot seams violate exact canonical meaning. All five are accepted
+  for bounded P0-G repair; forged identity fields and missing depth evidence remain
+  explicit later obligations rather than repair-scope inflation.
