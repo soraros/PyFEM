@@ -11,11 +11,14 @@ from pyfem.v3.spec.diagnostics import (
 )
 from pyfem.v3.spec.model import (
   CellBlockSpec,
+  CellRef,
   CellSpec,
   FieldSpec,
+  MaterialParameterSpec,
   MaterialSpec,
   MeshSpec,
   ModelSpec,
+  NodeSpec,
   RegionSpec,
   SpecId,
 )
@@ -83,6 +86,240 @@ def _positive_int(value: object) -> bool:
   return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
+def _non_negative_int(value: object) -> bool:
+  return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _is_exact_type(
+  value: object,
+  expected: type[object],
+  *,
+  code: str,
+  label: str,
+  source: SourceContext,
+  validator: _Validator,
+) -> bool:
+  if type(value) is expected:
+    return True
+  validator.error(
+    code,
+    f"{label} must be exactly {expected.__name__}; got {type(value).__name__}",
+    source,
+  )
+  return False
+
+
+def _trusted_source(
+  value: object,
+  *,
+  label: str,
+  fallback: SourceContext,
+  validator: _Validator,
+) -> SourceContext:
+  if type(value) is not SourceContext:
+    validator.error(
+      "invalid-source-context-type",
+      f"{label} source must be exactly SourceContext; got {type(value).__name__}",
+      fallback,
+    )
+    return fallback
+  if (
+    type(value.source) is not str
+    or (value.line is not None and type(value.line) is not int)
+    or (value.column is not None and type(value.column) is not int)
+  ):
+    validator.error(
+      "invalid-source-context-value",
+      f"{label} source context must contain plain string/integer values",
+      fallback,
+    )
+    return fallback
+  return value
+
+
+def _validate_canonical_mesh(
+  mesh: MeshSpec,
+  model_source: SourceContext,
+  validator: _Validator,
+) -> None:
+  mesh_source = _trusted_source(
+    mesh.source,
+    label="mesh",
+    fallback=model_source,
+    validator=validator,
+  )
+  for index, node in enumerate(mesh.nodes):
+    if _is_exact_type(
+      node,
+      NodeSpec,
+      code="invalid-node-spec-type",
+      label=f"mesh node {index}",
+      source=mesh_source,
+      validator=validator,
+    ):
+      _trusted_source(
+        node.source,
+        label=f"mesh node {index}",
+        fallback=mesh_source,
+        validator=validator,
+      )
+  for block_index, block in enumerate(mesh.cell_blocks):
+    if not _is_exact_type(
+      block,
+      CellBlockSpec,
+      code="invalid-cell-block-spec-type",
+      label=f"mesh cell block {block_index}",
+      source=mesh_source,
+      validator=validator,
+    ):
+      continue
+    block_source = _trusted_source(
+      block.source,
+      label=f"mesh cell block {block_index}",
+      fallback=mesh_source,
+      validator=validator,
+    )
+    for cell_index, cell in enumerate(block.cells):
+      if _is_exact_type(
+        cell,
+        CellSpec,
+        code="invalid-cell-spec-type",
+        label=f"cell block {block_index} cell {cell_index}",
+        source=block_source,
+        validator=validator,
+      ):
+        _trusted_source(
+          cell.source,
+          label=f"cell block {block_index} cell {cell_index}",
+          fallback=block_source,
+          validator=validator,
+        )
+
+
+def _validate_canonical_fields(
+  spec: ModelSpec,
+  model_source: SourceContext,
+  validator: _Validator,
+) -> None:
+  for index, field in enumerate(spec.fields):
+    if _is_exact_type(
+      field,
+      FieldSpec,
+      code="invalid-field-spec-type",
+      label=f"model field {index}",
+      source=model_source,
+      validator=validator,
+    ):
+      _trusted_source(
+        field.source,
+        label=f"model field {index}",
+        fallback=model_source,
+        validator=validator,
+      )
+
+
+def _validate_canonical_materials(
+  spec: ModelSpec,
+  model_source: SourceContext,
+  validator: _Validator,
+) -> None:
+  for material_index, material in enumerate(spec.materials):
+    if not _is_exact_type(
+      material,
+      MaterialSpec,
+      code="invalid-material-spec-type",
+      label=f"model material {material_index}",
+      source=model_source,
+      validator=validator,
+    ):
+      continue
+    material_source = _trusted_source(
+      material.source,
+      label=f"model material {material_index}",
+      fallback=model_source,
+      validator=validator,
+    )
+    for parameter_index, parameter in enumerate(material.parameters):
+      if _is_exact_type(
+        parameter,
+        MaterialParameterSpec,
+        code="invalid-material-parameter-spec-type",
+        label=(f"model material {material_index} parameter {parameter_index}"),
+        source=material_source,
+        validator=validator,
+      ):
+        _trusted_source(
+          parameter.source,
+          label=(f"model material {material_index} parameter {parameter_index}"),
+          fallback=material_source,
+          validator=validator,
+        )
+
+
+def _validate_canonical_regions(
+  spec: ModelSpec,
+  model_source: SourceContext,
+  validator: _Validator,
+) -> None:
+  for region_index, region in enumerate(spec.regions):
+    if not _is_exact_type(
+      region,
+      RegionSpec,
+      code="invalid-region-spec-type",
+      label=f"model region {region_index}",
+      source=model_source,
+      validator=validator,
+    ):
+      continue
+    region_source = _trusted_source(
+      region.source,
+      label=f"model region {region_index}",
+      fallback=model_source,
+      validator=validator,
+    )
+    for cell_ref_index, cell_ref in enumerate(region.cell_refs):
+      _is_exact_type(
+        cell_ref,
+        CellRef,
+        code="invalid-cell-ref-type",
+        label=f"model region {region_index} cell reference {cell_ref_index}",
+        source=region_source,
+        validator=validator,
+      )
+
+
+def _validate_canonical_tree(spec: object, validator: _Validator) -> bool:
+  fallback = SourceContext()
+  if not _is_exact_type(
+    spec,
+    ModelSpec,
+    code="invalid-model-spec-type",
+    label="model",
+    source=fallback,
+    validator=validator,
+  ):
+    return False
+  model_source = _trusted_source(
+    spec.source,
+    label="model",
+    fallback=fallback,
+    validator=validator,
+  )
+  if _is_exact_type(
+    spec.mesh,
+    MeshSpec,
+    code="invalid-mesh-spec-type",
+    label="model mesh",
+    source=model_source,
+    validator=validator,
+  ):
+    _validate_canonical_mesh(spec.mesh, model_source, validator)
+  _validate_canonical_fields(spec, model_source, validator)
+  _validate_canonical_materials(spec, model_source, validator)
+  _validate_canonical_regions(spec, model_source, validator)
+  return not validator.diagnostics
+
+
 def _validate_nodes(
   mesh: MeshSpec,
   validator: _Validator,
@@ -129,6 +366,12 @@ def _validate_connectivity(
   node_ids: set[SpecId],
   validator: _Validator,
 ) -> None:
+  if not cell.node_ids:
+    validator.error(
+      "empty-connectivity",
+      f"cell {cell.id!r} contains no node IDs",
+      cell.source,
+    )
   if len(cell.node_ids) != observed_arity:
     validator.error(
       "connectivity-arity",
@@ -165,25 +408,25 @@ def _validate_block_metadata(
   coordinate_dimension: int | None,
   topology_dimensions: dict[str, tuple[int, SourceContext]],
   validator: _Validator,
-) -> tuple[bool, bool]:
+) -> None:
   topology_ok = validator.text(
     block.reference_topology,
     code="invalid-reference-topology",
     label="reference topology",
     source=block.source,
   )
-  interpolation_ok = validator.text(
+  validator.text(
     block.geometry_interpolation,
     code="invalid-geometry-interpolation",
     label="geometry interpolation",
     source=block.source,
   )
-  topology_dimension_ok = _positive_int(block.topological_dimension)
+  topology_dimension_ok = _non_negative_int(block.topological_dimension)
   embedding_dimension_ok = _positive_int(block.embedding_dimension)
   if not topology_dimension_ok:
     validator.error(
       "invalid-topological-dimension",
-      "topological dimension must be a positive integer",
+      "topological dimension must be a non-negative integer",
       block.source,
     )
   if not embedding_dimension_ok:
@@ -226,7 +469,6 @@ def _validate_block_metadata(
         f"{first[1].render()} and {block.topological_dimension} here",
         block.source,
       )
-  return topology_ok, interpolation_ok
 
 
 def _validate_blocks(
@@ -238,7 +480,6 @@ def _validate_blocks(
   block_sources: dict[SpecId, SourceContext] = {}
   cells_by_block: dict[SpecId, set[SpecId]] = {}
   topology_dimensions: dict[str, tuple[int, SourceContext]] = {}
-  interpolation_arities: dict[tuple[str, str], tuple[int, SourceContext]] = {}
   if not mesh.cell_blocks:
     validator.error(
       "empty-cell-block-set",
@@ -252,7 +493,7 @@ def _validate_blocks(
       kind="cell-block",
       registry=block_sources,
     )
-    topology_ok, interpolation_ok = _validate_block_metadata(
+    _validate_block_metadata(
       block,
       coordinate_dimension,
       topology_dimensions,
@@ -265,12 +506,6 @@ def _validate_blocks(
         block.source,
       )
     observed_arity = len(block.cells[0].node_ids) if block.cells else None
-    if observed_arity == 0:
-      validator.error(
-        "empty-connectivity",
-        f"cell block {block.id!r} contains a cell with no node IDs",
-        block.cells[0].source,
-      )
     cell_sources: dict[SpecId, SourceContext] = {}
     for cell in block.cells:
       validator.identifier(
@@ -286,19 +521,6 @@ def _validate_blocks(
           observed_arity,
           node_ids,
           validator,
-        )
-    if topology_ok and interpolation_ok and observed_arity is not None:
-      key = (block.reference_topology, block.geometry_interpolation)
-      first = interpolation_arities.setdefault(
-        key,
-        (observed_arity, block.source),
-      )
-      if first[0] != observed_arity:
-        validator.error(
-          "geometry-interpolation-collision",
-          f"interpolation {block.geometry_interpolation!r} has observed arity "
-          f"{first[0]} at {first[1].render()} and {observed_arity} here",
-          block.source,
         )
     if unique_block:
       cells_by_block[block.id] = set(cell_sources)
@@ -545,6 +767,8 @@ def _validate_regions(
 def normalize_model_spec(spec: ModelSpec) -> ModelSpec:
   """Validate and return the canonical, caller-independent model value."""
   validator = _Validator()
+  if not _validate_canonical_tree(spec, validator):
+    raise ModelSpecValidationError(validator.diagnostics)
   node_ids, coordinate_dimension = _validate_nodes(spec.mesh, validator)
   cells_by_block = _validate_blocks(
     spec.mesh,
