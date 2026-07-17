@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: combined repaired foundations integrated and broad-green; repeat critics next
+- Status: combined repaired foundations broad-green; R0-J and R0-K active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -15,12 +15,12 @@
 
 ## Exact next safe action
 
-Commit this combined integration evidence, then dispatch fresh read-only Sol/max
-spec and identity/storage critics from that one exact ledger head. Require each to
-replay the prior hostile cases, attack the new integer/carrier validation seams, and
-report a zero-blocker or exact reproduced-blocker verdict. Do not start the model
-compiler until both repeated critics are green at the same exact combined
-foundation commit.
+Wait for direct callbacks from the fresh read-only Sol/max spec and identity/storage
+critics, adjudicate every reproduced finding against the recorded contracts, and
+repair any accepted blocker before compiler work. Both critics started from exact
+combined ledger head `8a952e7668f4f6c52d39352dee7e0685593906a3` and must report a
+zero-blocker or exact reproduced-blocker verdict. Do not start the model compiler
+until both are green at that same foundation state.
 
 Blocked condition: a critic demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -474,6 +474,8 @@ thread status are available.
 | `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Complete; 5 accepted blockers; 18 focused passed |
 | `P0-F · model spec — integer diagnostics total` | `019f7136-c2f1-77b2-81bb-f9aa41627a92` | `f9e1867a2c458531b61fd3d8e5107445c0229733` | Bounded exact-integer diagnostic repair | Complete; source `c0b3c57`, integrated `461a8a8`; 42 focused, 190 v3, 379 full tests passed |
 | `P0-G · identity/storage — exact boundaries enforced` | `019f7146-e871-76c2-a3e6-75d87fac83fd` | `7d1ededb6d11fc183ff506b989b6d1f72fd12600` | Close five accepted R0-I seams plus integration-audit carrier gaps | Complete; source `9504467` + child `8612d01`, integrated `e04f86a` + `afaac4d`; 47 focused, 212 v3, 401 full passed |
+| `R0-J · model spec — integer boundary re-attacked` | `019f7184-2fe6-7403-a5fd-683e58dcee79` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Fresh read-only spec/diagnostic repeat critic | Active; direct callback required |
+| `R0-K · identity/storage — canonical boundary re-attacked` | `019f7184-2fe6-7403-a5fd-685f9ee1995d` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Fresh read-only identity/provenance/registry/storage repeat critic | Active; direct callback required |
 
 ## Active watchdogs
 
@@ -681,3 +683,9 @@ integration decision; do not bridge it with a compatibility carrier.
   combined format, `git diff --check`, and the prototype-import quarantine scan;
   only 40 pre-existing SciPy warnings remain. Fresh repeat critics are now the sole
   gate before compiler integration.
+- 2026-07-18: froze the combined proof and ledger at
+  `8a952e7668f4f6c52d39352dee7e0685593906a3`, then dispatched read-only Sol/max
+  critics R0-J (`019f7184-2fe6-7403-a5fd-683e58dcee79`) and R0-K
+  (`019f7184-2fe6-7403-a5fd-685f9ee1995d`) from that exact clean head. Their scopes
+  are disjoint spec versus identity/storage boundaries; no writer or compiler task
+  is active.
