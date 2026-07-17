@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: P0-F spec repair active; R0-I complete with five accepted model-boundary blockers
+- Status: disjoint P0-F spec and P0-G identity/storage repairs active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -353,7 +353,8 @@ Evidence and exclusions:
 
 ### P0-G — Close polymorphic identity/storage semantic drift
 
-State: `READY`; dispatch from the next exact committed ledger state.
+State: `IMPLEMENTING` in task `019f7146-e871-76c2-a3e6-75d87fac83fd`,
+dispatched from exact base `7d1ededb6d11fc183ff506b989b6d1f72fd12600`.
 
 Outcome and invariant:
 
@@ -446,7 +447,7 @@ thread status are available.
 | `R0-H · model spec — canonical boundary attacked` | `019f711d-c79c-7652-96dc-f07e55fdb71b` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Fresh read-only P0-E critic | Complete; 1 accepted exact-integer rendering blocker; 35 focused passed |
 | `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Complete; 5 accepted blockers; 18 focused passed |
 | `P0-F · model spec — integer diagnostics total` | `019f7136-c2f1-77b2-81bb-f9aa41627a92` | `f9e1867a2c458531b61fd3d8e5107445c0229733` | Bounded exact-integer diagnostic repair | `IMPLEMENTING`; repair round 0; direct callback required |
-| `P0-G · identity/storage — exact boundaries enforced` | pending dispatch | next committed ledger state | Close five accepted R0-I semantic-drift seams | Ready; repair round 0; direct callback required |
+| `P0-G · identity/storage — exact boundaries enforced` | `019f7146-e871-76c2-a3e6-75d87fac83fd` | `7d1ededb6d11fc183ff506b989b6d1f72fd12600` | Close five accepted R0-I semantic-drift seams | `IMPLEMENTING`; repair round 0; direct callback required |
 
 ## Active watchdogs
 
@@ -591,3 +592,7 @@ integration decision; do not bridge it with a compatibility carrier.
   equality/snapshot seams violate exact canonical meaning. All five are accepted
   for bounded P0-G repair; forged identity fields and missing depth evidence remain
   explicit later obligations rather than repair-scope inflation.
+- 2026-07-18: froze P0-G in `7d1ededb6d11fc183ff506b989b6d1f72fd12600`
+  and dispatched Sol/max task `019f7146-e871-76c2-a3e6-75d87fac83fd` with exclusive
+  array/provenance/registry/test ownership. It confirmed the exact base gate; P0-F
+  continues concurrently on disjoint spec paths.
