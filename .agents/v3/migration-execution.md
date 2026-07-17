@@ -1,24 +1,24 @@
 # PyFEM v3 migration execution ledger
 
-- Status: P0-E spec repair and R0-G identity re-review active; compiler integration closed
+- Status: P0-E integrated; R0-G identity re-review active; R0-H spec re-review next
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
 - Migration method: [migration_workflow.md](migration_workflow.md)
 - Supporting structural method: [refactor_playbook.md](refactor_playbook.md)
 - Original dispatch base: `c75cbf3523349deb40bd2b07de7959e7606c3b1f`
-- Integrated foundation implementation: `f2a0cd2247728f26bb2f8a641824ae490ba38ddf`
+- Integrated foundation implementation: `108552ddd3382163a0e15c2fef7ca34e75f974fd`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
 - Active milestone: `I0 · foundations — combined proof`
 
 ## Exact next safe action
 
-Consume the first terminal callback from `P0-E` or `R0-G`. Review P0-E's commit
-against its frozen contract before integration; adjudicate every R0-G finding before
-requesting any identity-owner repair. Integrate required disjoint repairs serially,
-rerun fresh adversarial review where a boundary changed, then bind the combined
-foundation proof to one exact commit. Dispatch no additional writer and do not start
-the model compiler until this gate is green.
+Commit this ledger transition, then dispatch read-only `R0-H` from that exact
+committed base to attack P0-E's repaired canonical boundary. Consume and adjudicate
+the terminal callbacks from `R0-G` and `R0-H`; integrate any required disjoint
+repairs serially and repeat the affected critic. Dispatch no additional writer and
+do not start the model compiler until both critics are green at one exact combined
+foundation commit.
 
 Blocked condition: a critic demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -173,8 +173,10 @@ packet. Do not invent `CompiledModel` before P0-B is available.
 
 ### P0-E — Caller-detached canonical model specification
 
-State: `IMPLEMENTING` in task `019f70b8-3e74-7d82-b27b-67991cf50e3c`, dispatched
-from exact base `47e94752e93b7424c73e4d2979bebbe0f7567291`. This is a
+State: source `246114ba32b8367675f2b3954e67f9e3847ca235` reviewed and
+integrated as `108552ddd3382163a0e15c2fef7ca34e75f974fd`; integration gates
+are green and fresh adversarial review is required. The task was dispatched from
+exact base `47e94752e93b7424c73e4d2979bebbe0f7567291`. This is a
 post-integration repair, not a rewrite of P0-B history.
 
 Outcome and ownership invariant:
@@ -222,9 +224,32 @@ Required dangerous cases and evidence:
 - focused spec tests, both v3 Ruff configurations, focused format, `pytest -q
   test/v3`, full `pytest -q`, `git diff --check`, and a clean worker worktree pass.
 
-Merge order: review and integrate P0-E independently of R0-G; if R0-G also requires
-an identity-owner repair, integrate both disjoint repairs serially and re-run the
+Merge order: completed independently of R0-G. If R0-G or the fresh P0-E critic
+requires another owner repair, integrate disjoint repairs serially and re-run the
 combined foundation gates before any compiler packet.
+
+### R0-H — Re-falsify the repaired canonical model boundary
+
+State: `READY`; dispatch read-only from the next exact committed ledger state.
+
+Review lens:
+
+- prove the returned tree is recursively exact, newly owned, and detached from
+  hostile caller mutation at every nested spec/source/value/container boundary;
+- attack every spec family with exact uninitialized objects, forged slots, wrong
+  collection shapes, container subclasses, cycles, deep values, and malformed
+  `SourceContext` values;
+- prove hostile scalar subclasses cannot execute polymorphic hash, representation,
+  comparison, or string-normalization behavior and every failure remains a
+  deterministic `ModelSpecValidationError` at the nearest trusted source;
+- preserve ordinary multi-defect ordering, 0D topology, block-local identity,
+  differing uniform cross-block arities, and the absence of compiler/program/
+  section policy in the authored boundary; and
+- scrutinize the second defensive reconstruction, but report it as a blocker only
+  if evidence shows a correctness failure or a required foundation-scale violation.
+
+Owned output: terminal review report and reproducible hostile probes only. No file
+edits, commits, merge, push, API expansion, or compiler work.
 
 ## Merge and continuation order
 
@@ -232,8 +257,8 @@ combined foundation gates before any compiler packet.
 2. Completed: review P0-B and P0-C independently against the Horizon Gate.
 3. Completed: integrate P0-B/P0-C, repair the six accepted original critic
    findings, and rerun combined v3 plus full repository tests.
-4. Active: repair/re-prove the three accepted `R0-C` model-spec blockers in `P0-E`
-   and consume replacement identity critic `R0-G`.
+4. Active: P0-E is integrated and green under implementation gates; consume
+   replacement identity critic `R0-G` and fresh repaired-spec critic `R0-H`.
 5. Then dispatch the dependent compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
@@ -262,7 +287,8 @@ thread status are available.
 | `R0-C · model spec — repairs falsified` | interrupted `019f70a3-2650-7181-8a05-fc2b72b111a5`; replacement `019f70af-2c98-7563-b303-0a5a66fd6ef5` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Fresh read-only spec critic | Complete; 3 accepted blockers; 23 focused tests passed |
 | `R0-D · identity/storage — repairs falsified` | `019f70a3-264c-7831-8509-a3ffbf9235f4` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Initial identity/storage critic | Failed to finish correctly; archived; no terminal report accepted |
 | `R0-G · identity/storage — repairs falsified` | `019f70b1-793c-7c90-a051-07911fff3134` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Exact R0-D replacement, same read-only lens | Active; terminal callback required |
-| `P0-E · model spec — canonical tree owned` | `019f70b8-3e74-7d82-b27b-67991cf50e3c` | `47e94752e93b7424c73e4d2979bebbe0f7567291` | `pyfem/v3/spec/**`, focused spec tests | `IMPLEMENTING`; repair round 0; direct callback required |
+| `P0-E · model spec — canonical tree owned` | `019f70b8-3e74-7d82-b27b-67991cf50e3c` | `47e94752e93b7424c73e4d2979bebbe0f7567291` | `pyfem/v3/spec/**`, focused spec tests | Complete; source `246114b`, integrated `108552d`; 35 focused, 183 v3, 372 full tests passed |
+| `R0-H · model spec — canonical boundary attacked` | pending dispatch | next committed ledger state | Fresh read-only P0-E critic | Ready; terminal callback required before compiler integration |
 
 ## Active watchdogs
 
@@ -279,14 +305,15 @@ thread state does not trigger a model-consuming polling loop.
   prototype-import quarantine before the integration packet begins.
 
 Current combined evidence at
-`f2a0cd2247728f26bb2f8a641824ae490ba38ddf`:
+`108552ddd3382163a0e15c2fef7ca34e75f974fd`:
 
-- 41 focused foundation tests passed;
-- 171 v3 tests passed with 40 pre-existing SciPy warnings;
-- 360 full-repository tests passed with the same 40 warnings;
-- both v3 Ruff gates and focused format checks passed; and
-- the six accepted R0-A/R0-B blockers are repaired; fresh adversarial re-review
-  from one combined head is the open gate before compiler integration.
+- 35 focused P0-E model-spec tests passed;
+- 183 v3 tests passed with 40 pre-existing SciPy warnings and four existing
+  cold-cache Numba performance warnings;
+- 372 full-repository tests passed with the same 44 warnings;
+- both v3 Ruff gates, focused format, and `git diff --check` passed; and
+- all accepted R0-A/R0-B/R0-C blockers are repaired under implementation gates;
+  R0-G and R0-H adversarial reports remain open before compiler integration.
 
 ## Accepted later-phase obligations
 
@@ -298,6 +325,10 @@ Current combined evidence at
   generations equally. The future commit transaction must prevent multiple
   accepted transitions from one base and separately identify trial candidates;
   the primitive alone is not transaction enforcement.
+- P0-E's preflight already constructs a detached canonical tree and
+  `_reconstruct_model` defensively copies it again. This preserves the ownership
+  contract but increases normalization peak allocation; measure it at compiler-scale
+  proof before optimizing, and retain hostile detachment tests through any change.
 
 ## Blocked condition
 
@@ -364,3 +395,10 @@ integration decision; do not bridge it with a compatibility carrier.
   and dispatched Sol/max task `019f70b8-3e74-7d82-b27b-67991cf50e3c` with exclusive
   spec/test ownership. Its first status confirms the intended two-phase trusted
   capture then owned reconstruction; R0-G remains the only concurrent active critic.
+- 2026-07-18: P0-E completed as source `246114ba32b8367675f2b3954e67f9e3847ca235`.
+  Integration review found no correctness blocker and cherry-picked it as
+  `108552ddd3382163a0e15c2fef7ca34e75f974fd`.
+- 2026-07-18: the exact integrated P0-E head passes 35 focused spec tests, 183 v3
+  tests, 372 full-repository tests, both Ruff gates, focused format, and
+  `git diff --check`; 40 existing SciPy and four cold-cache Numba performance
+  warnings remain. Fresh read-only R0-H is the next spec gate while R0-G continues.
