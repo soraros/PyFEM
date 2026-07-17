@@ -1,9 +1,10 @@
 # Phase 0/1 execution state
 
-- Status: dispatching first independent work packets
+- Status: three first-chunk work packets active
 - Owner: delegating/integration thread
 - Design authority: [design.md](design.md)
 - Method: [refactor_playbook.md](refactor_playbook.md)
+- Dispatch base: `c75cbf3` (`v3`)
 
 ## Outcome and invariant
 
@@ -134,6 +135,14 @@ packet. Do not invent `CompiledModel` before P0-B is available.
 5. Only then dispatch `ProgramSpec`/affine constraints and
    `PreparedAssemblyPlan` work.
 
+## Active threads
+
+| Packet | Task | Thread | Status |
+|---|---|---|---|
+| P0-A | Quarantine prototype assembly module | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Active |
+| P0-B | Authored/normalized model specs | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Active |
+| P0-C | Identity/provenance/array primitives | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Active |
+
 ## Required combined evidence
 
 - focused tests owned by every packet;
@@ -154,3 +163,5 @@ integration decision; do not bridge it with a compatibility carrier.
 
 - 2026-07-17: architecture reset committed; FVM refactor playbook adapted; first
   three disjoint work packets defined for GPT-5.6 Sol with max reasoning.
+- 2026-07-17: P0-A/P0-B/P0-C dispatched from `c75cbf3` into isolated worktrees;
+  initial snapshots confirmed clean base/instruction reading and active execution.
