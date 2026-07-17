@@ -151,7 +151,7 @@ thread status are available.
 | `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | Active | — |
 | `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Integrated | `92bc87d` from `db486f5` |
 | `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Repairing critic findings | `da1e60f` + `ba466cd` + pending |
-| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Repairing critic findings | `d211afa` + `0834013` + pending |
+| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Integrated; awaiting re-review | `e1d7fe7` |
 | `R0-A · model spec — semantic gaps attacked` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | Complete | 3 accepted blockers |
 | `R0-B · identity/storage — invariants attacked` | `019f7087-61f0-71e0-9082-122e7ea75894` | Complete | 3 accepted blockers |
 | `D0-A · migration workflow — autonomy bounded` | `019f708b-2980-7703-8fca-7ea26d5826ba` | Active | `migration_workflow.md` proposal |
@@ -224,3 +224,6 @@ integration decision; do not bridge it with a compatibility carrier.
   canonical nested-type guards, registry-owned interpolation arity, and 0D topology;
   P0-C owns lossless scalar policy, ndarray-subclass rejection, and exact identity
   hardening. Compiler integration remains closed pending repair and re-review.
+- 2026-07-17: integrated the corrected P0-C boundary as `e1d7fe7`; 18 focused
+  identity/provenance tests, 157 combined v3 tests, both Ruff gates, and format pass.
+  Re-review will start from the final combined P0-B/P0-C repair head.
