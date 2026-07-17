@@ -5,9 +5,11 @@ target-version = "py313"
 [format]
 indent-style = "space"
 
-extend-exclude = ["_bench_*.py"]
-
 [lint]
 select = ["E", "F", "I", "UP", "ANN"]
 # Incompatible with indent-width = 2 and the formatter (see Ruff formatter docs).
 ignore = ["E111", "E114", "E117", "W191"]
+
+[lint.per-file-ignores]
+"*.py" = ["UP036"]
+"_bench_*.py" = ["ANN", "E501"]
