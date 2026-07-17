@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import sys
+from base64 import b64encode
 from copy import copy
 from dataclasses import FrozenInstanceError
 
@@ -227,6 +228,12 @@ class _ForeignValueBomb:
 def _assert_exact_bool(value: object, expected: bool) -> None:
   assert type(value) is bool
   assert value is expected
+
+
+def _forged_manifest(payload: bytes) -> CanonicalManifest:
+  manifest = object.__new__(CanonicalManifest)
+  object.__setattr__(manifest, "_payload", payload)
+  return manifest
 
 
 def test_finalization_detaches_converts_contiguity_and_rejects_writes() -> None:
@@ -799,6 +806,177 @@ def test_manifest_v1_bytes_remain_unchanged_for_exact_values() -> None:
     b'["mapping",[["a",["sequence",[["bool",true],["int","2"],'
     b'["float","0x1.0000000000000p-1"]]]],["z",["none"]]]]'
   )
+
+
+def test_huge_exact_integers_capture_without_changing_global_digit_limit() -> None:
+  limit_before = sys.get_int_max_str_digits()
+  for ordinary in (
+    -1_000_000_001,
+    -1_000_000_000,
+    -999_999_999,
+    -1,
+    0,
+    1,
+    999_999_999,
+    1_000_000_000,
+    1_000_000_001,
+  ):
+    expected = (
+      b"pyfem-v3-semantic-manifest-v1\n" + b'["int","' + str(ordinary).encode() + b'"]'
+    )
+    assert CanonicalManifest(ordinary).to_bytes() == expected
+
+  exponent = 5_000
+  positive = 10**exponent
+  negative = -positive
+  positive_text = "1" + "0" * exponent
+  negative_text = "-" + positive_text
+
+  assert CanonicalManifest(positive).to_bytes() == (
+    b"pyfem-v3-semantic-manifest-v1\n" + b'["int","' + positive_text.encode() + b'"]'
+  )
+  assert CanonicalManifest(negative).to_bytes() == (
+    b"pyfem-v3-semantic-manifest-v1\n" + b'["int","' + negative_text.encode() + b'"]'
+  )
+
+  unordered = UnorderedDeclarations([{"id": positive, "nested": [negative]}])
+  nested = CanonicalManifest({"declarations": unordered, "value": positive})
+  fingerprint = ContentFingerprint.from_manifest(nested)
+  descriptor = RegistryDescriptor(
+    kind="material",
+    name="huge-id",
+    version="1",
+    implementation_id="huge-id-v1",
+    metadata={"negative": negative, "positive": positive},
+    binding=_original_kernel,
+  )
+  snapshot = RegistrySnapshot({descriptor.key: descriptor})
+
+  assert len(fingerprint.digest) == 64
+  assert positive_text.encode() in descriptor.metadata.to_bytes()
+  assert negative_text.encode() in descriptor.metadata.to_bytes()
+  assert len(snapshot.fingerprint.digest) == 64
+  assert sys.get_int_max_str_digits() == limit_before
+
+
+def test_forged_overflow_float_text_rejects_as_malformed_carrier() -> None:
+  overflow = _forged_manifest(b'["float","0x1p999999999"]')
+
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    overflow.to_bytes()
+
+  canonical_payload = b'["float","0x1.0000000000000p+0"]'
+  canonical = _forged_manifest(canonical_payload)
+  assert canonical.to_bytes() == (
+    b"pyfem-v3-semantic-manifest-v1\n" + canonical_payload
+  )
+
+
+def test_forged_ndarray_payload_requires_finite_and_canonical_raw_bytes() -> None:
+  nan_bytes = np.array([np.nan], dtype="<f8").tobytes()
+  nan_payload = b'["ndarray","<f8",[1],"' + b64encode(nan_bytes) + b'"]'
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    _forged_manifest(nan_payload).to_bytes()
+
+  invalid_bool_payload = b'["ndarray","|b1",[1],"' + b64encode(b"\x02") + b'"]'
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    _forged_manifest(invalid_bool_payload).to_bytes()
+
+  big_endian_bytes = np.array([1.5], dtype=">f8").tobytes()
+  big_endian_payload = b'["ndarray",">f8",[1],"' + b64encode(big_endian_bytes) + b'"]'
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    _forged_manifest(big_endian_payload).to_bytes()
+
+  finite_bytes = np.array([-0.0, 1.5], dtype="<f8").tobytes()
+  finite_payload = b'["ndarray","<f8",[2],"' + b64encode(finite_bytes) + b'"]'
+  assert _forged_manifest(finite_payload).to_bytes() == (
+    b"pyfem-v3-semantic-manifest-v1\n" + finite_payload
+  )
+  bool_payload = b'["ndarray","|b1",[2],"' + b64encode(b"\x00\x01") + b'"]'
+  assert _forged_manifest(bool_payload).to_bytes() == (
+    b"pyfem-v3-semantic-manifest-v1\n" + bool_payload
+  )
+
+
+def test_forged_zero_payload_array_shape_must_be_numpy_constructible() -> None:
+  intp_max = int(np.iinfo(np.intp).max)
+  too_large = intp_max + 1
+  oversized_dimension = b'["ndarray","|i1",[' + str(too_large).encode() + b',0],""]'
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    _forged_manifest(oversized_dimension).to_bytes()
+
+  max_dims = int(np._core.multiarray.MAXDIMS)
+  excessive_rank = b'["ndarray","|i1",[' + b",".join([b"0"] * (max_dims + 1)) + b'],""]'
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    _forged_manifest(excessive_rank).to_bytes()
+
+  excessive_nonzero_product = (
+    b'["ndarray","|i1",['
+    + str(intp_max).encode()
+    + b","
+    + str(intp_max).encode()
+    + b',0],""]'
+  )
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    _forged_manifest(excessive_nonzero_product).to_bytes()
+
+  excessive_itemsize_product = (
+    b'["ndarray","<f8",[' + str(intp_max).encode() + b',0],""]'
+  )
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    _forged_manifest(excessive_itemsize_product).to_bytes()
+
+  supported = np.empty((0,) * max_dims, dtype=np.int8)
+  manifest = CanonicalManifest(supported)
+  assert ContentFingerprint.from_manifest(manifest) == ContentFingerprint.capture(
+    supported
+  )
+
+  supported_wide = np.empty((intp_max, 0), dtype=np.int8)
+  wide_manifest = CanonicalManifest(supported_wide)
+  assert wide_manifest.to_bytes() == CanonicalManifest(supported_wide).to_bytes()
+
+
+def test_unordered_payload_requires_id_keyed_unique_strictly_sorted_mappings() -> None:
+  non_mapping_payload = b'["unordered-declarations","id",[["int","1"]]]'
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    _forged_manifest(non_mapping_payload).to_bytes()
+
+  missing_id = object.__new__(UnorderedDeclarations)
+  object.__setattr__(missing_id, "id_key", "id")
+  object.__setattr__(
+    missing_id,
+    "_items",
+    (("mapping", (("value", ("int", "1")),)),),
+  )
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    CanonicalManifest(missing_id)
+
+  declaration_a = ("mapping", (("id", ("str", "a")),))
+  declaration_b = ("mapping", (("id", ("str", "b")),))
+  for invalid_items in (
+    (declaration_a, declaration_a),
+    (declaration_b, declaration_a),
+  ):
+    invalid = object.__new__(UnorderedDeclarations)
+    object.__setattr__(invalid, "id_key", "id")
+    object.__setattr__(invalid, "_items", invalid_items)
+    with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+      CanonicalManifest(invalid)
+
+  ordinary = UnorderedDeclarations([{"id": "b", "value": 2}, {"id": "a", "value": 1}])
+  ordinary_manifest = CanonicalManifest(ordinary)
+  ordinary_payload = ordinary_manifest.to_bytes().split(b"\n", maxsplit=1)[1]
+  assert _forged_manifest(ordinary_payload).to_bytes() == ordinary_manifest.to_bytes()
+
+  reused = object.__new__(UnorderedDeclarations)
+  object.__setattr__(reused, "id_key", ordinary.id_key)
+  object.__setattr__(
+    reused,
+    "_items",
+    object.__getattribute__(ordinary, "_items"),
+  )
+  assert CanonicalManifest(reused).to_bytes() == ordinary_manifest.to_bytes()
 
 
 def test_manifest_containers_reject_subclasses_without_executing_overrides() -> None:

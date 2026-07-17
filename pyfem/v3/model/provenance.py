@@ -35,6 +35,10 @@ from pyfem.v3.model.arrays import _dtype_has_metadata, _type_derives_from
 CANONICAL_MANIFEST_FORMAT = "pyfem-v3-semantic-manifest-v1"
 _MANIFEST_HEADER = f"{CANONICAL_MANIFEST_FORMAT}\n".encode()
 _BINARY64_INFO = np.finfo(np.float64)
+_DECIMAL_CHUNK_BASE = 1_000_000_000
+_DECIMAL_CHUNK_WIDTH = 9
+_INTP_MAX = int(np.iinfo(np.intp).max)
+_NUMPY_MAX_DIMS = int(np._core.multiarray.MAXDIMS)
 _NUMPY_BOOL_TYPES = (np.bool_,)
 _NUMPY_INTEGER_TYPES = tuple(
   scalar_type
@@ -63,6 +67,26 @@ def _canonical_float(value: float) -> _CanonicalNode:
     msg = "semantic manifests require finite floating-point values"
     raise ValueError(msg)
   return ("float", value.hex())
+
+
+def _canonical_int_text(value: int) -> str:
+  """Encode an exact integer without consulting the interpreter digit limit."""
+  if value == 0:
+    return "0"
+
+  negative = value < 0
+  magnitude = -value if negative else value
+  chunks: list[int] = []
+  while magnitude:
+    magnitude, chunk = divmod(magnitude, _DECIMAL_CHUNK_BASE)
+    chunks.append(chunk)
+
+  leading = str(chunks[-1])
+  trailing = "".join(
+    f"{chunk:0{_DECIMAL_CHUNK_WIDTH}d}" for chunk in reversed(chunks[:-1])
+  )
+  prefix = "-" if negative else ""
+  return prefix + leading + trailing
 
 
 def _floating_dtype_exceeds_binary64(dtype: np.dtype[np.generic]) -> bool:
@@ -110,7 +134,7 @@ def _validate_canonical_node(node: object) -> None:
       _malformed_carrier()
     try:
       value = float.fromhex(node[1])
-    except ValueError:
+    except (OverflowError, ValueError):
       _malformed_carrier()
     if not math.isfinite(value) or value.hex() != node[1]:
       _malformed_carrier()
@@ -125,7 +149,8 @@ def _validate_canonical_node(node: object) -> None:
       or type(node[1]) is not str
       or type(node[2]) is not tuple
       or type(node[3]) is not str
-      or any(type(size) is not int or size < 0 for size in node[2])
+      or len(node[2]) > _NUMPY_MAX_DIMS
+      or any(type(size) is not int or size < 0 or size > _INTP_MAX for size in node[2])
     ):
       _malformed_carrier()
     try:
@@ -135,14 +160,23 @@ def _validate_canonical_node(node: object) -> None:
       _malformed_carrier()
     if (
       dtype.str != node[1]
+      or dtype.newbyteorder("<").str != node[1]
       or _dtype_has_metadata(dtype)
       or dtype.hasobject
       or dtype.fields is not None
       or dtype.subdtype is not None
       or dtype.kind not in "biuf"
       or (dtype.kind == "f" and _floating_dtype_exceeds_binary64(dtype))
+      or math.prod(size for size in node[2] if size) * dtype.itemsize > _INTP_MAX
       or len(payload) != dtype.itemsize * math.prod(node[2])
+      or b64encode(payload).decode("ascii") != node[3]
     ):
+      _malformed_carrier()
+    if dtype.kind == "f" and not bool(
+      np.isfinite(np.frombuffer(payload, dtype=dtype)).all()
+    ):
+      _malformed_carrier()
+    if dtype.kind == "b" and any(byte not in (0, 1) for byte in payload):
       _malformed_carrier()
     return
   if tag == "captured-manifest":
@@ -152,7 +186,9 @@ def _validate_canonical_node(node: object) -> None:
       captured = b64decode(node[1], validate=True)
     except (BinasciiError, ValueError):
       _malformed_carrier()
-    if not captured.startswith(_MANIFEST_HEADER):
+    if b64encode(captured).decode("ascii") != node[1] or not captured.startswith(
+      _MANIFEST_HEADER
+    ):
       _malformed_carrier()
     _validate_manifest_payload(captured[len(_MANIFEST_HEADER) :])
     return
@@ -164,8 +200,7 @@ def _validate_canonical_node(node: object) -> None:
       or type(node[2]) is not tuple
     ):
       _malformed_carrier()
-    for item in node[2]:
-      _validate_canonical_node(item)
+    _validate_unordered_items(node[1], node[2])
     return
   if tag == "mapping":
     if len(node) != 2 or type(node[1]) is not tuple:
@@ -191,6 +226,35 @@ def _validate_canonical_node(node: object) -> None:
   _malformed_carrier()
 
 
+def _validate_unordered_items(
+  id_key: str,
+  items: tuple[_CanonicalNode, ...],
+) -> None:
+  previous_identity: bytes | None = None
+  for declaration in items:
+    _validate_canonical_node(declaration)
+    if (
+      type(declaration) is not tuple
+      or len(declaration) != 2
+      or declaration[0] != "mapping"
+      or type(declaration[1]) is not tuple
+    ):
+      _malformed_carrier()
+
+    identity: _CanonicalNode | None = None
+    for key, item in declaration[1]:
+      if key == id_key:
+        identity = item
+        break
+    if identity is None:
+      _malformed_carrier()
+
+    identity_bytes = _encode_node(identity)
+    if previous_identity is not None and identity_bytes <= previous_identity:
+      _malformed_carrier()
+    previous_identity = identity_bytes
+
+
 def _json_to_canonical_node(value: object) -> object:
   if type(value) is list:
     return tuple(_json_to_canonical_node(item) for item in value)
@@ -205,7 +269,13 @@ def _validate_manifest_payload(payload: bytes) -> None:
     _validate_canonical_node(node)
     if _encode_node(node) != payload:
       _malformed_carrier()
-  except (RecursionError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+  except (
+    OverflowError,
+    RecursionError,
+    UnicodeDecodeError,
+    json.JSONDecodeError,
+    ValueError,
+  ):
     _malformed_carrier()
 
 
@@ -236,8 +306,7 @@ def _validated_unordered_payload(
     _malformed_carrier()
   if type(id_key) is not str or not id_key or type(items) is not tuple:
     _malformed_carrier()
-  for item in items:
-    _validate_canonical_node(item)
+  _validate_unordered_items(id_key, items)
   return id_key, items
 
 
@@ -322,7 +391,7 @@ def _canonicalize(value: object, active: set[int]) -> _CanonicalNode:
   if value_type is bool:
     return ("bool", value)
   if value_type is int:
-    return ("int", str(value))
+    return ("int", _canonical_int_text(value))
   if value_type is float:
     return _canonical_float(value)
   if value_type is str:
@@ -330,7 +399,7 @@ def _canonicalize(value: object, active: set[int]) -> _CanonicalNode:
   if any(value_type is scalar_type for scalar_type in _NUMPY_BOOL_TYPES):
     return ("bool", bool(value))
   if any(value_type is scalar_type for scalar_type in _NUMPY_INTEGER_TYPES):
-    return ("int", str(int(value)))
+    return ("int", _canonical_int_text(int(value)))
   if any(value_type is scalar_type for scalar_type in _NUMPY_FLOAT_TYPES):
     return _canonical_numpy_float(value)
   if _type_derives_from(value_type, np.generic):
