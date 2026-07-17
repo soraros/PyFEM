@@ -137,11 +137,16 @@ packet. Do not invent `CompiledModel` before P0-B is available.
 
 ## Active threads
 
-| Packet | Task | Thread | Status |
-|---|---|---|---|
-| P0-A | Quarantine prototype assembly module | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Active |
-| P0-B | Authored/normalized model specs | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Active |
-| P0-C | Identity/provenance/array primitives | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Active |
+Titles follow the compact coordinate/owner/outcome convention in
+[refactor_playbook.md](refactor_playbook.md#thread-titles). Status and execution
+metadata stay here rather than being encoded in the title.
+
+| Exact title | Thread | Status |
+|---|---|---|
+| `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | Active |
+| `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Active |
+| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Active |
+| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Active |
 
 ## Required combined evidence
 
@@ -165,3 +170,5 @@ integration decision; do not bridge it with a compatibility carrier.
   three disjoint work packets defined for GPT-5.6 Sol with max reasoning.
 - 2026-07-17: P0-A/P0-B/P0-C dispatched from `c75cbf3` into isolated worktrees;
   initial snapshots confirmed clean base/instruction reading and active execution.
+- 2026-07-17: adopted stable `<ledger-id> · <semantic owner> — <target state>`
+  thread titles and renamed the active first-chunk packets without changing scope.

@@ -174,6 +174,51 @@ Update it at milestones or material plan changes, not after routine tool calls.
 Use the current thread by default. Create user-visible threads when explicitly
 requested or when each thread has a named, independently reviewable output.
 
+### Thread titles
+
+Treat a title as a compact index entry, not a miniature prompt. The project,
+branch, model, worktree, status, and generic action are already visible elsewhere.
+A title should identify the stable work coordinate, the semantic owner, and the
+terminal property being established:
+
+```text
+<ledger-id> · <semantic owner> — <target state>
+```
+
+Use these ledger-id classes:
+
+- `P<phase>-<letter>` for a code-and-test work packet;
+- `R<phase>-<letter>` for a read-only research or adversarial-review packet;
+- `D<phase>-<letter>` for a bounded design decision owned by the delegator; and
+- `I<phase>` for the phase integration and combined-proof thread.
+
+The semantic owner is the smallest recognizable boundary, normally one to three
+concrete nouns. The target state is an observable end condition, not an activity.
+Prefer `model spec — explicit immutable intent` over `implement new model spec`,
+and `assembly — prototype quarantined` over `refactor assembly module`.
+
+Title rules:
+
+- use the exact ID recorded in the execution-state artifact and never reuse it;
+- keep the title stable while status changes; record active, blocked, review, and
+  complete states in the execution artifact instead;
+- omit `PyFEM`, `v3`, worker/model names, `thread`, `task`, `implement`, `work on`,
+  and other context or motion words;
+- aim for 30 to 60 characters and at most one punctuation-delimited qualification;
+- give materially changed scope a new ledger ID and thread instead of stretching
+  an old title; and
+- record the exact title beside the thread ID at dispatch so titles and prompts can
+  be audited independently.
+
+Examples:
+
+```text
+P0-A · assembly — prototype quarantined
+R0-A · topology — shape inference attacked
+D1-A · constraints — affine owner selected
+I0 · foundations — combined proof
+```
+
 Before dispatching parallel writers:
 
 - define disjoint file/path ownership;
