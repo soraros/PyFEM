@@ -8,8 +8,10 @@ target architecture.
 design, invariants, dangerous-case proof suite, and phased migration. Then read
 [AGENTS.md](AGENTS.md) for the working rules and commands.
 
-Large structural work follows [refactor_playbook.md](refactor_playbook.md). Current
-delegated Phase 0/1 status lives in [phase0-execution.md](phase0-execution.md).
+The full legacy-to-v3 migration follows
+[migration_workflow.md](migration_workflow.md), with current state in the sole live
+[migration-execution.md](migration-execution.md) ledger. Structural refactors
+outside that migration use [refactor_playbook.md](refactor_playbook.md).
 
 V3 requires Python 3.13+ and uses 2-space Ruff. The branch's modernization and
 Intel-Mac dependency baseline are intentional. PySide6 is not in the current
@@ -31,11 +33,12 @@ uv sync
 |---|---|
 | [design.md](design.md) | **Authoritative:** target architecture, invariants, proof, migration |
 | [AGENTS.md](AGENTS.md) | **Active:** session routing and working rules |
-| [refactor_playbook.md](refactor_playbook.md) | **Active:** structural refactor proof and delegation method |
-| [phase0-execution.md](phase0-execution.md) | **Active:** restartable first-chunk work state and merge order |
+| [migration_workflow.md](migration_workflow.md) | **Active:** legacy-to-v3 capability workflow, packet lifecycle, and completion contract |
+| [migration-execution.md](migration-execution.md) | **Active:** sole restartable migration ledger and exact next action |
+| [refactor_playbook.md](refactor_playbook.md) | **Active outside the migration:** generic structural refactor proof method |
 | [conventions.md](conventions.md) | **Active where compatible with the design:** style, typing, tooling |
 | [parity.md](parity.md) | Numerical-reference workflow; parity is evidence, not architecture proof |
-| [feature-parity.md](feature-parity.md) | Legacy requirements inventory; not a delivery sequence |
+| [feature-parity.md](feature-parity.md) | Temporary legacy inventory pending absorption into the live capability ledger |
 | [architecture.md](architecture.md) | Historical snapshot of the prototype carrier |
 | [roadmap.md](roadmap.md) | Superseded P0-P8 checklist |
 | [WORKFLOW.md](WORKFLOW.md), [hardening.md](hardening.md) | Superseded Cursor-era execution process |

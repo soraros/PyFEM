@@ -1,14 +1,16 @@
-# PyFEM v3 migration workflow proposal
+# PyFEM v3 migration workflow
 
-- Status: **proposal for review; not yet the active migration method**
+- Status: **active migration method**
 - Prepared: 2026-07-17
 - Investigation base: `ad95149e2e34b8eff55c0896c1dea53ac1cbc71d`
+- Proposal source: `50cc6632490f5d185dd30ff6b85dd7cb10e432b6`
+- Integrated proposal: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
 - Target branch: local `v3`; no merge or push is implied
 
-This document proposes an operating system for gradually replacing legacy PyFEM
+This document defines the operating system for gradually replacing legacy PyFEM
 with the architecture in [design.md](design.md). It does not authorize a feature
-port, change any design invariant, or supersede the active foundation review in
-[phase0-execution.md](phase0-execution.md).
+port or change any design invariant. Live state is owned only by
+[migration-execution.md](migration-execution.md).
 
 Navigation: [authority](#authority-and-adoption-status),
 [state machine](#migration-state-machine),
@@ -17,7 +19,7 @@ Navigation: [authority](#authority-and-adoption-status),
 [contracts](#dispatch-and-integration-contracts),
 [proof](#numerical-and-physical-proof-strategy),
 [completion](#falsifiable-definition-of-migration-complete),
-[adoption](#staged-adoption), and
+[adoption](#adoption-and-rollout-state), and
 [coordinator loop](#coordinator-loop).
 
 ## Authority and adoption status
@@ -32,44 +34,49 @@ The authority order is unchanged:
 5. the current v3 prototype as reusable evidence; and
 6. historical plans, prototype APIs, old examples, and old benchmark policy.
 
-The current foundation at this proposal's base consists of:
+The current foundation at adoption consists of:
 
 - the prototype assembly module quarantined as
   `pyfem/v3/_prototype_assembly.py`;
 - normalized authored model-specification primitives under `pyfem/v3/spec/`;
 - live identity, state-generation, canonical-manifest, frozen-registry, and
-  owned-array primitives under `pyfem/v3/model/`; and
-- two active, read-only Sol/max critics, `R0-A` and `R0-B`, whose findings are a
-  hard dependency of the next compiler packet.
+  owned-array primitives under `pyfem/v3/model/`;
+- six accepted `R0-A`/`R0-B` blockers repaired in the spec and identity/storage
+  owners, with 41 focused, 171 v3, and 360 repository tests passing at the combined
+  implementation head; and
+- two fresh, read-only Sol/max critics, `R0-C` and `R0-D`, attacking the combined
+  repaired head before any compiler packet may start.
 
 The prototype still exposes `load_problem`, `ProblemDefinition`, `LoadedProblem`,
 `solve_linear`, `solve_nonlinear`, and `solve_riks`. It still contains the exact
 failure seams listed in [design section 3.2](design.md#32-what-the-current-v3-does-not-prove).
-Nothing in this proposal upgrades those paths from evidence to architecture.
+Nothing in this workflow upgrades those paths from evidence to architecture.
 
 The workflow keeps the Intel Mac, Python 3.13+, SciPy/NumPy/Numba development
 baseline recorded in [AGENTS.md](AGENTS.md). The foreseeable development line is
 `v3`. Modernization or feature work living on another unmerged branch is not
 silently imported, rebased, or treated as a prerequisite.
 
-### What this commit does now
+### Adoption record
 
-This commit creates only this proposal. It does not:
+The D0-A source commit created only this document. The integration owner then
+reviewed and adopted it by routing migration work here, preserving one live ledger,
+and leaving [design.md](design.md) unchanged. Adoption itself does not:
 
-- create or rename threads;
-- create a Goal, worktree, watchdog, or recurring automation;
-- modify the current execution ledger;
+- create or rename threads, worktrees, or a Goal;
+- create a watchdog or recurring automation;
 - classify an unresolved legacy capability by fiat;
-- start `P0-D`; or
-- merge, push, or change production or test code.
+- start the compiler writer;
+- merge, push, or change production or test code; or
+- expand compatibility, dependency, GUI, or retirement authority.
 
-### What requires later delegator or user approval
+### Actions that remain separately bounded
 
-The [staged adoption](#staged-adoption) changes require explicit review and
-adoption after `R0-A` and `R0-B` are terminal. Thread creation, scheduled
-automation, public compatibility decisions, legacy retirement, design amendments,
-new dependencies, optional GUI policy, merge, and push remain separately bounded
-actions.
+Thread creation, scheduled automation, public compatibility decisions, legacy
+retirement, design amendments, new dependencies, optional GUI policy, merge, and
+push remain separately bounded actions. The user's standing authorization covers
+the current delegated migration work and local focused commits; it does not turn
+these higher-consequence decisions into automatic transitions.
 
 ## Operating thesis
 
@@ -148,18 +155,17 @@ evidence and stops rather than manufacturing activity.
 
 ## Source of truth and persistence
 
-After adoption, the normal migration session should need exactly four durable
-inputs:
+The normal migration session should need exactly four durable inputs:
 
 | Kind | Sole owner | What belongs there |
 |---|---|---|
 | Target design | `design.md` | Architecture, invariants, acceptance suite, phase order, amendments |
 | Migration method | `migration_workflow.md` | This state machine, roles, contracts, automation, cost, and stop policy |
-| Live execution ledger | proposed `migration-execution.md` | Current head/base, capability rows, packets, decisions, callbacks, proof, blockers, next safe action |
+| Live execution ledger | `migration-execution.md` | Current head/base, capability rows, packets, decisions, callbacks, proof, blockers, next safe action |
 | Dated phase evidence | one focused note only when needed | Raw numerical/performance measurements or adjudication facts not already represented by tests |
 
 [refactor_playbook.md](refactor_playbook.md) is the source from which the Horizon
-Gate and proof discipline were adapted. After adoption it remains the generic
+Gate and proof discipline were adapted. It remains the generic
 method for non-migration structural refactors; it is not a second live migration
 roadmap. [feature-parity.md](feature-parity.md) remains an input inventory until
 its rows have been absorbed into the coverage ledger, then becomes historical.
@@ -172,7 +178,7 @@ unchanged status snapshots do not create ledger churn.
 
 ### Live execution ledger shape
 
-The proposed `migration-execution.md` has these sections, in this order:
+The live `migration-execution.md` has these sections, in this order:
 
 1. current integrated commit, dispatch base, branch, platform, and active
    milestone;
@@ -337,28 +343,28 @@ nearby class merely because its filename resembles the last packet.
 
 ### Wave 0: finish and operationalize foundations
 
-No new writer is dispatched while `R0-A` or `R0-B` is active.
+No compiler writer is dispatched while `R0-C` or `R0-D` is active.
 
 After their callbacks:
 
 1. the `I0` integrator adjudicates every finding;
-2. accepted foundation defects are repaired inside the original owner, with
-   combined focused/v3/full/Ruff proof;
-3. the migration method is adopted only if approved;
+2. accepted foundation defects are repaired inside the original owner;
+3. combined focused/v3/full/Ruff proof is rerun at one exact commit;
 4. the legacy coverage ledger is seeded from the complete inventory; and
-5. only then is the compiler-integration packet selected.
+5. only then is the compiler-integration writer selected.
 
-Proposed new IDs are reserved only on adoption:
+The next eligible IDs are reserved as follows; the earlier `R0-C` and `R0-D` IDs
+remain permanently assigned to the fresh foundation re-reviews:
 
 | ID and title | Outcome | Dependency | Parallel policy |
 |---|---|---|---|
-| `R0-C · legacy breadth — semantic ledger seeded` | Complete E0 inventory and proposed preserve/change/retire classifications with evidence gaps | R0-A/R0-B terminal; adopted ledger schema | Read-only research may overlap P0-D; only integrator writes the ledger |
-| `P0-D · model compiler — Q8 block frozen` | Normalized Q8 region compiles into immutable model/block recipe, entity/source maps, capabilities, and empty physical-state layout | Foundation critics adjudicated | Serial core writer |
-| `R0-D · model compiler — block invariants attacked` | Try topology inference, registry drift, missing membership, caller aliasing, invalid geometry, and identity substitution | P0-D integrated | Read-only Sol/max critic |
+| `R0-E · legacy breadth — semantic ledger seeded` | Complete E0 inventory and proposed preserve/change/retire classifications with evidence gaps | R0-C/R0-D terminal; adopted ledger schema | Read-only research may overlap P0-D; only integrator writes the ledger |
+| `P0-D · model compiler — Q8 block frozen` | Normalized Q8 region compiles into immutable model/block recipe, entity/source maps, capabilities, and empty physical-state layout | Foundation re-review adjudicated and combined proof green | Serial core writer |
+| `R0-F · model compiler — block invariants attacked` | Try topology inference, registry drift, missing membership, caller aliasing, invalid geometry, and identity substitution | P0-D integrated | Read-only Sol/max critic |
 
 `P0-D` must not introduce `ProgramSpec`, a public solver, a second whole-problem
 carrier, or a compatibility shim. It is the exact next dependency already implied
-by [phase0-execution.md](phase0-execution.md#merge-and-continuation-order).
+by [migration-execution.md](migration-execution.md#merge-and-continuation-order).
 
 ### Wave 1: one honest Q8 linear slice
 
@@ -367,7 +373,7 @@ would freeze mutually invented APIs before the architecture is executable.
 
 | ID and title | Outcome | Depends on | Causal retirement/proof |
 |---|---|---|---|
-| `P1-A · program compiler — affine plan canonical` | `ProgramSpec`, additive nodal loads, fixed affine constraints, structured coordinates, and model-compatible `CompiledProgram` | P0-D and R0-D adjudication | Replaces prototype constraint/load packing on the new flow |
+| `P1-A · program compiler — affine plan canonical` | `ProgramSpec`, additive nodal loads, fixed affine constraints, structured coordinates, and model-compatible `CompiledProgram` | P0-D and R0-F adjudication | Replaces prototype constraint/load packing on the new flow |
 | `P1-B · assembly plan — contributions composed` | Reference COO oracle plus composed model/program/reduction/request plan | P1-A | Proves loads are added and program tangents cannot be absent from topology |
 | `P1-C · linear slice — verified public flow` | Minimal physical/evolution state transaction, typed `LinearStatic`, reusable and one-shot solve, result ledger, `verify_record`, and fresh `verify` | P1-B | New Q8 public flow contains no `ProblemDefinition` or `LoadedProblem` |
 | `R1-A · linear slice — physics and state attacked` | Attack geometry, constraints, loads, identity, reactions, balance, snapshot isolation, and false verification | P1-C integrated | Independent Sol/max report |
@@ -838,7 +844,7 @@ cadence >= 15 minutes, last native cursor, last terminal/attention state,
 deduplication key, retry count, owner, and shutdown condition
 ```
 
-As of this proposal, a status-only watchdog can use the smallest available model
+As of adoption, a status-only watchdog can use the smallest available model
 with reliable thread tools, such as `gpt-5.3-codex-spark` at low reasoning. It may
 report status and terminal/attention transitions only. It may not review code,
 send repair instructions, cherry-pick, alter the ledger's semantic decisions, or
@@ -1123,54 +1129,44 @@ public flow that still constructs `GlobalData` or a prototype carrier, one
 path-dependent result that cannot be restarted/verified, one hidden compatibility
 fallback, or one unresolved required critic finding.
 
-## Staged adoption
+## Adoption and rollout state
 
-Adoption must not disturb `R0-A` or `R0-B`.
+### Adopted method and ledger
 
-### Stage 0: review only now
+The integration owner reviewed D0-A after the original `R0-A`/`R0-B` findings were
+repaired and the combined foundation gates passed. Adoption made these focused,
+documentation-only changes:
 
-- Leave `phase0-execution.md`, thread titles, callbacks, and active critics
-  unchanged.
-- Review this proposal against their eventual findings and the delegator's desired
-  operating cost.
-- Do not create a watchdog; current direct callbacks and native status are enough.
+1. `AGENTS.md` routes full legacy-to-v3 migration here while non-migration
+   structural refactors continue to use `refactor_playbook.md`;
+2. `refactor_playbook.md` links this workflow without duplicating the state machine;
+3. `phase0-execution.md` became the sole live `migration-execution.md` ledger while
+   retaining the foundation history;
+4. `README.md` routes new sessions to the same method and ledger;
+5. `feature-parity.md` is explicitly a temporary inventory whose old statuses and
+   exclusions have no classification authority; and
+6. `design.md` remains unchanged because no architectural invariant was amended.
 
-### Stage 1: close the active foundation review
+There is no second live status file and no watchdog. Existing direct callbacks and
+bounded native waits remain sufficient.
 
-After both critics send terminal callbacks:
+### Current foundation re-review
 
-- adjudicate and repair their findings under the existing `I0` contract;
-- rerun the recorded combined foundation gates;
-- update `phase0-execution.md` with the exact integrated foundation commit; and
-- do not start the compiler packet until that gate is green.
+Fresh critics `R0-C` and `R0-D` attack the combined repaired foundation at exact
+commit `faab0c938705f59fc5a22e702413f295af1dcadb`. Their IDs remain assigned to
+those reviews; the future breadth and compiler critics use `R0-E` and `R0-F`.
+Compiler integration remains closed until both callbacks are adjudicated and any
+accepted P0/P1 findings are repaired and re-proved.
 
-### Stage 2: adopt one method and one ledger
-
-With delegator approval, make a focused documentation-only adoption change:
-
-1. update `AGENTS.md` so full legacy-to-v3 migration uses
-   `migration_workflow.md`, while non-migration structural refactors continue to
-   use `refactor_playbook.md`;
-2. add the same distinction and link in `refactor_playbook.md` without duplicating
-   this state machine;
-3. rename `phase0-execution.md` to `migration-execution.md`, retaining its history
-   and replacing phase-specific headers with the live-ledger shape above;
-4. update `README.md` links and mark `feature-parity.md` as a temporary inventory
-   source pending ledger absorption; and
-5. leave `design.md` unchanged unless an actual invariant amendment is separately
-   justified.
-
-Do not keep both `phase0-execution.md` and `migration-execution.md` as live status
-files.
-
-### Stage 3: seed and trial
+### Next trial
 
 - Seed every legacy capability at E0 and classify high-level rows with Sol/max.
-- Trial the workflow on `P0-D`, its critic, and then the serial Phase 1 packets.
+- Trial the workflow on `P0-D`, its `R0-F` critic, and then the serial Phase 1
+  packets.
 - Record friction as concrete transition failures, not another process roadmap.
 - Change this method only if the trial exposes a falsifiable operating defect.
 
-### Stage 4: retire overlapping guidance
+### Retire overlapping guidance
 
 After the first complete Phase 1 trial:
 
@@ -1289,9 +1285,8 @@ function coordinator_activation():
     return and rely on direct terminal callbacks
 ```
 
-For the current base, the exact next safe action is not `P0-D`: it is to wait for
-the already active `R0-A` and `R0-B` terminal callbacks, adjudicate their findings
-in `I0`, and rerun the combined foundation proof. The smallest adoption action
-after that is a documentation-only decision to designate this file as the migration
-method and evolve the existing execution ledger without creating a second live
-status document.
+For the current base, the exact next safe action is not `P0-D`: it is to consume the
+active `R0-C` and `R0-D` terminal callbacks, adjudicate their findings in `I0`, and
+rerun the combined foundation proof if necessary. The next new writer is selected
+only after that gate; read-only legacy inventory may proceed independently under a
+frozen `R0-E` contract.

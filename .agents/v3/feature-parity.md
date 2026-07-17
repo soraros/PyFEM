@@ -1,8 +1,12 @@
 # v1 → v3 feature parity matrix
 
-> **Requirements inventory only.** This file describes legacy breadth; it is not an
-> implementation order or an architecture acceptance test. The active priorities
-> and proof gates are in [design.md](design.md).
+> **Temporary requirements inventory only.** This file describes legacy breadth;
+> it is not an implementation order, current status authority, retirement decision,
+> or architecture acceptance test. Its rows—including old `done`, `deferred`, and
+> `out of scope` labels—must be absorbed and reclassified in the capability ledger
+> governed by [migration_workflow.md](migration_workflow.md) and maintained in
+> [migration-execution.md](migration-execution.md). The architecture and proof gates
+> remain authoritative in [design.md](design.md).
 
 Legacy PyFEM (`pyfem/`, excluding `pyfem/v3/`) vs the typed v3 core. Status: **done** | **next** (current phase) | **deferred**.
 

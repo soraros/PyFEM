@@ -1,12 +1,56 @@
-# Phase 0/1 execution state
+# PyFEM v3 migration execution ledger
 
-- Status: foundation repairs integrated; adversarial re-review next
+- Status: migration method adopted; combined foundation adversarial re-review active
 - Owner: delegating/integration thread
+- Target branch: `v3`
 - Design authority: [design.md](design.md)
-- Method: [refactor_playbook.md](refactor_playbook.md)
-- Dispatch base: `c75cbf3` (`v3`)
-- Integrated foundation: `ba466cd` (`v3`)
-- Critic-repair head: `f2a0cd2` (`v3`)
+- Migration method: [migration_workflow.md](migration_workflow.md)
+- Supporting structural method: [refactor_playbook.md](refactor_playbook.md)
+- Original dispatch base: `c75cbf3523349deb40bd2b07de7959e7606c3b1f`
+- Integrated foundation implementation: `f2a0cd2247728f26bb2f8a641824ae490ba38ddf`
+- Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
+- Active milestone: `I0 · foundations — combined proof`
+
+## Exact next safe action
+
+Consume the terminal callbacks from `R0-C` and `R0-D`, adjudicate every finding,
+repair any accepted P0/P1 defect, and bind the combined foundation proof to one exact
+integrated commit. Do not dispatch the model compiler writer until this gate is
+green. The independent legacy-capability inventory may be selected separately once
+its read-only output and ledger-ingestion contract are frozen.
+
+Blocked condition: a critic demonstrates an invariant failure that cannot be
+repaired inside the existing spec or identity/storage owner without a new design,
+physics, compatibility, dependency, or authority decision.
+
+## Semantic decisions and open questions
+
+Decided:
+
+- `design.md` remains authoritative; the legacy runtime and current v3 prototype are
+  requirements and evidence, not target architecture.
+- Development continues on local branch `v3`; the separate unmerged modernization
+  line is not silently imported.
+- Full migration uses the bounded packet conveyor in `migration_workflow.md`, direct
+  terminal callbacks, serial integration, and independent adversarial proof.
+- Thread IDs are never reused. `R0-C` and `R0-D` belong to the current foundation
+  re-reviews; future legacy-breadth and compiler critics use `R0-E` and `R0-F`.
+
+Open and not implicitly decided:
+
+- root Python API, `pyfem` CLI, and `.pro`/`.dat` compatibility;
+- optional GUI preservation, replacement, or retirement;
+- RVE/FE2 and ROM preservation, redesign, or retirement; and
+- the later-phase registry-callable trust and accepted-generation transaction
+  obligations recorded below.
+
+## Capability coverage ledger
+
+The complete legacy capability ledger is not yet seeded. Until `R0-E` produces a
+reviewable E0 inventory and the integration owner ingests it, [feature-parity.md](feature-parity.md)
+is only a temporary source list. Its old `done`, `deferred`, and `out of scope`
+labels are not preserve/change/retire decisions. No unclassified capability is
+silently excluded from the migration-complete bar.
 
 ## Outcome and invariant
 
@@ -128,16 +172,19 @@ packet. Do not invent `CompiledModel` before P0-B is available.
 
 ## Merge and continuation order
 
-1. Review and integrate P0-A.
-2. Review P0-B and P0-C independently against the Horizon Gate.
-3. Integrate P0-B/P0-C and rerun combined v3 plus full repository tests.
-4. Dispatch the dependent compiler-integration packet: one explicit Q8 region ->
+1. Completed: review and integrate P0-A.
+2. Completed: review P0-B and P0-C independently against the Horizon Gate.
+3. Completed: integrate P0-B/P0-C, repair the six accepted original critic
+   findings, and rerun combined v3 plus full repository tests.
+4. Active: adjudicate fresh `R0-C`/`R0-D` review of the combined repaired head and
+   repair/re-prove any accepted P0/P1 finding.
+5. Then dispatch the dependent compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
-5. Only then dispatch `ProgramSpec`/affine constraints and
+6. Only after P0-D and its `R0-F` critic dispatch `ProgramSpec`/affine constraints and
    `PreparedAssemblyPlan` work.
 
-## Active threads
+## Packet ledger
 
 Titles follow the compact coordinate/owner/outcome convention in
 [refactor_playbook.md](refactor_playbook.md#thread-titles). Status and execution
@@ -147,15 +194,22 @@ Completion signalling: each worker has a direct terminal callback to `I0`; no
 polling automation is active. A watchdog is unnecessary while callbacks and native
 thread status are available.
 
-| Exact title | Thread | Status | Output |
-|---|---|---|---|
-| `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | Active | — |
-| `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Integrated | `92bc87d` from `db486f5` |
-| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Integrated; awaiting re-review | `f2a0cd2` |
-| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Integrated; awaiting re-review | `e1d7fe7` |
-| `R0-A · model spec — semantic gaps attacked` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | Complete | 3 accepted blockers |
-| `R0-B · identity/storage — invariants attacked` | `019f7087-61f0-71e0-9082-122e7ea75894` | Complete | 3 accepted blockers |
-| `D0-A · migration workflow — autonomy bounded` | `019f708b-2980-7703-8fca-7ea26d5826ba` | Active | `migration_workflow.md` proposal |
+| Exact title | Thread | Exact base | Owner/output | State and evidence |
+|---|---|---|---|---|
+| `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | Integration, shared docs, combined proof | Active |
+| `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | Assembly quarantine | Integrated as `92bc87d` from `db486f5`; repair 0 |
+| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | `pyfem/v3/spec/**` | Integrated through `f2a0cd2`; two integration repairs plus one critic repair |
+| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | `pyfem/v3/model/**` | Integrated through `e1d7fe7`; one integration repair plus one critic repair |
+| `R0-A · model spec — semantic gaps attacked` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | `2bda241719e2c236abe4711528abd82f47b4633d` | Original spec critic | Complete; 3 accepted blockers repaired |
+| `R0-B · identity/storage — invariants attacked` | `019f7087-61f0-71e0-9082-122e7ea75894` | `2bda241719e2c236abe4711528abd82f47b4633d` | Original identity/storage critic | Complete; 3 accepted blockers repaired |
+| `D0-A · migration workflow — autonomy bounded` | `019f708b-2980-7703-8fca-7ea26d5826ba` | `ad95149e2e34b8eff55c0896c1dea53ac1cbc71d` | `migration_workflow.md` | Complete; source `50cc663`, integrated `9b26574`, adopted |
+| `R0-C · model spec — repairs falsified` | `019f70a3-2650-7181-8a05-fc2b72b111a5` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Fresh read-only spec critic | Active; terminal callback required |
+| `R0-D · identity/storage — repairs falsified` | `019f70a3-264c-7831-8509-a3ffbf9235f4` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Fresh read-only identity/storage critic | Active; terminal callback required |
+
+## Active watchdogs
+
+None. Direct terminal callbacks and bounded native waits are active; unchanged
+thread state does not trigger a model-consuming polling loop.
 
 ## Required combined evidence
 
@@ -166,7 +220,8 @@ thread status are available.
 - disconfirming review of identity, caller aliasing, explicit topology, and
   prototype-import quarantine before the integration packet begins.
 
-Current combined evidence at `f2a0cd2`:
+Current combined evidence at
+`f2a0cd2247728f26bb2f8a641824ae490ba38ddf`:
 
 - 41 focused foundation tests passed;
 - 171 v3 tests passed with 40 pre-existing SciPy warnings;
@@ -231,3 +286,12 @@ integration decision; do not bridge it with a compatibility carrier.
 - 2026-07-17: integrated corrected P0-B canonicalization/topology as `f2a0cd2`;
   the combined repair head passes 41 focused, 171 v3, and 360 repository tests plus
   both Ruff gates and format. Fresh R0 spec and identity reviews are next.
+- 2026-07-17: D0-A returned the one-file workflow source `50cc663`; integration
+  review accepted its bounded packet conveyor, capability/evidence ledger,
+  callback-first coordination, model/cost policy, and falsifiable completion bar.
+- 2026-07-17: integrated the workflow proposal as `9b26574`, adopted it as the sole
+  migration method, renamed this file from `phase0-execution.md`, and routed the
+  document map without changing `design.md` or production code.
+- 2026-07-17: dispatched fresh Sol/max critics `R0-C` and `R0-D` from exact combined
+  head `faab0c938705f59fc5a22e702413f295af1dcadb`; both are active with disjoint spec
+  and identity/storage lenses and direct callbacks. No compiler writer is active.

@@ -3,17 +3,21 @@
 Adapted on 2026-07-17 from
 `/Users/sora/Projects/Maxwell/absim_fvm/docs/refactor_playbook.md`.
 
-Use this full playbook for large or high-risk structural work: changes that cross
-ownership boundaries, retire a prototype path, alter several production flows,
-carry numerical/physical/state risk, or require multiple verified milestones. A
-localized one-shot change follows [AGENTS.md](AGENTS.md) and
-[design.md](design.md) without adding long-horizon machinery.
+Use this generic playbook for large or high-risk structural work outside the full
+legacy-to-v3 migration: changes that cross ownership boundaries, retire a prototype
+path, alter several production flows, carry numerical/physical/state risk, or
+require multiple verified milestones. The migration specializes this discipline in
+[migration_workflow.md](migration_workflow.md) and records state only in
+[migration-execution.md](migration-execution.md). A localized one-shot change
+follows [AGENTS.md](AGENTS.md) and [design.md](design.md) without adding long-horizon
+machinery.
 
-This file owns refactor orchestration. [design.md](design.md) owns target
-architecture and invariants. [AGENTS.md](AGENTS.md) owns branch-specific code,
-testing, validation, tooling, and git rules. Put evolving milestone state in one
-named execution-state artifact under `.agents/v3/`; put dated evidence in a focused
-review note only when it adds facts not already represented by tests or the design.
+This file owns the generic refactor method. [migration_workflow.md](migration_workflow.md)
+owns full-migration orchestration. [design.md](design.md) owns target architecture
+and invariants. [AGENTS.md](AGENTS.md) owns branch-specific code, testing,
+validation, tooling, and git rules. Put evolving milestone state in one named
+execution-state artifact under `.agents/v3/`; put dated evidence in a focused review
+note only when it adds facts not already represented by tests or the design.
 
 ## North star
 
