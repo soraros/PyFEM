@@ -1,6 +1,6 @@
 # Phase 0/1 execution state
 
-- Status: first-chunk foundation integrated; adversarial review active
+- Status: foundation critic repairs active; compiler gate closed
 - Owner: delegating/integration thread
 - Design authority: [design.md](design.md)
 - Method: [refactor_playbook.md](refactor_playbook.md)
@@ -150,10 +150,10 @@ thread status are available.
 |---|---|---|---|
 | `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | Active | — |
 | `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Integrated | `92bc87d` from `db486f5` |
-| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Integrated | `da1e60f` + `ba466cd` |
-| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Integrated | `d211afa` + `0834013` |
-| `R0-A · model spec — semantic gaps attacked` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | Active | — |
-| `R0-B · identity/storage — invariants attacked` | `019f7087-61f0-71e0-9082-122e7ea75894` | Active | — |
+| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Repairing critic findings | `da1e60f` + `ba466cd` + pending |
+| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Repairing critic findings | `d211afa` + `0834013` + pending |
+| `R0-A · model spec — semantic gaps attacked` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | Complete | 3 accepted blockers |
+| `R0-B · identity/storage — invariants attacked` | `019f7087-61f0-71e0-9082-122e7ea75894` | Complete | 3 accepted blockers |
 | `D0-A · migration workflow — autonomy bounded` | `019f708b-2980-7703-8fca-7ea26d5826ba` | Active | `migration_workflow.md` proposal |
 
 ## Required combined evidence
@@ -171,8 +171,19 @@ Current combined evidence at `ba466cd`:
 - 151 v3 tests passed with 40 pre-existing SciPy warnings;
 - 340 full-repository tests passed with the same 40 warnings;
 - both v3 Ruff gates and focused format checks passed; and
-- the adversarial read-only review remains the only open gate before the compiler
-  integration packet.
+- R0-A/R0-B found six accepted Phase-0 blockers; their bounded repairs and repeat
+  adversarial review are the open gate before compiler integration.
+
+## Accepted later-phase obligations
+
+- Registry snapshot fingerprints trust callable purity and truthful, behavior-bound
+  `implementation_id` values. Compiler/restore work must preserve or strengthen
+  that trust boundary; a mutable callable can otherwise drift behind a stable
+  descriptor manifest.
+- Repeated `base.next_accepted()` calls can identify sibling prospective
+  generations equally. The future commit transaction must prevent multiple
+  accepted transitions from one base and separately identify trial candidates;
+  the primitive alone is not transaction enforcement.
 
 ## Blocked condition
 
@@ -209,3 +220,7 @@ integration decision; do not bridge it with a compatibility carrier.
 - 2026-07-17: dispatched Sol/max meta-coordinator D0-A from `ad95149` to design a
   repository-specific, bounded semi-autonomous legacy-to-v3 migration workflow in
   one isolated proposal document; it has no production or existing-policy writes.
+- 2026-07-17: R0-A and R0-B each returned three accepted blockers. P0-B now owns
+  canonical nested-type guards, registry-owned interpolation arity, and 0D topology;
+  P0-C owns lossless scalar policy, ndarray-subclass rejection, and exact identity
+  hardening. Compiler integration remains closed pending repair and re-review.
