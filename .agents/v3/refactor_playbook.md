@@ -244,6 +244,30 @@ working-tree changes. Each returns:
 - unresolved findings; and
 - the exact next dependency/merge action.
 
+### Completion signalling
+
+Prefer a direct terminal callback over model-driven polling. Every worker prompt
+names the integration thread ID. Immediately before its final response, the worker
+sends that thread exactly one compact message containing:
+
+```text
+<ledger-id> COMPLETE|BLOCKED · <commit or none> · <evidence> · <warning/blocker>
+· <next merge or dependency action>
+```
+
+The callback is part of handoff, costs no extra monitoring turn, and does not grant
+merge, push, shared-file, or scope authority. If the callback tool is unavailable,
+the worker marks `CALLBACK UNAVAILABLE` prominently in its own final response.
+
+While the delegator is already active, use the app's native thread wait/status
+mechanism; do not spend a model turn repeatedly rediscovering `active`. Add a
+scheduled watchdog only when direct callbacks are unavailable or a packet is
+expected to outlive the active coordination session. A watchdog must use the
+smallest capable model and reasoning profile, inspect only the recorded thread IDs,
+poll no more often than every 15 minutes unless latency is material, notify only on
+terminal/attention transitions, and be disabled as soon as all watched work is
+terminal. Record any active watchdog and its cadence in the execution artifact.
+
 The delegator integrates shared documents, adjudicates findings, checks combined
 evidence, and updates the execution artifact. Surface choice never grants a new
 side effect.

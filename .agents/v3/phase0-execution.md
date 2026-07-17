@@ -141,12 +141,16 @@ Titles follow the compact coordinate/owner/outcome convention in
 [refactor_playbook.md](refactor_playbook.md#thread-titles). Status and execution
 metadata stay here rather than being encoded in the title.
 
-| Exact title | Thread | Status |
-|---|---|---|
-| `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | Active |
-| `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Active |
-| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Active |
-| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Active |
+Completion signalling: each worker has a direct terminal callback to `I0`; no
+polling automation is active. A watchdog is unnecessary while callbacks and native
+thread status are available.
+
+| Exact title | Thread | Status | Output |
+|---|---|---|---|
+| `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | Active | — |
+| `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Ready to integrate | `db486f5` |
+| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Ready to integrate | `c6527dd` |
+| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Ready to integrate | `168c49a` |
 
 ## Required combined evidence
 
@@ -172,3 +176,9 @@ integration decision; do not bridge it with a compatibility carrier.
   initial snapshots confirmed clean base/instruction reading and active execution.
 - 2026-07-17: adopted stable `<ledger-id> · <semantic owner> — <target state>`
   thread titles and renamed the active first-chunk packets without changing scope.
+- 2026-07-17: installed direct terminal callbacks from P0-A/P0-B/P0-C to `I0`;
+  model-driven polling remains a documented fallback rather than the default.
+- 2026-07-17: P0-A (`db486f5`) and P0-B (`c6527dd`) reported complete with
+  focused, Ruff, and v3-suite evidence; both await delegator review/integration.
+- 2026-07-17: P0-C (`168c49a`) reported complete with focused identity/provenance,
+  Ruff, format, and v3-suite evidence; it awaits delegator review/integration.
