@@ -60,6 +60,175 @@ class _SpoofedStateGeneration(StateGeneration):
     return False
 
 
+class _ConversionBombFloat64(np.float64):
+  calls = 0
+
+  def __bool__(self) -> bool:
+    type(self).calls += 1
+    raise AssertionError("NumPy float subclass conversion executed")
+
+  def __float__(self) -> float:
+    type(self).calls += 1
+    raise AssertionError("NumPy float subclass conversion executed")
+
+  def __int__(self) -> int:
+    type(self).calls += 1
+    raise AssertionError("NumPy float subclass conversion executed")
+
+
+class _ConversionBombInt64(np.int64):
+  calls = 0
+
+  def __bool__(self) -> bool:
+    type(self).calls += 1
+    raise AssertionError("NumPy integer subclass conversion executed")
+
+  def __float__(self) -> float:
+    type(self).calls += 1
+    raise AssertionError("NumPy integer subclass conversion executed")
+
+  def __int__(self) -> int:
+    type(self).calls += 1
+    raise AssertionError("NumPy integer subclass conversion executed")
+
+
+class _ArrayBomb(np.ndarray):
+  calls = 0
+
+  def __array__(self, dtype: object = None, copy: object = None) -> object:
+    del dtype, copy
+    type(self).calls += 1
+    raise AssertionError("ndarray subclass conversion executed")
+
+  def __iter__(self) -> object:
+    type(self).calls += 1
+    raise AssertionError("ndarray subclass iteration executed")
+
+
+class _MaskedArrayBomb(np.ma.MaskedArray):
+  calls = 0
+
+  def __array__(self, dtype: object = None, copy: object = None) -> object:
+    del dtype, copy
+    type(self).calls += 1
+    raise AssertionError("masked-array conversion executed")
+
+  def __iter__(self) -> object:
+    type(self).calls += 1
+    raise AssertionError("masked-array iteration executed")
+
+
+class _DictionaryBomb(dict[object, object]):
+  calls = 0
+
+  def __iter__(self) -> object:
+    type(self).calls += 1
+    raise AssertionError("dictionary subclass iteration executed")
+
+  def __getitem__(self, key: object) -> object:
+    del key
+    type(self).calls += 1
+    raise AssertionError("dictionary subclass lookup executed")
+
+  def __contains__(self, key: object) -> bool:
+    del key
+    type(self).calls += 1
+    raise AssertionError("dictionary subclass membership executed")
+
+  def items(self) -> object:
+    type(self).calls += 1
+    raise AssertionError("dictionary subclass items executed")
+
+  def keys(self) -> object:
+    type(self).calls += 1
+    raise AssertionError("dictionary subclass keys executed")
+
+
+class _ListBomb(list[object]):
+  calls = 0
+
+  def __iter__(self) -> object:
+    type(self).calls += 1
+    raise AssertionError("list subclass iteration executed")
+
+  def __getitem__(self, key: int | slice) -> object:
+    del key
+    type(self).calls += 1
+    raise AssertionError("list subclass lookup executed")
+
+
+class _TupleBomb(tuple[object, ...]):
+  calls = 0
+  armed = False
+
+  def __iter__(self) -> object:
+    if not type(self).armed:
+      return tuple.__iter__(self)
+    type(self).calls += 1
+    raise AssertionError("tuple subclass iteration executed")
+
+  def __getitem__(self, key: int | slice) -> object:
+    if not type(self).armed:
+      return tuple.__getitem__(self, key)
+    type(self).calls += 1
+    raise AssertionError("tuple subclass lookup executed")
+
+  def __len__(self) -> int:
+    if not type(self).armed:
+      return tuple.__len__(self)
+    type(self).calls += 1
+    raise AssertionError("tuple subclass length executed")
+
+  def __hash__(self) -> int:
+    if not type(self).armed:
+      return tuple.__hash__(self)
+    type(self).calls += 1
+    raise AssertionError("tuple subclass hash executed")
+
+
+class _StringBomb(str):
+  calls = 0
+
+  def __bool__(self) -> bool:
+    type(self).calls += 1
+    raise AssertionError("string subclass truth executed")
+
+  def __eq__(self, other: object) -> bool:
+    del other
+    type(self).calls += 1
+    raise AssertionError("string subclass equality executed")
+
+  def __hash__(self) -> int:
+    type(self).calls += 1
+    raise AssertionError("string subclass hash executed")
+
+  def __repr__(self) -> str:
+    type(self).calls += 1
+    raise AssertionError("string subclass representation executed")
+
+
+class _ObjectConversionBomb:
+  calls = 0
+
+  def __float__(self) -> float:
+    type(self).calls += 1
+    raise AssertionError("object-array element conversion executed")
+
+
+class _ForeignValueBomb:
+  calls = 0
+
+  def __getattribute__(self, name: str) -> object:
+    del name
+    type(self).calls += 1
+    raise AssertionError("foreign value attribute access executed")
+
+
+def _assert_exact_bool(value: object, expected: bool) -> None:
+  assert type(value) is bool
+  assert value is expected
+
+
 def test_finalization_detaches_converts_contiguity_and_rejects_writes() -> None:
   source = np.arange(12, dtype=np.float32).reshape(3, 4)
   expected = source.astype(np.float64)
@@ -418,3 +587,382 @@ def test_generation_helpers_reject_subclasses_with_spoofed_fields() -> None:
     require_same_generation(accepted, spoofed)
   with pytest.raises(GenerationMismatchError, match="related next"):
     require_generation_successor(initial, spoofed)
+
+
+def test_numpy_scalar_subclasses_reject_before_conversion_at_every_boundary() -> None:
+  for scalar_type, raw_value in (
+    (_ConversionBombFloat64, 0.25),
+    (_ConversionBombInt64, 7),
+  ):
+    value = scalar_type(raw_value)
+    scalar_type.calls = 0
+
+    for manifest_value in (
+      value,
+      [value],
+      (value,),
+      {"nested": [value]},
+    ):
+      with pytest.raises(TypeError, match="exact supported NumPy scalar"):
+        CanonicalManifest(manifest_value)
+
+    for array_value in (value, [value], (value,), [[value]]):
+      with pytest.raises(TypeError, match="exact NumPy scalar"):
+        finalize_array(array_value, dtype=np.float64)
+
+    assert scalar_type.calls == 0
+
+
+def test_nested_ndarray_subclasses_reject_before_conversion_or_iteration() -> None:
+  custom = np.arange(3.0).view(_ArrayBomb)
+  masked = np.ma.array([1.0, 2.0], mask=[False, True]).view(_MaskedArrayBomb)
+
+  for value in (custom, masked):
+    type(value).calls = 0
+    for source in ([value], (value,), [[value]]):
+      with pytest.raises(TypeError, match="exact plain ndarray"):
+        finalize_array(source, dtype=np.float64)
+    assert type(value).calls == 0
+
+
+def test_target_dtype_rejects_foreign_forms_before_any_hook_executes() -> None:
+  class _ForeignDTypeLike:
+    calls = 0
+
+    def __getattribute__(self, name: str) -> object:
+      del name
+      type(self).calls += 1
+      raise AssertionError("foreign dtype attribute access executed")
+
+    def __iter__(self) -> object:
+      type(self).calls += 1
+      raise AssertionError("foreign dtype iteration executed")
+
+    def __str__(self) -> str:
+      type(self).calls += 1
+      raise AssertionError("foreign dtype string conversion executed")
+
+  foreign = _ForeignDTypeLike()
+  _ForeignDTypeLike.calls = 0
+
+  with pytest.raises(TypeError, match="exact dtype string"):
+    finalize_array([1.0], dtype=foreign)
+  assert _ForeignDTypeLike.calls == 0
+
+  dtype_string = _StringBomb("float64")
+  _StringBomb.calls = 0
+  with pytest.raises(TypeError, match="exact dtype string"):
+    finalize_array([1.0], dtype=dtype_string)
+  assert _StringBomb.calls == 0
+
+
+def test_object_source_array_rejects_before_element_conversion() -> None:
+  source = np.array([_ObjectConversionBomb()], dtype=object)
+  _ObjectConversionBomb.calls = 0
+
+  with pytest.raises(TypeError, match="array sources.*object dtype"):
+    finalize_array(source, dtype=np.float64)
+  assert _ObjectConversionBomb.calls == 0
+
+
+def test_foreign_values_reject_without_consulting_overridden_class_hooks() -> None:
+  value = _ForeignValueBomb()
+  _ForeignValueBomb.calls = 0
+
+  with pytest.raises(TypeError, match="exact scalars"):
+    finalize_array(value, dtype=np.float64)
+  with pytest.raises(TypeError, match="documented canonical boundary"):
+    CanonicalManifest(value)
+  assert _ForeignValueBomb.calls == 0
+
+
+def test_dtype_metadata_rejects_without_fingerprint_collision_or_aliasing() -> None:
+  first_nested = {"units": ["m"]}
+  second_nested = {"units": ["s"]}
+  first_dtype = np.dtype(np.float64, metadata={"semantic": first_nested})
+  second_dtype = np.dtype(np.float64, metadata={"semantic": second_nested})
+  first = np.array([1.0, 2.0], dtype=first_dtype)
+  second = np.array([1.0, 2.0], dtype=second_dtype)
+
+  assert first.dtype.str == second.dtype.str
+  assert first.dtype.metadata is not None
+  assert first.dtype.metadata["semantic"] is first_nested
+  for value in (first, second):
+    with pytest.raises(TypeError, match="dtype metadata"):
+      CanonicalManifest(value)
+    with pytest.raises(TypeError, match="dtype metadata"):
+      finalize_array(value, dtype=np.float64)
+
+  for target_dtype in (first_dtype, second_dtype):
+    with pytest.raises(TypeError, match="dtype metadata"):
+      finalize_array([1.0, 2.0], dtype=target_dtype)
+
+  first_nested["units"].append("mutated")
+  second_nested.clear()
+
+
+def test_nested_dtype_metadata_rejects_but_plain_structured_values_detach() -> None:
+  nested_values: list[str] = []
+  metadata_leaf = np.dtype(np.float64, metadata={"nested": nested_values})
+  structured_metadata = np.dtype([("value", metadata_leaf)])
+  subdtype_metadata = np.dtype((metadata_leaf, (2,)))
+
+  metadata_source = np.array([(1.0,)], dtype=structured_metadata)
+  plain_structured = np.dtype([("value", np.float64)])
+  with pytest.raises(TypeError, match="dtype metadata"):
+    CanonicalManifest(metadata_source)
+  with pytest.raises(TypeError, match="dtype metadata"):
+    finalize_array(metadata_source, dtype=plain_structured)
+  for target_dtype in (structured_metadata, subdtype_metadata):
+    with pytest.raises(TypeError, match="dtype metadata"):
+      finalize_array([1.0], dtype=target_dtype)
+
+  owned_dtype = np.dtype([("value", "<f8"), ("indices", "<i4", (2,))])
+  source = np.array([(1.5, [2, 3]), (4.5, [5, 6])], dtype=owned_dtype)
+  expected = source.copy()
+  finalized = finalize_array(source, dtype=owned_dtype)
+  source["value"].fill(-1.0)
+  source["indices"].fill(-1)
+
+  assert finalized.dtype == owned_dtype
+  assert finalized.flags.c_contiguous
+  assert finalized.flags.owndata
+  assert not finalized.flags.writeable
+  assert not np.shares_memory(finalized, source)
+  np.testing.assert_array_equal(finalized, expected)
+
+
+def test_finalized_array_comparisons_are_scalar_identity_in_both_orders() -> None:
+  source = np.array([1.0, 2.0])
+  first = FinalizedArray(source, dtype=np.float64)
+  second = FinalizedArray(source, dtype=np.float64)
+  plain = np.array([1.0, 2.0])
+  unrelated = object()
+
+  for left, right, identical in (
+    (first, first, True),
+    (first, second, False),
+    (second, first, False),
+    (first, plain, False),
+    (plain, first, False),
+    (first, unrelated, False),
+    (unrelated, first, False),
+  ):
+    _assert_exact_bool(left == right, identical)
+    _assert_exact_bool(left != right, not identical)
+
+  for left, right, identical in (
+    (first, first, True),
+    (first, second, False),
+    (first, plain, False),
+    (plain, first, False),
+  ):
+    _assert_exact_bool(np.equal(left, right), identical)
+    _assert_exact_bool(np.not_equal(left, right), not identical)
+
+  assert hash(first) == object.__hash__(first)
+
+
+def test_finalized_array_comparison_ufunc_kwargs_fail_without_mutating_out() -> None:
+  carrier = FinalizedArray([1.0], dtype=np.float64)
+  plain = np.array([1.0])
+  output = np.array(False)
+
+  with pytest.raises(TypeError, match="do not accept keyword"):
+    np.equal(plain, carrier, out=output)
+  assert output.item() is False
+  with pytest.raises(TypeError, match="do not accept keyword"):
+    np.not_equal(carrier, plain, where=True)
+
+
+@pytest.mark.parametrize(
+  "base",
+  [
+    FinalizedArray,
+    CanonicalManifest,
+    UnorderedDeclarations,
+    ContentFingerprint,
+    RegistryDescriptor,
+    RegistrySnapshot,
+  ],
+)
+def test_semantic_carriers_are_runtime_final(base: type[object]) -> None:
+  with pytest.raises(TypeError, match="runtime-final"):
+    type(f"Attempted{base.__name__}Subclass", (base,), {})
+
+
+def test_manifest_v1_bytes_remain_unchanged_for_exact_values() -> None:
+  manifest = CanonicalManifest({"a": [True, np.int16(2), np.float32(0.5)], "z": None})
+
+  assert manifest.to_bytes() == (
+    b"pyfem-v3-semantic-manifest-v1\n"
+    b'["mapping",[["a",["sequence",[["bool",true],["int","2"],'
+    b'["float","0x1.0000000000000p-1"]]]],["z",["none"]]]]'
+  )
+
+
+def test_manifest_containers_reject_subclasses_without_executing_overrides() -> None:
+  mapping = _DictionaryBomb({"value": 1})
+  sequence = _ListBomb([1, 2])
+  tuple_sequence = _TupleBomb((1, 2))
+  declarations = _ListBomb([{"id": "a"}])
+  declaration = _DictionaryBomb({"id": "a"})
+
+  for bomb_type in (_DictionaryBomb, _ListBomb):
+    bomb_type.calls = 0
+  _TupleBomb.calls = 0
+  _TupleBomb.armed = True
+  with pytest.raises(TypeError, match="documented canonical boundary"):
+    CanonicalManifest(mapping)
+  with pytest.raises(TypeError, match="documented canonical boundary"):
+    CanonicalManifest({"values": sequence})
+  try:
+    with pytest.raises(TypeError, match="documented canonical boundary"):
+      CanonicalManifest({"values": tuple_sequence})
+  finally:
+    _TupleBomb.armed = False
+  with pytest.raises(TypeError, match="exact list/tuple"):
+    UnorderedDeclarations(declarations)
+  with pytest.raises(TypeError, match="exact string-keyed"):
+    UnorderedDeclarations([declaration])
+  assert _DictionaryBomb.calls == 0
+  assert _ListBomb.calls == 0
+  assert _TupleBomb.calls == 0
+
+
+def test_invalid_unordered_id_key_rejects_before_declaration_lookup() -> None:
+  declaration = _DictionaryBomb({"id": "a"})
+  id_key = _StringBomb("id")
+  _DictionaryBomb.calls = 0
+  _StringBomb.calls = 0
+
+  with pytest.raises(TypeError, match="exact string"):
+    UnorderedDeclarations([declaration], id_key=id_key)
+  assert _DictionaryBomb.calls == 0
+  assert _StringBomb.calls == 0
+  with pytest.raises(TypeError, match="exact string"):
+    UnorderedDeclarations([{"id": "a"}], id_key=1)
+  with pytest.raises(ValueError, match="cannot be empty"):
+    UnorderedDeclarations([{"id": "a"}], id_key="")
+
+
+def test_malformed_exact_canonical_carriers_fail_deterministically() -> None:
+  uninitialized_manifest = object.__new__(CanonicalManifest)
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    uninitialized_manifest.to_bytes()
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    CanonicalManifest({"captured": uninitialized_manifest})
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    ContentFingerprint.from_manifest(uninitialized_manifest)
+
+  invalid_manifest = object.__new__(CanonicalManifest)
+  object.__setattr__(invalid_manifest, "_payload", b"{}")
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    invalid_manifest.to_bytes()
+
+  malformed_unordered = object.__new__(UnorderedDeclarations)
+  object.__setattr__(malformed_unordered, "id_key", "id")
+  object.__setattr__(malformed_unordered, "_items", ("not-a-node",))
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    CanonicalManifest(malformed_unordered)
+
+  malformed_fingerprint = object.__new__(ContentFingerprint)
+  with pytest.raises(TypeError, match="malformed exact canonical carrier"):
+    str(malformed_fingerprint)
+
+
+def test_registry_rejects_polymorphic_inputs_without_executing_overrides() -> None:
+  descriptor = RegistryDescriptor(
+    kind="material",
+    name="elastic",
+    version="1",
+    implementation_id="elastic-v1",
+    metadata={},
+    binding=_original_kernel,
+  )
+  source_subclass = _DictionaryBomb({descriptor.key: descriptor})
+  required_subclass = _ListBomb([descriptor.key])
+  metadata_subclass = _DictionaryBomb({"value": 1})
+
+  _DictionaryBomb.calls = 0
+  _ListBomb.calls = 0
+  with pytest.raises(TypeError, match="exact dictionary"):
+    RegistrySnapshot(source_subclass)
+  with pytest.raises(TypeError, match="exact list/tuple"):
+    RegistrySnapshot({descriptor.key: descriptor}, required=required_subclass)
+  with pytest.raises(TypeError, match="exact dictionary"):
+    RegistryDescriptor(
+      kind="material",
+      name="other",
+      version="1",
+      implementation_id="other-v1",
+      metadata=metadata_subclass,
+      binding=_original_kernel,
+    )
+  assert _DictionaryBomb.calls == 0
+  assert _ListBomb.calls == 0
+
+
+def test_registry_key_subclasses_reject_before_lookup_iteration_or_hash() -> None:
+  descriptor = RegistryDescriptor(
+    kind="material",
+    name="elastic",
+    version="1",
+    implementation_id="elastic-v1",
+    metadata={},
+    binding=_original_kernel,
+  )
+  tuple_key = _TupleBomb(descriptor.key)
+  source = {tuple_key: descriptor}
+  _TupleBomb.calls = 0
+  _TupleBomb.armed = True
+  try:
+    with pytest.raises(TypeError, match="registry keys"):
+      RegistrySnapshot(source)
+  finally:
+    _TupleBomb.armed = False
+  assert _TupleBomb.calls == 0
+
+  string_key = _StringBomb("material")
+  _StringBomb.calls = 0
+  with pytest.raises(TypeError, match="registry keys"):
+    RegistrySnapshot(
+      {descriptor.key: descriptor},
+      required=[(string_key, "elastic")],
+    )
+  assert _StringBomb.calls == 0
+
+
+def test_registry_rejects_malformed_exact_descriptor_before_field_behavior() -> None:
+  malformed = object.__new__(RegistryDescriptor)
+  with pytest.raises(TypeError, match="malformed exact descriptor"):
+    RegistrySnapshot({("material", "elastic"): malformed})
+
+
+def test_registry_rejects_exact_descriptor_whose_manifest_no_longer_matches() -> None:
+  descriptor = RegistryDescriptor(
+    kind="material",
+    name="elastic",
+    version="1",
+    implementation_id="elastic-v1",
+    metadata={},
+    binding=_original_kernel,
+  )
+  stable_manifest = descriptor.manifest.to_bytes()
+  object.__setattr__(descriptor, "version", "2")
+
+  assert descriptor.manifest.to_bytes() == stable_manifest
+  with pytest.raises(ValueError, match="manifest does not match"):
+    RegistrySnapshot({descriptor.key: descriptor})
+
+
+def test_registry_descriptor_cannot_subclass_to_drift_key_or_binding() -> None:
+  with pytest.raises(TypeError, match="runtime-final"):
+    type(
+      "DriftingRegistryDescriptor",
+      (RegistryDescriptor,),
+      {
+        "binding": property(lambda self: _replacement_kernel),
+        "key": property(lambda self: ("material", "drifted")),
+      },
+    )
