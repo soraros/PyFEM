@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: R0-C spec blockers accepted; P0-E repair contract frozen; R0-G identity re-review active
+- Status: P0-E spec repair and R0-G identity re-review active; compiler integration closed
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -13,12 +13,12 @@
 
 ## Exact next safe action
 
-Commit this ledger transition, dispatch `P0-E` from that exact committed base, and
-record its task ID. In parallel, consume the terminal callback from `R0-G`, the exact
-replacement for failed identity critic `R0-D`. Review and integrate required repairs
-serially, rerun fresh adversarial review where a boundary changed, then bind the
-combined foundation proof to one exact commit. Do not dispatch the model compiler
-writer until this gate is green.
+Consume the first terminal callback from `P0-E` or `R0-G`. Review P0-E's commit
+against its frozen contract before integration; adjudicate every R0-G finding before
+requesting any identity-owner repair. Integrate required disjoint repairs serially,
+rerun fresh adversarial review where a boundary changed, then bind the combined
+foundation proof to one exact commit. Dispatch no additional writer and do not start
+the model compiler until this gate is green.
 
 Blocked condition: a critic demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -173,9 +173,9 @@ packet. Do not invent `CompiledModel` before P0-B is available.
 
 ### P0-E — Caller-detached canonical model specification
 
-State: `HORIZON_FROZEN`; dispatch immediately after this ledger transition is
-committed. This is a post-integration repair from the current `v3` head, not a
-rewrite of P0-B history.
+State: `IMPLEMENTING` in task `019f70b8-3e74-7d82-b27b-67991cf50e3c`, dispatched
+from exact base `47e94752e93b7424c73e4d2979bebbe0f7567291`. This is a
+post-integration repair, not a rewrite of P0-B history.
 
 Outcome and ownership invariant:
 
@@ -262,7 +262,7 @@ thread status are available.
 | `R0-C · model spec — repairs falsified` | interrupted `019f70a3-2650-7181-8a05-fc2b72b111a5`; replacement `019f70af-2c98-7563-b303-0a5a66fd6ef5` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Fresh read-only spec critic | Complete; 3 accepted blockers; 23 focused tests passed |
 | `R0-D · identity/storage — repairs falsified` | `019f70a3-264c-7831-8509-a3ffbf9235f4` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Initial identity/storage critic | Failed to finish correctly; archived; no terminal report accepted |
 | `R0-G · identity/storage — repairs falsified` | `019f70b1-793c-7c90-a051-07911fff3134` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Exact R0-D replacement, same read-only lens | Active; terminal callback required |
-| `P0-E · model spec — canonical tree owned` | pending dispatch | commit containing the frozen P0-E card | `pyfem/v3/spec/**`, focused spec tests | `HORIZON_FROZEN`; repair round 0 |
+| `P0-E · model spec — canonical tree owned` | `019f70b8-3e74-7d82-b27b-67991cf50e3c` | `47e94752e93b7424c73e4d2979bebbe0f7567291` | `pyfem/v3/spec/**`, focused spec tests | `IMPLEMENTING`; repair round 0; direct callback required |
 
 ## Active watchdogs
 
@@ -360,3 +360,7 @@ integration decision; do not bridge it with a compatibility carrier.
   accepted blockers: returned caller-tree aliasing, hostile scalar-subclass escape,
   and unvalidated forged slots/containers causing raw exceptions. P0-E owns the
   bounded canonical-tree and total-preflight repair; compiler integration stays shut.
+- 2026-07-17: froze P0-E in `47e94752e93b7424c73e4d2979bebbe0f7567291`
+  and dispatched Sol/max task `019f70b8-3e74-7d82-b27b-67991cf50e3c` with exclusive
+  spec/test ownership. Its first status confirms the intended two-phase trusted
+  capture then owned reconstruction; R0-G remains the only concurrent active critic.
