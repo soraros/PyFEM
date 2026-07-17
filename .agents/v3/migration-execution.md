@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: P0-E integrated; R0-G identity re-review active; R0-H spec re-review next
+- Status: P0-E integrated; R0-H spec and R0-I identity re-reviews active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -13,11 +13,11 @@
 
 ## Exact next safe action
 
-Commit this ledger transition, then dispatch read-only `R0-H` from that exact
-committed base to attack P0-E's repaired canonical boundary. Consume and adjudicate
-the terminal callbacks from `R0-G` and `R0-H`; integrate any required disjoint
-repairs serially and repeat the affected critic. Dispatch no additional writer and
-do not start the model compiler until both critics are green at one exact combined
+Consume and adjudicate the terminal callbacks from `R0-H` and `R0-I`; integrate any
+required disjoint repairs serially and repeat the affected critic. R0-G system-failed
+without an acceptable terminal report, so its partial observations are only leads
+that R0-I must reproduce independently. Dispatch no additional writer and do not
+start the model compiler until both active critics are green at one exact combined
 foundation commit.
 
 Blocked condition: a critic demonstrates an invariant failure that cannot be
@@ -224,13 +224,14 @@ Required dangerous cases and evidence:
 - focused spec tests, both v3 Ruff configurations, focused format, `pytest -q
   test/v3`, full `pytest -q`, `git diff --check`, and a clean worker worktree pass.
 
-Merge order: completed independently of R0-G. If R0-G or the fresh P0-E critic
+Merge order: completed independently of the identity critic. If R0-I or R0-H
 requires another owner repair, integrate disjoint repairs serially and re-run the
 combined foundation gates before any compiler packet.
 
 ### R0-H — Re-falsify the repaired canonical model boundary
 
-State: `READY`; dispatch read-only from the next exact committed ledger state.
+State: `ACTIVE` in task `019f711d-c79c-7652-96dc-f07e55fdb71b`, dispatched
+read-only from exact base `13c68e302cf8f4e0f7e211f8af46eff09c863368`.
 
 Review lens:
 
@@ -257,8 +258,8 @@ edits, commits, merge, push, API expansion, or compiler work.
 2. Completed: review P0-B and P0-C independently against the Horizon Gate.
 3. Completed: integrate P0-B/P0-C, repair the six accepted original critic
    findings, and rerun combined v3 plus full repository tests.
-4. Active: P0-E is integrated and green under implementation gates; consume
-   replacement identity critic `R0-G` and fresh repaired-spec critic `R0-H`.
+4. Active: P0-E is integrated and green under implementation gates; consume fresh
+   repaired-spec critic `R0-H` and replacement identity critic `R0-I`.
 5. Then dispatch the dependent compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
@@ -286,9 +287,10 @@ thread status are available.
 | `D0-A · migration workflow — autonomy bounded` | `019f708b-2980-7703-8fca-7ea26d5826ba` | `ad95149e2e34b8eff55c0896c1dea53ac1cbc71d` | `migration_workflow.md` | Complete; source `50cc663`, integrated `9b26574`, adopted |
 | `R0-C · model spec — repairs falsified` | interrupted `019f70a3-2650-7181-8a05-fc2b72b111a5`; replacement `019f70af-2c98-7563-b303-0a5a66fd6ef5` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Fresh read-only spec critic | Complete; 3 accepted blockers; 23 focused tests passed |
 | `R0-D · identity/storage — repairs falsified` | `019f70a3-264c-7831-8509-a3ffbf9235f4` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Initial identity/storage critic | Failed to finish correctly; archived; no terminal report accepted |
-| `R0-G · identity/storage — repairs falsified` | `019f70b1-793c-7c90-a051-07911fff3134` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Exact R0-D replacement, same read-only lens | Active; terminal callback required |
+| `R0-G · identity/storage — repairs falsified` | `019f70b1-793c-7c90-a051-07911fff3134` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Exact R0-D replacement, same read-only lens | System-failed before terminal report; partial observations are unaccepted leads |
 | `P0-E · model spec — canonical tree owned` | `019f70b8-3e74-7d82-b27b-67991cf50e3c` | `47e94752e93b7424c73e4d2979bebbe0f7567291` | `pyfem/v3/spec/**`, focused spec tests | Complete; source `246114b`, integrated `108552d`; 35 focused, 183 v3, 372 full tests passed |
-| `R0-H · model spec — canonical boundary attacked` | pending dispatch | next committed ledger state | Fresh read-only P0-E critic | Ready; terminal callback required before compiler integration |
+| `R0-H · model spec — canonical boundary attacked` | `019f711d-c79c-7652-96dc-f07e55fdb71b` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Fresh read-only P0-E critic | Active; exact base confirmed; terminal callback required |
+| `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Active; terminal callback required |
 
 ## Active watchdogs
 
@@ -313,7 +315,7 @@ Current combined evidence at
 - 372 full-repository tests passed with the same 44 warnings;
 - both v3 Ruff gates, focused format, and `git diff --check` passed; and
 - all accepted R0-A/R0-B/R0-C blockers are repaired under implementation gates;
-  R0-G and R0-H adversarial reports remain open before compiler integration.
+  R0-H and R0-I adversarial reports remain open before compiler integration.
 
 ## Accepted later-phase obligations
 
@@ -402,3 +404,10 @@ integration decision; do not bridge it with a compatibility carrier.
   tests, 372 full-repository tests, both Ruff gates, focused format, and
   `git diff --check`; 40 existing SciPy and four cold-cache Numba performance
   warnings remain. Fresh read-only R0-H is the next spec gate while R0-G continues.
+- 2026-07-18: live status exposed R0-G as `systemError` before any terminal report.
+  Its incomplete observations are not accepted evidence. Sol/max replacement R0-I
+  (`019f711f-339b-7300-aa1c-17e6e7ea9974`) must reproduce or reject each lead.
+- 2026-07-18: dispatched read-only Sol/max critics R0-H
+  (`019f711d-c79c-7652-96dc-f07e55fdb71b`) and R0-I from exact base
+  `13c68e302cf8f4e0f7e211f8af46eff09c863368`; both confirmed that base and are
+  active with disjoint spec and identity/storage lenses.
