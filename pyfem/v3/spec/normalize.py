@@ -8,6 +8,7 @@ from pyfem.v3.spec.diagnostics import (
   ModelSpecValidationError,
   SourceContext,
   SpecDiagnostic,
+  _render_diagnostic_value,
 )
 from pyfem.v3.spec.model import (
   CellBlockSpec,
@@ -65,7 +66,8 @@ class _Validator:
       label = kind.replace("-", " ")
       self.error(
         f"duplicate-{kind}-id",
-        f"duplicate {label} ID {value!r}; first declared at {first.render()}",
+        f"duplicate {label} ID {_render_diagnostic_value(value)}; "
+        f"first declared at {first.render()}",
         source,
       )
       return False
@@ -327,7 +329,7 @@ def _preflight_node(
   mesh_source: SourceContext,
   validator: _Validator,
 ) -> NodeSpec | None:
-  label = f"mesh node {index}"
+  label = f"mesh node {_render_diagnostic_value(index)}"
   if not _is_exact_type(
     value,
     NodeSpec,
@@ -398,7 +400,10 @@ def _preflight_cell(
   block_source: SourceContext,
   validator: _Validator,
 ) -> CellSpec | None:
-  label = f"cell block {block_index} cell {cell_index}"
+  label = (
+    f"cell block {_render_diagnostic_value(block_index)} "
+    f"cell {_render_diagnostic_value(cell_index)}"
+  )
   if not _is_exact_type(
     value,
     CellSpec,
@@ -469,7 +474,7 @@ def _preflight_cell_block(
   mesh_source: SourceContext,
   validator: _Validator,
 ) -> CellBlockSpec | None:
-  label = f"mesh cell block {index}"
+  label = f"mesh cell block {_render_diagnostic_value(index)}"
   if not _is_exact_type(
     value,
     CellBlockSpec,
@@ -669,7 +674,7 @@ def _preflight_field(
   model_source: SourceContext,
   validator: _Validator,
 ) -> FieldSpec | None:
-  label = f"model field {index}"
+  label = f"model field {_render_diagnostic_value(index)}"
   if not _is_exact_type(
     value,
     FieldSpec,
@@ -751,7 +756,10 @@ def _preflight_material_parameter(
   material_source: SourceContext,
   validator: _Validator,
 ) -> MaterialParameterSpec | None:
-  label = f"model material {material_index} parameter {parameter_index}"
+  label = (
+    f"model material {_render_diagnostic_value(material_index)} "
+    f"parameter {_render_diagnostic_value(parameter_index)}"
+  )
   if not _is_exact_type(
     value,
     MaterialParameterSpec,
@@ -805,7 +813,7 @@ def _preflight_material(
   model_source: SourceContext,
   validator: _Validator,
 ) -> MaterialSpec | None:
-  label = f"model material {index}"
+  label = f"model material {_render_diagnostic_value(index)}"
   if not _is_exact_type(
     value,
     MaterialSpec,
@@ -887,7 +895,10 @@ def _preflight_cell_ref(
   region_source: SourceContext,
   validator: _Validator,
 ) -> CellRef | None:
-  label = f"model region {region_index} cell reference {cell_ref_index}"
+  label = (
+    f"model region {_render_diagnostic_value(region_index)} "
+    f"cell reference {_render_diagnostic_value(cell_ref_index)}"
+  )
   if not _is_exact_type(
     value,
     CellRef,
@@ -933,7 +944,7 @@ def _preflight_region(
   model_source: SourceContext,
   validator: _Validator,
 ) -> RegionSpec | None:
-  label = f"model region {index}"
+  label = f"model region {_render_diagnostic_value(index)}"
   if not _is_exact_type(
     value,
     RegionSpec,
@@ -1283,7 +1294,7 @@ def _validate_nodes(
     if not node.coordinates:
       validator.error(
         "empty-node-coordinates",
-        f"node {node.id!r} has no reference coordinates",
+        f"node {_render_diagnostic_value(node.id)} has no reference coordinates",
         node.source,
       )
     elif dimension is None:
@@ -1291,8 +1302,9 @@ def _validate_nodes(
     elif len(node.coordinates) != dimension:
       validator.error(
         "coordinate-dimension-mismatch",
-        f"node {node.id!r} has {len(node.coordinates)} coordinates; "
-        f"expected {dimension}",
+        f"node {_render_diagnostic_value(node.id)} has "
+        f"{_render_diagnostic_value(len(node.coordinates))} coordinates; "
+        f"expected {_render_diagnostic_value(dimension)}",
         node.source,
       )
     if any(
@@ -1300,7 +1312,8 @@ def _validate_nodes(
     ):
       validator.error(
         "invalid-coordinate",
-        f"node {node.id!r} has a non-finite or non-numeric coordinate",
+        f"node {_render_diagnostic_value(node.id)} has a non-finite or "
+        "non-numeric coordinate",
         node.source,
       )
   return set(sources), dimension
@@ -1316,14 +1329,16 @@ def _validate_connectivity(
   if not cell.node_ids:
     validator.error(
       "empty-connectivity",
-      f"cell {cell.id!r} contains no node IDs",
+      f"cell {_render_diagnostic_value(cell.id)} contains no node IDs",
       cell.source,
     )
   if len(cell.node_ids) != observed_arity:
     validator.error(
       "connectivity-arity",
-      f"cell {cell.id!r} has {len(cell.node_ids)} nodes; "
-      f"block {block.id!r} first observed arity {observed_arity}",
+      f"cell {_render_diagnostic_value(cell.id)} has "
+      f"{_render_diagnostic_value(len(cell.node_ids))} nodes; "
+      f"block {_render_diagnostic_value(block.id)} first observed arity "
+      f"{_render_diagnostic_value(observed_arity)}",
       cell.source,
     )
   seen: set[SpecId] = set()
@@ -1331,20 +1346,22 @@ def _validate_connectivity(
     if not _valid_id(node_id):
       validator.error(
         "invalid-node-reference",
-        f"cell {cell.id!r} contains an invalid node ID",
+        f"cell {_render_diagnostic_value(cell.id)} contains an invalid node ID",
         cell.source,
       )
       continue
     if node_id in seen:
       validator.error(
         "duplicate-node-reference",
-        f"cell {cell.id!r} references node {node_id!r} more than once",
+        f"cell {_render_diagnostic_value(cell.id)} references node "
+        f"{_render_diagnostic_value(node_id)} more than once",
         cell.source,
       )
     elif node_id not in node_ids:
       validator.error(
         "unknown-node-reference",
-        f"cell {cell.id!r} references unknown node {node_id!r}",
+        f"cell {_render_diagnostic_value(cell.id)} references unknown node "
+        f"{_render_diagnostic_value(node_id)}",
         cell.source,
       )
     seen.add(node_id)
@@ -1389,8 +1406,10 @@ def _validate_block_metadata(
   ):
     validator.error(
       "invalid-topology-embedding",
-      f"topological dimension {block.topological_dimension} exceeds "
-      f"embedding dimension {block.embedding_dimension}",
+      "topological dimension "
+      f"{_render_diagnostic_value(block.topological_dimension)} exceeds "
+      "embedding dimension "
+      f"{_render_diagnostic_value(block.embedding_dimension)}",
       block.source,
     )
   if (
@@ -1400,8 +1419,10 @@ def _validate_block_metadata(
   ):
     validator.error(
       "embedding-dimension-mismatch",
-      f"block embedding dimension {block.embedding_dimension} does not match "
-      f"mesh coordinate dimension {coordinate_dimension}",
+      "block embedding dimension "
+      f"{_render_diagnostic_value(block.embedding_dimension)} does not match "
+      "mesh coordinate dimension "
+      f"{_render_diagnostic_value(coordinate_dimension)}",
       block.source,
     )
   if topology_ok and topology_dimension_ok:
@@ -1412,8 +1433,10 @@ def _validate_block_metadata(
     if first[0] != block.topological_dimension:
       validator.error(
         "reference-topology-collision",
-        f"topology {block.reference_topology!r} has dimension {first[0]} at "
-        f"{first[1].render()} and {block.topological_dimension} here",
+        f"topology {_render_diagnostic_value(block.reference_topology)} has "
+        f"dimension {_render_diagnostic_value(first[0])} at "
+        f"{first[1].render()} and "
+        f"{_render_diagnostic_value(block.topological_dimension)} here",
         block.source,
       )
 
@@ -1449,7 +1472,8 @@ def _validate_blocks(
     if not block.cells:
       validator.error(
         "empty-cell-block",
-        f"cell block {block.id!r} must contain at least one cell",
+        f"cell block {_render_diagnostic_value(block.id)} must contain at least "
+        "one cell",
         block.source,
       )
     observed_arity = len(block.cells[0].node_ids) if block.cells else None
@@ -1497,7 +1521,8 @@ def _validate_fields(
     if not field.components:
       validator.error(
         "empty-field-components",
-        f"field {field.id!r} must declare at least one component",
+        f"field {_render_diagnostic_value(field.id)} must declare at least one "
+        "component",
         field.source,
       )
     seen: set[str] = set()
@@ -1511,7 +1536,8 @@ def _validate_fields(
         if component in seen:
           validator.error(
             "duplicate-field-component",
-            f"field {field.id!r} repeats component {component!r}",
+            f"field {_render_diagnostic_value(field.id)} repeats component "
+            f"{_render_diagnostic_value(component)}",
             field.source,
           )
         seen.add(component)
@@ -1577,7 +1603,8 @@ def _validate_materials(
         if first is not None:
           validator.error(
             "duplicate-material-parameter-name",
-            f"material {material.id!r} repeats parameter {parameter.name!r}; "
+            f"material {_render_diagnostic_value(material.id)} repeats parameter "
+            f"{_render_diagnostic_value(parameter.name)}; "
             f"first declared at {first.render()}",
             parameter.source,
           )
@@ -1586,7 +1613,8 @@ def _validate_materials(
       if not _parameter_value_is_valid(parameter.value):
         validator.error(
           "invalid-material-parameter-value",
-          f"parameter {parameter.name!r} must contain finite plain scalars or tuples",
+          f"parameter {_render_diagnostic_value(parameter.name)} must contain "
+          "finite plain scalars or tuples",
           parameter.source,
         )
   return set(sources)
@@ -1600,7 +1628,7 @@ def _validate_cell_refs(
   if not region.cell_refs:
     validator.error(
       "empty-region-cell-selection",
-      f"region {region.id!r} must select at least one cell",
+      f"region {_render_diagnostic_value(region.id)} must select at least one cell",
       region.source,
     )
   seen: set[tuple[SpecId, SpecId]] = set()
@@ -1608,14 +1636,15 @@ def _validate_cell_refs(
     if not _valid_id(cell_ref.block_id):
       validator.error(
         "invalid-cell-block-reference",
-        f"region {region.id!r} contains an invalid cell block ID",
+        f"region {_render_diagnostic_value(region.id)} contains an invalid cell "
+        "block ID",
         region.source,
       )
       continue
     if not _valid_id(cell_ref.cell_id):
       validator.error(
         "invalid-cell-reference",
-        f"region {region.id!r} contains an invalid cell ID",
+        f"region {_render_diagnostic_value(region.id)} contains an invalid cell ID",
         region.source,
       )
       continue
@@ -1623,20 +1652,23 @@ def _validate_cell_refs(
     if key in seen:
       validator.error(
         "duplicate-cell-reference",
-        f"region {region.id!r} repeats cell reference {key!r}",
+        f"region {_render_diagnostic_value(region.id)} repeats cell reference "
+        f"{_render_diagnostic_value(key)}",
         region.source,
       )
     elif cell_ref.block_id not in cells_by_block:
       validator.error(
         "unknown-cell-block-reference",
-        f"region {region.id!r} references unknown block {cell_ref.block_id!r}",
+        f"region {_render_diagnostic_value(region.id)} references unknown block "
+        f"{_render_diagnostic_value(cell_ref.block_id)}",
         region.source,
       )
     elif cell_ref.cell_id not in cells_by_block[cell_ref.block_id]:
       validator.error(
         "unknown-cell-reference",
-        f"region {region.id!r} references unknown cell {cell_ref.cell_id!r} "
-        f"in block {cell_ref.block_id!r}",
+        f"region {_render_diagnostic_value(region.id)} references unknown cell "
+        f"{_render_diagnostic_value(cell_ref.cell_id)} in block "
+        f"{_render_diagnostic_value(cell_ref.block_id)}",
         region.source,
       )
     seen.add(key)
@@ -1650,7 +1682,7 @@ def _validate_field_refs(
   if not region.field_ids:
     validator.error(
       "empty-region-field-signature",
-      f"region {region.id!r} must reference at least one field",
+      f"region {_render_diagnostic_value(region.id)} must reference at least one field",
       region.source,
     )
   seen: set[SpecId] = set()
@@ -1658,20 +1690,22 @@ def _validate_field_refs(
     if not _valid_id(field_id):
       validator.error(
         "invalid-field-reference",
-        f"region {region.id!r} contains an invalid field ID",
+        f"region {_render_diagnostic_value(region.id)} contains an invalid field ID",
         region.source,
       )
       continue
     if field_id in seen:
       validator.error(
         "duplicate-field-reference",
-        f"region {region.id!r} repeats field {field_id!r}",
+        f"region {_render_diagnostic_value(region.id)} repeats field "
+        f"{_render_diagnostic_value(field_id)}",
         region.source,
       )
     elif field_id not in field_ids:
       validator.error(
         "unknown-field-reference",
-        f"region {region.id!r} references unknown field {field_id!r}",
+        f"region {_render_diagnostic_value(region.id)} references unknown field "
+        f"{_render_diagnostic_value(field_id)}",
         region.source,
       )
     seen.add(field_id)
@@ -1712,13 +1746,14 @@ def _validate_regions(
     if not _valid_id(region.material_id):
       validator.error(
         "invalid-material-reference",
-        f"region {region.id!r} contains an invalid material ID",
+        f"region {_render_diagnostic_value(region.id)} contains an invalid material ID",
         region.source,
       )
     elif region.material_id not in material_ids:
       validator.error(
         "unknown-material-reference",
-        f"region {region.id!r} references unknown material {region.material_id!r}",
+        f"region {_render_diagnostic_value(region.id)} references unknown "
+        f"material {_render_diagnostic_value(region.material_id)}",
         region.source,
       )
 

@@ -29,6 +29,10 @@ from pyfem.v3.spec import (
   normalize_model_spec,
 )
 
+_HUGE_INTEGER_ID = 10**5000
+_HUGE_INTEGER_DECIMAL = "1" + "0" * 5000
+_MAX_HUGE_DIAGNOSTIC_LENGTH = 8192
+
 
 class _MutableDuck:
   def __init__(self) -> None:
@@ -239,6 +243,17 @@ def _model_with_nested_value(family: str, value: object) -> ModelSpec:
 
 def _diagnostic_codes(error: ModelSpecValidationError) -> tuple[str, ...]:
   return tuple(diagnostic.code for diagnostic in error.diagnostics)
+
+
+def _assert_bounded_huge_diagnostic(error: ModelSpecValidationError) -> str:
+  rendered = str(error)
+  assert len(rendered) < _MAX_HUGE_DIAGNOSTIC_LENGTH
+  assert _HUGE_INTEGER_DECIMAL not in rendered
+  assert "0" * 1000 not in rendered
+  assert "<int sign=" in rendered
+  assert " bits=" in rendered
+  assert " sha256=" in rendered
+  return rendered
 
 
 def test_tet4_volume_and_quad4_surface_in_3d_do_not_collide_by_node_count() -> None:
@@ -866,6 +881,55 @@ def test_malformed_source_context_uses_nearest_trusted_parent() -> None:
   assert caught.value.diagnostics[0].source == _source("mesh")
 
 
+def test_huge_source_line_and_column_render_when_another_defect_is_reported() -> None:
+  huge_source = SourceContext(
+    source="nodes:huge-location",
+    line=_HUGE_INTEGER_ID,
+    column=-_HUGE_INTEGER_ID,
+  )
+  base = _valid_model()
+  node = replace(base.mesh.nodes[0], coordinates=(), source=huge_source)
+  model = replace(
+    base,
+    mesh=replace(base.mesh, nodes=(node, *base.mesh.nodes[1:])),
+  )
+
+  with pytest.raises(ModelSpecValidationError) as caught:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(caught.value) == ("empty-node-coordinates",)
+  rendered = _assert_bounded_huge_diagnostic(caught.value)
+  assert rendered.startswith("nodes:huge-location:<int sign=+")
+  assert ":<int sign=-" in rendered
+
+
+def test_huge_nearest_trusted_source_renders_during_fallback() -> None:
+  huge_source = SourceContext(
+    source="mesh:huge-fallback",
+    line=_HUGE_INTEGER_ID,
+    column=_HUGE_INTEGER_ID + 1,
+  )
+  malformed_source = SourceContext(source=[])
+  base = _valid_model()
+  node = replace(base.mesh.nodes[0], source=malformed_source)
+  model = replace(
+    base,
+    mesh=replace(
+      base.mesh,
+      nodes=(node, *base.mesh.nodes[1:]),
+      source=huge_source,
+    ),
+  )
+
+  with pytest.raises(ModelSpecValidationError) as caught:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(caught.value) == ("invalid-source-context-value",)
+  assert caught.value.diagnostics[0].source == huge_source
+  rendered = _assert_bounded_huge_diagnostic(caught.value)
+  assert rendered.startswith("mesh:huge-fallback:<int sign=+")
+
+
 def test_duplicate_ids_fail_deterministically_with_source_context() -> None:
   base = _valid_model()
   cases = (
@@ -971,6 +1035,284 @@ def test_duplicate_ids_fail_deterministically_with_source_context() -> None:
     assert first.value.diagnostics == second.value.diagnostics
     assert expected_code in _diagnostic_codes(first.value)
     assert expected_source in str(first.value)
+
+
+def test_small_integer_and_string_diagnostics_keep_their_ordinary_text() -> None:
+  base = _valid_model()
+  model = replace(
+    base,
+    mesh=replace(
+      base.mesh,
+      nodes=(
+        *base.mesh.nodes,
+        NodeSpec(
+          id=1,
+          coordinates=(2.0, 0.0),
+          source=_source("nodes:duplicate-small"),
+        ),
+      ),
+    ),
+    fields=(
+      *base.fields,
+      replace(_field(), source=_source("fields:duplicate-small")),
+    ),
+  )
+
+  with pytest.raises(ModelSpecValidationError) as caught:
+    normalize_model_spec(model)
+
+  assert str(caught.value) == (
+    "nodes:duplicate-small: [duplicate-node-id] duplicate node ID 1; "
+    "first declared at nodes:1\n"
+    "fields:duplicate-small: [duplicate-field-id] duplicate field ID "
+    "'displacement'; first declared at fields:displacement"
+  )
+  assert SourceContext(source="model.py", line=7, column=11).render() == (
+    "model.py:7:11"
+  )
+
+
+def test_duplicate_5001_digit_ids_are_bounded_deterministic_and_ordered() -> None:
+  huge = _HUGE_INTEGER_ID
+  first_huge_block = replace(
+    _quad_block(),
+    id=huge,
+    cells=(
+      CellSpec(
+        id=huge + 1,
+        node_ids=(1, 2, 3, 4),
+        source=_source("cells:huge-block-first"),
+      ),
+    ),
+    source=_source("blocks:huge-first"),
+  )
+  duplicate_huge_block = replace(
+    _quad_block(),
+    id=huge,
+    cells=(
+      CellSpec(
+        id=huge + 2,
+        node_ids=(1, 2, 3, 4),
+        source=_source("cells:huge-first"),
+      ),
+      CellSpec(
+        id=huge + 2,
+        node_ids=(1, 2, 3, 4),
+        source=_source("cells:huge-duplicate"),
+      ),
+    ),
+    source=_source("blocks:huge-duplicate"),
+  )
+  base = _valid_model()
+  model = replace(
+    base,
+    mesh=replace(
+      base.mesh,
+      nodes=(
+        *base.mesh.nodes,
+        NodeSpec(
+          id=huge,
+          coordinates=(2.0, 0.0),
+          source=_source("nodes:huge-first"),
+        ),
+        NodeSpec(
+          id=huge,
+          coordinates=(3.0, 0.0),
+          source=_source("nodes:huge-duplicate"),
+        ),
+      ),
+      cell_blocks=(
+        *base.mesh.cell_blocks,
+        first_huge_block,
+        duplicate_huge_block,
+      ),
+    ),
+    fields=(
+      *base.fields,
+      replace(_field(), id=huge, source=_source("fields:huge-first")),
+      replace(_field(), id=huge, source=_source("fields:huge-duplicate")),
+    ),
+    materials=(
+      *base.materials,
+      replace(_material(), id=huge, source=_source("materials:huge-first")),
+      replace(
+        _material(),
+        id=huge,
+        source=_source("materials:huge-duplicate"),
+      ),
+    ),
+    regions=(
+      *base.regions,
+      replace(_region(), id=huge, source=_source("regions:huge-first")),
+      replace(_region(), id=huge, source=_source("regions:huge-duplicate")),
+    ),
+  )
+
+  with pytest.raises(ModelSpecValidationError) as first:
+    normalize_model_spec(model)
+  with pytest.raises(ModelSpecValidationError) as second:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(first.value) == (
+    "duplicate-node-id",
+    "duplicate-cell-block-id",
+    "duplicate-cell-id",
+    "duplicate-field-id",
+    "duplicate-material-id",
+    "duplicate-region-id",
+  )
+  assert first.value.diagnostics == second.value.diagnostics
+  first_rendered = _assert_bounded_huge_diagnostic(first.value)
+  second_rendered = _assert_bounded_huge_diagnostic(second.value)
+  assert first_rendered == second_rendered
+  assert first_rendered.count("<int sign=+") == 6
+  for entity in ("node", "cell block", "cell", "field", "material", "region"):
+    assert f"duplicate {entity} ID <int sign=+" in first_rendered
+
+
+def test_huge_unknown_and_duplicate_references_render_through_one_boundary() -> None:
+  huge = _HUGE_INTEGER_ID
+  block_id = huge + 10
+  cell_id = huge + 11
+  unknown_node_id = huge + 20
+  unknown_block_id = huge + 30
+  unknown_block_cell_id = huge + 31
+  unknown_cell_id = huge + 40
+  unknown_field_id = huge + 50
+  unknown_material_id = huge + 60
+  huge_block = replace(
+    _quad_block(),
+    id=block_id,
+    cells=(
+      CellSpec(
+        id=cell_id,
+        node_ids=(1, 2, unknown_node_id, unknown_node_id),
+        source=_source("cells:huge-references"),
+      ),
+    ),
+    source=_source("blocks:huge-references"),
+  )
+  region = replace(
+    _region(),
+    id=huge + 70,
+    cell_refs=(
+      CellRef(block_id=block_id, cell_id=cell_id),
+      CellRef(block_id=unknown_block_id, cell_id=unknown_block_cell_id),
+      CellRef(block_id=unknown_block_id, cell_id=unknown_block_cell_id),
+      CellRef(block_id=block_id, cell_id=unknown_cell_id),
+      CellRef(block_id=block_id, cell_id=unknown_cell_id),
+    ),
+    field_ids=("displacement", unknown_field_id, unknown_field_id),
+    material_id=unknown_material_id,
+    source=_source("regions:huge-references"),
+  )
+  base = _valid_model()
+  model = replace(
+    base,
+    mesh=replace(
+      base.mesh,
+      cell_blocks=(*base.mesh.cell_blocks, huge_block),
+    ),
+    regions=(region,),
+  )
+
+  with pytest.raises(ModelSpecValidationError) as first:
+    normalize_model_spec(model)
+  with pytest.raises(ModelSpecValidationError) as second:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(first.value) == (
+    "unknown-node-reference",
+    "duplicate-node-reference",
+    "unknown-cell-block-reference",
+    "duplicate-cell-reference",
+    "unknown-cell-reference",
+    "duplicate-cell-reference",
+    "unknown-field-reference",
+    "duplicate-field-reference",
+    "unknown-material-reference",
+  )
+  assert first.value.diagnostics == second.value.diagnostics
+  first_rendered = _assert_bounded_huge_diagnostic(first.value)
+  second_rendered = _assert_bounded_huge_diagnostic(second.value)
+  assert first_rendered == second_rendered
+  assert "low=0x0000000a" in first_rendered
+  assert "low=0x0000000b" in first_rendered
+
+
+def test_huge_dimensions_render_without_decimal_conversion() -> None:
+  huge = _HUGE_INTEGER_ID
+  block = replace(
+    _quad_block(),
+    topological_dimension=huge + 1,
+    embedding_dimension=huge,
+    source=_source("blocks:huge-dimensions"),
+  )
+  base = _valid_model()
+  model = replace(base, mesh=replace(base.mesh, cell_blocks=(block,)))
+
+  with pytest.raises(ModelSpecValidationError) as caught:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(caught.value) == (
+    "invalid-topology-embedding",
+    "embedding-dimension-mismatch",
+  )
+  rendered = _assert_bounded_huge_diagnostic(caught.value)
+  assert "topological dimension <int sign=+" in rendered
+  assert "embedding dimension <int sign=+" in rendered
+
+
+def test_valid_huge_ids_and_material_parameter_still_normalize() -> None:
+  huge = _HUGE_INTEGER_ID
+  node_ids = (huge, huge + 1, huge + 2, huge + 3)
+  block_id = huge + 10
+  cell_id = huge + 11
+  field_id = huge + 12
+  material_id = huge + 13
+  region_id = huge + 14
+  model = ModelSpec(
+    mesh=MeshSpec(
+      nodes=tuple(
+        NodeSpec(id=node_id, coordinates=coordinates)
+        for node_id, coordinates in zip(node_ids, ((0.0, 0.0),) * 4, strict=True)
+      ),
+      cell_blocks=(
+        replace(
+          _quad_block(),
+          id=block_id,
+          cells=(CellSpec(id=cell_id, node_ids=node_ids),),
+        ),
+      ),
+    ),
+    fields=(replace(_field(), id=field_id),),
+    materials=(
+      replace(
+        _material(),
+        id=material_id,
+        parameters=(MaterialParameterSpec(name="huge", value=huge + 100),),
+      ),
+    ),
+    regions=(
+      replace(
+        _region(),
+        id=region_id,
+        cell_refs=(CellRef(block_id=block_id, cell_id=cell_id),),
+        field_ids=(field_id,),
+        material_id=material_id,
+      ),
+    ),
+  )
+
+  normalized = normalize_model_spec(model)
+
+  assert tuple(node.id for node in normalized.mesh.nodes) == node_ids
+  assert normalized.mesh.cell_blocks[0].id == block_id
+  assert normalized.mesh.cell_blocks[0].cells[0].id == cell_id
+  assert normalized.fields[0].id == field_id
+  assert normalized.materials[0].id == material_id
+  assert normalized.materials[0].parameters[0].value == huge + 100
+  assert normalized.regions[0].id == region_id
 
 
 def test_invalid_ids_fail_deterministically_with_source_context() -> None:
