@@ -2,7 +2,8 @@
 
 The serialization boundary is deliberately narrow and explicit. Supported values
 are ``None``, exact Python booleans/integers/finite floats/strings, equivalent NumPy
-scalars, numeric NumPy arrays, string-keyed mappings, ordered lists/tuples,
+scalars no wider than binary64, exact plain numeric NumPy arrays without extended
+floating dtypes, string-keyed mappings, ordered lists/tuples,
 ``UnorderedDeclarations``, and already captured ``CanonicalManifest`` values.
 
 Mappings are ordered by key. Lists and tuples retain physical order and share one
@@ -31,6 +32,7 @@ import numpy as np
 
 CANONICAL_MANIFEST_FORMAT = "pyfem-v3-semantic-manifest-v1"
 _MANIFEST_HEADER = f"{CANONICAL_MANIFEST_FORMAT}\n".encode()
+_BINARY64_INFO = np.finfo(np.float64)
 
 type _CanonicalNode = tuple[object, ...]
 
@@ -50,15 +52,37 @@ def _canonical_float(value: float) -> _CanonicalNode:
   return ("float", value.hex())
 
 
+def _floating_dtype_exceeds_binary64(dtype: np.dtype[np.generic]) -> bool:
+  info = np.finfo(dtype)
+  return (
+    info.nmant > _BINARY64_INFO.nmant
+    or info.minexp < _BINARY64_INFO.minexp
+    or info.maxexp > _BINARY64_INFO.maxexp
+  )
+
+
+def _canonical_numpy_float(value: np.floating) -> _CanonicalNode:
+  if _floating_dtype_exceeds_binary64(value.dtype):
+    msg = "extended NumPy floating scalars exceeding binary64 are unsupported"
+    raise TypeError(msg)
+  return _canonical_float(float(value))
+
+
 def _canonical_array(
   value: np.ndarray[tuple[int, ...], np.dtype[np.generic]],
 ) -> _CanonicalNode:
+  if type(value) is not np.ndarray:
+    msg = "semantic manifest ndarray subclasses require explicit lowering"
+    raise TypeError(msg)
   dtype = value.dtype
   if dtype.hasobject or dtype.fields is not None or dtype.subdtype is not None:
     msg = "semantic manifest arrays require a plain numeric dtype"
     raise TypeError(msg)
   if dtype.kind not in "biuf":
     msg = "semantic manifest arrays support bool, integer, and real float dtypes"
+    raise TypeError(msg)
+  if dtype.kind == "f" and _floating_dtype_exceeds_binary64(dtype):
+    msg = "semantic manifest arrays do not support extended floating dtypes"
     raise TypeError(msg)
   if dtype.kind == "f" and not bool(np.isfinite(value).all()):
     msg = "semantic manifest arrays require finite floating-point values"
@@ -106,7 +130,7 @@ def _canonicalize(value: object, active: set[int]) -> _CanonicalNode:
   if isinstance(value, np.integer):
     return ("int", str(int(value)))
   if isinstance(value, np.floating):
-    return _canonical_float(float(value))
+    return _canonical_numpy_float(value)
   if isinstance(value, np.ndarray):
     return _canonical_array(value)
   if isinstance(value, CanonicalManifest):

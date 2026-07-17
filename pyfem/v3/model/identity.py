@@ -72,9 +72,9 @@ def require_same_instance(
 ) -> None:
   """Require exact live instance identity, failing closed for foreign values."""
   if (
-    not isinstance(expected, InstanceId)
-    or not isinstance(actual, InstanceId)
-    or expected != actual
+    type(expected) is not InstanceId
+    or type(actual) is not InstanceId
+    or expected._token != actual._token
   ):
     msg = f"{context} requires the exact same live instance"
     raise IdentityMismatchError(msg)
@@ -87,10 +87,7 @@ def require_same_generation(
   context: str = "accepted state",
 ) -> None:
   """Require one exact accepted-state generation identity."""
-  if not isinstance(expected, StateGeneration) or not isinstance(
-    actual,
-    StateGeneration,
-  ):
+  if type(expected) is not StateGeneration or type(actual) is not StateGeneration:
     msg = f"{context} requires an exact accepted-state generation"
     raise GenerationMismatchError(msg)
   if expected._lineage != actual._lineage or expected.ordinal != actual.ordinal:
@@ -105,10 +102,7 @@ def require_generation_successor(
   context: str = "state commit",
 ) -> None:
   """Require ``candidate`` to be the next generation in ``base``'s lineage."""
-  if not isinstance(base, StateGeneration) or not isinstance(
-    candidate,
-    StateGeneration,
-  ):
+  if type(base) is not StateGeneration or type(candidate) is not StateGeneration:
     msg = f"{context} requires a related next accepted-state generation"
     raise GenerationMismatchError(msg)
   if base._lineage != candidate._lineage or candidate.ordinal != base.ordinal + 1:

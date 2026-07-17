@@ -21,8 +21,12 @@ def finalize_array(
 
   ``copy=True`` is unconditional: even an already matching NumPy input cannot be
   reused. Object dtypes are rejected because copying their pointer table would not
-  detach the referenced Python objects.
+  detach the referenced Python objects. NumPy subclasses are rejected because
+  their additional semantics cannot be preserved by this generic boundary.
   """
+  if isinstance(source, np.ndarray) and type(source) is not np.ndarray:
+    msg = "compiler-owned array finalization requires an exact plain ndarray"
+    raise TypeError(msg)
   if order not in ("C", "F"):
     msg = "array order must be 'C' or 'F'"
     raise ValueError(msg)
@@ -61,3 +65,11 @@ class FinalizedArray:
       "values",
       finalize_array(source, dtype=dtype, order=order),
     )
+
+  def __eq__(self, other: object) -> bool:
+    return self is other
+
+  def __ne__(self, other: object) -> bool:
+    return self is not other
+
+  __hash__ = object.__hash__
