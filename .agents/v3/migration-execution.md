@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: R0-H complete with one accepted blocker; P0-F spec repair next; R0-I active
+- Status: R0-H complete; P0-F spec repair and R0-I identity review active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -271,7 +271,8 @@ Evidence and adjudication:
 
 ### P0-F — Total bounded exact-integer diagnostics
 
-State: `READY`; dispatch from the next exact committed ledger state.
+State: `IMPLEMENTING` in task `019f7136-c2f1-77b2-81bb-f9aa41627a92`,
+dispatched from exact base `f9e1867a2c458531b61fd3d8e5107445c0229733`.
 
 Outcome and invariant:
 
@@ -346,7 +347,7 @@ thread status are available.
 | `P0-E · model spec — canonical tree owned` | `019f70b8-3e74-7d82-b27b-67991cf50e3c` | `47e94752e93b7424c73e4d2979bebbe0f7567291` | `pyfem/v3/spec/**`, focused spec tests | Complete; source `246114b`, integrated `108552d`; 35 focused, 183 v3, 372 full tests passed |
 | `R0-H · model spec — canonical boundary attacked` | `019f711d-c79c-7652-96dc-f07e55fdb71b` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Fresh read-only P0-E critic | Complete; 1 accepted exact-integer rendering blocker; 35 focused passed |
 | `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Active; terminal callback required |
-| `P0-F · model spec — integer diagnostics total` | pending dispatch | next committed ledger state | Bounded exact-integer diagnostic repair | Ready; repair round 0; direct callback required |
+| `P0-F · model spec — integer diagnostics total` | `019f7136-c2f1-77b2-81bb-f9aa41627a92` | `f9e1867a2c458531b61fd3d8e5107445c0229733` | Bounded exact-integer diagnostic repair | `IMPLEMENTING`; repair round 0; direct callback required |
 
 ## Active watchdogs
 
@@ -475,3 +476,7 @@ integration decision; do not bridge it with a compatibility carrier.
   interpreter decimal limit leak raw `ValueError` in duplicate/reference/source
   diagnostics. The finding is accepted for bounded P0-F repair; its measured double
   reconstruction cost remains nonblocking.
+- 2026-07-18: froze P0-F in `f9e1867a2c458531b61fd3d8e5107445c0229733`
+  and dispatched Sol/max task `019f7136-c2f1-77b2-81bb-f9aa41627a92` with exclusive
+  spec diagnostics/normalization/test ownership. It confirmed the exact clean base;
+  R0-I remains the only concurrent read-only identity critic.
