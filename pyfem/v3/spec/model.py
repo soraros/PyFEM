@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from numbers import Integral, Real
 
 from pyfem.v3.spec.diagnostics import SourceContext
 
@@ -13,36 +13,67 @@ type MaterialParameterValue = (
 )
 
 
-def _normalize_id(value: SpecId) -> SpecId:
-  if isinstance(value, str):
-    return value.strip()
-  if isinstance(value, Integral) and not isinstance(value, bool):
-    return int(value)
+def _normalize_id(value: object) -> object:
+  if type(value) is str:
+    return str.strip(value)
+  if type(value) is int:
+    return value
   return value
 
 
-def _normalize_text(value: str) -> str:
-  if isinstance(value, str):
-    return value.strip()
+def _normalize_text(value: object) -> object:
+  if type(value) is str:
+    return str.strip(value)
   return value
 
 
 def _normalize_number(value: object) -> object:
-  if isinstance(value, Real) and not isinstance(value, bool):
-    return float(value)
+  if type(value) is float:
+    return value
+  if type(value) is int:
+    try:
+      return float(value)
+    except OverflowError:
+      return value
+  return value
+
+
+def _normalize_sequence(
+  value: object,
+  normalize_item: Callable[[object], object],
+) -> object:
+  if type(value) is list or type(value) is tuple:
+    return tuple(normalize_item(item) for item in value)
+  return value
+
+
+def _freeze_sequence(value: object) -> object:
+  if type(value) is list or type(value) is tuple:
+    return tuple(value)
   return value
 
 
 def _freeze_parameter_value(value: object) -> object:
   """Own nested list/tuple parameter values as immutable tuples."""
-  if isinstance(value, list | tuple):
-    return tuple(_freeze_parameter_value(item) for item in value)
-  if isinstance(value, str):
-    return value.strip()
-  if isinstance(value, Integral) and not isinstance(value, bool):
-    return int(value)
-  if isinstance(value, Real) and not isinstance(value, bool):
-    return float(value)
+  try:
+    return _freeze_parameter_value_inner(value, set())
+  except RecursionError:
+    return value
+
+
+def _freeze_parameter_value_inner(value: object, active: set[int]) -> object:
+  if type(value) is list or type(value) is tuple:
+    identity = id(value)
+    if identity in active:
+      return value
+    active.add(identity)
+    frozen = tuple(_freeze_parameter_value_inner(item, active) for item in value)
+    active.remove(identity)
+    return frozen
+  if type(value) is str:
+    return str.strip(value)
+  if type(value) is bool or type(value) is int or type(value) is float:
+    return value
   return value
 
 
@@ -59,7 +90,7 @@ class NodeSpec:
     object.__setattr__(
       self,
       "coordinates",
-      tuple(_normalize_number(item) for item in self.coordinates),
+      _normalize_sequence(self.coordinates, _normalize_number),
     )
 
 
@@ -76,7 +107,7 @@ class CellSpec:
     object.__setattr__(
       self,
       "node_ids",
-      tuple(_normalize_id(item) for item in self.node_ids),
+      _normalize_sequence(self.node_ids, _normalize_id),
     )
 
 
@@ -104,7 +135,7 @@ class CellBlockSpec:
       "geometry_interpolation",
       _normalize_text(self.geometry_interpolation),
     )
-    object.__setattr__(self, "cells", tuple(self.cells))
+    object.__setattr__(self, "cells", _freeze_sequence(self.cells))
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,8 +147,8 @@ class MeshSpec:
   source: SourceContext = field(default_factory=SourceContext)
 
   def __post_init__(self) -> None:
-    object.__setattr__(self, "nodes", tuple(self.nodes))
-    object.__setattr__(self, "cell_blocks", tuple(self.cell_blocks))
+    object.__setattr__(self, "nodes", _freeze_sequence(self.nodes))
+    object.__setattr__(self, "cell_blocks", _freeze_sequence(self.cell_blocks))
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +165,7 @@ class FieldSpec:
     object.__setattr__(
       self,
       "components",
-      tuple(_normalize_text(item) for item in self.components),
+      _normalize_sequence(self.components, _normalize_text),
     )
     object.__setattr__(self, "location", _normalize_text(self.location))
 
@@ -164,7 +195,7 @@ class MaterialSpec:
   def __post_init__(self) -> None:
     object.__setattr__(self, "id", _normalize_id(self.id))
     object.__setattr__(self, "model", _normalize_text(self.model))
-    object.__setattr__(self, "parameters", tuple(self.parameters))
+    object.__setattr__(self, "parameters", _freeze_sequence(self.parameters))
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,11 +224,11 @@ class RegionSpec:
 
   def __post_init__(self) -> None:
     object.__setattr__(self, "id", _normalize_id(self.id))
-    object.__setattr__(self, "cell_refs", tuple(self.cell_refs))
+    object.__setattr__(self, "cell_refs", _freeze_sequence(self.cell_refs))
     object.__setattr__(
       self,
       "field_ids",
-      tuple(_normalize_id(item) for item in self.field_ids),
+      _normalize_sequence(self.field_ids, _normalize_id),
     )
     object.__setattr__(
       self,
@@ -219,6 +250,6 @@ class ModelSpec:
   source: SourceContext = field(default_factory=SourceContext)
 
   def __post_init__(self) -> None:
-    object.__setattr__(self, "fields", tuple(self.fields))
-    object.__setattr__(self, "materials", tuple(self.materials))
-    object.__setattr__(self, "regions", tuple(self.regions))
+    object.__setattr__(self, "fields", _freeze_sequence(self.fields))
+    object.__setattr__(self, "materials", _freeze_sequence(self.materials))
+    object.__setattr__(self, "regions", _freeze_sequence(self.regions))

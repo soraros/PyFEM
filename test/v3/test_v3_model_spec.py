@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 from dataclasses import replace
 
@@ -44,8 +45,92 @@ class _NodeSpecSubclass(NodeSpec):
   pass
 
 
+class _MutableHashStr(str):
+  def __new__(cls, value: str) -> _MutableHashStr:
+    instance = super().__new__(cls, value)
+    instance.hash_calls = 0
+    instance.hash_value = 1
+    instance.strip_calls = 0
+    return instance
+
+  def __hash__(self) -> int:
+    self.hash_calls += 1
+    return self.hash_value
+
+  def strip(self, chars: str | None = None) -> str:
+    self.strip_calls += 1
+    return self
+
+
+class _UnhashableStr(str):
+  __hash__ = None
+
+  def __new__(cls, value: str) -> _UnhashableStr:
+    instance = super().__new__(cls, value)
+    instance.strip_calls = 0
+    return instance
+
+  def strip(self, chars: str | None = None) -> str:
+    self.strip_calls += 1
+    return self
+
+
+class _ReprBombStr(str):
+  def __new__(cls, value: str) -> _ReprBombStr:
+    instance = super().__new__(cls, value)
+    instance.repr_calls = 0
+    instance.strip_calls = 0
+    return instance
+
+  def __repr__(self) -> str:
+    self.repr_calls += 1
+    msg = "hostile repr invoked"
+    raise RuntimeError(msg)
+
+  def strip(self, chars: str | None = None) -> str:
+    self.strip_calls += 1
+    return self
+
+
+class _ComparisonBombInt(int):
+  def __new__(cls, value: int) -> _ComparisonBombInt:
+    instance = super().__new__(cls, value)
+    instance.comparison_calls = 0
+    return instance
+
+  def __eq__(self, other: object) -> bool:
+    self.comparison_calls += 1
+    msg = "hostile comparison invoked"
+    raise RuntimeError(msg)
+
+  def __ge__(self, other: object) -> bool:
+    self.comparison_calls += 1
+    msg = "hostile comparison invoked"
+    raise RuntimeError(msg)
+
+  def __gt__(self, other: object) -> bool:
+    self.comparison_calls += 1
+    msg = "hostile comparison invoked"
+    raise RuntimeError(msg)
+
+  def __le__(self, other: object) -> bool:
+    self.comparison_calls += 1
+    msg = "hostile comparison invoked"
+    raise RuntimeError(msg)
+
+  def __lt__(self, other: object) -> bool:
+    self.comparison_calls += 1
+    msg = "hostile comparison invoked"
+    raise RuntimeError(msg)
+
+
 def _source(label: str) -> SourceContext:
   return SourceContext(source=label)
+
+
+def _forge_slot(value: object, name: str, replacement: object) -> object:
+  object.__setattr__(value, name, replacement)
+  return value
 
 
 def _nodes_2d() -> tuple[NodeSpec, ...]:
@@ -315,6 +400,387 @@ def test_normalized_model_is_owned_and_caller_mutation_cannot_change_it() -> Non
   assert normalized.fields[0].components == ("x", "y")
   assert normalized.materials[0].parameters[0].value == (1.0, 2.0)
   assert normalized.regions[0].field_ids == ("displacement",)
+
+
+def test_normalized_tree_is_recursively_exact_new_and_caller_detached() -> None:
+  parameter = MaterialParameterSpec(
+    name=" table ",
+    value=(" label ", (1, 2.0, True)),
+    source=_source("materials:solid:table"),
+  )
+  model = replace(
+    _valid_model(),
+    materials=(replace(_material(), parameters=(parameter,)),),
+  )
+  caller_mesh = model.mesh
+  caller_node = caller_mesh.nodes[0]
+  caller_block = caller_mesh.cell_blocks[0]
+  caller_cell = caller_block.cells[0]
+  caller_field = model.fields[0]
+  caller_material = model.materials[0]
+  caller_parameter = caller_material.parameters[0]
+  caller_region = model.regions[0]
+  caller_cell_ref = caller_region.cell_refs[0]
+
+  normalized = normalize_model_spec(model)
+
+  assert type(normalized) is ModelSpec
+  assert type(normalized.mesh) is MeshSpec
+  assert type(normalized.mesh.nodes[0]) is NodeSpec
+  assert type(normalized.mesh.cell_blocks[0]) is CellBlockSpec
+  assert type(normalized.mesh.cell_blocks[0].cells[0]) is CellSpec
+  assert type(normalized.fields[0]) is FieldSpec
+  assert type(normalized.materials[0]) is MaterialSpec
+  assert type(normalized.materials[0].parameters[0]) is MaterialParameterSpec
+  assert type(normalized.regions[0]) is RegionSpec
+  assert type(normalized.regions[0].cell_refs[0]) is CellRef
+  assert normalized is not model
+  assert normalized.mesh is not caller_mesh
+  assert normalized.mesh.nodes[0] is not caller_node
+  assert normalized.mesh.cell_blocks[0] is not caller_block
+  assert normalized.mesh.cell_blocks[0].cells[0] is not caller_cell
+  assert normalized.fields[0] is not caller_field
+  assert normalized.materials[0] is not caller_material
+  assert normalized.materials[0].parameters[0] is not caller_parameter
+  assert normalized.regions[0] is not caller_region
+  assert normalized.regions[0].cell_refs[0] is not caller_cell_ref
+
+  source_pairs = (
+    (normalized.source, model.source),
+    (normalized.mesh.source, caller_mesh.source),
+    (normalized.mesh.nodes[0].source, caller_node.source),
+    (normalized.mesh.cell_blocks[0].source, caller_block.source),
+    (normalized.mesh.cell_blocks[0].cells[0].source, caller_cell.source),
+    (normalized.fields[0].source, caller_field.source),
+    (normalized.materials[0].source, caller_material.source),
+    (
+      normalized.materials[0].parameters[0].source,
+      caller_parameter.source,
+    ),
+    (normalized.regions[0].source, caller_region.source),
+  )
+  assert all(type(owned) is SourceContext for owned, _ in source_pairs)
+  assert all(owned is not caller for owned, caller in source_pairs)
+
+  container_pairs = (
+    (normalized.mesh.nodes, caller_mesh.nodes),
+    (normalized.mesh.cell_blocks, caller_mesh.cell_blocks),
+    (normalized.mesh.nodes[0].coordinates, caller_node.coordinates),
+    (normalized.mesh.cell_blocks[0].cells, caller_block.cells),
+    (normalized.mesh.cell_blocks[0].cells[0].node_ids, caller_cell.node_ids),
+    (normalized.fields, model.fields),
+    (normalized.fields[0].components, caller_field.components),
+    (normalized.materials, model.materials),
+    (normalized.materials[0].parameters, caller_material.parameters),
+    (normalized.regions, model.regions),
+    (normalized.regions[0].cell_refs, caller_region.cell_refs),
+    (normalized.regions[0].field_ids, caller_region.field_ids),
+  )
+  assert all(type(owned) is tuple for owned, _ in container_pairs)
+  assert all(owned is not caller for owned, caller in container_pairs)
+  owned_parameter = normalized.materials[0].parameters[0].value
+  assert type(owned_parameter) is tuple
+  assert type(owned_parameter[1]) is tuple
+  assert owned_parameter is not caller_parameter.value
+  assert owned_parameter[1] is not caller_parameter.value[1]
+
+  assert type(normalized.mesh.nodes[0].id) is int
+  assert all(type(value) is float for value in normalized.mesh.nodes[0].coordinates)
+  assert type(normalized.mesh.cell_blocks[0].reference_topology) is str
+  assert type(normalized.mesh.cell_blocks[0].topological_dimension) is int
+  assert type(normalized.fields[0].id) is str
+  assert all(type(value) is str for value in normalized.fields[0].components)
+  assert normalized.materials[0].parameters[0].name == "table"
+  assert owned_parameter == ("label", (1, 2.0, True))
+  assert tuple(type(value) for value in owned_parameter[1]) == (int, float, bool)
+
+  object.__setattr__(model.source, "source", "mutated:model")
+  object.__setattr__(caller_mesh, "nodes", ())
+  object.__setattr__(caller_node, "coordinates", (99.0, 99.0))
+  object.__setattr__(caller_block, "reference_topology", "mutated-topology")
+  object.__setattr__(caller_cell, "node_ids", (99,))
+  object.__setattr__(caller_field, "components", ("mutated",))
+  object.__setattr__(caller_material, "model", "mutated-material")
+  object.__setattr__(caller_parameter, "value", (99,))
+  object.__setattr__(caller_region, "field_ids", ("mutated",))
+  object.__setattr__(caller_cell_ref, "block_id", "mutated-block")
+
+  assert normalized.source.source == "model"
+  assert len(normalized.mesh.nodes) == 4
+  assert normalized.mesh.nodes[0].coordinates == (0.0, 0.0)
+  assert normalized.mesh.cell_blocks[0].reference_topology == "quadrilateral"
+  assert normalized.mesh.cell_blocks[0].cells[0].node_ids == (1, 2, 3, 4)
+  assert normalized.fields[0].components == ("x", "y")
+  assert normalized.materials[0].model == "linear-elastic"
+  assert normalized.materials[0].parameters[0].value == (
+    "label",
+    (1, 2.0, True),
+  )
+  assert normalized.regions[0].field_ids == ("displacement",)
+  assert normalized.regions[0].cell_refs[0].block_id == "quad-cells"
+
+
+def test_mutable_hash_string_subclass_rejects_without_hostile_calls() -> None:
+  hostile = _MutableHashStr("mutable-node")
+  node = NodeSpec(
+    id=hostile,
+    coordinates=(0.0, 0.0),
+    source=_source("nodes:mutable-hash"),
+  )
+  model = _valid_model()
+  object.__setattr__(model.mesh, "nodes", (node, *model.mesh.nodes[1:]))
+
+  with pytest.raises(ModelSpecValidationError) as caught:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(caught.value) == ("invalid-node-id",)
+  assert caught.value.diagnostics[0].source == _source("nodes:mutable-hash")
+  assert hostile.strip_calls == 0
+  assert hostile.hash_calls == 0
+
+
+def test_unhashable_string_subclass_rejects_without_strip_or_lookup() -> None:
+  hostile = _UnhashableStr("unhashable-node")
+  node = NodeSpec(
+    id=hostile,
+    coordinates=(0.0, 0.0),
+    source=_source("nodes:unhashable"),
+  )
+  model = _valid_model()
+  object.__setattr__(model.mesh, "nodes", (node, *model.mesh.nodes[1:]))
+
+  with pytest.raises(ModelSpecValidationError) as caught:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(caught.value) == ("invalid-node-id",)
+  assert caught.value.diagnostics[0].source == _source("nodes:unhashable")
+  assert hostile.strip_calls == 0
+
+
+def test_repr_bomb_string_subclass_rejects_without_rendering() -> None:
+  hostile = _ReprBombStr("duplicate")
+  first = NodeSpec(id="duplicate", coordinates=(2.0, 0.0))
+  second = NodeSpec(
+    id=hostile,
+    coordinates=(3.0, 0.0),
+    source=_source("nodes:repr-bomb"),
+  )
+  model = _valid_model()
+  object.__setattr__(model.mesh, "nodes", (*model.mesh.nodes, first, second))
+
+  with pytest.raises(ModelSpecValidationError) as caught:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(caught.value) == ("invalid-node-id",)
+  assert caught.value.diagnostics[0].source == _source("nodes:repr-bomb")
+  assert hostile.strip_calls == 0
+  assert hostile.repr_calls == 0
+
+
+def test_comparison_bomb_integer_subclass_rejects_without_comparison() -> None:
+  hostile = _ComparisonBombInt(2)
+  block = replace(
+    _quad_block(),
+    topological_dimension=hostile,
+    source=_source("blocks:comparison-bomb"),
+  )
+  model = _valid_model()
+  object.__setattr__(model.mesh, "cell_blocks", (block,))
+
+  with pytest.raises(ModelSpecValidationError) as caught:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(caught.value) == ("invalid-topological-dimension",)
+  assert caught.value.diagnostics[0].source == _source("blocks:comparison-bomb")
+  assert hostile.comparison_calls == 0
+
+
+def test_hostile_text_and_source_scalars_reject_at_trusted_parent() -> None:
+  hostile_text = _ReprBombStr("quadrilateral")
+  hostile_source = _ReprBombStr("nodes:hostile-source")
+  block = replace(_quad_block(), reference_topology=hostile_text)
+  node = _valid_model().mesh.nodes[0]
+  object.__setattr__(node.source, "source", hostile_source)
+  model = _valid_model()
+  object.__setattr__(model.mesh, "nodes", (node, *model.mesh.nodes[1:]))
+  object.__setattr__(model.mesh, "cell_blocks", (block,))
+
+  with pytest.raises(ModelSpecValidationError) as caught:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(caught.value) == (
+    "invalid-source-context-value",
+    "invalid-reference-topology",
+  )
+  assert caught.value.diagnostics[0].source == _source("mesh")
+  assert caught.value.diagnostics[1].source == _source("blocks:quad-cells")
+  assert hostile_text.strip_calls == 0
+  assert hostile_text.repr_calls == 0
+  assert hostile_source.strip_calls == 0
+  assert hostile_source.repr_calls == 0
+
+
+def test_source_context_integer_subclass_rejects_without_comparison() -> None:
+  hostile_line = _ComparisonBombInt(7)
+  node = _valid_model().mesh.nodes[0]
+  object.__setattr__(
+    node,
+    "source",
+    SourceContext(source="nodes:hostile-line", line=hostile_line),
+  )
+  model = _valid_model()
+  object.__setattr__(model.mesh, "nodes", (node, *model.mesh.nodes[1:]))
+
+  with pytest.raises(ModelSpecValidationError) as caught:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(caught.value) == ("invalid-source-context-value",)
+  assert caught.value.diagnostics[0].source == _source("mesh")
+  assert hostile_line.comparison_calls == 0
+
+
+def test_exact_uninitialized_specs_never_escape_raw_slot_errors() -> None:
+  uninitialized_model = object.__new__(ModelSpec)
+  mesh_model = _valid_model()
+  object.__setattr__(mesh_model, "mesh", object.__new__(MeshSpec))
+  node_model = _valid_model()
+  object.__setattr__(
+    node_model.mesh,
+    "nodes",
+    (object.__new__(NodeSpec), *node_model.mesh.nodes[1:]),
+  )
+  source_model = _valid_model()
+  object.__setattr__(
+    source_model.mesh.nodes[0],
+    "source",
+    object.__new__(SourceContext),
+  )
+  cases = (
+    (uninitialized_model, "<python>"),
+    (mesh_model, "model"),
+    (node_model, "mesh"),
+    (source_model, "mesh"),
+  )
+
+  for model, expected_source in cases:
+    with pytest.raises(ModelSpecValidationError) as first:
+      normalize_model_spec(model)
+    with pytest.raises(ModelSpecValidationError) as second:
+      normalize_model_spec(model)
+
+    assert first.value.diagnostics == second.value.diagnostics
+    assert first.value.diagnostics[0].source == _source(expected_source)
+    assert str(first.value) == str(second.value)
+
+
+def test_wrong_slot_and_collection_shapes_reject_before_iteration() -> None:
+  model_fields = _valid_model()
+  _forge_slot(model_fields, "fields", object())
+  model_materials = _valid_model()
+  _forge_slot(model_materials, "materials", [])
+  mesh_nodes = _valid_model()
+  _forge_slot(mesh_nodes.mesh, "nodes", object())
+  mesh_blocks = _valid_model()
+  _forge_slot(mesh_blocks.mesh, "cell_blocks", [])
+  node_coordinates = _valid_model()
+  _forge_slot(node_coordinates.mesh.nodes[0], "coordinates", [0.0, 0.0])
+  block_cells = _valid_model()
+  _forge_slot(block_cells.mesh.cell_blocks[0], "cells", object())
+  cell_nodes = _valid_model()
+  _forge_slot(
+    cell_nodes.mesh.cell_blocks[0].cells[0],
+    "node_ids",
+    [1, 2, 3, 4],
+  )
+  field_components = _valid_model()
+  _forge_slot(field_components.fields[0], "components", object())
+  material_parameters = _valid_model()
+  _forge_slot(material_parameters.materials[0], "parameters", [])
+  parameter_value = _valid_model()
+  _forge_slot(parameter_value.materials[0].parameters[0], "value", [1.0])
+  region_cells = _valid_model()
+  _forge_slot(region_cells.regions[0], "cell_refs", object())
+  region_fields = _valid_model()
+  _forge_slot(region_fields.regions[0], "field_ids", ["displacement"])
+  cases = (
+    (model_fields, "invalid-model-spec-value", "model"),
+    (model_materials, "invalid-model-spec-value", "model"),
+    (mesh_nodes, "invalid-mesh-spec-value", "mesh"),
+    (mesh_blocks, "invalid-mesh-spec-value", "mesh"),
+    (node_coordinates, "invalid-node-spec-value", "nodes:1"),
+    (block_cells, "invalid-cell-block-spec-value", "blocks:quad-cells"),
+    (cell_nodes, "invalid-cell-spec-value", "cells:10"),
+    (field_components, "invalid-field-spec-value", "fields:displacement"),
+    (
+      material_parameters,
+      "invalid-material-spec-value",
+      "materials:solid",
+    ),
+    (
+      parameter_value,
+      "invalid-material-parameter-value",
+      "materials:solid:E",
+    ),
+    (region_cells, "invalid-region-spec-value", "regions:domain"),
+    (region_fields, "invalid-region-spec-value", "regions:domain"),
+  )
+
+  for model, expected_code, expected_source in cases:
+    with pytest.raises(ModelSpecValidationError) as first:
+      normalize_model_spec(model)
+    with pytest.raises(ModelSpecValidationError) as second:
+      normalize_model_spec(model)
+
+    assert _diagnostic_codes(first.value) == (expected_code,)
+    assert first.value.diagnostics == second.value.diagnostics
+    assert first.value.diagnostics[0].source == _source(expected_source)
+
+
+def test_authored_constructors_defer_malformed_values_to_normalization() -> None:
+  base = _valid_model()
+  bad_model_container = ModelSpec(
+    mesh=base.mesh,
+    fields=object(),
+    materials=base.materials,
+    regions=base.regions,
+    source=_source("model:bad-container"),
+  )
+  bad_node = NodeSpec(
+    id=1,
+    coordinates=object(),
+    source=_source("nodes:bad-container"),
+  )
+  bad_node_model = replace(
+    base,
+    mesh=replace(base.mesh, nodes=(bad_node, *base.mesh.nodes[1:])),
+  )
+  cyclic_value: list[object] = []
+  cyclic_value.append(cyclic_value)
+  cyclic_parameter = MaterialParameterSpec(
+    name="cyclic",
+    value=cyclic_value,
+    source=_source("materials:solid:cyclic"),
+  )
+  cyclic_model = replace(
+    base,
+    materials=(replace(_material(), parameters=(cyclic_parameter,)),),
+  )
+  cases = (
+    (bad_model_container, "invalid-model-spec-value", "model:bad-container"),
+    (bad_node_model, "invalid-node-spec-value", "nodes:bad-container"),
+    (
+      cyclic_model,
+      "invalid-material-parameter-value",
+      "materials:solid:cyclic",
+    ),
+  )
+
+  for model, expected_code, expected_source in cases:
+    with pytest.raises(ModelSpecValidationError) as caught:
+      normalize_model_spec(model)
+
+    assert _diagnostic_codes(caught.value) == (expected_code,)
+    assert caught.value.diagnostics[0].source == _source(expected_source)
 
 
 def test_foreign_nested_objects_fail_before_child_attribute_access() -> None:
@@ -799,6 +1265,100 @@ def test_interpolation_arity_compatibility_is_registry_owned_in_either_order() -
       tuple(len(block.cells[0].node_ids) for block in normalized.mesh.cell_blocks)
       == expected_arities
     )
+
+
+def test_cell_identity_is_block_local_even_when_ids_match() -> None:
+  base = _valid_model()
+  triangle = CellBlockSpec(
+    id="tri-cells",
+    reference_topology="triangle",
+    topological_dimension=2,
+    embedding_dimension=2,
+    geometry_interpolation="tri3",
+    cells=(
+      CellSpec(
+        id=10,
+        node_ids=(1, 2, 3),
+        source=_source("cells:tri:10"),
+      ),
+    ),
+    source=_source("blocks:tri-cells"),
+  )
+  region = replace(
+    _region(),
+    cell_refs=(
+      CellRef(block_id="quad-cells", cell_id=10),
+      CellRef(block_id="tri-cells", cell_id=10),
+    ),
+  )
+  model = replace(
+    base,
+    mesh=replace(base.mesh, cell_blocks=(_quad_block(), triangle)),
+    regions=(region,),
+  )
+
+  normalized = normalize_model_spec(model)
+
+  assert normalized.regions[0].cell_refs == (
+    CellRef(block_id="quad-cells", cell_id=10),
+    CellRef(block_id="tri-cells", cell_id=10),
+  )
+
+
+def test_ordinary_multiple_defect_diagnostic_order_remains_stable() -> None:
+  base = _valid_model()
+  duplicate_node = NodeSpec(
+    id=1,
+    coordinates=(math.nan, 0.0),
+    source=_source("nodes:duplicate-invalid"),
+  )
+  bad_cell = CellSpec(
+    id=11,
+    node_ids=(1, 2, 99),
+    source=_source("cells:bad"),
+  )
+  block = replace(_quad_block(), cells=(*_quad_block().cells, bad_cell))
+  field = replace(_field(), components=("x", "x"))
+  material = replace(
+    _material(),
+    parameters=(
+      MaterialParameterSpec(name="p", value=1.0),
+      MaterialParameterSpec(name="p", value=2.0),
+    ),
+  )
+  region = replace(
+    _region(),
+    field_ids=("displacement", "missing"),
+    material_id="missing",
+  )
+  model = replace(
+    base,
+    mesh=replace(
+      base.mesh,
+      nodes=(*base.mesh.nodes, duplicate_node),
+      cell_blocks=(block,),
+    ),
+    fields=(field,),
+    materials=(material,),
+    regions=(region,),
+  )
+
+  with pytest.raises(ModelSpecValidationError) as first:
+    normalize_model_spec(model)
+  with pytest.raises(ModelSpecValidationError) as second:
+    normalize_model_spec(model)
+
+  assert _diagnostic_codes(first.value) == (
+    "duplicate-node-id",
+    "invalid-coordinate",
+    "connectivity-arity",
+    "unknown-node-reference",
+    "duplicate-field-component",
+    "duplicate-material-parameter-name",
+    "unknown-field-reference",
+    "unknown-material-reference",
+  )
+  assert first.value.diagnostics == second.value.diagnostics
 
 
 def test_zero_dimensional_point_topology_is_valid_in_positive_embedding() -> None:
