@@ -1,10 +1,11 @@
 # Phase 0/1 execution state
 
-- Status: three first-chunk work packets active
+- Status: first-chunk foundation integrated; adversarial review next
 - Owner: delegating/integration thread
 - Design authority: [design.md](design.md)
 - Method: [refactor_playbook.md](refactor_playbook.md)
 - Dispatch base: `c75cbf3` (`v3`)
+- Integrated foundation: `ba466cd` (`v3`)
 
 ## Outcome and invariant
 
@@ -149,8 +150,8 @@ thread status are available.
 |---|---|---|---|
 | `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | Active | — |
 | `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Integrated | `92bc87d` from `db486f5` |
-| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Repairing integration findings | `c6527dd` + pending |
-| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Repairing integration findings | `168c49a` + pending |
+| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Integrated | `da1e60f` + `ba466cd` |
+| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Integrated | `d211afa` + `0834013` |
 
 ## Required combined evidence
 
@@ -160,6 +161,15 @@ thread status are available.
 - full `pytest -q` after the first combined foundation; and
 - disconfirming review of identity, caller aliasing, explicit topology, and
   prototype-import quarantine before the integration packet begins.
+
+Current combined evidence at `ba466cd`:
+
+- 21 focused foundation tests passed;
+- 151 v3 tests passed with 40 pre-existing SciPy warnings;
+- 340 full-repository tests passed with the same 40 warnings;
+- both v3 Ruff gates and focused format checks passed; and
+- the adversarial read-only review remains the only open gate before the compiler
+  integration packet.
 
 ## Blocked condition
 
@@ -187,3 +197,6 @@ integration decision; do not bridge it with a compatibility carrier.
 - 2026-07-17: integration review returned P0-B for redundant authored geometry
   arity and unhashable-reference diagnostics, and P0-C for retained-array ownership;
   both repairs remain inside their original path contracts.
+- 2026-07-17: integrated corrected P0-C as `d211afa` + `0834013` and corrected
+  P0-B as `da1e60f` + `ba466cd`; combined focused, v3, full-suite, Ruff, and format
+  gates pass. Adversarial review is next; compiler integration is not yet authorized.
