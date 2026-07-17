@@ -154,6 +154,7 @@ thread status are available.
 | `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Integrated | `d211afa` + `0834013` |
 | `R0-A · model spec — semantic gaps attacked` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | Active | — |
 | `R0-B · identity/storage — invariants attacked` | `019f7087-61f0-71e0-9082-122e7ea75894` | Active | — |
+| `D0-A · migration workflow — autonomy bounded` | `019f708b-2980-7703-8fca-7ea26d5826ba` | Active | `migration_workflow.md` proposal |
 
 ## Required combined evidence
 
@@ -205,3 +206,6 @@ integration decision; do not bridge it with a compatibility carrier.
 - 2026-07-17: dispatched independent Sol/max critics R0-A and R0-B from `2bda241`
   with separate spec-semantics and identity/ownership attack lenses and direct
   terminal callbacks. No polling automation is active.
+- 2026-07-17: dispatched Sol/max meta-coordinator D0-A from `ad95149` to design a
+  repository-specific, bounded semi-autonomous legacy-to-v3 migration workflow in
+  one isolated proposal document; it has no production or existing-policy writes.
