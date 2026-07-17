@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: combined repaired foundations broad-green; R0-J and R0-K active
+- Status: spec foundation re-review green; R0-K identity/storage re-review active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -15,12 +15,13 @@
 
 ## Exact next safe action
 
-Wait for direct callbacks from the fresh read-only Sol/max spec and identity/storage
-critics, adjudicate every reproduced finding against the recorded contracts, and
-repair any accepted blocker before compiler work. Both critics started from exact
-combined ledger head `8a952e7668f4f6c52d39352dee7e0685593906a3` and must report a
-zero-blocker or exact reproduced-blocker verdict. Do not start the model compiler
-until both are green at that same foundation state.
+Wait for the fresh read-only Sol/max identity/storage critic R0-K, adjudicate every
+reproduced finding against the recorded contracts, and repair any accepted blocker
+before compiler work. R0-J completed its substantive review from exact combined
+ledger head `8a952e7668f4f6c52d39352dee7e0685593906a3` with zero blockers;
+its terminal callback was lost to a repeated host finalization error, but all owned
+probe and gate evidence was recovered. Do not start the model compiler until R0-K
+is also green at that same foundation state.
 
 Blocked condition: a critic demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -439,8 +440,8 @@ integrated directly after it.
    findings, and rerun combined v3 plus full repository tests.
 4. Completed: P0-F repaired the R0-H diagnostic blocker; P0-G plus its direct
    provenance follow-up repaired the five R0-I seams and integration-audit findings.
-5. Active: repeat the spec and identity/storage critics from one exact combined
-   ledger head.
+5. R0-J's repeated spec critic is green with zero blockers. Active: finish R0-K's
+   identity/storage repeat critic from the same exact combined ledger head.
 6. Then dispatch the dependent compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
@@ -474,8 +475,8 @@ thread status are available.
 | `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Complete; 5 accepted blockers; 18 focused passed |
 | `P0-F · model spec — integer diagnostics total` | `019f7136-c2f1-77b2-81bb-f9aa41627a92` | `f9e1867a2c458531b61fd3d8e5107445c0229733` | Bounded exact-integer diagnostic repair | Complete; source `c0b3c57`, integrated `461a8a8`; 42 focused, 190 v3, 379 full tests passed |
 | `P0-G · identity/storage — exact boundaries enforced` | `019f7146-e871-76c2-a3e6-75d87fac83fd` | `7d1ededb6d11fc183ff506b989b6d1f72fd12600` | Close five accepted R0-I seams plus integration-audit carrier gaps | Complete; source `9504467` + child `8612d01`, integrated `e04f86a` + `afaac4d`; 47 focused, 212 v3, 401 full passed |
-| `R0-J · model spec — integer boundary re-attacked` | `019f7184-2fe6-7403-a5fd-683e58dcee79` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Fresh read-only spec/diagnostic repeat critic | Active; direct callback required |
-| `R0-K · identity/storage — canonical boundary re-attacked` | `019f7184-2fe6-7403-a5fd-685f9ee1995d` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Fresh read-only identity/provenance/registry/storage repeat critic | Active; direct callback required |
+| `R0-J · model spec — integer boundary re-attacked` | `019f7184-2fe6-7403-a5fd-683e58dcee79` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Fresh read-only spec/diagnostic repeat critic | Reviewed; zero blockers; 42 focused twice, 219 v3; final callback lost to host error |
+| `R0-K · identity/storage — canonical boundary re-attacked` | `019f7184-2fe6-7403-a5fd-685f9ee1995d` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Fresh read-only identity/provenance/registry/storage repeat critic | Active; temporary probe-script approval pending; direct callback required |
 
 ## Active watchdogs
 
@@ -536,6 +537,24 @@ Combined foundation evidence at
   clean integration worktree; and
 - the old `pyfem.v3.assembly` Python-reference scan has zero matches.
 
+R0-J independent repeat evidence at exact frozen ledger head
+`8a952e7668f4f6c52d39352dee7e0685593906a3`:
+
+- the complete exact-class/slot/container, hostile-hook, depth/cycle, topology,
+  detachment, source-context, and restrictive-digit probe matrix found zero
+  blockers across all 11 spec/source families;
+- all positive and negative 5,001-digit cases remained exact or failed with bounded
+  deterministic diagnostics under the 640-digit interpreter limit without changing
+  that global limit;
+- 42 focused model-spec tests passed both normally and at the 640-digit limit, both
+  Ruff configurations passed, and the cold-cache broad replay passed 219 v3 tests
+  with 40 existing SciPy plus four existing Numba warnings; and
+- two repeated 20,000-node / 5,000-cell / 5,000-reference samples retained full
+  detachment at median 1.410 seconds, 11.36 MiB peak, and 2.50 times retained memory.
+  This confirms the recorded double-reconstruction obligation without crossing its
+  blocker rule. Two task turns system-failed only while formatting the terminal
+  callback; the integration owner recovered the completed evidence directly.
+
 ## Accepted later-phase obligations
 
 - Registry snapshot fingerprints trust callable purity and truthful, behavior-bound
@@ -549,9 +568,10 @@ Combined foundation evidence at
 - P0-E's preflight already constructs a detached canonical tree and
   `_reconstruct_model` defensively copies it again. R0-H measured 1.251 seconds and
   11.36 MiB peak for 20,000 nodes, 5,000 cells, and 5,000 references, with peak
-  memory 2.37 times retained. This preserves the ownership contract and is not a
-  foundation blocker; remeasure at compiler-scale proof before optimizing, and
-  retain hostile detachment tests through any change.
+  memory 2.37 times retained; R0-J repeated two fully detached samples at median
+  1.410 seconds, the same 11.36 MiB peak, and 2.50 times retained. This preserves the
+  ownership contract and is not a foundation blocker; remeasure at compiler-scale
+  proof before optimizing, and retain hostile detachment tests through any change.
 - Exact forged `InstanceId`/`StateGeneration` fields can bypass helpers or raise raw
   exceptions after deliberate `object.__new__`/`object.__setattr__` construction.
   This is not an authored/live primitive blocker; future restore/rebind decoding
@@ -689,3 +709,8 @@ integration decision; do not bridge it with a compatibility carrier.
   (`019f7184-2fe6-7403-a5fd-685f9ee1995d`) from that exact clean head. Their scopes
   are disjoint spec versus identity/storage boundaries; no writer or compiler task
   is active.
+- 2026-07-18: R0-J completed the substantive spec review with zero blockers. Its
+  hostile matrix, 42 focused tests both normally and under the 640-digit limit, both
+  Ruff gates, and 219-test broad replay are green. Two task turns system-failed only
+  during terminal-report finalization, so the integration owner recovered and
+  recorded the evidence directly. R0-K remains the sole compiler gate.
