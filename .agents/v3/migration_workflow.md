@@ -44,8 +44,9 @@ The current foundation at adoption consists of:
 - six accepted `R0-A`/`R0-B` blockers repaired in the spec and identity/storage
   owners, with 41 focused, 171 v3, and 360 repository tests passing at the combined
   implementation head; and
-- two fresh, read-only Sol/max critics, `R0-C` and `R0-D`, attacking the combined
-  repaired head before any compiler packet may start.
+- fresh, read-only Sol/max foundation criticism as a hard gate before any compiler
+  packet; exact active, failed, replacement, and terminal task IDs live only in the
+  execution ledger.
 
 The prototype still exposes `load_problem`, `ProblemDefinition`, `LoadedProblem`,
 `solve_linear`, `solve_nonlinear`, and `solve_riks`. It still contains the exact
@@ -343,9 +344,10 @@ nearby class merely because its filename resembles the last packet.
 
 ### Wave 0: finish and operationalize foundations
 
-No compiler writer is dispatched while `R0-C` or `R0-D` is active.
+No compiler writer is dispatched while required foundation adversarial review or
+repair is active.
 
-After their callbacks:
+After the required callbacks:
 
 1. the `I0` integrator adjudicates every finding;
 2. accepted foundation defects are repaired inside the original owner;
@@ -353,12 +355,13 @@ After their callbacks:
 4. the legacy coverage ledger is seeded from the complete inventory; and
 5. only then is the compiler-integration writer selected.
 
-The next eligible IDs are reserved as follows; the earlier `R0-C` and `R0-D` IDs
-remain permanently assigned to the fresh foundation re-reviews:
+The following migration IDs were reserved at adoption. Failed or replacement tasks
+receive their own additional IDs in the live ledger; these reservations are not
+reused for them:
 
 | ID and title | Outcome | Dependency | Parallel policy |
 |---|---|---|---|
-| `R0-E · legacy breadth — semantic ledger seeded` | Complete E0 inventory and proposed preserve/change/retire classifications with evidence gaps | R0-C/R0-D terminal; adopted ledger schema | Read-only research may overlap P0-D; only integrator writes the ledger |
+| `R0-E · legacy breadth — semantic ledger seeded` | Complete E0 inventory and proposed preserve/change/retire classifications with evidence gaps | Foundation re-review terminal; adopted ledger schema | Read-only research may overlap P0-D; only integrator writes the ledger |
 | `P0-D · model compiler — Q8 block frozen` | Normalized Q8 region compiles into immutable model/block recipe, entity/source maps, capabilities, and empty physical-state layout | Foundation re-review adjudicated and combined proof green | Serial core writer |
 | `R0-F · model compiler — block invariants attacked` | Try topology inference, registry drift, missing membership, caller aliasing, invalid geometry, and identity substitution | P0-D integrated | Read-only Sol/max critic |
 
@@ -1150,12 +1153,13 @@ documentation-only changes:
 There is no second live status file and no watchdog. Existing direct callbacks and
 bounded native waits remain sufficient.
 
-### Current foundation re-review
+### Foundation re-review at adoption
 
-Fresh critics `R0-C` and `R0-D` attack the combined repaired foundation at exact
-commit `faab0c938705f59fc5a22e702413f295af1dcadb`. Their IDs remain assigned to
-those reviews; the future breadth and compiler critics use `R0-E` and `R0-F`.
-Compiler integration remains closed until both callbacks are adjudicated and any
+Fresh critics were launched against exact combined repaired commit
+`faab0c938705f59fc5a22e702413f295af1dcadb`. Task failures, replacements,
+callbacks, findings, and repairs are deliberately recorded only in
+`migration-execution.md`, so this method does not become a second status ledger.
+Compiler integration remains closed until required callbacks are adjudicated and
 accepted P0/P1 findings are repaired and re-proved.
 
 ### Next trial
@@ -1285,8 +1289,7 @@ function coordinator_activation():
     return and rely on direct terminal callbacks
 ```
 
-For the current base, the exact next safe action is not `P0-D`: it is to consume the
-active `R0-C` and `R0-D` terminal callbacks, adjudicate their findings in `I0`, and
-rerun the combined foundation proof if necessary. The next new writer is selected
-only after that gate; read-only legacy inventory may proceed independently under a
-frozen `R0-E` contract.
+The exact current base, active tasks, findings, and next safe action live only in
+`migration-execution.md`. This method defines how to consume that state; it does not
+duplicate it. No compiler writer is selected while the ledger records an unresolved
+foundation P0/P1 finding.

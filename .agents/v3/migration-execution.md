@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: migration method adopted; combined foundation adversarial re-review active
+- Status: R0-C spec blockers accepted; P0-E repair contract frozen; R0-G identity re-review active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -13,11 +13,12 @@
 
 ## Exact next safe action
 
-Consume the terminal callbacks from `R0-C` and `R0-D`, adjudicate every finding,
-repair any accepted P0/P1 defect, and bind the combined foundation proof to one exact
-integrated commit. Do not dispatch the model compiler writer until this gate is
-green. The independent legacy-capability inventory may be selected separately once
-its read-only output and ledger-ingestion contract are frozen.
+Commit this ledger transition, dispatch `P0-E` from that exact committed base, and
+record its task ID. In parallel, consume the terminal callback from `R0-G`, the exact
+replacement for failed identity critic `R0-D`. Review and integrate required repairs
+serially, rerun fresh adversarial review where a boundary changed, then bind the
+combined foundation proof to one exact commit. Do not dispatch the model compiler
+writer until this gate is green.
 
 Blocked condition: a critic demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -170,14 +171,69 @@ Acceptance:
 Merge dependency: independent of P0-B; both feed a later compiler-integration
 packet. Do not invent `CompiledModel` before P0-B is available.
 
+### P0-E — Caller-detached canonical model specification
+
+State: `HORIZON_FROZEN`; dispatch immediately after this ledger transition is
+committed. This is a post-integration repair from the current `v3` head, not a
+rewrite of P0-B history.
+
+Outcome and ownership invariant:
+
+- successful normalization constructs a new, exact, recursively caller-detached
+  canonical `ModelSpec` tree;
+- every dataclass slot, container, scalar, and `SourceContext` is validated before
+  unsafe iteration, lookup, comparison, formatting, or child access; and
+- every malformed authored value produces deterministic `ModelSpecValidationError`
+  diagnostics anchored at the nearest trusted source, never raw Python exceptions.
+
+Accepted R0-C blockers to repair:
+
+1. `normalize_model_spec()` returns the caller tree, so forged mutable slots and
+   source values remain aliased.
+2. `str`/`int` subclasses can retain polymorphic hash, comparison, stripping, and
+   rendering behavior or escape as raw exceptions.
+3. exact-but-forged dataclasses and wrong internal containers are trusted before
+   their slots and collection shapes are validated.
+
+Owned paths:
+
+- `pyfem/v3/spec/**`
+- `test/v3/test_v3_model_spec.py`
+
+Forbidden paths and non-goals:
+
+- all other production/tests and all `.agents/v3/**` documents;
+- compiler, registry compatibility, DOF allocation, section/program binding,
+  public exports, file parsing, solvers, compatibility shims, and dependency changes;
+- weakening exact canonical type policy or treating deliberate raw exceptions as
+  acceptable failure behavior.
+
+Required dangerous cases and evidence:
+
+- normalized result and every nested spec/source/value/container are newly owned
+  exact canonical values; mutating forged caller slots afterward cannot affect it;
+- mutable-hash, unhashable, repr-bomb `str` subclasses and comparison-bomb `int`
+  subclasses reject deterministically without invoking hostile behavior;
+- exact uninitialized or wrong-slot `ModelSpec`, `MeshSpec`, `NodeSpec`, and
+  `SourceContext`, plus non-iterable/list-forged collections, never escape raw
+  `AttributeError`, `TypeError`, or rendering failures;
+- ordinary multi-defect ordering, 0D topology, block-local identity, differing
+  uniform block arities, caller detachment, and all earlier P0-B repairs remain;
+- focused spec tests, both v3 Ruff configurations, focused format, `pytest -q
+  test/v3`, full `pytest -q`, `git diff --check`, and a clean worker worktree pass.
+
+Merge order: review and integrate P0-E independently of R0-G; if R0-G also requires
+an identity-owner repair, integrate both disjoint repairs serially and re-run the
+combined foundation gates before any compiler packet.
+
 ## Merge and continuation order
 
 1. Completed: review and integrate P0-A.
 2. Completed: review P0-B and P0-C independently against the Horizon Gate.
 3. Completed: integrate P0-B/P0-C, repair the six accepted original critic
    findings, and rerun combined v3 plus full repository tests.
-4. Active: adjudicate fresh `R0-C`/`R0-D` review of the combined repaired head and
-   repair/re-prove any accepted P0/P1 finding.
+4. Active: repair/re-prove the three accepted `R0-C` model-spec blockers in `P0-E`
+   and consume replacement identity critic `R0-G`.
 5. Then dispatch the dependent compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
@@ -203,8 +259,10 @@ thread status are available.
 | `R0-A · model spec — semantic gaps attacked` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | `2bda241719e2c236abe4711528abd82f47b4633d` | Original spec critic | Complete; 3 accepted blockers repaired |
 | `R0-B · identity/storage — invariants attacked` | `019f7087-61f0-71e0-9082-122e7ea75894` | `2bda241719e2c236abe4711528abd82f47b4633d` | Original identity/storage critic | Complete; 3 accepted blockers repaired |
 | `D0-A · migration workflow — autonomy bounded` | `019f708b-2980-7703-8fca-7ea26d5826ba` | `ad95149e2e34b8eff55c0896c1dea53ac1cbc71d` | `migration_workflow.md` | Complete; source `50cc663`, integrated `9b26574`, adopted |
-| `R0-C · model spec — repairs falsified` | `019f70a3-2650-7181-8a05-fc2b72b111a5` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Fresh read-only spec critic | Active; terminal callback required |
-| `R0-D · identity/storage — repairs falsified` | `019f70a3-264c-7831-8509-a3ffbf9235f4` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Fresh read-only identity/storage critic | Active; terminal callback required |
+| `R0-C · model spec — repairs falsified` | interrupted `019f70a3-2650-7181-8a05-fc2b72b111a5`; replacement `019f70af-2c98-7563-b303-0a5a66fd6ef5` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Fresh read-only spec critic | Complete; 3 accepted blockers; 23 focused tests passed |
+| `R0-D · identity/storage — repairs falsified` | `019f70a3-264c-7831-8509-a3ffbf9235f4` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Initial identity/storage critic | Failed to finish correctly; archived; no terminal report accepted |
+| `R0-G · identity/storage — repairs falsified` | `019f70b1-793c-7c90-a051-07911fff3134` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Exact R0-D replacement, same read-only lens | Active; terminal callback required |
+| `P0-E · model spec — canonical tree owned` | pending dispatch | commit containing the frozen P0-E card | `pyfem/v3/spec/**`, focused spec tests | `HORIZON_FROZEN`; repair round 0 |
 
 ## Active watchdogs
 
@@ -295,3 +353,10 @@ integration decision; do not bridge it with a compatibility carrier.
 - 2026-07-17: dispatched fresh Sol/max critics `R0-C` and `R0-D` from exact combined
   head `faab0c938705f59fc5a22e702413f295af1dcadb`; both are active with disjoint spec
   and identity/storage lenses and direct callbacks. No compiler writer is active.
+- 2026-07-17: the first R0-C and R0-D tasks did not finish correctly. R0-C resumed
+  in replacement task `019f70af-2c98-7563-b303-0a5a66fd6ef5`; R0-D was archived and
+  replaced exactly by Sol/max task `R0-G` (`019f70b1-793c-7c90-a051-07911fff3134`).
+- 2026-07-17: replacement R0-C completed with 23 focused tests passing but three
+  accepted blockers: returned caller-tree aliasing, hostile scalar-subclass escape,
+  and unvalidated forged slots/containers causing raw exceptions. P0-E owns the
+  bounded canonical-tree and total-preflight repair; compiler integration stays shut.
