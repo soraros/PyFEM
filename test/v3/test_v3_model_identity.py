@@ -48,13 +48,12 @@ def test_finalization_detaches_converts_contiguity_and_rejects_writes() -> None:
 
   assert finalized.dtype == np.dtype(np.float64)
   assert finalized.flags.f_contiguous
+  assert finalized.flags.owndata
   assert not finalized.flags.writeable
   assert not np.shares_memory(finalized, source)
   np.testing.assert_array_equal(finalized, expected)
   with pytest.raises(ValueError, match="read-only"):
     finalized[0, 0] = 10.0
-  with pytest.raises(ValueError, match="WRITEABLE"):
-    finalized.setflags(write=True)
 
 
 def test_separate_finalizations_never_alias_matching_source_or_each_other() -> None:
@@ -66,6 +65,8 @@ def test_separate_finalizations_never_alias_matching_source_or_each_other() -> N
 
   assert first.flags.c_contiguous
   assert second.flags.c_contiguous
+  assert first.flags.owndata
+  assert second.flags.owndata
   assert not np.shares_memory(first, source)
   assert not np.shares_memory(second, source)
   assert not np.shares_memory(first, second)

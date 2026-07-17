@@ -40,9 +40,7 @@ def finalize_array(
     subok=False,
   )
   owned.setflags(write=False)
-  published = owned.view()
-  published.setflags(write=False)
-  return published
+  return owned
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
