@@ -148,9 +148,9 @@ thread status are available.
 | Exact title | Thread | Status | Output |
 |---|---|---|---|
 | `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | Active | — |
-| `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Ready to integrate | `db486f5` |
-| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Ready to integrate | `c6527dd` |
-| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Ready to integrate | `168c49a` |
+| `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Integrated | `92bc87d` from `db486f5` |
+| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Repairing integration findings | `c6527dd` + pending |
+| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Repairing integration findings | `168c49a` + pending |
 
 ## Required combined evidence
 
@@ -182,3 +182,8 @@ integration decision; do not bridge it with a compatibility carrier.
   focused, Ruff, and v3-suite evidence; both await delegator review/integration.
 - 2026-07-17: P0-C (`168c49a`) reported complete with focused identity/provenance,
   Ruff, format, and v3-suite evidence; it awaits delegator review/integration.
+- 2026-07-17: P0-A integrated as `92bc87d`; the combined checkout has zero old
+  assembly imports, both Ruff gates pass, and v3 remains 130 passed/40 warnings.
+- 2026-07-17: integration review returned P0-B for redundant authored geometry
+  arity and unhashable-reference diagnostics, and P0-C for retained-array ownership;
+  both repairs remain inside their original path contracts.
