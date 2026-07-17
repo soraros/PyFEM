@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: P0-E integrated; R0-H spec and R0-I identity re-reviews active
+- Status: R0-H complete with one accepted blocker; P0-F spec repair next; R0-I active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -13,11 +13,12 @@
 
 ## Exact next safe action
 
-Consume and adjudicate the terminal callbacks from `R0-H` and `R0-I`; integrate any
-required disjoint repairs serially and repeat the affected critic. R0-G system-failed
-without an acceptable terminal report, so its partial observations are only leads
-that R0-I must reproduce independently. Dispatch no additional writer and do not
-start the model compiler until both active critics are green at one exact combined
+Commit the P0-F Horizon card and dispatch its bounded spec-diagnostic repair while
+R0-I completes the disjoint identity/storage review. Consume and adjudicate R0-I's
+terminal callback, then review and integrate required repairs serially and repeat
+each affected critic. R0-G system-failed without an acceptable terminal report, so
+its partial observations remain leads that R0-I must reproduce independently. Do
+not start the model compiler until both boundaries are green at one exact combined
 foundation commit.
 
 Blocked condition: a critic demonstrates an invariant failure that cannot be
@@ -230,8 +231,11 @@ combined foundation gates before any compiler packet.
 
 ### R0-H — Re-falsify the repaired canonical model boundary
 
-State: `ACTIVE` in task `019f711d-c79c-7652-96dc-f07e55fdb71b`, dispatched
+State: `COMPLETE` in task `019f711d-c79c-7652-96dc-f07e55fdb71b`, reviewed
 read-only from exact base `13c68e302cf8f4e0f7e211f8af46eff09c863368`.
+One blocker is accepted: exact integers beyond Python's decimal conversion limit
+normalize successfully but duplicate/reference/source diagnostics interpolate them
+with ordinary decimal rendering and leak raw `ValueError`.
 
 Review lens:
 
@@ -252,14 +256,65 @@ Review lens:
 Owned output: terminal review report and reproducible hostile probes only. No file
 edits, commits, merge, push, API expansion, or compiler work.
 
+Evidence and adjudication:
+
+- 35 focused spec tests passed in 0.76 seconds;
+- all 11 exact spec/source families, 27 hostile scalar subclasses, 13 hostile
+  collection slots, depth 5,000, cycles, deterministic fallback ordering, and a
+  complete post-normalization mutation sweep survived;
+- a valid 5,001-digit exact-integer ID normalized, while duplicate-ID,
+  invalid-node, and huge `SourceContext.line` diagnostics leaked raw `ValueError`
+  at the default 4,300-digit conversion limit; and
+- double reconstruction measured 1.251 seconds and 11.36 MiB peak, 2.37 times
+  retained memory, for 20,000 nodes, 5,000 cells, and 5,000 references. This remains
+  a nonblocking later measurement obligation.
+
+### P0-F — Total bounded exact-integer diagnostics
+
+State: `READY`; dispatch from the next exact committed ledger state.
+
+Outcome and invariant:
+
+- every exact integer already accepted as a spec ID, dimension, parameter, or
+  source line/column renders deterministically and with bounded output in every
+  normalization diagnostic;
+- large integers remain valid authored IDs where the existing contract permits
+  them; the repair must not impose an arbitrary ID limit or mutate Python's global
+  integer-string conversion setting; and
+- malformed or conflicting models still fail only as source-anchored
+  `ModelSpecValidationError`, never a raw decimal-conversion exception.
+
+Owned paths:
+
+- `pyfem/v3/spec/diagnostics.py`
+- `pyfem/v3/spec/normalize.py`
+- `test/v3/test_v3_model_spec.py`
+
+Required dangerous cases and evidence:
+
+- duplicate 5,001-digit node/block/cell/field/material/region IDs use one bounded,
+  stable representation and preserve diagnostic order;
+- unknown/duplicate huge node, cell, block, field, and material references never
+  invoke unbounded `repr`/`str` conversion;
+- huge exact `SourceContext.line` and `.column` values render safely when another
+  defect is reported, including nearest-trusted-source fallback;
+- ordinary small integer/string diagnostic text, 0D topology, block-local identity,
+  cross-block arity policy, and all P0-E hostile/detachment cases remain unchanged;
+- focused spec tests, both v3 Ruff configurations, focused format, `pytest -q
+  test/v3`, full `pytest -q`, `git diff --check`, and a clean worker worktree pass.
+
+Forbidden: new ID-range policy, global interpreter-setting changes, compiler/
+program/section work, double-reconstruction optimization, public exports,
+dependency/config changes, shared-document edits, merge, or push.
+
 ## Merge and continuation order
 
 1. Completed: review and integrate P0-A.
 2. Completed: review P0-B and P0-C independently against the Horizon Gate.
 3. Completed: integrate P0-B/P0-C, repair the six accepted original critic
    findings, and rerun combined v3 plus full repository tests.
-4. Active: P0-E is integrated and green under implementation gates; consume fresh
-   repaired-spec critic `R0-H` and replacement identity critic `R0-I`.
+4. Active: R0-H accepted one bounded diagnostic blocker; dispatch P0-F while
+   replacement identity critic R0-I completes, then repeat affected critics.
 5. Then dispatch the dependent compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
@@ -289,8 +344,9 @@ thread status are available.
 | `R0-D · identity/storage — repairs falsified` | `019f70a3-264c-7831-8509-a3ffbf9235f4` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Initial identity/storage critic | Failed to finish correctly; archived; no terminal report accepted |
 | `R0-G · identity/storage — repairs falsified` | `019f70b1-793c-7c90-a051-07911fff3134` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Exact R0-D replacement, same read-only lens | System-failed before terminal report; partial observations are unaccepted leads |
 | `P0-E · model spec — canonical tree owned` | `019f70b8-3e74-7d82-b27b-67991cf50e3c` | `47e94752e93b7424c73e4d2979bebbe0f7567291` | `pyfem/v3/spec/**`, focused spec tests | Complete; source `246114b`, integrated `108552d`; 35 focused, 183 v3, 372 full tests passed |
-| `R0-H · model spec — canonical boundary attacked` | `019f711d-c79c-7652-96dc-f07e55fdb71b` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Fresh read-only P0-E critic | Active; exact base confirmed; terminal callback required |
+| `R0-H · model spec — canonical boundary attacked` | `019f711d-c79c-7652-96dc-f07e55fdb71b` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Fresh read-only P0-E critic | Complete; 1 accepted exact-integer rendering blocker; 35 focused passed |
 | `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Active; terminal callback required |
+| `P0-F · model spec — integer diagnostics total` | pending dispatch | next committed ledger state | Bounded exact-integer diagnostic repair | Ready; repair round 0; direct callback required |
 
 ## Active watchdogs
 
@@ -315,7 +371,8 @@ Current combined evidence at
 - 372 full-repository tests passed with the same 44 warnings;
 - both v3 Ruff gates, focused format, and `git diff --check` passed; and
 - all accepted R0-A/R0-B/R0-C blockers are repaired under implementation gates;
-  R0-H and R0-I adversarial reports remain open before compiler integration.
+  R0-H accepted one new spec-diagnostic blocker for P0-F, and R0-I remains open
+  before compiler integration.
 
 ## Accepted later-phase obligations
 
@@ -328,9 +385,11 @@ Current combined evidence at
   accepted transitions from one base and separately identify trial candidates;
   the primitive alone is not transaction enforcement.
 - P0-E's preflight already constructs a detached canonical tree and
-  `_reconstruct_model` defensively copies it again. This preserves the ownership
-  contract but increases normalization peak allocation; measure it at compiler-scale
-  proof before optimizing, and retain hostile detachment tests through any change.
+  `_reconstruct_model` defensively copies it again. R0-H measured 1.251 seconds and
+  11.36 MiB peak for 20,000 nodes, 5,000 cells, and 5,000 references, with peak
+  memory 2.37 times retained. This preserves the ownership contract and is not a
+  foundation blocker; remeasure at compiler-scale proof before optimizing, and
+  retain hostile detachment tests through any change.
 
 ## Blocked condition
 
@@ -411,3 +470,8 @@ integration decision; do not bridge it with a compatibility carrier.
   (`019f711d-c79c-7652-96dc-f07e55fdb71b`) and R0-I from exact base
   `13c68e302cf8f4e0f7e211f8af46eff09c863368`; both confirmed that base and are
   active with disjoint spec and identity/storage lenses.
+- 2026-07-18: R0-H completed after one report-only resume from a system-erroring
+  finalization turn. Its broad hostile matrix passed, but exact integers beyond the
+  interpreter decimal limit leak raw `ValueError` in duplicate/reference/source
+  diagnostics. The finding is accepted for bounded P0-F repair; its measured double
+  reconstruction cost remains nonblocking.
