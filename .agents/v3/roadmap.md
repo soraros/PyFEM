@@ -1,5 +1,10 @@
 # v3 roadmap
 
+> **Superseded.** Do not continue this P0-P8 checklist. It records prototype
+> history and legacy breadth, but its completed boxes do not prove the ground-up
+> architecture. The active migration plan is
+> [design.md](design.md#13-migration-plan).
+
 Phased delivery toward v1 feature parity. Each phase exits when its skim parity tests pass (see [parity.md](parity.md) and [feature-parity.md](feature-parity.md)).
 
 ## P0 — Reference linear patch (done)

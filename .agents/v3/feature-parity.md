@@ -1,5 +1,9 @@
 # v1 → v3 feature parity matrix
 
+> **Requirements inventory only.** This file describes legacy breadth; it is not an
+> implementation order or an architecture acceptance test. The active priorities
+> and proof gates are in [design.md](design.md).
+
 Legacy PyFEM (`pyfem/`, excluding `pyfem/v3/`) vs the typed v3 core. Status: **done** | **next** (current phase) | **deferred**.
 
 Phases **P0–P8** are defined in [roadmap.md](roadmap.md). Parity skims live under `skims/<case>/`; see [parity.md](parity.md).

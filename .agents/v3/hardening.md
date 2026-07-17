@@ -1,5 +1,9 @@
 # Phase hardening (pass B)
 
+> **Historical process and benchmark evidence.** It is not the active design or
+> execution plan. Follow [design.md](design.md), especially its dangerous-case and
+> performance-proof policies, before applying any optimization described here.
+
 **Pass A** ([WORKFLOW.md](WORKFLOW.md)): deliver a roadmap checkbox with skim parity on book-scale examples.
 
 **Pass B** (this doc): make that work credible at the **next scale**—larger meshes, higher DOF count, repeated solves, or memory pressure—without changing the parity contract unless the plan says so.

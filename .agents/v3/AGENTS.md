@@ -1,58 +1,86 @@
 # PyFEM v3 agent guide
 
-Branch `v3`: typed, data-oriented FEM core under `pyfem/v3/`. Legacy `pyfem/` remains on Python 3.11+ with 4-space Ruff; **v3 requires Python 3.13+** and uses 2-space Ruff.
+Branch `v3` is a ground-up, data-oriented finite-element rewrite under
+`pyfem/v3/`. Legacy `pyfem/` is a requirements and numerical-reference source, not
+an architecture to reproduce.
 
-## Setup
+## Read first
+
+Read [design.md](design.md) before planning or editing v3. It is authoritative for
+the architecture, invariants, acceptance suite, and migration order.
+
+The current `pyfem/v3` code is an executable prototype. Its kernels, tests, and
+benchmarks may be reused when they satisfy the new contracts, but these current
+types are explicitly not architectural constraints:
+
+- `ProblemDefinition`
+- `LoadedProblem`
+- shape/node-count formulation dispatch
+- global material/solver strings
+- fixed-width `group_props`
+- current solver and result APIs
+
+Do not continue the old P0-P8 checklist. Begin with Phase 0/1 in
+[design.md](design.md#13-migration-plan), and prefer a complete, falsifiable vertical
+slice over feature breadth.
+
+## Platform baseline
+
+V3 requires Python 3.13+ and uses 2-space Ruff. This branch's packaging,
+dependency, CI, and Intel-Mac compatibility work is intentional and separate from
+the architecture reset.
+
+The current Intel baseline does not install PySide6. The legacy `pyfem-gui`
+entrypoint therefore is not a development gate and will fail unless GUI dependencies
+are installed separately; resolve that later as an explicit optional-dependency
+decision rather than silently restoring it to the core environment.
 
 ```bash
-uv sync --group v3    # jupyter stack (3.13+ only)
-uv run pytest test/v3 -q
-uv run ruff check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+uv sync
+.venv/bin/python -m pytest -q test/v3
+.venv/bin/ruff check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+.venv/bin/ruff check test/v3 --config test/v3/ruff.toml
 ```
 
-## Public API
+Run the full suite when code changes cross the legacy/v3 boundary:
 
-- `pyfem.v3.load_problem(path)` → `LoadedProblem` (metadata + `problem`)
-- `pyfem.v3.solve_linear(loaded)` — global displacement `state`
-- `pyfem.v3.pack_problem(...)` — build `ProblemDefinition` from mesh/DOF data
+```bash
+.venv/bin/python -m pytest -q
+```
 
-Importing `pyfem.v3` on Python &lt; 3.13 raises `ImportError`.
+## Working rules
 
-## Architecture
+- Separate authored specification, compiled model, compiled program, physical
+  state, solver workspace, and result by meaning and lifetime.
+- Compiler output owns read-only arrays and never aliases caller-owned inputs.
+- Formulation, topology, field layout, material kernel, quadrature, and state
+  schema are explicit; never infer physics from array shape.
+- Dispatch once per homogeneous contribution block; numeric kernels receive plain
+  arrays/scalars and do not own accepted state.
+- Separate model-owned physical state from program/request-owned evolution and
+  interaction state, then commit their composed trial atomically or discard it.
+- Compile model/program contribution topology separately and compose the final
+  backend/reduction plan once in `PreparedAnalysis` when structure is fixed. Add
+  load contributions; never silently overwrite them.
+- Require dangerous-case tests and an independent reference before optimizing.
+- Preserve source/entity identity and result provenance through compilation,
+  batching, state evolution, and output projection.
 
-| Layer | Location | Notes |
-|-------|----------|--------|
-| Schema | `types.py` | `ProblemDefinition` (`NamedTuple`, arrays only), `LoadedProblem` (metadata) |
-| I/O | `io/dat.py`, `io/toml.py`, `io/legacy_pro.py` | Literal parsing only (no `eval`) |
-| Registry | `registry.py` | Legacy `.pro` type strings → implementations |
-| FEM math | `fem/quadrature.py`, `fem/shapes.py`, `fem/kinematics.py`, `fem/element.py` | `@njit` Gauss rules, N, B, K_e = ∫ Bᵀ C B; `prange` only on quadrature in `element.py` |
-| Assembly | `fem/assembly.py` | Batched element stiffness + serial `@njit` COO scatter |
-| Solver | `solver/linear.py`, `solver/constraints.py` | SciPy `spsolve` + `coo_array`; native prescribed BCs and MPC ties |
+## Documentation map
 
-`ProblemDefinition` is a **`NamedTuple`** of `F64`/`I32` fields — pass it to `@njit` directly or unpack arrays. No jitclass wrapper.
+| Status | Files | Use |
+|---|---|---|
+| Authoritative | [design.md](design.md) | Architecture and migration contract |
+| Active tooling | [conventions.md](conventions.md) | Style, typing, Ruff, tests |
+| Numerical evidence | [parity.md](parity.md), [scaling.md](scaling.md), [plane_strain.md](plane_strain.md), [structural.md](structural.md), [tangent_assembly.md](tangent_assembly.md) | Oracles and historical measurements |
+| Requirements inventory | [feature-parity.md](feature-parity.md) | Legacy breadth only; not an implementation order |
+| Historical/superseded | [architecture.md](architecture.md), [roadmap.md](roadmap.md), [WORKFLOW.md](WORKFLOW.md), [hardening.md](hardening.md) | Understand the prototype; do not execute as a plan |
 
-## Conventions
+## Decision discipline
 
-- PEP 8 `snake_case` / `PascalCase`; legacy names only in `registry.py`
-- Annotate arrays with **`F64`** / **`I32`**; use `np.float64` / `np.int32` for `dtype=`
-- Ruff: `pyfem/v3/ruff.toml` (`indent-width = 2`, `target-version = "py313"`)
-- **Numerical kernels:** short math-aligned names (`ke`, `lam`, `bl`, `du`) so lines stay dense; descriptive names at public/I/O boundaries — see [conventions.md](conventions.md#short-names-in-numerical-kernels)
-
-## Parity (skims)
-
-| Layer | File |
-|-------|------|
-| A | `skims/<case>/skim.pro` → legacy `InputRead` |
-| B | `skims/<case>/problem.toml` → v3 canonical |
-| C | `ProblemDefinition` NamedTuple |
-
-Skims: `patch_test8`, `patch_test8_loaded`, `patch_test4`, `patch_test3`, `patch_test8_mpc`, `patch_test8_plane_strain`, `patch_test8_3d`. Session kickoff: `Work on the next item per .agents/v3/roadmap.md` — see [WORKFLOW.md](WORKFLOW.md).
-
-## Notebooks
-
-- Jupytext: `py:percent` ↔ `ipynb` ([`tool.jupytext`](../pyproject.toml))
-- Example: [`notebooks/v3/patch_test8.py`](../../notebooks/v3/patch_test8.py)
-
-## Roadmap
-
-See [roadmap.md](roadmap.md).
+If implementation evidence contradicts the design, stop and record the dangerous
+case, competing design, falsifiable consequence, and updated tests in the
+[design amendment log](design.md#16-design-amendment-log) before changing an
+invariant.
+Green legacy parity alone is not sufficient evidence: it proves a reference answer
+for a skim, not general representation, state safety, or solver compatibility.

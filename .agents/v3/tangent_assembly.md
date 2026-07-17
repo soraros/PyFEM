@@ -1,5 +1,8 @@
 # Tangent assembly scaling notes
 
+> **Historical prototype measurements.** This file is evidence for later migration,
+> not an active tangent/state contract. See [design.md](design.md).
+
 Pass B hardening for P3 `SolverState` + tangent / internal-force assembly. Pass A parity: `test/v3/test_tangent_assembly.py` vs legacy `assembleTangentStiffness`. **Do not extrapolate from 5-element skims alone.**
 
 Hardening workflow: [hardening.md](hardening.md). Linear Q8 baseline: [scaling.md](scaling.md).
@@ -58,7 +61,7 @@ At 16×16 and below, `tangent_ms` ≈ `linear_ms` (single `K_e` pass). At 64×64
 | Test | Role |
 |------|------|
 | `test/v3/test_tangent_assembly.py` | Pass A: legacy parity; fused vs separate `f_int` path |
-| `test/v3/test_tangent_scale.py` | 2×2 / 8×8 programmatic assemble; context `f_int` vs full tangent |
+| `test/v3/test_refined_patch.py` | 2×2 / 8×8 programmatic assemble; context `f_int` vs full tangent |
 
 ## Accuracy
 

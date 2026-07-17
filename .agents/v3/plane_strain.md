@@ -1,5 +1,9 @@
 # Plane-strain scaling notes
 
+> **Historical prototype measurements.** Reuse the fixtures and numerical evidence,
+> not the thresholds or architecture claims. See
+> [design.md](design.md#12-performance-proof-policy).
+
 Pass B hardening for P2 plane strain. Pass A parity: `patch_test8_plane_strain` skim vs legacy. **Do not extrapolate from 5-element skims alone.**
 
 Hardening workflow: [hardening.md](hardening.md). P1 Q8 scale baseline: [scaling.md](scaling.md).
@@ -49,10 +53,9 @@ Skim spot-check: `patch_test8_plane_strain` solve ok, `||u|| ≈ 9.53×10⁻⁴`
 
 | Test | Role |
 |------|------|
-| `test/v3/test_parity_patch_test8_plane_strain.py` | Pass A: v3 vs legacy on book mesh |
+| `test/v3/test_parity_linear.py` | Pass A: v3 vs legacy on book mesh |
 | `test/v3/test_plane_strain.py` | D matrix vs closed form |
-| `test/v3/test_plane_strain_scale.py` | 2×2 and 8×8 programmatic assemble + solve |
-| `test/v3/test_refined_patch.py` | Plane-strain stiffness diagonal, factorized 2×2 |
+| `test/v3/test_refined_patch.py` | 2×2/8×8 programmatic solve, stiffness diagonal, factorized context |
 
 ## Accuracy
 

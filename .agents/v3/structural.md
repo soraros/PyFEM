@@ -1,5 +1,8 @@
 # Structural scaling notes
 
+> **Historical prototype measurements.** This file is evidence for later migration,
+> not an active design or implementation order. See [design.md](design.md).
+
 Pass B hardening for P4 Truss/Spring + Riks arc-length. Pass A parity: `shallow_truss_riks` skim vs legacy. **Do not extrapolate from the 3-element book mesh alone.**
 
 Hardening workflow: [hardening.md](hardening.md). Continuum tangent baseline: [tangent_assembly.md](tangent_assembly.md).

@@ -1,5 +1,9 @@
 # v3 architecture
 
+> **Historical prototype snapshot.** This carrier and flow are superseded by
+> [design.md](design.md). Keep this file only as evidence of the runnable prototype;
+> do not extend `ProblemDefinition` or use this document to plan new work.
+
 ## Data flow
 
 ```mermaid

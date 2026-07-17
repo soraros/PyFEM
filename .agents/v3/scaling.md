@@ -1,5 +1,9 @@
 # v3 scaling notes
 
+> **Historical prototype measurements.** Reuse the fixtures and evidence, not the
+> thresholds or architecture claims. New performance proof follows
+> [design.md](design.md#12-performance-proof-policy).
+
 How to interpret performance and memory for the P1 linear 2D stack. **Do not extrapolate from 5-element parity skims alone.**
 
 Hardening workflow for other phases: [hardening.md](hardening.md).

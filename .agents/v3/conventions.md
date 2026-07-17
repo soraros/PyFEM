@@ -1,121 +1,90 @@
 # v3 coding conventions
 
-## Formatting
+These tooling and readability conventions are active. [design.md](design.md) owns
+architecture, state, kernel/backend, and performance policy; no convention below
+may recreate a prototype-specific carrier or dispatch rule.
 
-- **Indentation:** 2 spaces under `pyfem/v3/` and `test/v3/` only.
-- **Ruff:** use nested config `pyfem/v3/ruff.toml` (extends repo root).
+## Formatting and checks
+
+- Use 2-space indentation under `pyfem/v3/` and `test/v3/` only.
+- Use `pyfem/v3/ruff.toml` for production plus v3 tests.
+- Use `test/v3/ruff.toml` to verify the test/benchmark-specific policy.
 
 ```bash
-uv run ruff check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
-uv run ruff format pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+.venv/bin/ruff check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+.venv/bin/ruff check test/v3 --config test/v3/ruff.toml
+.venv/bin/ruff format pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
 ```
 
-## Naming (PEP 8)
+## Naming
 
 | Kind | Style | Example |
-|------|--------|---------|
-| Module | `snake_case` | `small_strain_quad8.py` |
-| Function | `snake_case` | `assemble_stiffness` |
-| Class | `PascalCase` | `ProblemDefinition` |
-| Constant | `UPPER_SNAKE` | `DOF_TYPES_2D` |
-| Legacy `.pro` names | Only in `registry.py` | `"SmallStrainContinuum"` |
+|---|---|---|
+| Module | `snake_case` | `assembly_plan.py` |
+| Function | `snake_case` | `compile_program` |
+| Semantic type | `PascalCase` | `CompiledModel` |
+| Constant | `UPPER_SNAKE` | `DEFAULT_TOLERANCE` |
+| Authored field/component | descriptive lower case | `displacement`, `temperature` |
 
-Do not introduce Java-style names (`ContElem`) in public v3 APIs.
+Legacy `.pro` names such as `SmallStrainContinuum` belong only in input adapters or
+an explicit compatibility registry. Do not leak them into compiled or solver APIs.
 
-## Typing
+Use descriptive names at public, compiler, state, and I/O boundaries. Standard
+mathematical names such as `u`, `du`, `k`, `r`, `b`, `sigma`, or `lambda` are welcome
+inside a short numeric kernel when their meaning is immediate from the formula.
+Do not shorten semantic carrier fields or provenance names.
 
-- Annotate public functions and dataclass fields.
-- Use **`F64`** / **`I32`** (`NDArray[np.float64]` / `NDArray[np.int32]`) from `types.py` for array annotations.
-- **`ProblemDefinition`**: `typing.NamedTuple` of arrays only (jitable bundle).
-- **`LoadedProblem`**: `dataclass` for metadata (strings, paths, registry).
-- `frozen=True` on other immutable value objects (`PlaneStressMaterial`, `PlaneStrainMaterial`, `IsotropicMaterial`, `PrescribedDof`).
-- Ship `pyfem/v3/py.typed` when the surface stabilizes.
+## Typing and arrays
 
-## Python version
+- Annotate public functions, immutable descriptors, compiled carriers, and state
+  transitions.
+- Use NumPy typing aliases consistently within a numeric module. Existing `F64` and
+  `I32` aliases are prototype conveniences, not a mandate to narrow every compiled
+  index to 32 bits.
+- Production floating-point state is `float64` initially. The compiler must validate
+  any selected index dtype before conversion.
+- Compiler-owned array carriers use identity equality (`eq=False` or equivalent),
+  structural freezing, owned/non-aliased storage, and read-only arrays.
+- Do not use a frozen dataclass as evidence that contained arrays are immutable.
+- Keep `pyfem/v3/py.typed` and make public type contracts precise as the new surface
+  stabilizes.
 
-- **v3 requires Python 3.13+** (`pyfem.v3` raises on import otherwise).
-- Legacy `pyfem` stays at project minimum 3.11.
-- v3 dependency group uses `python_version >= '3.13'` markers.
+## Python and dependencies
 
-## Dependencies
+- The project and v3 development environment require Python 3.13+ on this branch.
+- Install the committed environment with `uv sync`.
+- Do not add a dependency for convenience inside a numeric kernel. Add runtime or
+  optional dependencies only with a public-flow need and an explicit packaging
+  decision.
+- PySide6 is not in the current Intel development baseline; GUI availability is not
+  a v3 core gate.
 
-- Install v3 stack: `uv sync --group v3` (`jupytext`, `ipykernel`, `ipympl`, `ipywidgets`).
+## Numeric code
 
-## Style
+- Begin with a clear NumPy or deliberately simple reference implementation that can
+  serve as an oracle.
+- Dispatch once in Python per explicit homogeneous contribution block. Never infer
+  formulation, topology, field layout, or material behavior from rank/node count in
+  a kernel.
+- Numeric kernels accept arrays/scalars/output buffers; they do not inspect file
+  metadata, string registries, dictionaries, or a whole compiled model.
+- Keep accepted physical state out of kernels and scratch buffers. Trial output has
+  one explicit owner.
+- Use Numba, fusion, chunking, parallel loops, and hardware thresholds only after
+  the public-flow measurement required by
+  [design.md](design.md#12-performance-proof-policy).
+- A few repeated formula lines at a JIT boundary are preferable to a dynamic
+  abstraction that obscures the mathematical operation, but duplication is not an
+  excuse for inconsistent conventions or state semantics.
 
-- Plain-Python FEM kernels use vectorized NumPy (`einsum`, broadcasting).
-- ``@njit`` kernels use the nopython subset: 2D ``@``, slice assign inline (not
-  ``einsum``); one ``prange`` site per top-level stiffness call — fused Q8 integrates
-  ``B`` inside the element loop; Quad4/Tria3 still use staged kinematics + ``prange``
-  on integration; COO scatter stays serial ``@njit`` with ``range``.
-- Dev Numba benchmarks (not pytest-collected): ``test/v3/_bench_numba_stiffness.py``,
-  ``test/v3/_bench_prange_investigation.py``, ``test/v3/_bench_solve_scale.py`` — run
-  manually with ``uv run python ...``. See [scaling.md](scaling.md).
-- **Scale-first performance:** optimize for mid-large meshes; no small-problem fallbacks
-  or dual code paths without proven large-scale need ([scaling.md](scaling.md)).
-- Name functions after the quantity they return (`strain_displacement`, `plane_stress_matrix`).
-- Keep setup/I/O in plain Python; only numerical kernels need to be dense and array-oriented.
-- Do not add v3-only deps to the default runtime list until v3 is promoted.
+## Tests and notebooks
 
-### Numba-safe abstraction
-
-Unify and deduplicate code **without** patterns that block future `@njit` fusion or inlining.
-
-**Python-only shell** (OK to use dicts, strings, dataclasses, `Callable`, dynamic `*args`):
-
-- I/O, registry, `make_loaded`, `CachedLinearSystem`, COO buffer allocation, group loops in `assembly.py`.
-- Dispatch from mesh metadata to a **fixed** kernel by rank / nodes-per-element / group kind.
-
-**Inside or adjacent to `@njit` hot paths** (must stay nopython-safe):
-
-- Array-only arguments; no closures, no dict-of-callables, no `Callable` parameters.
-- Shared integration: one staged helper (e.g. `_integrate_btcb_batched`) called directly from each element kernel.
-- Element-type dispatch: **`if` / `elif` on literal rank and node count**, calling `@njit` functions by name — not a runtime map of callables.
-- State gather → kernel: allocate `element_states`, call `_gather_element_states`, then call the batched kernel **directly** (no generic `batch_fn(...)` wrapper).
-
-**Rule of thumb:** if a refactor would need object mode or `numba.extending` to compile, keep the abstraction in the Python shell and duplicate a few lines at the `@njit` boundary instead.
-
-### Short names in numerical kernels
-
-In `@njit` FEM math and other hot, array-oriented code, **prefer short variable names** when they are unambiguous or match standard notation. The goal is **one line, dense with meaning** — avoid breaking expressions across lines just to satisfy long PEP 8 names.
-
-| Context | Prefer | Over |
-|---------|--------|------|
-| Element stiffness / force | `ke`, `fe`, `k`, `f` | `element_stiffness`, `internal_force_local` |
-| Local / global state | `a`, `u`, `da` | `element_displacement`, `displacement_increment` |
-| Strain / stress scalars | `du`, `dv`, `eps`, `sig` | `axial_strain_increment`, `cauchy_stress` |
-| Geometry | `l0`, `dx`, `dy` | `reference_length`, `delta_x` |
-| Load / arc-length | `lam`, `dlam`, `fhat` | `load_factor`, `external_load_reference` |
-| B-matrix / shape | `bl`, `N`, `dN` | `strain_displacement_row`, `shape_function` |
-| Loop indices | `e`, `gp`, `i`, `j` | `elem_index`, `gauss_point` |
-
-**Where this applies:** inside `fem/*` kernels, assembly inner loops, Newton/Riks increment math, and staged helpers that mirror textbook symbols.
-
-**Where it does not apply:** public APIs, I/O, dataclass fields, registry keys, and test names — keep those descriptive (`assemble_tangent_loaded`, `ProblemDefinition`, `build_truss_fan`).
-
-**Rule of thumb:** if a reviewer would recognize the symbol from FEM texts (B, K, u, λ, ε, σ) or from the immediately surrounding three lines, shorten it. If the name would need a comment to decode, spell it out.
-
-Example (good — matches math, stays on one line):
-
-```python
-kl = youngs_modulus * area * l0 * np.outer(bl, bl)
-f_bar = l0 * sigma * area * bl
-```
-
-Example (avoid in kernels — forces needless wraps):
-
-```python
-linear_stiffness_matrix = (
-  youngs_modulus * cross_section_area * reference_length * np.outer(strain_displacement_row, strain_displacement_row)
-)
-```
-
-## Notebooks
-
-- Jupytext config in root `pyproject.toml` (`py:percent` ↔ `ipynb`).
-- Notebooks live under `notebooks/v3/`.
-
-## Tests
-
-- Parity tests live in `test/v3/` and compare against legacy `InputRead` + `LinearSolver`.
-- Tolerances come from `skims/<case>/parity.toml`.
+- Put v3 tests under `test/v3/`; name dangerous cases after the invariant they
+  disprove or protect.
+- Legacy parity skims are numerical oracles, not target API/schema fixtures.
+- Every optimized kernel keeps a reference comparison and every new architecture
+  boundary gets a counterexample test.
+- Keep diagnostic benchmarks out of ordinary pytest collection and report hardware,
+  cold/warm preparation, public flow, memory, and verification status.
+- Jupytext configuration lives in root `pyproject.toml`; v3 notebooks live under
+  `notebooks/v3/` and exercise public APIs rather than private benchmark paths.

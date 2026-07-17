@@ -1,5 +1,9 @@
 # v3 session workflow
 
+> **Superseded workflow.** This Cursor-era feature/hardening loop is retained for
+> history only. New work starts from [design.md](design.md) and the active rules in
+> [AGENTS.md](AGENTS.md); do not select the next item from the old roadmap.
+
 Plan files live in the repo—not in chat. Branch: `v3`. Legacy `pyfem/` on `main` is out of scope unless the plan says otherwise.
 
 ## Plan files (pick one per session)
