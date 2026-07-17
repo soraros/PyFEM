@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from pyfem.v3.assembly import assemble_tangent_loaded
+from pyfem.v3._prototype_assembly import assemble_tangent_loaded
 from pyfem.v3.io.load_ramp import load_factor, n_load_steps
 from pyfem.v3.registry import (
   resolve_element_type,

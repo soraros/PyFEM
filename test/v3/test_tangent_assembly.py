@@ -16,7 +16,7 @@ if sys.version_info < (3, 13):
 from _legacy_parity import legacy_state, legacy_tangent_at_state
 
 from pyfem.v3 import load_problem, solve_linear
-from pyfem.v3.assembly import assemble_loaded, assemble_tangent_loaded
+from pyfem.v3._prototype_assembly import assemble_loaded, assemble_tangent_loaded
 from pyfem.v3.solver.constraints import build_prescribed_constraints
 from pyfem.v3.solver.state import initial_solver_state
 

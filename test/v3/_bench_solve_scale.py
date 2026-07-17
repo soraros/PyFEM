@@ -21,7 +21,7 @@ from _bench_common import (
 from pyfem.fem.Assembly import assembleExternalForce, assembleTangentStiffness, prepare
 from pyfem.io.InputReader import InputRead
 from pyfem.v3 import load_problem, solve_linear
-from pyfem.v3.assembly import assemble_loaded
+from pyfem.v3._prototype_assembly import assemble_loaded
 from pyfem.v3.mesh.refined_patch import build_uniform_q8_loaded
 from pyfem.v3.solver.context import prepare_cached_linear
 

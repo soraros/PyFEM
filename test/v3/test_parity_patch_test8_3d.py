@@ -22,7 +22,7 @@ from _legacy_parity import (
 )
 
 from pyfem.v3 import load_problem, solve_linear
-from pyfem.v3.assembly import assemble_loaded
+from pyfem.v3._prototype_assembly import assemble_loaded
 from pyfem.v3.fem.element import hex8_stiffness, tet4_stiffness
 from pyfem.v3.materials.isotropic import isotropic_matrix
 from pyfem.v3.types import LoadedProblem

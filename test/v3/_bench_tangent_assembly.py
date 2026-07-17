@@ -12,7 +12,7 @@ if sys.version_info < (3, 13):
 from _bench_common import rss_mb, run_q8_patch_sweep, timeit_ms
 
 from pyfem.v3 import load_problem, solve_linear
-from pyfem.v3.assembly import assemble_loaded, assemble_tangent_loaded
+from pyfem.v3._prototype_assembly import assemble_loaded, assemble_tangent_loaded
 from pyfem.v3.mesh.refined_patch import build_uniform_q8_loaded
 from pyfem.v3.solver.context import prepare_cached_linear
 

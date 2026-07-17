@@ -41,7 +41,7 @@ def test_cantilever8_tangent_matches_legacy_at_converged_state() -> None:
   loaded = load_problem(SKIM_PRO)
   state = solve_nonlinear(loaded).state
   legacy_k, legacy_fint = legacy_tangent_at_state(SKIM_PRO, state)
-  from pyfem.v3.assembly import assemble_tangent_loaded
+  from pyfem.v3._prototype_assembly import assemble_tangent_loaded
 
   tangent = assemble_tangent_loaded(loaded, state)
   v3_k = tangent.stiffness.tocoo()

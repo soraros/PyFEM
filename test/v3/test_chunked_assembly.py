@@ -12,7 +12,7 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
-from pyfem.v3.assembly import assemble_linear_system
+from pyfem.v3._prototype_assembly import assemble_linear_system
 from pyfem.v3.mesh import build_dof_map
 from pyfem.v3.mesh.refined_patch import build_uniform_q8_patch
 from pyfem.v3.pack import pack_problem

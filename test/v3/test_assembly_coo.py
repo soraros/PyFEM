@@ -16,7 +16,7 @@ if sys.version_info < (3, 13):
 from _legacy_parity import legacy_stiffness_coo
 
 from pyfem.v3 import load_problem
-from pyfem.v3.assembly import assemble_loaded
+from pyfem.v3._prototype_assembly import assemble_loaded
 
 ROOT = Path(__file__).resolve().parents[2]
 

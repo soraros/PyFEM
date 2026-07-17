@@ -13,7 +13,7 @@ if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
 from pyfem.v3 import load_problem, solve_riks
-from pyfem.v3.assembly import assemble_tangent_loaded
+from pyfem.v3._prototype_assembly import assemble_tangent_loaded
 from pyfem.v3.mesh.truss_fan import build_truss_fan, build_truss_fan_loaded
 
 ROOT = __import__("pathlib").Path(__file__).resolve().parents[2]

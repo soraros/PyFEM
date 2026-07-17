@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from pyfem.v3.assembly import (
+from pyfem.v3._prototype_assembly import (
   assemble_linear_system,
   assemble_loaded,
   assemble_tangent_loaded,

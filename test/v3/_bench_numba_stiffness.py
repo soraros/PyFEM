@@ -170,7 +170,7 @@ def main() -> None:
     )
 
   print("\n=== End-to-end assembly (patch_test8, 5 elems) ===")
-  from pyfem.v3.assembly import assemble_loaded
+  from pyfem.v3._prototype_assembly import assemble_loaded
 
   loaded_full = load_problem("skims/patch_test8/problem.toml")
   for _ in range(3):

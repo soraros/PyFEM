@@ -9,7 +9,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import factorized
 
-from pyfem.v3.assembly import assemble_linear_system, assemble_loaded
+from pyfem.v3._prototype_assembly import assemble_linear_system, assemble_loaded
 from pyfem.v3.registry import resolve_solver_type
 from pyfem.v3.solver.constraints import (
   PrescribedConstraints,
