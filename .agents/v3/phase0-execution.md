@@ -1,6 +1,6 @@
 # Phase 0/1 execution state
 
-- Status: first-chunk foundation integrated; adversarial review next
+- Status: first-chunk foundation integrated; adversarial review active
 - Owner: delegating/integration thread
 - Design authority: [design.md](design.md)
 - Method: [refactor_playbook.md](refactor_playbook.md)
@@ -152,6 +152,8 @@ thread status are available.
 | `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Integrated | `92bc87d` from `db486f5` |
 | `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Integrated | `da1e60f` + `ba466cd` |
 | `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Integrated | `d211afa` + `0834013` |
+| `R0-A · model spec — semantic gaps attacked` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | Active | — |
+| `R0-B · identity/storage — invariants attacked` | `019f7087-61f0-71e0-9082-122e7ea75894` | Active | — |
 
 ## Required combined evidence
 
@@ -200,3 +202,6 @@ integration decision; do not bridge it with a compatibility carrier.
 - 2026-07-17: integrated corrected P0-C as `d211afa` + `0834013` and corrected
   P0-B as `da1e60f` + `ba466cd`; combined focused, v3, full-suite, Ruff, and format
   gates pass. Adversarial review is next; compiler integration is not yet authorized.
+- 2026-07-17: dispatched independent Sol/max critics R0-A and R0-B from `2bda241`
+  with separate spec-semantics and identity/ownership attack lenses and direct
+  terminal callbacks. No polling automation is active.
