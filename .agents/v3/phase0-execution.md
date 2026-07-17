@@ -1,11 +1,12 @@
 # Phase 0/1 execution state
 
-- Status: foundation critic repairs active; compiler gate closed
+- Status: foundation repairs integrated; adversarial re-review next
 - Owner: delegating/integration thread
 - Design authority: [design.md](design.md)
 - Method: [refactor_playbook.md](refactor_playbook.md)
 - Dispatch base: `c75cbf3` (`v3`)
 - Integrated foundation: `ba466cd` (`v3`)
+- Critic-repair head: `f2a0cd2` (`v3`)
 
 ## Outcome and invariant
 
@@ -150,7 +151,7 @@ thread status are available.
 |---|---|---|---|
 | `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | Active | — |
 | `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | Integrated | `92bc87d` from `db486f5` |
-| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Repairing critic findings | `da1e60f` + `ba466cd` + pending |
+| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | Integrated; awaiting re-review | `f2a0cd2` |
 | `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | Integrated; awaiting re-review | `e1d7fe7` |
 | `R0-A · model spec — semantic gaps attacked` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | Complete | 3 accepted blockers |
 | `R0-B · identity/storage — invariants attacked` | `019f7087-61f0-71e0-9082-122e7ea75894` | Complete | 3 accepted blockers |
@@ -165,14 +166,14 @@ thread status are available.
 - disconfirming review of identity, caller aliasing, explicit topology, and
   prototype-import quarantine before the integration packet begins.
 
-Current combined evidence at `ba466cd`:
+Current combined evidence at `f2a0cd2`:
 
-- 21 focused foundation tests passed;
-- 151 v3 tests passed with 40 pre-existing SciPy warnings;
-- 340 full-repository tests passed with the same 40 warnings;
+- 41 focused foundation tests passed;
+- 171 v3 tests passed with 40 pre-existing SciPy warnings;
+- 360 full-repository tests passed with the same 40 warnings;
 - both v3 Ruff gates and focused format checks passed; and
-- R0-A/R0-B found six accepted Phase-0 blockers; their bounded repairs and repeat
-  adversarial review are the open gate before compiler integration.
+- the six accepted R0-A/R0-B blockers are repaired; fresh adversarial re-review
+  from one combined head is the open gate before compiler integration.
 
 ## Accepted later-phase obligations
 
@@ -227,3 +228,6 @@ integration decision; do not bridge it with a compatibility carrier.
 - 2026-07-17: integrated the corrected P0-C boundary as `e1d7fe7`; 18 focused
   identity/provenance tests, 157 combined v3 tests, both Ruff gates, and format pass.
   Re-review will start from the final combined P0-B/P0-C repair head.
+- 2026-07-17: integrated corrected P0-B canonicalization/topology as `f2a0cd2`;
+  the combined repair head passes 41 focused, 171 v3, and 360 repository tests plus
+  both Ruff gates and format. Fresh R0 spec and identity reviews are next.
