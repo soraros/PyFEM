@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: disjoint P0-F spec and P0-G identity/storage repairs active
+- Status: P0-F integrated; P0-G identity/storage repair active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -8,17 +8,19 @@
 - Supporting structural method: [refactor_playbook.md](refactor_playbook.md)
 - Original dispatch base: `c75cbf3523349deb40bd2b07de7959e7606c3b1f`
 - Integrated foundation implementation: `108552ddd3382163a0e15c2fef7ca34e75f974fd`
+- Integrated exact-integer diagnostic repair: `461a8a85de622820eb627a24b8e53749489d020a`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
 - Active milestone: `I0 · foundations — combined proof`
 
 ## Exact next safe action
 
-Commit the P0-G Horizon card and dispatch its bounded identity/storage repair while
-P0-F continues on the disjoint spec boundary. Review and integrate both commits
-serially, rerun the combined gates, then repeat R0-H and R0-I from one exact repaired
-head. R0-G system-failed without an acceptable terminal report; R0-I independently
-reproduced and classified its useful leads. Do not start the model compiler until
-both repeated critics are green at one exact combined foundation commit.
+Review and integrate P0-G's bounded identity/storage repair after its direct
+callback, rerun the combined gates, then repeat the spec and identity/storage
+critics from one exact repaired head. P0-F is integrated and green at its focused,
+static, and v3 gates. R0-G system-failed without an acceptable terminal report;
+R0-I independently reproduced and classified its useful leads. Do not start the
+model compiler until both repeated critics are green at one exact combined
+foundation commit.
 
 Blocked condition: a critic demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -280,8 +282,10 @@ Evidence and adjudication:
 
 ### P0-F — Total bounded exact-integer diagnostics
 
-State: `IMPLEMENTING` in task `019f7136-c2f1-77b2-81bb-f9aa41627a92`,
-dispatched from exact base `f9e1867a2c458531b61fd3d8e5107445c0229733`.
+State: `COMPLETE` in task `019f7136-c2f1-77b2-81bb-f9aa41627a92`,
+source `c0b3c578e6641cad428244065221170136534b51` from exact base
+`f9e1867a2c458531b61fd3d8e5107445c0229733`, reviewed and integrated as
+`461a8a85de622820eb627a24b8e53749489d020a`.
 
 Outcome and invariant:
 
@@ -413,8 +417,9 @@ shared-document/config/dependency edits, merge, or push.
 2. Completed: review P0-B and P0-C independently against the Horizon Gate.
 3. Completed: integrate P0-B/P0-C, repair the six accepted original critic
    findings, and rerun combined v3 plus full repository tests.
-4. Active: P0-F repairs the R0-H diagnostic blocker; R0-I accepted five disjoint
-   identity/storage blockers for P0-G. Integrate both serially, then repeat critics.
+4. Active: P0-F repaired the R0-H diagnostic blocker and is integrated; R0-I
+   accepted five disjoint identity/storage blockers for P0-G. Integrate P0-G, then
+   repeat both critics from one exact combined head.
 5. Then dispatch the dependent compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
@@ -446,7 +451,7 @@ thread status are available.
 | `P0-E · model spec — canonical tree owned` | `019f70b8-3e74-7d82-b27b-67991cf50e3c` | `47e94752e93b7424c73e4d2979bebbe0f7567291` | `pyfem/v3/spec/**`, focused spec tests | Complete; source `246114b`, integrated `108552d`; 35 focused, 183 v3, 372 full tests passed |
 | `R0-H · model spec — canonical boundary attacked` | `019f711d-c79c-7652-96dc-f07e55fdb71b` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Fresh read-only P0-E critic | Complete; 1 accepted exact-integer rendering blocker; 35 focused passed |
 | `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Complete; 5 accepted blockers; 18 focused passed |
-| `P0-F · model spec — integer diagnostics total` | `019f7136-c2f1-77b2-81bb-f9aa41627a92` | `f9e1867a2c458531b61fd3d8e5107445c0229733` | Bounded exact-integer diagnostic repair | `IMPLEMENTING`; repair round 0; direct callback required |
+| `P0-F · model spec — integer diagnostics total` | `019f7136-c2f1-77b2-81bb-f9aa41627a92` | `f9e1867a2c458531b61fd3d8e5107445c0229733` | Bounded exact-integer diagnostic repair | Complete; source `c0b3c57`, integrated `461a8a8`; 42 focused, 190 v3, 379 full tests passed |
 | `P0-G · identity/storage — exact boundaries enforced` | `019f7146-e871-76c2-a3e6-75d87fac83fd` | `7d1ededb6d11fc183ff506b989b6d1f72fd12600` | Close five accepted R0-I semantic-drift seams | `IMPLEMENTING`; repair round 0; direct callback required |
 
 ## Active watchdogs
@@ -474,6 +479,16 @@ Current combined evidence at
 - all accepted R0-A/R0-B/R0-C blockers are repaired under implementation gates;
   R0-H accepted one spec-diagnostic blocker for P0-F, and R0-I accepted five
   identity/storage blockers for P0-G before compiler integration.
+
+P0-F integration evidence at
+`461a8a85de622820eb627a24b8e53749489d020a`:
+
+- integration review confirmed the exact declared parent and three-path ownership;
+- 42 focused model-spec tests and 190 v3 tests passed, with only 40 pre-existing
+  SciPy `SparseEfficiencyWarning` notices;
+- both v3 Ruff gates, focused format, and `git diff --check` passed; and
+- the worker's exact source commit additionally passed seven selected tests under
+  a 640-digit interpreter limit and the full 379-test repository suite.
 
 ## Accepted later-phase obligations
 
@@ -596,3 +611,10 @@ integration decision; do not bridge it with a compatibility carrier.
   and dispatched Sol/max task `019f7146-e871-76c2-a3e6-75d87fac83fd` with exclusive
   array/provenance/registry/test ownership. It confirmed the exact base gate; P0-F
   continues concurrently on disjoint spec paths.
+- 2026-07-18: P0-F completed as source
+  `c0b3c578e6641cad428244065221170136534b51`. Integration review found no correctness
+  blocker and cherry-picked it as
+  `461a8a85de622820eb627a24b8e53749489d020a`; 42 focused and 190 v3 tests plus both
+  Ruff gates, focused format, and `git diff --check` pass on the integration branch.
+  The worker additionally proved seven selected cases under a 640-digit conversion
+  limit and 379 full-repository tests. P0-G remains the only active writer.
