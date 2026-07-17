@@ -9,6 +9,10 @@ an architecture to reproduce.
 Read [design.md](design.md) before planning or editing v3. It is authoritative for
 the architecture, invariants, acceptance suite, and migration order.
 
+For structural work crossing ownership/state boundaries or multiple milestones,
+also read [refactor_playbook.md](refactor_playbook.md). The active multi-thread
+milestone is recorded in [phase0-execution.md](phase0-execution.md).
+
 The current `pyfem/v3` code is an executable prototype. Its kernels, tests, and
 benchmarks may be reused when they satisfy the new contracts, but these current
 types are explicitly not architectural constraints:
@@ -71,6 +75,8 @@ Run the full suite when code changes cross the legacy/v3 boundary:
 | Status | Files | Use |
 |---|---|---|
 | Authoritative | [design.md](design.md) | Architecture and migration contract |
+| Refactor method | [refactor_playbook.md](refactor_playbook.md) | Horizon Gate, proof loop, delegation and completion |
+| Execution state | [phase0-execution.md](phase0-execution.md) | Current work packets, dependencies, evidence, and blockers |
 | Active tooling | [conventions.md](conventions.md) | Style, typing, Ruff, tests |
 | Numerical evidence | [parity.md](parity.md), [scaling.md](scaling.md), [plane_strain.md](plane_strain.md), [structural.md](structural.md), [tangent_assembly.md](tangent_assembly.md) | Oracles and historical measurements |
 | Requirements inventory | [feature-parity.md](feature-parity.md) | Legacy breadth only; not an implementation order |
