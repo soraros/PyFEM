@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: pause requested; finish P1-A repair round 1/2, record its result, then stop
+- Status: paused; P1-A repair source returned but is not I0-reviewed or integrated
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -14,23 +14,23 @@
 - Integrated P0-D compiler: source `f21aaed2c97e98e63f58b77d0e301c3a2107e243`, integrated `79060abb054d82fd34ac85f000e44d9de5947d60`
 - P0-D independent component proof: `79060abb054d82fd34ac85f000e44d9de5947d60`
 - P1-A frozen Horizon and R0-N adjudication: `b18b262b97068086b9c61618d06a2d14a50046cd`
-- P1-A source candidate under repair: `a749972dca8a97ae4801017ac686d114225432f3` (not integrated)
+- P1-A repair 1/2 replacement source: `587e3fc41a0a0fbf9ef3d7e069d8eca591006001` (not reviewed or integrated)
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: `P1-A · program compiler — affine plan canonical`, repair 1/2; pause on terminal result
+- Active milestone: none; paused after P1-A repair 1/2 source completion
 
 ## Exact next safe action
 
-Wait for the original Sol/max P1-A task to return repair 1/2 as one replacement
-source commit with exact parent `b18b262`, both terminal signals, the unchanged ten
-owned paths, and focused regressions for the seven accepted integration-review
-findings below. Source `a749972` remains unintegrated. Do not start P1-B assembly,
-state, solver, adapters, a reviewer, or another migration packet in parallel.
+Remain paused. Repair source `587e3fc` has a valid terminal final and callback, is
+exactly one commit on parent `b18b262`, changes only the same ten owned paths, and
+has a clean worker tree. Its reported proof is recorded below, but I0 has not read
+the repair delta, rerun the seven reproductions, executed local gates, accepted the
+repair, or integrated it.
 
-When the repair callback arrives, verify only its terminal contract, exact parent,
-owned paths, reported evidence, warnings, and clean state; record that result in this
-ledger and summarize the pause point. Per the user's 2026-07-19 pause request, do
-not begin I0 semantic re-review, local reproduction, integration, repair round 2/2,
-an independent reviewer, P1-B, or another packet until the user explicitly resumes.
+On explicit user resumption, I0 first reviews `a749972..587e3fc`, reruns the seven
+local cases and frozen affine/load semantics, and executes the required focused,
+strict, static, v3, and full gates. Only a green adjudication permits serial
+integration; otherwise the remaining bounded option is repair round 2/2. Do not
+start an independent reviewer, P1-B, or another packet before that transition.
 
 ## Semantic decisions and open questions
 
@@ -106,7 +106,7 @@ dated E0 evidence.
 | Live scope | Rows | Lifecycle and evidence | Disposition state | Next transition |
 |---|---:|---|---|---|
 | P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
-| P1-A immediate dependency cut | 3 | `repairing`, `E1` at `b18b262`; source `a749972` completed but failed I0 integration review and is not integrated | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Repair 1/2 -> repeat I0 review -> serial integration only if green |
+| P1-A immediate dependency cut | 3 | `source-complete`, `E1` at `b18b262`; replacement `587e3fc` passed terminal/mechanical precheck but is not I0-reviewed or integrated | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Paused -> I0 repair review -> serial integration only if green |
 | Later preserve/change portfolio | 120 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -1277,28 +1277,27 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P0-D · model compiler — Q8 block frozen` | `019f75dd-f597-7c21-adfc-d78b1e2580c0` | `2842ef84b86f04f82587f5fc378584f30f6b62bd` | `pyfem/v3/compile/**`, new compiled-model carriers, one focused compiler test | Complete after repair 1/2; replacement source `f21aaed2`, integrated `79060abb`; branch proof 156 focused twice, 22 direct Q8, 286 v3, 475 full |
 | `INCOMPLETE R0-F · model compiler — base mismatch` | `019f761b-2fc2-7e20-b5d9-b9681cb83e7e` | incorrect requested hash `79060ab3186e38460595b3831b77855b3f824bc` | Intended read-only compiler review | Incomplete by coordinator error; stopped correctly at clean preflight after observing actual `79060abb`; no correctness matrix or finding was assessed |
 | `R0-N · model compiler — block invariants verified` | `019f761d-4d85-7b72-9d80-857fab45aef8` | `79060abb054d82fd34ac85f000e44d9de5947d60` | Replacement read-only P0-D integrated review | Complete GO with both terminal signals; 99 independent checks, 156 focused twice, 22 direct Q8, 286 v3, 475 full, zero findings |
-| `P1-A · program compiler — affine plan canonical` | `019f764f-2643-75b2-a8b5-323ed58351a2` | `b18b262b97068086b9c61618d06a2d14a50046cd` | New program spec/normalizer, immutable compiled-program carriers, compiler/evaluator, and one focused test | Source `a749972` returned both terminal signals and all reported gates green; I0 reproduced seven P1 gaps, withheld integration, and activated repair 1/2; record its terminal result and then pause before re-review or integration |
+| `P1-A · program compiler — affine plan canonical` | `019f764f-2643-75b2-a8b5-323ed58351a2` | `b18b262b97068086b9c61618d06a2d14a50046cd` | New program spec/normalizer, immutable compiled-program carriers, compiler/evaluator, and one focused test | Repair 1/2 replacement `587e3fc` returned both terminal signals, exact ancestry/scope, reported 59 focused twice, 215 combined twice, 14 references, static gates, 345 v3, and 534 full; mechanically verified and clean, but paused before I0 semantic review or integration |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
 R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N subsequently completed under the corrected
-terminal contract. The record is now 25 tasks: 18 properly complete, six explicitly
-incomplete, and one active task.
+terminal contract. The record is now 25 tasks: 19 properly complete, six explicitly
+incomplete, and no active task.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
-  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N.
+  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, R0-N, and P1-A.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, and R0-F.
-- Active: P1-A repair 1/2 in the original task from source `a749972`; no other
-  migration writer or reviewer is active, and the coordinator pauses when this turn
-  returns its terminal result.
+- Active: none. P1-A replacement source `587e3fc` awaits I0 review after explicit
+  user resumption; no migration writer or reviewer is active.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The current risk is review/process
   integrity, not contamination of the integrated foundation code.
 
-## P1-A source review — repair 1/2 requested
+## P1-A source review — repair 1/2 returned; paused before re-review
 
 P1-A returned valid terminal final and callback for source
 `a749972dca8a97ae4801017ac686d114225432f3`, exactly one commit on frozen parent
@@ -1332,6 +1331,17 @@ identity plans, and graph complexity sound, including a separate 40-case affine/
 matrix. Repair 1/2 preserves the frozen outcome, owned paths, numeric policy, and
 non-goals; it adds only the smallest validation/diagnostic changes and regressions
 for these seven cases.
+
+Repair 1/2 returned replacement source
+`587e3fc41a0a0fbf9ef3d7e069d8eca591006001`, exactly one commit on `b18b262` and
+the same ten owned paths. Its own final and callback report all seven cases closed,
+59 focused tests in both digit modes, 215 P0-D/P1-A tests in both modes, 14
+references, both Ruff configurations, focused format, 345 v3 tests, 534 full-suite
+tests, path/import/whitespace checks, and only the existing Numba/SciPy notices.
+I0 verified the terminal contract, exact commit/parent/count, path scope, diff check,
+and clean exact worker head. Per the pause request, those are source claims awaiting
+independent I0 semantic and command reproduction; no repair finding is yet
+adjudicated closed, no code is integrated, and the three capability rows remain E1.
 
 ## Active watchdogs
 
@@ -1832,3 +1842,9 @@ integration decision; do not bridge it with a compatibility carrier.
   I0 will validate and record only that task's terminal result, then stop before
   semantic re-review, integration, a second repair, an independent reviewer, P1-B,
   or any other packet. Resumption requires an explicit user instruction.
+- 2026-07-19: P1-A repair 1/2 returned replacement source
+  `587e3fc41a0a0fbf9ef3d7e069d8eca591006001` with a valid terminal final and
+  callback. I0 mechanically verified its exact parent, one-commit ancestry, ten-path
+  scope, clean diff, and clean worker head, and recorded its reported proof. The
+  migration is now paused before semantic re-review, local gate reproduction,
+  integration, reviewer dispatch, P1-B, or evidence advancement.
