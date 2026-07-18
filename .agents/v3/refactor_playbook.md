@@ -161,8 +161,8 @@ Use these as proof gates, not a script to narrate:
    broader checks at every milestone. Compare baseline and repair a failed milestone
    before building on it.
 5. **Seek disconfirmation.** For high-risk work, use independent read-only reviewers
-   when available and authorized. Ask for the strongest competing design, dangerous
-   counterexample, missing proof, and scope violation—not general approval.
+   when available and authorized. Ask for the strongest competing design, decisive
+   failure case, missing proof, and scope violation—not general approval.
 6. **Adjudicate and persist.** Mark every finding accepted, rejected with evidence,
    or deferred outside the success bar. Update execution state and owning docs only
    when their distinct truths changed.

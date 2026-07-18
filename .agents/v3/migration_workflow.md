@@ -220,7 +220,7 @@ legacy class or file. Examples include “fixed affine displacement constraints,
 metadata,” and “periodic RVE homogenization.”
 
 Several legacy classes may be evidence for one row. One legacy class may produce
-several rows. A row is split whenever it has a different semantic owner, dangerous
+several rows. A row is split whenever it has a different semantic owner, failure
 case, dependency, disposition, or proof surface.
 
 The initial inventory must scan:
@@ -300,7 +300,7 @@ decision rather than a fabricated benchmark.
 These are seed hypotheses for the future ledger, not a substitute for the complete
 inventory or a pre-approved compatibility decision.
 
-| ID | Capability | Proposed disposition | Target owner/slice | Current evidence and required danger |
+| ID | Capability | Proposed disposition | Target owner/slice | Current evidence and required failure case |
 |---|---|---|---|---|
 | `LIN-Q8-PS` | Q8 plane-stress linear static solve | preserve | compiled block through verified `LinearStatic`, Phase 1 | Prototype/book parity exists; add orientation, aliasing, additive load, affine MPC, reactions, and independent verification |
 | `CON-AFFINE` | fixed Dirichlet and linear MPC constraints | change | `CompiledProgram` affine plan, Phase 1 | Preserve affine meaning; retire chained mutable patching; prove cycles, conflicts, nonzero offsets, zero-free-DOF, and reaction basis |
@@ -504,7 +504,7 @@ capability rows, and one capability may require several packets.
 | `REPAIR_REQUESTED` | Accepted findings and round `1/2` or `2/2` recorded | `DISPATCHED`, `CALLBACK_RECEIVED`, `BLOCKED` | Integrator/original writer | Mechanical repair may be redispatched |
 | `CHERRY_PICKED` | Source and integrated hashes plus clean focused gate recorded | `INDEPENDENT_REVIEW`, `REPAIR_REQUESTED`, `BLOCKED` | Integrator | Cherry-pick is serial and human/model reviewed |
 | `INDEPENDENT_REVIEW` | Independent reviewer findings returned and adjudicated | `REPAIR_REQUESTED`, `COMBINED_PROOF`, `BLOCKED` | Sol/max reviewer/integrator | Callback receipt only |
-| `COMBINED_PROOF` | Focused, public-flow, dangerous, relevant full-suite, static, and performance gates complete | `ADVANCED`, `REPAIR_REQUESTED`, `BLOCKED` | Sol/max integrator | Commands may run automatically; interpretation may not |
+| `COMBINED_PROOF` | Focused, public-flow, edge-case, relevant full-suite, static, and performance gates complete | `ADVANCED`, `REPAIR_REQUESTED`, `BLOCKED` | Sol/max integrator | Commands may run automatically; interpretation may not |
 | `ADVANCED` | Capability statuses/evidence grades and next safe action updated | terminal | Integrator | Ledger bookkeeping after approved proof |
 
 `REJECTED` means the commit is not integrated and the candidate returns to the
@@ -549,7 +549,7 @@ and named output. It has no file ownership and makes no commit. Useful validatio
 focuses are:
 
 - strongest competing semantic owner;
-- dangerous numerical/physical counterexample;
+- decisive numerical/physical failure case;
 - missing state or provenance lifetime;
 - unsupported compatibility claim;
 - false independence in proof; and
@@ -1021,7 +1021,7 @@ The portfolio maintains proof rows for:
   comparison;
 - **geometry:** inverted and sign-changing Jacobian, scale-relative singularity,
   finite-strain current inversion, rigid translation/rotation objectivity;
-- **dangerous scale:** a case large or irregular enough to expose assembly/state
+- **stress scale:** a case large or irregular enough to expose assembly/state
   memory, dispatch, and solver behavior; and
 - **results:** false convergence, perturbed field, stale workspace, material
   interface projection, raw localization, and independent strong verification.
@@ -1046,7 +1046,7 @@ weakened to recover a benchmark.
 For code packets, run in increasing scope:
 
 1. packet-focused tests and independent reference;
-2. affected dangerous/public-flow tests;
+2. affected edge-case/public-flow tests;
 3. both v3 Ruff configurations and format check;
 4. `pytest -q test/v3`; and
 5. `pytest -q` whenever the packet crosses legacy/v3, root API, input, packaging,
@@ -1301,7 +1301,7 @@ function coordinator_activation():
 
     slice = first item in COMBINED_PROOF
     if slice exists:
-        run focused + public + dangerous + v3 + relevant full/static/perf gates
+        run focused + public + edge-case + v3 + relevant full/static/perf gates
         bind every result to exact integrated commit and environment
         if flaky, failed, or semantically ambiguous:
             apply failure policy; do not advance

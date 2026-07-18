@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: foundation gate GO; R0-E complete; E0 inventory ingested; P0-D Horizon not yet frozen
+- Status: foundation gate GO; R0-E ingested; P0-D Horizon frozen; writer not yet dispatched
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -12,20 +12,17 @@
 - Combined repaired foundation code head: `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Integrated registry-snapshot repair: source `0947dd7ca3b70bef2ebdf986f2336f62f5b3c08b`, integrated `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: `I0 · capability inventory — accepted at E0`
+- Active milestone: `P0-D · model compiler — Q8 block frozen`
 
 ## Exact next safe action
 
-Freeze the P0-D Horizon contract from the 18 classified immediate-dependency rows
-below and the compiler invariants in [design.md](design.md). Start from the exact
-clean `v3` commit containing the durable R0-E evidence and this state overlay. The
-packet must remain one internal compiler slice: one explicit Q8 region becomes an
-immutable `CompiledModel` recipe with complete entity/source maps, explicit
-capabilities, and an empty physical-state-value layout. It must not add
-`ProgramSpec`, constraints/loads, prepared assembly, a solver/public API, a legacy
-adapter, GUI, RVE/FE2, ROM, output compatibility, or a wrapper around the prototype
-carrier. After the Horizon is recorded, dispatch exactly one Sol/max writer; no
-other packet overlaps the compiler/spec/model owners.
+Commit the frozen P0-D Horizon below, then dispatch exactly one Sol/max writer from
+that exact clean commit. The packet remains one internal compiler slice: one
+explicit Q8 region becomes an immutable `CompiledModel` recipe with complete
+entity/source maps, derived capabilities, frozen registry meaning, audited
+reference geometry, and a physical-state layout containing no evolving values.
+No other task may overlap the compiler/model paths until P0-D returns both terminal
+signals and I0 reviews its commit.
 
 Blocked condition: the P0-D Horizon cannot assign one target owner and one exact
 descriptor/compiler contract without a new design, physics, compatibility,
@@ -104,7 +101,7 @@ dated E0 evidence.
 
 | Live scope | Rows | Lifecycle and evidence | Disposition state | Next transition |
 |---|---:|---|---|---|
-| P0-D immediate dependency cut | 18 | `classified`, `E0` at `c50ca70` | 11 preserve, 7 change; owner/dependencies/failure cases accepted for the Q8 compiler Horizon | Freeze P0-D, then `contracted` |
+| P0-D immediate dependency cut | 18 | `contracted`, `E0` at `80edd4a` | 11 preserve, 7 change; frozen Q8 compiler Horizon below | Dispatch P0-D, then component proof toward `provisional`/E2 |
 | Later preserve/change portfolio | 123 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -127,6 +124,208 @@ The seven internal/duplicate retirement candidates are `ANAL-MODAL-DUP`,
 `V3-PROTOTYPE-ANALYSIS`. The six public candidates are listed under open decisions
 above. [feature-parity.md](feature-parity.md) is now historical input: its old
 `done`, `deferred`, and `out of scope` labels have no live status authority.
+
+## P0-D Horizon card — `HORIZON_FROZEN`
+
+**ID/title:** `P0-D · model compiler — Q8 block frozen`
+
+**Outcome and ownership invariant:** `compile_model(...)` consumes only the exact,
+detached result of `normalize_model_spec(...)` plus an injected registry. For the
+single supported slice it returns one structurally frozen `CompiledModel` whose
+arrays are detached, owning, contiguous, and read-only; whose live identity is
+fresh; whose content fingerprint includes normalized semantics, source/entity
+mapping, numeric policy, and the exact selected registry snapshot; and whose
+physical-state layout describes sizes without allocating any evolving state value.
+The compiler owns semantic resolution and homogeneous recipe construction. Numeric
+kernels own only explicit array/scalar operations, and the prototype carrier owns
+nothing on this path.
+
+**Coverage rows advanced:** `V3-AUTHORED-SPEC`, `V3-SPEC-NORMALIZE`,
+`V3-ARRAY-OWNERSHIP`, `V3-LIVE-ID`, `V3-CONTENT-ID`, `V3-REGISTRY-SNAPSHOT`,
+`MESH-NODES`, `MESH-CELLS`, `MESH-GROUPS`, `COMP-MESH`, `COMP-DOF`,
+`COMP-REGISTRY`, `COMP-MODEL`, `KERN-SHAPES`, `KERN-QUADRATURE`,
+`KERN-KINEMATICS`, `MAT-PLANE-STRESS`, and `FORM-SMALL-CONT`. Freezing this card
+moves the rows to `contracted` but leaves them at E0. Implementation plus the
+independent R0-F review may advance component evidence to E2; no row reaches E3
+before the authored-to-verified-result Phase 1 flow exists.
+
+**Exact base and required parent packets:** required parent is the clean inventory
+ingestion commit `80edd4af7456321e42376a006ee428d6c690080b`; the writer starts from the
+single documentation commit that freezes this card, whose exact hash is supplied
+in the dispatch prompt and packet ledger. P0-A through P0-H, R0-M, R0-E, and I0
+foundation proof are required and complete. No parallel writer is permitted.
+
+**Owned paths:** new `pyfem/v3/compile/**`; new compiled-carrier modules under
+`pyfem/v3/model/**`; `pyfem/v3/model/__init__.py` only for internal model exports;
+and new `test/v3/test_v3_model_compile.py`. Existing spec, identity, provenance,
+registry, shape, quadrature, kinematics, and plane-stress modules are read-only
+dependencies.
+
+**Forbidden paths and non-goals:** `.agents/v3/**`, `pyproject.toml`, `uv.lock`,
+root configuration, `pyfem/v3/__init__.py`, `pyfem/v3/spec/**`, existing foundation
+tests, prototype `types.py`, `pack.py`, `_prototype_assembly.py`, `solver/**`,
+`io/**`, and existing numeric kernels. Do not add `ProgramSpec`, sections,
+constraints, loads, initial conditions, a final sparse pattern, SciPy objects,
+prepared assembly, physical-state values, state transactions, analysis/solver/
+result APIs, file parsing, root exports, legacy adapters, compatibility wrappers,
+GUI, RVE/FE2, ROM, output behavior, Numba policy, or performance thresholds.
+
+**Supported authored slice and descriptor contract:** exactly one cell block with
+one or more cells and exactly one region are executable in P0-D. The block declares
+`reference_topology="quadrilateral"`, topological and embedding dimension 2, and
+`geometry_interpolation="serendipity-quad8"`; every cell has exactly eight node
+IDs in the existing serendipity Q8 local order. The region covers every source cell
+exactly once, references exactly one node field with components `("x", "y")` in
+that physical order, and declares `formulation="small-strain-continuum"`,
+`quadrature="gauss-3x3"`, and one material whose
+`model="plane-stress-linear-elastic"`. That material has exactly finite
+`youngs_modulus` and `poisson_ratio` scalars, with `E > 0` and
+`-1 < nu < 0.5`. The first slice is per-unit out-of-plane thickness; no implicit
+section value is stored, and any non-unit thickness remains a later explicit
+section contract.
+
+The compiler selects only these injected registry keys:
+
+| Kind | Name | Required meaning |
+|---|---|---|
+| `topology` | `serendipity-quad8` | quadrilateral, 2D parent/embedding, eight-node local convention, shape values and parent gradients |
+| `quadrature` | `gauss-3x3` | deterministic nine-point tensor Gauss rule in the same parent coordinates |
+| `formulation` | `small-strain-continuum` | two-component nodal displacement, engineering-shear Voigt order, no formulation history, symmetric material tangent contribution |
+| `material` | `plane-stress-linear-elastic` | ordered `[E, nu]` schema, plane-stress engineering-shear law, no material history |
+
+Descriptor metadata must carry and the compiler must validate these compatibility
+facts; matching names alone are insufficient. The selected callables are exact
+references captured by `RegistrySnapshot`. The topology, quadrature, kinematics,
+and plane-stress behavior may reuse the existing mathematically relevant functions
+without modifying them or binding the prototype shape/rank-dispatch stiffness
+wrapper. Callable implementation truth and restore/rebind remain recorded later
+obligations; P0-D does not claim to solve them.
+
+**Required compiled meaning:** the returned carrier has the semantic content of
+`CompiledMesh`, `DofPlan`, one `DomainBlock`, `ModelAssemblyTopology`,
+`PhysicalStateLayout`, `ModelCapabilities`, `EntityIndex`, `SourceMap`, registry
+snapshot, provenance manifest/fingerprint, and live `InstanceId`. Exact internal
+field splitting may remain compact, but it must prove all of the following:
+
+- canonical dense node and cell indices derive from stable semantic IDs, not source
+  declaration order; Q8 connectivity retains physical local-node order;
+- global DOFs are deterministic node/declared-component pairs, and the block owns
+  an explicit `(n_cell, 16)` local-to-global map rather than relying on a kernel's
+  node-major assumption;
+- source/entity records preserve node, cell, field, region, block, and stable local
+  integration-point identities independently of execution ordering;
+- the domain recipe contains explicit descriptor identities, connectivity, DOF
+  map, quadrature/shape recipe, ordered material parameters, integration layout,
+  and backend-neutral element-coupling information; no final sparse indices or
+  matrices are built;
+- dense index arrays use a declared integer dtype whose capacity is checked before
+  conversion; numeric compiled values use `float64`;
+- `PhysicalStateLayout` describes the global primary-field size and zero-width
+  material/formulation history for every element/integration point, but contains no
+  displacement, stress, history, or other evolving value array; and
+- capabilities are derived, never accepted as authored claims: linear elastic,
+  fixed model coupling, symmetric constant material tangent, conservative internal
+  contribution, no mass/damping/storage channels, and no restart history.
+
+All compiled carrier dataclasses use structural freezing and identity equality.
+No mutable list/dictionary/parser object is retained. Sharing a single finalized
+read-only array between two compiled views is allowed; retaining a caller-owned
+array or two independently mutable semantic owners is not.
+
+**Geometry policy and failure behavior:** compilation evaluates the explicit Q8
+shape gradients at the explicit nine quadrature points and audits each source cell
+in reference configuration. Jacobian classification is translation- and
+scale-invariant, based on `float64` Jacobian magnitude rather than a fixed absolute
+length. A non-finite mapping, scale-relative near-singular Jacobian, uniformly
+negative orientation, or determinant sign change fails during compilation with a
+bounded deterministic diagnostic carrying the source cell identity/context. The
+compiler never applies `abs(det J)`, reorders connectivity, or repairs geometry.
+Wrong topology/dimension/arity, incomplete or multiply assigned cells, incompatible
+field/material/descriptor metadata, missing registry keys, invalid material
+domains, index overflow, and malformed exact inputs also fail before a compiled
+model is returned. Normalization failures remain `ModelSpecValidationError`;
+compiler compatibility/geometry failures use one explicit compilation-error type
+and must not leak incidental Python/NumPy exceptions for covered inputs.
+
+**Public flows and consumers:** P0-D is internal and has no root public flow. Its
+only immediate consumers are P1-A compiled-program compatibility, P1-B assembly
+composition, P1-C state/linear analysis, and R0-F read-only verification. Later
+block compilers must be able to add Q4/T3 without changing `CompiledModel` into a
+union-shaped carrier.
+
+**Strongest competing design:** extend `ProblemDefinition`/`pack.py`, or make a
+thin immutable wrapper over their rectangular arrays and string registry. Rejected:
+that preserves shape/rank inference, mutable caller meaning, one global
+constitutive carrier, missing source/entity ownership, and solver-coupled topology.
+Also rejected for this packet are a universal ragged element table and premature
+`SectionSpec`/program/assembly/state APIs. The Q8 compiler recipe is the smallest
+owner-plus-consumer boundary that can later replace the prototype rather than hide
+it.
+
+**Baseline and independent reference:** foundation baseline is 42 normalized-spec
+tests plus 68 identity/storage tests, each also under
+`PYTHONINTMAXSTRDIGITS=640`; the exact pre-dispatch v3 baseline is 240 tests. Q8
+local ordering and shape/quadrature values are checked against the existing direct
+mathematical tests and the `PatchTest8` mesh only as independent component/oracle
+evidence. Prototype `ProblemDefinition`, `pack`, or solve results are not API
+fixtures for this packet.
+
+**Required correctness matrix:** successful compilation proves detached/read-only
+ownership, fresh live identity, stable content identity, exact registry capture,
+canonical declaration-order independence, complete source/entity lookup, explicit
+DOF and coupling maps, empty state values, and derived capabilities. Failure cases
+cover caller mutation after compile; duplicate/missing cross-region membership;
+wrong Q8 arity/topology/dimensions; incompatible or absent descriptor metadata;
+missing/extra/invalid material parameters; non-finite and out-of-domain values;
+valid geometry at very small and very large scales; inverted, sign-changing, and
+scale-relative near-singular cells; mixed string/integer semantic IDs; and bounded
+diagnostics for very large exact integer IDs. A second compilation of semantically
+equivalent reordered declarations has the same fingerprint and canonical arrays
+but a different live instance ID. A semantic, source-map, numeric-policy, or
+selected-descriptor change changes the fingerprint.
+
+**Expected migrations and causal deletions:** no prototype path is deleted in
+P0-D. The new compiler path becomes the sole owner for later Phase 1 work. P1-C may
+retire the Q8 use of `ProblemDefinition`/`LoadedProblem`, `pack.py`, string
+registry, prototype assembly, and direct linear solve only after its public flow is
+proved; other prototype consumers remain until their own slices migrate.
+
+**Compatibility/API consequence:** all new names are internal and are not exported
+from `pyfem.v3`. Legacy class/type/property strings remain adapter questions. The
+P0-D exact descriptor vocabulary is a versioned internal contract, not approval of
+root API, CLI, `.pro`/`.dat`, GUI, archive, or output compatibility.
+
+**Performance relevance and envelope:** no performance claim or gate. Use clear
+NumPy/reference compilation code, do not add a backend or Numba policy, and do not
+retain both a canonical dense connectivity/DOF map and a second ragged execution
+copy. Compiler temporaries may exceed retained payload during validation; report a
+measured concern only if the focused correctness fixture reveals an unbounded or
+obviously quadratic owner error.
+
+**Acceptance commands and evidence:** one focused commit and clean worker tree;
+focused compiler plus foundation tests normally and with
+`PYTHONINTMAXSTRDIGITS=640`; direct Q8 shape/quadrature/element component tests;
+both required Ruff configurations and focused format check; `pytest -q test/v3`;
+full `pytest -q`; `git diff --check`; a search proving the new compiler does not
+import prototype `types`, `pack`, `_prototype_assembly`, solver, or I/O modules;
+and the complete edge-case evidence above. Report all warnings without upgrading
+them into findings unless they change this contract.
+
+**Merge order:** writer returns one source commit; I0 checks ancestry, owned paths,
+diff, contract, focused/static/v3/full evidence, and then integrates serially. Only
+after combined proof does a fresh Sol/max R0-F task independently verify the
+integrated block invariants. Accepted findings return to the same writer for at
+most two bounded repair turns. P1-A stays closed until R0-F is adjudicated.
+
+**Blocked condition and minimum unlock:** stop without broadening scope if the
+exact descriptor compatibility cannot represent the Q8 recipe, a correct geometry
+audit requires modifying existing numeric kernels, the current spec cannot express
+the supported slice without a new authored owner, a forbidden shared path is
+required, or a physical convention other than the explicit per-unit-thickness
+slice must be chosen. Return the smallest reproducible conflict; I0 decides whether
+to amend design/card or create a new packet.
+
+**Integration task ID:** `019f6f49-0b72-7d73-86da-c6b85519eeaf`.
 
 ## Outcome and invariant
 
@@ -723,8 +922,8 @@ schema, dependency, vocabulary, manifest-hash, `.pro`, skim, and test-set checks
 8. Completed: R0-E produced the complete E0 legacy capability inventory; I0
    preserved its exact report, independently checked it, and ingested the live state
    overlay into this ledger.
-9. Active next: freeze and dispatch the dependent compiler-integration packet: one
-   explicit Q8 region ->
+9. Horizon frozen; active next is dispatch of the dependent compiler-integration
+   packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
 10. Only after P0-D and its `R0-F` reviewer dispatch `ProgramSpec`/affine constraints and
@@ -1168,3 +1367,13 @@ integration decision; do not bridge it with a compatibility carrier.
   classified the 18-row Q8 compiler dependency cut, and retained explicit blocks
   on six public retirement candidates. P0-D is not dispatched until its Horizon is
   frozen from the resulting clean ledger commit.
+- 2026-07-18: froze the P0-D Horizon after comparing the authoritative compiler
+  boundary, the normalized spec and identity/storage foundations, the existing Q8
+  mathematical kernels, and the 18 immediate capability rows. The contract fixes
+  one explicit per-unit-thickness Q8 plane-stress recipe, four versioned descriptor
+  meanings, canonical dense/source/DOF maps, scale-relative reference-geometry
+  rejection, derived capabilities, and a state layout with no evolving values. It
+  assigns disjoint `compile/**`, compiled-model, and focused-test ownership and
+  keeps program, section, assembly, state, public API, adapters, and prototype
+  paths outside P0-D. Exactly one Sol/max writer may now be dispatched from this
+  card's clean commit.
