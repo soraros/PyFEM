@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: foundation gate GO; R0-E ingested; P0-D dispatched from frozen Horizon
+- Status: pause requested; P0-D may finish its current packet; integration and later work are paused
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -16,13 +16,14 @@
 
 ## Exact next safe action
 
-Let the single Sol/max P0-D task `019f75dd-f597-7c21-adfc-d78b1e2580c0` execute
-the frozen Horizon from exact clean base
-`2842ef84b86f04f82587f5fc378584f30f6b62bd`. It is performing its required
-base/document preflight in an isolated worktree. Do not dispatch a second writer,
-R0-F, ProgramSpec, assembly, state, or solver work. On P0-D's own final plus direct
-callback, I0 reviews ancestry, owned paths, design/physics meaning, diagnostics,
-correctness matrix, and all reported gates before any integration or repair action.
+Let the single Sol/max P0-D task `019f75dd-f597-7c21-adfc-d78b1e2580c0` finish
+the already-authorized frozen Horizon from exact clean base
+`2842ef84b86f04f82587f5fc378584f30f6b62bd`. It has a green 42-test focused
+compiler matrix and is running its broad acceptance ladder. Record its terminal
+result and callback, but do not integrate, request a repair, dispatch R0-F, or start
+ProgramSpec, assembly, state, solver, or any other migration packet until the user
+explicitly resumes. The smallest resume action will be I0 review of the returned
+P0-D source commit, if any.
 
 Blocked condition: the P0-D Horizon cannot assign one target owner and one exact
 descriptor/compiler contract without a new design, physics, compatibility,
@@ -964,7 +965,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P0-H · registry snapshot — meaning detached` | `019f7568-a1e0-7c33-bf83-0a490e54c520` | `55fcf990da8f47f612f5193529c2a6b77a823a10` | `registry.py` plus focused identity tests | Complete; source `0947dd7`, integrated `fb358fc`; 68 focused twice, 240 v3, 429 full, static gates green |
 | `R0-M · registry snapshot — capture invariant verified` | `019f757a-e84f-70c3-a6d6-8c4ff7874204` | `fb358fc0609b81a12cee4a1a66c2dae98edf5cae` | Read-only P0-H integrated recheck | Complete GO, zero blockers; 42 local checks, 68 focused twice, both Ruff gates, 240 v3; one app-level resume, both terminal signals valid |
 | `R0-E · legacy breadth — semantic ledger seeded` | `019f7587-31f2-7642-b162-5fd5b7a2d07b` | `c50ca70bff884157c5645dde276c25acc6672d4a` | Complete read-only E0 capability inventory report | Complete with both terminal signals; 154 rows, 606/606 paths, zero remnants; durable report SHA `f9e326d`; independently checked and ingested |
-| `P0-D · model compiler — Q8 block frozen` | `019f75dd-f597-7c21-adfc-d78b1e2580c0` | `2842ef84b86f04f82587f5fc378584f30f6b62bd` | `pyfem/v3/compile/**`, new compiled-model carriers, one focused compiler test | Dispatched to Sol/max from frozen Horizon; isolated worktree preflight active; no callback, commit, or integration claim yet |
+| `P0-D · model compiler — Q8 block frozen` | `019f75dd-f597-7c21-adfc-d78b1e2580c0` | `2842ef84b86f04f82587f5fc378584f30f6b62bd` | `pyfem/v3/compile/**`, new compiled-model carriers, one focused compiler test | Active with 42 focused compiler tests and 282 v3 tests green; pause begins at terminal callback, before integration or R0-F |
 
 ## Task completion audit
 
@@ -1387,3 +1388,10 @@ integration decision; do not bridge it with a compatibility carrier.
   worktree preflight is active. No parallel compiler owner or R0-F reviewer exists;
   neither completion nor integration is claimed until both terminal signals and I0
   review are present.
+- 2026-07-18: the user requested a pause and a clearer status view while P0-D was
+  already executing. P0-D may finish its bounded packet and send its terminal
+  callback, but I0 will not integrate or request repair and will not dispatch R0-F
+  or later work until explicit resume. At the pause request, 42 focused compiler
+  tests, both Ruff gates, formatting, and 282 v3 tests were green; the repository-
+  wide gate and source commit were still pending. A compact dashboard snapshot was
+  prepared from this ledger; this ledger remains the only mutable authority.
