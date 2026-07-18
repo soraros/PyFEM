@@ -12,6 +12,12 @@ require multiple verified milestones. The migration specializes this discipline 
 follows [AGENTS.md](AGENTS.md) and [design.md](design.md) without adding long-horizon
 machinery.
 
+[Proofline](proofline.md) names the reusable coordination layer shared by these
+workflows: durable state, bounded delegation, terminal-result integrity, event-
+driven callbacks, serial integration, independent proof, and dashboard projection.
+This playbook remains the structural-refactor method; Proofline is not another live
+plan.
+
 This file owns the generic refactor method. [migration_workflow.md](migration_workflow.md)
 owns full-migration orchestration. [design.md](design.md) owns target architecture
 and invariants. [AGENTS.md](AGENTS.md) owns branch-specific code, testing,

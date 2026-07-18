@@ -15,6 +15,11 @@ For the full legacy-to-v3 migration, also read
 migration which crosses ownership/state boundaries or multiple milestones, read
 [refactor_playbook.md](refactor_playbook.md).
 
+[Proofline](proofline.md) is the concise reusable field guide for the coordination
+method. It is useful when transferring the workflow to another project or session,
+but it never replaces this repository's full migration specialization or live
+ledger.
+
 The full 154-row E0 source inventory is preserved in
 [evidence/2026-07-18-r0e-capability-inventory.md](evidence/2026-07-18-r0e-capability-inventory.md).
 Read or query that large evidence note only when selecting, classifying, or auditing
@@ -93,6 +98,7 @@ Run the full suite when code changes cross the legacy/v3 boundary:
 | Status | Files | Use |
 |---|---|---|
 | Authoritative | [design.md](design.md) | Architecture and migration contract |
+| Proofline field guide | [proofline.md](proofline.md) | Reusable semi-automatic coordination loop, task integrity, callbacks, automation boundary, and dashboard projection |
 | Migration method | [migration_workflow.md](migration_workflow.md) | Capability conveyor, packet lifecycle, integration, proof, and completion |
 | Execution state | [migration-execution.md](migration-execution.md) | Sole live migration ledger: commits, packets, evidence, blockers, and next action |
 | Refactor method | [refactor_playbook.md](refactor_playbook.md) | Generic Horizon Gate and proof loop for non-migration structural refactors |

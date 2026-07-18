@@ -9,6 +9,7 @@ design, invariants, edge-case proof suite, and phased migration. Then read
 [AGENTS.md](AGENTS.md) for the working rules and commands.
 
 The full legacy-to-v3 migration follows
+[Proofline](proofline.md), specialized in
 [migration_workflow.md](migration_workflow.md), with current state in the sole live
 [migration-execution.md](migration-execution.md) ledger. Structural refactors
 outside that migration use [refactor_playbook.md](refactor_playbook.md).
@@ -33,6 +34,7 @@ uv sync
 |---|---|
 | [design.md](design.md) | **Authoritative:** target architecture, invariants, proof, migration |
 | [AGENTS.md](AGENTS.md) | **Active:** session routing and working rules |
+| [proofline.md](proofline.md) | **Reusable field guide:** semi-automatic coordination, task integrity, callbacks, automation boundary, and dashboard projection |
 | [migration_workflow.md](migration_workflow.md) | **Active:** legacy-to-v3 capability workflow, packet lifecycle, and completion contract |
 | [migration-execution.md](migration-execution.md) | **Active:** sole restartable migration ledger and exact next action |
 | [refactor_playbook.md](refactor_playbook.md) | **Active outside the migration:** generic structural refactor proof method |

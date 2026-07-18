@@ -1,16 +1,20 @@
-# PyFEM v3 migration workflow
+# Proofline — PyFEM v3 migration workflow
 
 - Status: **active migration method**
+- Method name: **Proofline**
 - Prepared: 2026-07-17
 - Investigation base: `ad95149e2e34b8eff55c0896c1dea53ac1cbc71d`
 - Proposal source: `50cc6632490f5d185dd30ff6b85dd7cb10e432b6`
 - Integrated proposal: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
 - Target branch: local `v3`; no merge or push is implied
 
-This document defines the operating system for gradually replacing legacy PyFEM
-with the architecture in [design.md](design.md). It does not authorize a feature
-port or change any design invariant. Live state is owned only by
-[migration-execution.md](migration-execution.md).
+This document is the full PyFEM specialization of
+[Proofline](proofline.md), the repository's ledger-driven semi-automatic
+coordination method. It defines the operating system for gradually replacing
+legacy PyFEM with the architecture in [design.md](design.md). It does not authorize
+a feature port or change any design invariant. Live state is owned only by
+[migration-execution.md](migration-execution.md); the Proofline field guide is not
+a second plan or ledger.
 
 Navigation: [authority](#authority-and-adoption-status),
 [state machine](#migration-state-machine),
@@ -150,7 +154,7 @@ Failure modes:
 - integration debt is delayed rather than removed; and
 - watchdogs and polls become a substitute for proof.
 
-### Design C: the selected bounded packet conveyor
+### Design C: Proofline's bounded packet conveyor
 
 Keep one integration owner and one live ledger. Select a small dependency-aware
 portfolio, then dispatch only packets with a frozen Horizon contract, disjoint path
