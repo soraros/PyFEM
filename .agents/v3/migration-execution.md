@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: foundation code broad-green; R0-L identity/storage review active; compiler closed
+- Status: foundation code broad-green; R0-L waiting on local-temp approval; compiler closed
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -15,12 +15,14 @@
 
 ## Exact next safe action
 
-Wait for R0-L task `019f7551-0075-7383-a895-fd2d77f02419`, dispatched from exact
-clean base `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92`. Accept no state transition
-until its own final response and callback satisfy the terminal-result contract,
-then adjudicate every finding and rerun any required integration evidence. R0-J's
-recovered evidence remains supporting only; R0-K remains incomplete. Do not start
-the model compiler or create another replacement while R0-L is active.
+Approve R0-L task `019f7551-0075-7383-a895-fd2d77f02419` to create its authorized
+task-specific validation script under `/private/tmp`, then let it continue from
+exact clean base `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92`. Its two focused
+pytest modes (47 passed each) and both Ruff configurations are already green, but
+that partial evidence is not completion. Accept no state transition until its own
+final response and callback satisfy the terminal-result contract. R0-J's recovered
+evidence remains supporting only; R0-K remains incomplete. Do not start the model
+compiler or create another replacement while R0-L is active.
 
 Blocked condition: a reviewer demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -561,7 +563,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P0-G · identity/storage — exact boundaries enforced` | `019f7146-e871-76c2-a3e6-75d87fac83fd` | `7d1ededb6d11fc183ff506b989b6d1f72fd12600` | Close five accepted R0-I seams plus integration-audit carrier gaps | Complete; source `9504467` + child `8612d01`, integrated `e04f86a` + `afaac4d`; 47 focused, 212 v3, 401 full passed |
 | `INCOMPLETE R0-J · model spec — evidence only` | `019f7184-2fe6-7403-a5fd-683e58dcee79` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Read-only spec/diagnostic repeat reviewer | Incomplete; substantial zero-blocker evidence recovered, but no final result or callback; evidence is supporting only |
 | `INCOMPLETE R0-K · identity/storage — checks not run` | `019f7184-2fe6-7403-a5fd-685f9ee1995d` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Read-only identity/provenance/registry/storage repeat reviewer | Incomplete; temporary script created but never executed; no required tests, static gates, verdict, or callback |
-| `R0-L · identity/storage — boundary independently verified` | `019f7551-0075-7383-a895-fd2d77f02419` | `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92` | Read-only identity/provenance/registry/storage replacement reviewer | Active; exact base and clean worktree confirmed; terminal result required |
+| `R0-L · identity/storage — boundary independently verified` | `019f7551-0075-7383-a895-fd2d77f02419` | `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92` | Read-only identity/provenance/registry/storage replacement reviewer | Waiting on authorized `/private/tmp` script approval; 47 focused passed in both digit modes and both Ruff gates passed; final result still required |
 
 ## Task completion audit
 
@@ -826,3 +828,9 @@ integration decision; do not bridge it with a compatibility carrier.
   `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92`. Its concise prompt links only the
   neutral local correctness card and relevant implementation/tests. Initial
   preflight confirmed the exact base and clean worktree; no other task is active.
+- 2026-07-18: R0-L completed its mandatory focused/static block: 47 focused tests
+  passed both normally and with the 640-digit interpreter limit, and both Ruff
+  configurations passed. It is waiting for user approval to create the explicitly
+  authorized task-specific `/private/tmp` script for its remaining independent
+  cross-product and depth checks. No final result or callback exists yet, so the
+  packet remains active and the compiler gate remains closed.
