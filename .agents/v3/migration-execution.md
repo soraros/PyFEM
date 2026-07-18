@@ -19,16 +19,17 @@
 - P1-B frozen Horizon and dispatch base: `4ed975795a4917fe40ed0203c981980ac5bea9cc`
 - P1-B initial source: `ab02297c052912cb027ac6963b37667bf61f3e97` (I0-reviewed NO-GO; not integrated)
 - Integrated P1-B assembly plan: repaired source `8e94454c63a76fdc1505d8ec3ec6341128448aab`, integrated `daad22796a6b178ba9fdb33d0e444b5be0f830e7`
+- Active P1-B independent reviewer: `R1-B` at task `019f7750-8745-7e23-aaf2-35f50ec79fc8`, exact base `e11a07c0cc5c00e956c3d537ac94272f120621c0`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
 - Active milestone: P1-B independent assembly verification
 
 ## Exact next safe action
 
-Commit this adjudication and the frozen R1-B reviewer card below, then dispatch
-exactly one read-only Sol/max assembly reviewer from that exact clean commit. Record
-its task ID and base immediately after dispatch. Do not open P1-C before R1-B returns
-both terminal signals, every finding is adjudicated, accepted P0/P1 findings are
-repaired, and the independent verdict is GO.
+Wait for the one read-only Sol/max assembly reviewer R1-B at task
+`019f7750-8745-7e23-aaf2-35f50ec79fc8` to return both terminal signals from exact
+clean base `e11a07c0cc5c00e956c3d537ac94272f120621c0`. Adjudicate every finding against
+the frozen cards and exact evidence. Do not open P1-C before the verdict is GO and
+any accepted P0/P1 finding is repaired and independently rechecked.
 
 The original P1-B writer returned a valid terminal source and callback, but I0's
 independent carrier review found two P1 gaps while the numerical and architecture
@@ -1694,22 +1695,23 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `INCOMPLETE P1-B · assembly plan — approval stalled` | `019f76f1-fffd-7772-ba9c-4e17d3ee9f63` | `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Initial immutable reference assembly plan/evaluator source plus attempted repair turn | Initial source `ab02297` completed with valid final/callback; I0 accepted two P1 findings; repair turn was interrupted before editing at an avoidable worktree-transition approval |
 | `INCOMPLETE P1-D · assembly plan — worktree missing` | `019f7732-d6a9-7c61-aa50-1410cb7b7f26` | intended source `ab02297c052912cb027ac6963b37667bf61f3e97` | First replacement for P1-B repair 1/2 | Incomplete before preflight/editing because the fork inherited the app-removed worktree path; archived without repository change |
 | `P1-E · assembly plan — correspondence repaired` | `019f7736-ec41-7560-9d65-472551b4a6fe` | source `ab02297c052912cb027ac6963b37667bf61f3e97`, parent `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Close exact Q8 reference-recipe correspondence and metadata-free binding output in the same six paths | Complete with both terminal signals; replacement `8e94454`, integrated `daad227`; 34 focused twice, 152 combined twice, 392 v3, 581 full |
+| `R1-B · assembly plan — contribution invariants verified` | `019f7750-8745-7e23-aaf2-35f50ec79fc8` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Independent read-only P1-B correctness matrix and verdict | Active; exact Sol/max reviewer dispatched from the frozen card; P1-C closed |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
 R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N subsequently completed under the corrected
-terminal contract. The record is now 28 tasks: 20 properly complete, eight explicitly
-incomplete, and no active task before R1-B dispatch.
+terminal contract. The record is now 29 tasks: 20 properly complete, eight explicitly
+incomplete, and one active task.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
   P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, R0-N, P1-A,
   and P1-E.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, and the P1-D missing-worktree replacement.
-- Active: none before the one R1-B reviewer is dispatched from the frozen card
-  below.
+- Active: R1-B on exact clean base `e11a07c`; no writer or second assembly reviewer
+  is active.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The current risk is review/process
@@ -2499,3 +2501,8 @@ integration decision; do not bridge it with a compatibility carrier.
   oracles, geometry policy, identity/storage/diagnostic boundaries, scope exclusions,
   and cost honesty. P1-C remains closed until the one read-only Sol/max reviewer is
   terminal, every finding is adjudicated, and the verdict is GO.
+- 2026-07-19: I0 committed the R1-B card as
+  `e11a07c0cc5c00e956c3d537ac94272f120621c0` and dispatched exactly one read-only
+  Sol/max reviewer, `R1-B · assembly plan — contribution invariants verified`
+  (`019f7750-8745-7e23-aaf2-35f50ec79fc8`), from that exact clean base. No assembly
+  writer, second reviewer, or P1-C owner is active.
