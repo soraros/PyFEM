@@ -27,8 +27,18 @@ types are explicitly not architectural constraints:
 - current solver and result APIs
 
 Do not continue the old P0-P8 checklist. Begin with Phase 0/1 in
-[design.md](design.md#13-migration-plan), and prefer a complete, falsifiable vertical
+[design.md](design.md#13-migration-plan), and prefer a complete, testable vertical
 slice over feature breadth.
+
+## Task vocabulary and routing
+
+PyFEM v3 packets are local finite-element design, implementation, and correctness
+work. In task titles, prompts, callbacks, and ledger entries, use concrete terms
+such as **finite-element correctness review**, **local edge-case matrix**,
+**correctness matrix**, **failure case**, and **independent reviewer**. Do not
+import labels, metaphors, skills, or review frames from unrelated domains, and do
+not reuse historical packet wording as prompt text. This routing rule changes no
+technical acceptance criterion.
 
 ## Platform baseline
 
@@ -68,7 +78,7 @@ Run the full suite when code changes cross the legacy/v3 boundary:
 - Compile model/program contribution topology separately and compose the final
   backend/reduction plan once in `PreparedAnalysis` when structure is fixed. Add
   load contributions; never silently overwrite them.
-- Require dangerous-case tests and an independent reference before optimizing.
+- Require edge-case tests and an independent reference before optimizing.
 - Preserve source/entity identity and result provenance through compilation,
   batching, state evolution, and output projection.
 
@@ -87,8 +97,8 @@ Run the full suite when code changes cross the legacy/v3 boundary:
 
 ## Decision discipline
 
-If implementation evidence contradicts the design, stop and record the dangerous
-case, competing design, falsifiable consequence, and updated tests in the
+If implementation evidence contradicts the design, stop and record the failure
+case, competing design, testable consequence, and updated tests in the
 [design amendment log](design.md#16-design-amendment-log) before changing an
 invariant.
 Green legacy parity alone is not sufficient evidence: it proves a reference answer

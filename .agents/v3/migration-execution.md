@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: foundation gate GO; R0-E waiting on authorized local-report write; compiler closed
+- Status: foundation gate GO; R0-E active in inventory/report assembly; compiler closed
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -16,17 +16,18 @@
 
 ## Exact next safe action
 
-Approve read-only Sol/max R0-E task `019f7587-31f2-7642-b162-5fd5b7a2d07b` to
-write its authorized external report at
-`/private/tmp/pyfem-r0e-capability-inventory.md`, then let it finish the complete
-evidence-backed E0 inventory from exact clean foundation-closure commit
-`c50ca70bff884157c5645dde276c25acc6672d4a`. It must account for legacy runtime,
+Let read-only Sol/max R0-E task `019f7587-31f2-7642-b162-5fd5b7a2d07b` finish its
+authorized external report at `/private/tmp/pyfem-r0e-capability-inventory.md`.
+It has confirmed exact clean foundation-closure base
+`c50ca70bff884157c5645dde276c25acc6672d4a`, completed the required source/test/
+example/documentation census, and is assembling the evidence-backed per-capability
+E0 ledger plus its coverage appendix. The report must account for legacy runtime,
 examples, tests, input/output, GUI, RVE/FE2, ROM, public/docs surfaces, and the v3
-prototype in `/private/tmp/pyfem-r0e-capability-inventory.md`, audit unclassified
-remnants, return its own terminal result, and callback I0. The integration owner
-then ingests and adjudicates the inventory in this sole live ledger. Do not create a
-replacement or dispatch P0-D while R0-E is active. R0-J's recovered evidence
-remains supporting only; R0-K remains incomplete.
+prototype; use the `failure_cases` field and neutral finite-element correctness
+wording; audit unclassified remnants; return its own terminal result; and callback
+I0. The integration owner then ingests and adjudicates it in this sole live ledger.
+Do not create a replacement or dispatch P0-D while R0-E is active. R0-J's recovered
+evidence remains supporting only; R0-K remains incomplete.
 
 Blocked condition: a reviewer demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -45,14 +46,16 @@ Decided:
 - A task is complete only when its own final response and callback satisfy the
   terminal-result contract. Idle state, commentary, recovered evidence, or a
   completed replacement never completes the original task.
-- Task prompts use concise, domain-specific finite-element correctness language and
-  repository-local evidence. They avoid metaphorical language from unrelated
-  technical domains.
+- Task prompts use only domain-specific finite-element correctness language and
+  repository-local evidence: finite-element correctness review, local edge-case
+  matrix, correctness matrix, failure case, and independent reviewer. Historical
+  packet wording is not reusable prompt text, and unrelated labels, metaphors,
+  skills, or review frames are not routed into this migration.
 - The 2026-07-18 audit found 12 properly completed migration tasks and five
   incomplete tasks. All five are visibly prefixed `INCOMPLETE` in the task list and
   recorded separately below.
 - Thread IDs are never reused. `R0-E` and `R0-F` remain reserved for the planned
-  legacy-breadth and compiler critics; replacement/follow-up foundation reviews use
+  legacy-breadth and compiler reviews; replacement/follow-up foundation reviews use
   the next otherwise-unreserved IDs, hence `R0-G`, `R0-H`, and `R0-I`.
 - dtype metadata is outside the current v1 manifest/finalization boundary and must
   fail closed; do not invent a recursive dtype-metadata schema or manifest v2 before
@@ -107,14 +110,14 @@ assembly plan, or compatibility shim.
   `.agents/v3/**`, `pyproject.toml`, `uv.lock`, `pyfem/v3/__init__.py`, and root
   project configuration.
 - Do not fix the known prototype correctness failures in these packets; they are
-  dangerous cases for the replacement boundary.
+  edge cases for the replacement boundary.
 - Do not optimize, add Numba policy, expose public exports, or continue the old
   roadmap.
 
 ## Strongest competing hypothesis
 
 The prototype could be extended in place by adding fields to `ProblemDefinition`
-and more registry/group switches. This chunk is falsified if the new foundations
+and more registry/group switches. This chunk fails if the new foundations
 need a universal optional-array carrier, rank/node-count formulation inference,
 mutable compiled arrays, runtime registry rebinding, or edits to current solver
 behavior merely to express identity/specification.
@@ -202,7 +205,7 @@ packet. Do not invent `CompiledModel` before P0-B is available.
 
 State: source `246114ba32b8367675f2b3954e67f9e3847ca235` reviewed and
 integrated as `108552ddd3382163a0e15c2fef7ca34e75f974fd`; integration gates
-are green and fresh adversarial review is required. The task was dispatched from
+are green and a fresh independent edge-case review is required. The task was dispatched from
 exact base `47e94752e93b7424c73e4d2979bebbe0f7567291`. This is a
 post-integration repair, not a rewrite of P0-B history.
 
@@ -217,11 +220,11 @@ Outcome and ownership invariant:
 
 Accepted R0-C blockers to repair:
 
-1. `normalize_model_spec()` returns the caller tree, so forged mutable slots and
+1. `normalize_model_spec()` returns the caller tree, so manually altered mutable slots and
    source values remain aliased.
 2. `str`/`int` subclasses can retain polymorphic hash, comparison, stripping, and
    rendering behavior or escape as raw exceptions.
-3. exact-but-forged dataclasses and wrong internal containers are trusted before
+3. exact-but-manually-constructed dataclasses and wrong internal containers are trusted before
    their slots and collection shapes are validated.
 
 Owned paths:
@@ -237,25 +240,25 @@ Forbidden paths and non-goals:
 - weakening exact canonical type policy or treating deliberate raw exceptions as
   acceptable failure behavior.
 
-Required dangerous cases and evidence:
+Required edge cases and evidence:
 
 - normalized result and every nested spec/source/value/container are newly owned
-  exact canonical values; mutating forged caller slots afterward cannot affect it;
-- mutable-hash, unhashable, repr-bomb `str` subclasses and comparison-bomb `int`
-  subclasses reject deterministically without invoking hostile behavior;
+  exact canonical values; mutating manually altered caller slots afterward cannot affect it;
+- mutable-hash, unhashable, raising-repr `str` subclasses and raising-comparison `int`
+  subclasses reject deterministically without invoking caller-defined behavior;
 - exact uninitialized or wrong-slot `ModelSpec`, `MeshSpec`, `NodeSpec`, and
-  `SourceContext`, plus non-iterable/list-forged collections, never escape raw
+  `SourceContext`, plus non-iterable/list-valued collections, never escape raw
   `AttributeError`, `TypeError`, or rendering failures;
 - ordinary multi-defect ordering, 0D topology, block-local identity, differing
   uniform block arities, caller detachment, and all earlier P0-B repairs remain;
 - focused spec tests, both v3 Ruff configurations, focused format, `pytest -q
   test/v3`, full `pytest -q`, `git diff --check`, and a clean worker worktree pass.
 
-Merge order: completed independently of the identity critic. If R0-I or R0-H
+Merge order: completed independently of the identity reviewer. If R0-I or R0-H
 requires another owner repair, integrate disjoint repairs serially and re-run the
 combined foundation gates before any compiler packet.
 
-### R0-H — Re-falsify the repaired canonical model boundary
+### R0-H — Independently check the repaired canonical model boundary
 
 State: `COMPLETE` in task `019f711d-c79c-7652-96dc-f07e55fdb71b`, reviewed
 read-only from exact base `13c68e302cf8f4e0f7e211f8af46eff09c863368`.
@@ -266,11 +269,11 @@ with ordinary decimal rendering and leak raw `ValueError`.
 Review lens:
 
 - prove the returned tree is recursively exact, newly owned, and detached from
-  hostile caller mutation at every nested spec/source/value/container boundary;
-- attack every spec family with exact uninitialized objects, forged slots, wrong
+  caller-side mutation at every nested spec/source/value/container boundary;
+- check every spec family with exact uninitialized objects, manually set slots, wrong
   collection shapes, container subclasses, cycles, deep values, and malformed
   `SourceContext` values;
-- prove hostile scalar subclasses cannot execute polymorphic hash, representation,
+- prove custom scalar subclasses cannot execute polymorphic hash, representation,
   comparison, or string-normalization behavior and every failure remains a
   deterministic `ModelSpecValidationError` at the nearest trusted source;
 - preserve ordinary multi-defect ordering, 0D topology, block-local identity,
@@ -279,13 +282,13 @@ Review lens:
 - scrutinize the second defensive reconstruction, but report it as a blocker only
   if evidence shows a correctness failure or a required foundation-scale violation.
 
-Owned output: terminal review report and reproducible hostile probes only. No file
+Owned output: terminal review report and reproducible local edge-case checks only. No file
 edits, commits, merge, push, API expansion, or compiler work.
 
 Evidence and adjudication:
 
 - 35 focused spec tests passed in 0.76 seconds;
-- all 11 exact spec/source families, 27 hostile scalar subclasses, 13 hostile
+- all 11 exact spec/source families, 27 custom scalar subclasses, 13 custom
   collection slots, depth 5,000, cycles, deterministic fallback ordering, and a
   complete post-normalization mutation sweep survived;
 - a valid 5,001-digit exact-integer ID normalized, while duplicate-ID,
@@ -319,7 +322,7 @@ Owned paths:
 - `pyfem/v3/spec/normalize.py`
 - `test/v3/test_v3_model_spec.py`
 
-Required dangerous cases and evidence:
+Required edge cases and evidence:
 
 - duplicate 5,001-digit node/block/cell/field/material/region IDs use one bounded,
   stable representation and preserve diagnostic order;
@@ -328,7 +331,7 @@ Required dangerous cases and evidence:
 - huge exact `SourceContext.line` and `.column` values render safely when another
   defect is reported, including nearest-trusted-source fallback;
 - ordinary small integer/string diagnostic text, 0D topology, block-local identity,
-  cross-block arity policy, and all P0-E hostile/detachment cases remain unchanged;
+  cross-block arity policy, and all P0-E custom-behavior/detachment cases remain unchanged;
 - focused spec tests, both v3 Ruff configurations, focused format, `pytest -q
   test/v3`, full `pytest -q`, `git diff --check`, and a clean worker worktree pass.
 
@@ -336,7 +339,7 @@ Forbidden: new ID-range policy, global interpreter-setting changes, compiler/
 program/section work, double-reconstruction optimization, public exports,
 dependency/config changes, shared-document edits, merge, or push.
 
-### R0-I — Re-falsify identity, provenance, registry, and storage repairs
+### R0-I — Independently check identity, provenance, registry, and storage repairs
 
 State: `COMPLETE` in task `019f711f-339b-7300-aa1c-17e6e7ea9974`, reviewed
 read-only from exact base `13c68e302cf8f4e0f7e211f8af46eff09c863368`.
@@ -349,19 +352,19 @@ Accepted foundation blockers:
 2. dtype metadata is omitted from fingerprints and its nested mutable objects remain
    caller-aliased across finalizations;
 3. `FinalizedArray` comparison becomes elementwise under standard NumPy reverse/
-   ufunc dispatch, and a public carrier subclass can spoof base-carrier equality;
+   ufunc dispatch, and a public carrier subclass can imitate base-carrier equality;
 4. canonical carriers plus mapping/list subclasses retain polymorphic execution
-   paths, `ContentFingerprint` subclasses spoof equality, and invalid `id_key`
+   paths, `ContentFingerprint` subclasses imitate equality, and invalid `id_key`
    values can escape as raw exceptions; and
 5. `RegistrySnapshot` accepts and retains descriptor/key/source subclasses, allowing
    exposed key/binding meaning to drift under a stable snapshot fingerprint.
 
 Evidence and exclusions:
 
-- 18 focused identity tests passed in 2.06 seconds; independent hostile probes
+- 18 focused identity tests passed in 2.06 seconds; independent local edge-case checks
   reproduced all five blockers under NumPy 2.3.5; ordinary exact scalar/array,
   endian/stride, cycle, detachment, and registry-rebinding cases held;
-- exact forged identity fields required `object.__new__` plus deliberate
+- exact manually constructed identity fields required `object.__new__` plus deliberate
   `object.__setattr__` and are not a current primitive blocker; restore/rebind must
   validate exact `UUID`/integer fields before comparing externally reconstructed
   identity values;
@@ -403,9 +406,9 @@ Owned paths:
 - `pyfem/v3/model/registry.py`
 - `test/v3/test_v3_model_identity.py`
 
-Required dangerous cases and evidence:
+Required edge cases and evidence:
 
-- NumPy integer/float subclasses with conversion bombs reject at every nested
+- NumPy integer/float subclasses with raising conversion methods reject at every nested
   manifest position, while exact `float16`/`float32`/`float64` and integers retain
   the documented lossless behavior;
 - top-level and list/tuple-nested `MaskedArray`/custom ndarray subclasses reject
@@ -434,10 +437,10 @@ Integration audit follow-up:
 
 - a normal 5,001-digit exact Python integer leaks the interpreter's raw decimal
   conversion-limit `ValueError`, although exact integers are documented supported;
-- forged exact float carrier text can leak `OverflowError` from `float.fromhex`;
-- a forged exact v1 float-array payload containing `NaN` passes validation even
+- manually constructed exact float carrier text can leak `OverflowError` from `float.fromhex`;
+- a manually constructed exact v1 float-array payload containing `NaN` passes validation even
   though constructor capture rejects non-finite values; and
-- a forged exact unordered carrier can contain a non-mapping node without its
+- a manually constructed exact unordered carrier can contain a non-mapping node without its
   declared ID key, unique identity, or canonical identity ordering.
 
 The provenance/test-only follow-up repaired all four findings without changing
@@ -499,7 +502,7 @@ Required local correctness checks:
    obligations remain later work unless a current primitive contract is directly
    violated.
 7. Record the bounded depth reached by a deeply nested but acyclic manifest input.
-   Treat untrusted restore decoding as later work unless ordinary current use fails.
+   Treat externally reconstructed-data decoding as later work unless ordinary current use fails.
 
 Required evidence and environment:
 
@@ -535,7 +538,7 @@ Result and adjudication:
   head. They are one root failure of the frozen-snapshot contract in `design.md`,
   not three separate repair packets; and
 - callable implementation truth, transaction semantics, restore/rebind, and
-  untrusted restored-data decoding remain later-phase obligations.
+  externally reconstructed-data decoding remain later-phase obligations.
 
 ### P0-H — Preserve registry snapshot meaning
 
@@ -653,7 +656,7 @@ design/implement compiler code.
 
 1. Completed: review and integrate P0-A.
 2. Completed: review P0-B and P0-C independently against the Horizon Gate.
-3. Completed: integrate P0-B/P0-C, repair the six accepted original critic
+3. Completed: integrate P0-B/P0-C, repair the six accepted original reviewer
    review findings, and rerun combined v3 plus full repository tests.
 4. Completed: P0-F repaired the R0-H diagnostic blocker; P0-G plus its direct
    provenance follow-up repaired the five R0-I seams and integration-audit findings.
@@ -688,18 +691,18 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 |---|---|---|---|---|
 | `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | Integration, shared docs, combined proof | Complete GO through integrated repair `fb358fc`; coordinator continues to next milestone |
 | `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | Assembly quarantine | Integrated as `92bc87d` from `db486f5`; repair 0 |
-| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | `pyfem/v3/spec/**` | Integrated through `f2a0cd2`; two integration repairs plus one critic repair |
-| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | `pyfem/v3/model/**` | Integrated through `e1d7fe7`; one integration repair plus one critic repair |
-| `R0-A · model spec — semantic gaps attacked` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | `2bda241719e2c236abe4711528abd82f47b4633d` | Original spec reviewer | Complete; 3 accepted blockers repaired |
-| `R0-B · identity/storage — invariants attacked` | `019f7087-61f0-71e0-9082-122e7ea75894` | `2bda241719e2c236abe4711528abd82f47b4633d` | Original identity/storage reviewer | Complete; 3 accepted blockers repaired |
+| `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | `pyfem/v3/spec/**` | Integrated through `f2a0cd2`; two integration repairs plus one reviewer repair |
+| `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | `pyfem/v3/model/**` | Integrated through `e1d7fe7`; one integration repair plus one reviewer repair |
+| `R0-A · model spec — semantic gaps identified` | `019f7087-61f2-78a2-9df7-5174dbc5b8a3` | `2bda241719e2c236abe4711528abd82f47b4633d` | Original spec reviewer | Complete; 3 accepted blockers repaired |
+| `R0-B · identity/storage — invariant gaps identified` | `019f7087-61f0-71e0-9082-122e7ea75894` | `2bda241719e2c236abe4711528abd82f47b4633d` | Original identity/storage reviewer | Complete; 3 accepted blockers repaired |
 | `D0-A · migration workflow — autonomy bounded` | `019f708b-2980-7703-8fca-7ea26d5826ba` | `ad95149e2e34b8eff55c0896c1dea53ac1cbc71d` | `migration_workflow.md` | Complete; source `50cc663`, integrated `9b26574`, adopted |
 | `INCOMPLETE R0-C · model spec — superseded` | `019f70a3-2650-7181-8a05-fc2b72b111a5` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Initial read-only spec reviewer | Incomplete; unrelated policy reframing interrupted the work; no final result or callback |
-| `R0-C · model spec — repairs falsified` | `019f70af-2c98-7563-b303-0a5a66fd6ef5` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Replacement read-only spec reviewer | Complete; 3 accepted blockers; 23 focused tests passed |
+| `R0-C · model spec — repairs independently checked` | `019f70af-2c98-7563-b303-0a5a66fd6ef5` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Replacement read-only spec reviewer | Complete; 3 accepted blockers; 23 focused tests passed |
 | `INCOMPLETE R0-D · identity/storage — no verdict` | `019f70a3-264c-7831-8509-a3ffbf9235f4` | `faab0c938705f59fc5a22e702413f295af1dcadb` | Initial identity/storage reviewer | Incomplete; partial focused evidence only; no final verdict or callback |
 | `INCOMPLETE R0-G · identity/storage — superseded` | `019f70b1-793c-7c90-a051-07911fff3134` | `faab0c938705f59fc5a22e702413f295af1dcadb` | First R0-D replacement | Incomplete after repeated turns; no final verdict or callback; later replaced by completed R0-I |
 | `P0-E · model spec — canonical tree owned` | `019f70b8-3e74-7d82-b27b-67991cf50e3c` | `47e94752e93b7424c73e4d2979bebbe0f7567291` | `pyfem/v3/spec/**`, focused spec tests | Complete; source `246114b`, integrated `108552d`; 35 focused, 183 v3, 372 full tests passed |
-| `R0-H · model spec — canonical boundary attacked` | `019f711d-c79c-7652-96dc-f07e55fdb71b` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Fresh read-only P0-E reviewer | Complete; 1 accepted exact-integer rendering blocker; 35 focused passed |
-| `R0-I · identity/storage — repairs falsified` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Complete; 5 accepted blockers; 18 focused passed |
+| `R0-H · model spec — boundary independently checked` | `019f711d-c79c-7652-96dc-f07e55fdb71b` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Fresh read-only P0-E reviewer | Complete; 1 accepted exact-integer rendering blocker; 35 focused passed |
+| `R0-I · identity/storage — repairs independently checked` | `019f711f-339b-7300-aa1c-17e6e7ea9974` | `13c68e302cf8f4e0f7e211f8af46eff09c863368` | Exact-scope R0-G replacement with independent reproduction | Complete; 5 accepted blockers; 18 focused passed |
 | `P0-F · model spec — integer diagnostics total` | `019f7136-c2f1-77b2-81bb-f9aa41627a92` | `f9e1867a2c458531b61fd3d8e5107445c0229733` | Bounded exact-integer diagnostic repair | Complete; source `c0b3c57`, integrated `461a8a8`; 42 focused, 190 v3, 379 full tests passed |
 | `P0-G · identity/storage — exact boundaries enforced` | `019f7146-e871-76c2-a3e6-75d87fac83fd` | `7d1ededb6d11fc183ff506b989b6d1f72fd12600` | Close five accepted R0-I seams plus integration-audit carrier gaps | Complete; source `9504467` + child `8612d01`, integrated `e04f86a` + `afaac4d`; 47 focused, 212 v3, 401 full passed |
 | `INCOMPLETE R0-J · model spec — evidence only` | `019f7184-2fe6-7403-a5fd-683e58dcee79` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Read-only spec/diagnostic repeat reviewer | Incomplete; substantial zero-blocker evidence recovered, but no final result or callback; evidence is supporting only |
@@ -866,7 +869,7 @@ Recovered R0-J supporting evidence at exact frozen ledger head
   1.410 seconds, the same 11.36 MiB peak, and 2.50 times retained. This preserves the
   ownership contract and is not a foundation blocker; remeasure at compiler-scale
   proof before optimizing, and retain caller-detachment edge cases through any change.
-- Exact forged `InstanceId`/`StateGeneration` fields can bypass helpers or raise raw
+- Exact manually constructed `InstanceId`/`StateGeneration` fields can bypass helpers or raise raw
   exceptions after deliberate `object.__new__`/`object.__setattr__` construction.
   This is not an authored/live primitive blocker; future restore/rebind decoding
   must validate exact `UUID`/integer fields before invoking identity comparisons.
@@ -903,9 +906,9 @@ integration decision; do not bridge it with a compatibility carrier.
   both repairs remain inside their original path contracts.
 - 2026-07-17: integrated corrected P0-C as `d211afa` + `0834013` and corrected
   P0-B as `da1e60f` + `ba466cd`; combined focused, v3, full-suite, Ruff, and format
-  gates pass. Adversarial review is next; compiler integration is not yet authorized.
-- 2026-07-17: dispatched independent Sol/max critics R0-A and R0-B from `2bda241`
-  with separate spec-semantics and identity/ownership attack lenses and direct
+  gates pass. Independent edge-case review is next; compiler integration is not yet authorized.
+- 2026-07-17: dispatched independent Sol/max reviewers R0-A and R0-B from `2bda241`
+  with separate spec-semantics and identity/ownership review scopes and direct
   terminal callbacks. No polling automation is active.
 - 2026-07-17: dispatched Sol/max meta-coordinator D0-A from `ad95149` to design a
   repository-specific, bounded semi-autonomous legacy-to-v3 migration workflow in
@@ -922,24 +925,24 @@ integration decision; do not bridge it with a compatibility carrier.
   both Ruff gates and format. Fresh R0 spec and identity reviews are next.
 - 2026-07-17: D0-A returned the one-file workflow source `50cc663`; integration
   review accepted its bounded packet conveyor, capability/evidence ledger,
-  callback-first coordination, model/cost policy, and falsifiable completion bar.
+  callback-first coordination, model/cost policy, and evidence-checkable completion bar.
 - 2026-07-17: integrated the workflow proposal as `9b26574`, adopted it as the sole
   migration method, renamed this file from `phase0-execution.md`, and routed the
   document map without changing `design.md` or production code.
-- 2026-07-17: dispatched fresh Sol/max critics `R0-C` and `R0-D` from exact combined
+- 2026-07-17: dispatched fresh Sol/max reviewers `R0-C` and `R0-D` from exact combined
   head `faab0c938705f59fc5a22e702413f295af1dcadb`; both are active with disjoint spec
   and identity/storage lenses and direct callbacks. No compiler writer is active.
 - 2026-07-17: the first R0-C and R0-D tasks did not finish correctly. R0-C resumed
   in replacement task `019f70af-2c98-7563-b303-0a5a66fd6ef5`; R0-D was archived and
   replaced exactly by Sol/max task `R0-G` (`019f70b1-793c-7c90-a051-07911fff3134`).
 - 2026-07-17: replacement R0-C completed with 23 focused tests passing but three
-  accepted blockers: returned caller-tree aliasing, hostile scalar-subclass escape,
-  and unvalidated forged slots/containers causing raw exceptions. P0-E owns the
+  accepted blockers: returned caller-tree aliasing, custom scalar-subclass escape,
+  and unvalidated manually altered slots/containers causing raw exceptions. P0-E owns the
   bounded canonical-tree and total-preflight repair; compiler integration stays shut.
 - 2026-07-17: froze P0-E in `47e94752e93b7424c73e4d2979bebbe0f7567291`
   and dispatched Sol/max task `019f70b8-3e74-7d82-b27b-67991cf50e3c` with exclusive
   spec/test ownership. Its first status confirms the intended two-phase trusted
-  capture then owned reconstruction; R0-G remains the only concurrent active critic.
+  capture then owned reconstruction; R0-G remains the only concurrent active reviewer.
 - 2026-07-18: P0-E completed as source `246114ba32b8367675f2b3954e67f9e3847ca235`.
   Integration review found no correctness blocker and cherry-picked it as
   `108552ddd3382163a0e15c2fef7ca34e75f974fd`.
@@ -950,23 +953,23 @@ integration decision; do not bridge it with a compatibility carrier.
 - 2026-07-18: live status exposed R0-G as `systemError` before any terminal report.
   Its incomplete observations are not accepted evidence. Sol/max replacement R0-I
   (`019f711f-339b-7300-aa1c-17e6e7ea9974`) must reproduce or reject each lead.
-- 2026-07-18: dispatched read-only Sol/max critics R0-H
+- 2026-07-18: dispatched read-only Sol/max reviewers R0-H
   (`019f711d-c79c-7652-96dc-f07e55fdb71b`) and R0-I from exact base
   `13c68e302cf8f4e0f7e211f8af46eff09c863368`; both confirmed that base and are
   active with disjoint spec and identity/storage lenses.
 - 2026-07-18: R0-H completed after one report-only resume from a system-erroring
-  finalization turn. Its broad hostile matrix passed, but exact integers beyond the
+  finalization turn. Its broad local edge-case matrix passed, but exact integers beyond the
   interpreter decimal limit leak raw `ValueError` in duplicate/reference/source
   diagnostics. The finding is accepted for bounded P0-F repair; its measured double
   reconstruction cost remains nonblocking.
 - 2026-07-18: froze P0-F in `f9e1867a2c458531b61fd3d8e5107445c0229733`
   and dispatched Sol/max task `019f7136-c2f1-77b2-81bb-f9aa41627a92` with exclusive
   spec diagnostics/normalization/test ownership. It confirmed the exact clean base;
-  R0-I remains the only concurrent read-only identity critic.
+  R0-I remains the only concurrent read-only identity reviewer.
 - 2026-07-18: R0-I completed after one report-only resume from a system-erroring
   probe turn. Eighteen focused tests passed, but five ordinary subclass/dtype/
   equality/snapshot seams violate exact canonical meaning. All five are accepted
-  for bounded P0-G repair; forged identity fields and missing depth evidence remain
+  for bounded P0-G repair; manually constructed identity fields and missing depth evidence remain
   explicit later obligations rather than repair-scope inflation.
 - 2026-07-18: froze P0-G in `7d1ededb6d11fc183ff506b989b6d1f72fd12600`
   and dispatched Sol/max task `019f7146-e871-76c2-a3e6-75d87fac83fd` with exclusive
@@ -990,17 +993,17 @@ integration decision; do not bridge it with a compatibility carrier.
 - 2026-07-18: P0-G completed direct child
   `8612d0140dc0cb7e68bc1bc61d3947acf3f81de0`, which repairs all four audit findings
   plus constructor-reachability gaps for canonical array payloads. Review replayed
-  the hostile probes, then integrated source and child as
+  the local edge-case checks, then integrated source and child as
   `e04f86a67e5fa225f6191b7ef16ca5572598cbb9` and
   `afaac4d189979c861fb0463e6aa9c07bc1bc4ed5`.
 - 2026-07-18: the combined repaired foundation passes 89 focused tests normally and
   at the 640-digit limit, 219 v3 tests, 408 full-repository tests, both Ruff gates,
   combined format, `git diff --check`, and the prototype-import quarantine scan;
-  only 40 pre-existing SciPy warnings remain. Fresh repeat critics are now the sole
+  only 40 pre-existing SciPy warnings remain. Fresh repeat reviewers are now the sole
   gate before compiler integration.
 - 2026-07-18: froze the combined proof and ledger at
   `8a952e7668f4f6c52d39352dee7e0685593906a3`, then dispatched read-only Sol/max
-  critics R0-J (`019f7184-2fe6-7403-a5fd-683e58dcee79`) and R0-K
+  reviewers R0-J (`019f7184-2fe6-7403-a5fd-683e58dcee79`) and R0-K
   (`019f7184-2fe6-7403-a5fd-685f9ee1995d`) from that exact clean head. Their scopes
   are disjoint spec versus identity/storage boundaries; no writer or compiler task
   is active.
@@ -1071,3 +1074,15 @@ integration decision; do not bridge it with a compatibility carrier.
   app approval required to write the explicitly authorized external report at
   `/private/tmp/pyfem-r0e-capability-inventory.md`. No repository change exists and
   no compiler task is active.
+- 2026-07-18: corrected the coordinator vocabulary after R0-M was incorrectly
+  routed under an unrelated review frame. R0-M remains a completed finite-element
+  registry-snapshot correctness review with zero blockers. Completed task titles
+  now use neutral state descriptions, and active R0-E received a follow-up requiring
+  the `failure_cases` schema field plus local finite-element correctness wording.
+  Scope and evidence gates are unchanged.
+- 2026-07-18: R0-E received the correction and resumed after its report-write
+  approval resolved. It confirmed the mandatory sources and exact-base gate,
+  completed the repository-surface census, and is assembling the per-capability
+  ledger plus coverage appendix with `failure_cases` and neutral finite-element
+  wording. No repository output or terminal callback exists yet, so R0-E remains
+  active and P0-D remains closed.

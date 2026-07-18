@@ -79,7 +79,7 @@ Do not shorten semantic carrier fields or provenance names.
 
 ## Tests and notebooks
 
-- Put v3 tests under `test/v3/`; name dangerous cases after the invariant they
+- Put v3 tests under `test/v3/`; name edge cases after the invariant they
   disprove or protect.
 - Legacy parity skims are numerical oracles, not target API/schema fixtures.
 - Every optimized kernel keeps a reference comparison and every new architecture

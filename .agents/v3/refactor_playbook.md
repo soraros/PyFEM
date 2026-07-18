@@ -45,7 +45,7 @@ Before implementation, establish a compact contract:
 - outcome and ownership invariant;
 - scope, authority boundary, path ownership, and non-goals;
 - strongest competing explanation or design;
-- baseline, dangerous cases, and falsifiable evidence surface;
+- baseline, edge cases, and testable evidence surface;
 - consequence map: affected consumers, expected causal deletions, and migration
   order;
 - acceptance bar, performance relevance, and an honest blocked condition; and
@@ -76,7 +76,7 @@ Each candidate needs a compact card before research or delegation:
 - compatibility/API and invariant burden;
 - structural prediction for the owning path and whole v3 tree;
 - representative runtime/allocation expectation, if performance-relevant; and
-- a falsifiable Phase 0 plus explicit stop condition.
+- a testable Phase 0 plus explicit stop condition.
 
 A candidate passes only when Phase 0 can test a plausible global consequence:
 causal downstream deletion, removal of real compatibility/orchestration burden, or
@@ -152,7 +152,7 @@ Use these as proof gates, not a script to narrate:
    and real high-level call paths. Treat dated claims and proposed design as
    hypotheses.
 2. **Pre-register proof.** Record the Horizon Gate contract before finalizing the
-   implementation design. Name baseline, dangerous cases, failure behavior, and
+   implementation design. Name baseline, edge cases, failure behavior, and
    acceptance evidence.
 3. **Move one boundary.** Migrate meaningful behavior tests before deletion. Keep
    the prototype path frozen except for necessary shared API churn until the
@@ -288,7 +288,7 @@ side effect.
 
 For a process/instruction refactor, inventory inherited behavior and classify each
 item as **preserve**, **change**, or **retire**, with its invariant/evidence. Treat
-current wording as an untrusted behavior inventory. Change one policy group at a
+current wording as an unverified behavior inventory. Change one policy group at a
 time and replay the same cases. Pre-register edge cases, compare the
 strongest alternative structure, scan stale terms/conflicts, and compare line/byte
 counts. Do not describe author-written cases as independent proof.
@@ -299,8 +299,8 @@ The refactor is technically complete when:
 
 - stated acceptance and [AGENTS.md](AGENTS.md) evidence gates pass on the real path;
 - no unresolved in-scope correctness, authority, or required-evidence finding
-  falsifies the invariant;
-- performance claims stay within the representative and dangerous-case envelope;
+  disproves the invariant;
+- performance claims stay within the representative and edge-case envelope;
 - remaining old terms are active ownership, intentional compatibility, negative
   tests, or clearly labeled history;
 - accepted findings are repaired, rejected findings have evidence, and advisory or

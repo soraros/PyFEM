@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Dangerous-case contracts for authored and normalized model specifications."""
+"""Edge-case contracts for authored and normalized model specifications."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class _MutableDuck:
   def __init__(self) -> None:
     self.id = "duck"
     self.coordinates = [0.0, 0.0]
-    self.source = SourceContext(source="untrusted-child")
+    self.source = SourceContext(source="custom-child")
 
 
 class _MissingAttributes:
@@ -79,8 +79,8 @@ class _UnhashableStr(str):
     return self
 
 
-class _ReprBombStr(str):
-  def __new__(cls, value: str) -> _ReprBombStr:
+class _RaisingReprStr(str):
+  def __new__(cls, value: str) -> _RaisingReprStr:
     instance = super().__new__(cls, value)
     instance.repr_calls = 0
     instance.strip_calls = 0
@@ -88,7 +88,7 @@ class _ReprBombStr(str):
 
   def __repr__(self) -> str:
     self.repr_calls += 1
-    msg = "hostile repr invoked"
+    msg = "unexpected repr invoked"
     raise RuntimeError(msg)
 
   def strip(self, chars: str | None = None) -> str:
@@ -96,35 +96,35 @@ class _ReprBombStr(str):
     return self
 
 
-class _ComparisonBombInt(int):
-  def __new__(cls, value: int) -> _ComparisonBombInt:
+class _RaisingComparisonInt(int):
+  def __new__(cls, value: int) -> _RaisingComparisonInt:
     instance = super().__new__(cls, value)
     instance.comparison_calls = 0
     return instance
 
   def __eq__(self, other: object) -> bool:
     self.comparison_calls += 1
-    msg = "hostile comparison invoked"
+    msg = "unexpected comparison invoked"
     raise RuntimeError(msg)
 
   def __ge__(self, other: object) -> bool:
     self.comparison_calls += 1
-    msg = "hostile comparison invoked"
+    msg = "unexpected comparison invoked"
     raise RuntimeError(msg)
 
   def __gt__(self, other: object) -> bool:
     self.comparison_calls += 1
-    msg = "hostile comparison invoked"
+    msg = "unexpected comparison invoked"
     raise RuntimeError(msg)
 
   def __le__(self, other: object) -> bool:
     self.comparison_calls += 1
-    msg = "hostile comparison invoked"
+    msg = "unexpected comparison invoked"
     raise RuntimeError(msg)
 
   def __lt__(self, other: object) -> bool:
     self.comparison_calls += 1
-    msg = "hostile comparison invoked"
+    msg = "unexpected comparison invoked"
     raise RuntimeError(msg)
 
 
@@ -132,7 +132,7 @@ def _source(label: str) -> SourceContext:
   return SourceContext(source=label)
 
 
-def _forge_slot(value: object, name: str, replacement: object) -> object:
+def _set_slot_for_test(value: object, name: str, replacement: object) -> object:
   object.__setattr__(value, name, replacement)
   return value
 
@@ -535,10 +535,10 @@ def test_normalized_tree_is_recursively_exact_new_and_caller_detached() -> None:
   assert normalized.regions[0].cell_refs[0].block_id == "quad-cells"
 
 
-def test_mutable_hash_string_subclass_rejects_without_hostile_calls() -> None:
-  hostile = _MutableHashStr("mutable-node")
+def test_mutable_hash_string_subclass_rejects_without_custom_calls() -> None:
+  custom_value = _MutableHashStr("mutable-node")
   node = NodeSpec(
-    id=hostile,
+    id=custom_value,
     coordinates=(0.0, 0.0),
     source=_source("nodes:mutable-hash"),
   )
@@ -550,14 +550,14 @@ def test_mutable_hash_string_subclass_rejects_without_hostile_calls() -> None:
 
   assert _diagnostic_codes(caught.value) == ("invalid-node-id",)
   assert caught.value.diagnostics[0].source == _source("nodes:mutable-hash")
-  assert hostile.strip_calls == 0
-  assert hostile.hash_calls == 0
+  assert custom_value.strip_calls == 0
+  assert custom_value.hash_calls == 0
 
 
 def test_unhashable_string_subclass_rejects_without_strip_or_lookup() -> None:
-  hostile = _UnhashableStr("unhashable-node")
+  custom_value = _UnhashableStr("unhashable-node")
   node = NodeSpec(
-    id=hostile,
+    id=custom_value,
     coordinates=(0.0, 0.0),
     source=_source("nodes:unhashable"),
   )
@@ -569,16 +569,16 @@ def test_unhashable_string_subclass_rejects_without_strip_or_lookup() -> None:
 
   assert _diagnostic_codes(caught.value) == ("invalid-node-id",)
   assert caught.value.diagnostics[0].source == _source("nodes:unhashable")
-  assert hostile.strip_calls == 0
+  assert custom_value.strip_calls == 0
 
 
-def test_repr_bomb_string_subclass_rejects_without_rendering() -> None:
-  hostile = _ReprBombStr("duplicate")
+def test_raising_repr_string_subclass_rejects_without_rendering() -> None:
+  custom_value = _RaisingReprStr("duplicate")
   first = NodeSpec(id="duplicate", coordinates=(2.0, 0.0))
   second = NodeSpec(
-    id=hostile,
+    id=custom_value,
     coordinates=(3.0, 0.0),
-    source=_source("nodes:repr-bomb"),
+    source=_source("nodes:repr-check"),
   )
   model = _valid_model()
   object.__setattr__(model.mesh, "nodes", (*model.mesh.nodes, first, second))
@@ -587,17 +587,17 @@ def test_repr_bomb_string_subclass_rejects_without_rendering() -> None:
     normalize_model_spec(model)
 
   assert _diagnostic_codes(caught.value) == ("invalid-node-id",)
-  assert caught.value.diagnostics[0].source == _source("nodes:repr-bomb")
-  assert hostile.strip_calls == 0
-  assert hostile.repr_calls == 0
+  assert caught.value.diagnostics[0].source == _source("nodes:repr-check")
+  assert custom_value.strip_calls == 0
+  assert custom_value.repr_calls == 0
 
 
-def test_comparison_bomb_integer_subclass_rejects_without_comparison() -> None:
-  hostile = _ComparisonBombInt(2)
+def test_raising_comparison_integer_subclass_rejects_without_comparison() -> None:
+  custom_value = _RaisingComparisonInt(2)
   block = replace(
     _quad_block(),
-    topological_dimension=hostile,
-    source=_source("blocks:comparison-bomb"),
+    topological_dimension=custom_value,
+    source=_source("blocks:comparison-check"),
   )
   model = _valid_model()
   object.__setattr__(model.mesh, "cell_blocks", (block,))
@@ -606,16 +606,16 @@ def test_comparison_bomb_integer_subclass_rejects_without_comparison() -> None:
     normalize_model_spec(model)
 
   assert _diagnostic_codes(caught.value) == ("invalid-topological-dimension",)
-  assert caught.value.diagnostics[0].source == _source("blocks:comparison-bomb")
-  assert hostile.comparison_calls == 0
+  assert caught.value.diagnostics[0].source == _source("blocks:comparison-check")
+  assert custom_value.comparison_calls == 0
 
 
-def test_hostile_text_and_source_scalars_reject_at_trusted_parent() -> None:
-  hostile_text = _ReprBombStr("quadrilateral")
-  hostile_source = _ReprBombStr("nodes:hostile-source")
-  block = replace(_quad_block(), reference_topology=hostile_text)
+def test_custom_text_and_source_scalars_reject_at_trusted_parent() -> None:
+  custom_text = _RaisingReprStr("quadrilateral")
+  custom_source = _RaisingReprStr("nodes:custom-source")
+  block = replace(_quad_block(), reference_topology=custom_text)
   node = _valid_model().mesh.nodes[0]
-  object.__setattr__(node.source, "source", hostile_source)
+  object.__setattr__(node.source, "source", custom_source)
   model = _valid_model()
   object.__setattr__(model.mesh, "nodes", (node, *model.mesh.nodes[1:]))
   object.__setattr__(model.mesh, "cell_blocks", (block,))
@@ -629,19 +629,19 @@ def test_hostile_text_and_source_scalars_reject_at_trusted_parent() -> None:
   )
   assert caught.value.diagnostics[0].source == _source("mesh")
   assert caught.value.diagnostics[1].source == _source("blocks:quad-cells")
-  assert hostile_text.strip_calls == 0
-  assert hostile_text.repr_calls == 0
-  assert hostile_source.strip_calls == 0
-  assert hostile_source.repr_calls == 0
+  assert custom_text.strip_calls == 0
+  assert custom_text.repr_calls == 0
+  assert custom_source.strip_calls == 0
+  assert custom_source.repr_calls == 0
 
 
 def test_source_context_integer_subclass_rejects_without_comparison() -> None:
-  hostile_line = _ComparisonBombInt(7)
+  custom_line = _RaisingComparisonInt(7)
   node = _valid_model().mesh.nodes[0]
   object.__setattr__(
     node,
     "source",
-    SourceContext(source="nodes:hostile-line", line=hostile_line),
+    SourceContext(source="nodes:custom-line", line=custom_line),
   )
   model = _valid_model()
   object.__setattr__(model.mesh, "nodes", (node, *model.mesh.nodes[1:]))
@@ -651,7 +651,7 @@ def test_source_context_integer_subclass_rejects_without_comparison() -> None:
 
   assert _diagnostic_codes(caught.value) == ("invalid-source-context-value",)
   assert caught.value.diagnostics[0].source == _source("mesh")
-  assert hostile_line.comparison_calls == 0
+  assert custom_line.comparison_calls == 0
 
 
 def test_exact_uninitialized_specs_never_escape_raw_slot_errors() -> None:
@@ -690,33 +690,33 @@ def test_exact_uninitialized_specs_never_escape_raw_slot_errors() -> None:
 
 def test_wrong_slot_and_collection_shapes_reject_before_iteration() -> None:
   model_fields = _valid_model()
-  _forge_slot(model_fields, "fields", object())
+  _set_slot_for_test(model_fields, "fields", object())
   model_materials = _valid_model()
-  _forge_slot(model_materials, "materials", [])
+  _set_slot_for_test(model_materials, "materials", [])
   mesh_nodes = _valid_model()
-  _forge_slot(mesh_nodes.mesh, "nodes", object())
+  _set_slot_for_test(mesh_nodes.mesh, "nodes", object())
   mesh_blocks = _valid_model()
-  _forge_slot(mesh_blocks.mesh, "cell_blocks", [])
+  _set_slot_for_test(mesh_blocks.mesh, "cell_blocks", [])
   node_coordinates = _valid_model()
-  _forge_slot(node_coordinates.mesh.nodes[0], "coordinates", [0.0, 0.0])
+  _set_slot_for_test(node_coordinates.mesh.nodes[0], "coordinates", [0.0, 0.0])
   block_cells = _valid_model()
-  _forge_slot(block_cells.mesh.cell_blocks[0], "cells", object())
+  _set_slot_for_test(block_cells.mesh.cell_blocks[0], "cells", object())
   cell_nodes = _valid_model()
-  _forge_slot(
+  _set_slot_for_test(
     cell_nodes.mesh.cell_blocks[0].cells[0],
     "node_ids",
     [1, 2, 3, 4],
   )
   field_components = _valid_model()
-  _forge_slot(field_components.fields[0], "components", object())
+  _set_slot_for_test(field_components.fields[0], "components", object())
   material_parameters = _valid_model()
-  _forge_slot(material_parameters.materials[0], "parameters", [])
+  _set_slot_for_test(material_parameters.materials[0], "parameters", [])
   parameter_value = _valid_model()
-  _forge_slot(parameter_value.materials[0].parameters[0], "value", [1.0])
+  _set_slot_for_test(parameter_value.materials[0].parameters[0], "value", [1.0])
   region_cells = _valid_model()
-  _forge_slot(region_cells.regions[0], "cell_refs", object())
+  _set_slot_for_test(region_cells.regions[0], "cell_refs", object())
   region_fields = _valid_model()
-  _forge_slot(region_fields.regions[0], "field_ids", ["displacement"])
+  _set_slot_for_test(region_fields.regions[0], "field_ids", ["displacement"])
   cases = (
     (model_fields, "invalid-model-spec-value", "model"),
     (model_materials, "invalid-model-spec-value", "model"),

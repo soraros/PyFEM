@@ -1,7 +1,7 @@
 # Phase hardening (pass B)
 
 > **Historical process and benchmark evidence.** It is not the active design or
-> execution plan. Follow [design.md](design.md), especially its dangerous-case and
+> execution plan. Follow [design.md](design.md), especially its edge-case and
 > performance-proof policies, before applying any optimization described here.
 
 **Pass A** ([WORKFLOW.md](WORKFLOW.md)): deliver a roadmap checkbox with skim parity on book-scale examples.

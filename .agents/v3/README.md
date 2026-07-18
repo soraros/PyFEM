@@ -5,7 +5,7 @@ The current code is a runnable prototype and numerical-reference source, not the
 target architecture.
 
 **Start with [design.md](design.md).** It records the authoritative first-principles
-design, invariants, dangerous-case proof suite, and phased migration. Then read
+design, invariants, edge-case proof suite, and phased migration. Then read
 [AGENTS.md](AGENTS.md) for the working rules and commands.
 
 The full legacy-to-v3 migration follows
@@ -50,6 +50,6 @@ The next slice is deliberately narrow: authored and compiled carriers, one expli
 Q8 plane-stress contribution block, one compiled affine constraint/load program,
 one composed prepared assembly plan, the minimal physical/evolution state
 transaction, a typed linear-static request, and a result that independently
-re-verifies constraints and equilibrium. The dangerous cases in
-[design.md](design.md#11-falsifiable-acceptance-suite) must drive it before more
+re-verifies constraints and equilibrium. The edge cases in
+[design.md](design.md#11-testable-acceptance-suite) must drive it before more
 element or solver breadth is added.

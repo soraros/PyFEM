@@ -44,13 +44,13 @@ code cleverness third.
 When sources disagree, use this order:
 
 1. the overall goal above and the invariants in this document;
-2. executable dangerous-case tests written for the new design;
+2. executable edge-case tests written for the new design;
 3. the new implementation;
 4. legacy PyFEM as a requirements and numerical-reference source;
 5. the current v3 prototype as a source of reusable kernels and lessons;
 6. historical v3 plans, benchmark thresholds, and compatibility claims.
 
-Changing an invariant requires a recorded design change and a falsifiable reason.
+Changing an invariant requires a recorded design change and a testable reason.
 An old API, benchmark, or completed roadmap checkbox is not a reason by itself.
 
 ### 2.2 Deliberate non-goals
@@ -1002,7 +1002,7 @@ Rejected as an implementation dogma. Compiled inputs and accepted snapshots are
 immutable; high-performance workspaces and owned output buffers are explicitly
 mutable. The important property is visible ownership and no hidden physical state.
 
-## 11. Falsifiable acceptance suite
+## 11. Testable acceptance suite
 
 The replacement architecture is not accepted by happy-path parity alone. The tests
 below are design deliverables.
@@ -1211,7 +1211,7 @@ constraint, and state invariants before broad feature work resumes.
 - Support both reusable prepared and one-shot API paths.
 
 Exit: one legacy Q8 parity case plus all relevant compiler/identity/load/constraint/
-verification dangerous cases pass. No old `ProblemDefinition` is involved in this
+verification edge cases pass. No old `ProblemDefinition` is involved in this
 flow.
 
 ### Phase 2 — Prove block generality
@@ -1290,7 +1290,7 @@ architecture:
 - whether an optional backend fuses formulation and material kernels; and
 - public plugin packaging beyond explicit registry injection.
 
-The decision criterion is always the invariants, dangerous-case suite, memory, and
+The decision criterion is always the invariants, edge-case suite, memory, and
 representative public-flow evidence above.
 
 ## 15. Immediate next implementation task
@@ -1305,7 +1305,7 @@ vertical slice that establishes the new boundaries:
 5. solve through a typed `LinearStatic` request;
 6. return a solution that independently re-evaluates constraints and equilibrium;
    and
-7. drive it with the dangerous cases before optimizing or adding more elements.
+7. drive it with the edge cases before optimizing or adding more elements.
 
 That slice is intentionally narrow. Its job is to prove that the representation can
 survive the rest of FEM, not to recover the prototype's checkbox count quickly.
@@ -1316,9 +1316,9 @@ Record invariant changes in this section before or with their implementation. Ea
 dated entry must name:
 
 1. the invariant or ownership boundary being changed;
-2. the dangerous case or measured evidence that forced reconsideration;
+2. the failure case or measured evidence that forced reconsideration;
 3. the strongest competing alternatives considered;
-4. the chosen change and its falsifiable consequence; and
+4. the chosen change and its testable consequence; and
 5. acceptance tests and other documents updated.
 
 ### 2026-07-17 — Ground-up reset
@@ -1326,6 +1326,6 @@ dated entry must name:
 Replaced the prototype mega-carrier/feature-checklist architecture with the
 compiled model/program, homogeneous contribution recipe, prepared assembly,
 explicit physical/evolution state transaction, typed analysis, and independently
-verified result contracts in this document. The dangerous cases in section 11 are
-the falsifiable consequences; the historical docs are explicitly demoted to
+verified result contracts in this document. The edge cases in section 11 are
+the testable consequences; the historical docs are explicitly demoted to
 evidence.

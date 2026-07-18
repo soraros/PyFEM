@@ -18,7 +18,7 @@ Navigation: [authority](#authority-and-adoption-status),
 [initial waves](#dependency-aware-portfolio-and-initial-waves),
 [contracts](#dispatch-and-integration-contracts),
 [proof](#numerical-and-physical-proof-strategy),
-[completion](#falsifiable-definition-of-migration-complete),
+[completion](#evidence-checkable-definition-of-migration-complete),
 [adoption](#adoption-and-rollout-state), and
 [coordinator loop](#coordinator-loop).
 
@@ -28,11 +28,21 @@ The authority order is unchanged:
 
 1. the user's overall v3 goal and [design.md](design.md), including its amendment
    discipline;
-2. dangerous-case tests and independent numerical or physical evidence;
+2. edge-case tests and independent numerical or physical evidence;
 3. the new v3 implementation;
 4. legacy PyFEM as requirements, behavior evidence, and numerical reference;
 5. the current v3 prototype as reusable evidence; and
 6. historical plans, prototype APIs, old examples, and old benchmark policy.
+
+### Finite-element task vocabulary
+
+Every packet, title, callback, ledger entry, and coordinator handoff describes this
+work as local finite-element migration and correctness work. Preferred terms are
+**finite-element correctness review**, **local edge-case matrix**,
+**correctness matrix**, **failure case**, and **independent reviewer**. Historical
+wording is evidence about past execution, not reusable prompt text. Do not import
+labels, metaphors, skills, or review frames from unrelated domains. This vocabulary
+rule changes no invariant, evidence requirement, or acceptance gate.
 
 The current foundation at adoption consists of:
 
@@ -151,7 +161,7 @@ against isolated code style.
 This is less failure-prone because it combines the serial safety of Design A with
 bounded independent work, while refusing the file-for-file partitioning and
 long-lived branch drift of Design B. It also has a defined no-work result: if no
-candidate is dependency-ready and falsifiable, the coordinator records the missing
+candidate is dependency-ready and testable, the coordinator records the missing
 evidence and stops rather than manufacturing activity.
 
 ## Source of truth and persistence
@@ -249,7 +259,7 @@ and delegator/user approval when public behavior is affected. “Deferred,” �
 | `intent_and_difference` | Preserved meaning and any deliberate incompatibility |
 | `v3_semantic_owner` | One target owner from design: spec, compiler, block, program, state, assembly, analysis, result, adapter, or ecosystem |
 | `dependencies` | Capability IDs and design/packet gates required first |
-| `dangerous_cases` | Counterexamples that can falsify the proposed owner or behavior |
+| `failure_cases` | Counterexamples that can disprove the proposed owner or behavior |
 | `reference_evidence` | Legacy harness, analytical result, independent formulation, benchmark, or other oracle; never only the new implementation |
 | `target_slice` | One vertical slice or explicit later decision packet |
 | `compatibility` | Public names, files, outputs, checkpoints, or entry points affected |
@@ -276,7 +286,7 @@ migration completion.
 |---|---|
 | `E0` | Source, example, or claim exists; behavior not extracted |
 | `E1` | Behavior and conventions extracted into a reproducible legacy, analytical, or independent reference |
-| `E2` | Target component plus dangerous cases pass, but no complete public v3 flow |
+| `E2` | Target component plus edge cases pass, but no complete public v3 flow |
 | `E3` | Public authored-to-verified-result vertical slice passes with provenance and failure behavior |
 | `E4` | Compatibility/retirement, representative performance, docs/examples, and relevant full-suite gates pass |
 
@@ -323,7 +333,7 @@ eligible only if:
 
 1. all hard dependencies are integrated and proved at their stated commit;
 2. its owner-plus-consumer cone fits one reviewable vertical slice;
-3. it has an independent reference and at least one dangerous case;
+3. it has an independent reference and at least one edge case;
 4. its path ownership and merge order are explicit;
 5. its public/compatibility consequence is bounded; and
 6. its blocked condition can be stated without “keep trying.”
@@ -331,7 +341,7 @@ eligible only if:
 Among eligible candidates, use this priority order:
 
 ```text
-repair a falsified invariant
+repair an invariant contradicted by evidence
 -> unblock architecture ratification in Phases 1-3
 -> replace a real public flow end to end
 -> causally delete a prototype/legacy owner
@@ -383,7 +393,7 @@ would freeze mutually invented APIs before the architecture is executable.
 | `I1 · linear slice — combined proof` | Adjudicate findings and run all Phase 1 exit gates | R1-A terminal and repairs integrated | Capability rows reach E3; no breadth claim |
 
 The Phase 1 exit includes the existing Q8 book oracle, but the success bar is the
-full dangerous-case surface in [design section 11](design.md#11-falsifiable-acceptance-suite).
+full edge-case surface in [design section 11](design.md#11-testable-acceptance-suite).
 
 ### Wave 2: prove heterogeneous block generality
 
@@ -482,7 +492,7 @@ capability rows, and one capability may require several packets.
 | State | Entry evidence | Only allowed next states | Owner | Automatic transition allowed |
 |---|---|---|---|---|
 | `DISCOVERED` | Capability/evidence gap recorded | `CLASSIFIED`, `BLOCKED` | Coordinator/researcher | Inventory mechanics only |
-| `CLASSIFIED` | Preserve/change/retire, owner, dependencies, dangerous cases | `READY`, `BLOCKED`, `SUPERSEDED` | Sol/max coordinator | No semantic classification automation |
+| `CLASSIFIED` | Preserve/change/retire, owner, dependencies, failure cases | `READY`, `BLOCKED`, `SUPERSEDED` | Sol/max coordinator | No semantic classification automation |
 | `READY` | Dependencies proved and candidate card complete | `SELECTED`, `BLOCKED` | Coordinator | Eligibility calculation may be mechanical |
 | `SELECTED` | Portfolio comparison and reason recorded | `HORIZON_FROZEN`, `BLOCKED` | Sol/max coordinator | No |
 | `HORIZON_FROZEN` | Outcome, ownership, scope, competing design, base, proof, merge order, blocked condition frozen | `DISPATCHED`, `BLOCKED` | Integrator | No |
@@ -601,7 +611,7 @@ Owned paths / forbidden paths:
 Public flows and consumers:
 Strongest competing design or explanation:
 Baseline and independent reference:
-Dangerous cases and failure behavior:
+Edge cases and failure behavior:
 Expected migrations and causal deletions:
 Compatibility/API consequence:
 Performance relevance and envelope:
@@ -629,7 +639,7 @@ Owned paths: <...>
 Forbidden paths: <...>
 Non-goals: <...>
 Competing design: <...>
-Dangerous cases/reference: <...>
+Edge cases/reference: <...>
 Acceptance: <commands and public proof>
 Merge dependency: <...>
 
@@ -687,7 +697,7 @@ The integrator reviews, in this order:
 1. exact base, commit ancestry, diff scope, and user-owned changes;
 2. Horizon outcome and explicit non-goals;
 3. target ownership and dependency direction;
-4. dangerous cases, failure behavior, and independent reference;
+4. edge cases, failure behavior, and independent reference;
 5. public consumer migration and claimed causal deletion;
 6. state, identity, provenance, and snapshot lifetimes;
 7. numerical conventions, tolerances, balance, and performance claims; and
@@ -791,7 +801,7 @@ A phase integration packet can advance only when:
 - every source commit is reviewed and recorded in merge order;
 - all accepted reviewer findings are repaired;
 - all rejected findings cite evidence and all deferrals are outside the exit bar;
-- focused, public-flow, dangerous-case, v3, relevant full-suite, Ruff, format, and
+- focused, public-flow, edge-case, v3, relevant full-suite, Ruff, format, and
   diff gates pass at one exact integrated commit;
 - performance claims meet a preregistered representative envelope;
 - affected coverage rows and evidence grades are updated;
@@ -942,7 +952,7 @@ For each preserve/change row, an `E1` extraction packet records:
 2. equations, tensor/Voigt convention, units, signs, measures, configuration,
    constraint/load convention, state variables, and commit timing;
 3. outputs and failure behavior actually consumed;
-4. a minimal deterministic reference case and a dangerous case;
+4. a minimal deterministic reference case and an edge case;
 5. the exact legacy commit, environment, command, tolerances, and output digest;
 6. an independent analytical, textbook, finite-difference, or alternate
    implementation reference where possible; and
@@ -1118,7 +1128,7 @@ Do not automate:
 These actions are irreversible, authority-expanding, physically ambiguous, or too
 high-risk for status-driven automation.
 
-## Falsifiable definition of migration complete
+## Evidence-checkable definition of migration complete
 
 Migration is complete at one exact clean `v3` commit only when all of the following
 are true:
@@ -1146,7 +1156,7 @@ are true:
    maintained example is executed or explicitly retired; archived material is
    visibly historical.
 6. **Numerical/physical proof is complete.** Applicable parity, analytical
-   references, dangerous cases, heterogeneity, state evolution, constraints,
+   references, edge cases, heterogeneity, state evolution, constraints,
    conservation, restart/provenance, result verification, and failure behavior
    pass at the completion commit.
 7. **Performance is representative.** The public-flow benchmark ladder records
@@ -1163,7 +1173,7 @@ are true:
     all worker/reviewer packets are terminal, all watchdogs are disabled, the
     worktree is clean, and landing/push remains a separate explicit action.
 
-This definition is falsified by one unclassified legacy example, one maintained
+This definition is not satisfied when one unclassified legacy example, one maintained
 public flow that still constructs `GlobalData` or a prototype carrier, one
 path-dependent result that cannot be restarted/verified, one hidden compatibility
 fallback, or one unresolved required reviewer finding.
@@ -1204,7 +1214,7 @@ accepted P0/P1 findings are repaired and re-proved.
 - Trial the workflow on `P0-D`, its `R0-F` reviewer, and then the serial Phase 1
   packets.
 - Record friction as concrete transition failures, not another process roadmap.
-- Change this method only if the trial exposes a falsifiable operating defect.
+- Change this method only if the trial exposes a testable operating defect.
 
 ### Retire overlapping guidance
 
@@ -1311,7 +1321,7 @@ function coordinator_activation():
 
     if selected is none:
         if every capability is proved or retired-proved:
-            run falsifiable migration-complete audit with independent reviewer
+            run evidence-checkable migration-complete audit with independent reviewer
             if all completion conditions pass:
                 record completion commit; disable all automation; return COMPLETE
         record missing dependency/evidence or minimum user decision
