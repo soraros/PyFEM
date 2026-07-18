@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: P0-H repairing the one accepted registry-snapshot defect; compiler closed
+- Status: P0-H integrated and broad-green; R0-M independent recheck active; compiler closed
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -9,24 +9,22 @@
 - Original dispatch base: `c75cbf3523349deb40bd2b07de7959e7606c3b1f`
 - Integrated foundation implementation: `108552ddd3382163a0e15c2fef7ca34e75f974fd`
 - Integrated exact-integer diagnostic repair: `461a8a85de622820eb627a24b8e53749489d020a`
-- Combined repaired foundation code head: `afaac4d189979c861fb0463e6aa9c07bc1bc4ed5`
+- Combined repaired foundation code head: `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
+- Integrated registry-snapshot repair: source `0947dd7ca3b70bef2ebdf986f2336f62f5b3c08b`, integrated `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
 - Active milestone: `I0 · foundations — combined proof`
 
 ## Exact next safe action
 
-Let P0-H task `019f7568-a1e0-7c33-bf83-0a490e54c520` repair the accepted R0-L
-registry-snapshot defect from exact clean base
-`55fcf990da8f47f612f5193529c2a6b77a823a10` inside
-`pyfem/v3/model/registry.py` and `test/v3/test_v3_model_identity.py`: capture
-descriptor meaning independently of the caller-owned descriptor and validate reused
-snapshot/descriptor fields, canonical ordering, manifest, fingerprint, and selected
-binding references before resolution. Missing or altered fields must fail with a
-stable library exception rather than changing resolved meaning or leaking an
-incidental `AttributeError`. Rerun the focused tests in both digit-limit modes, both
-Ruff configurations, `test/v3`, and the full repository suite, then obtain one
-bounded independent recheck. Do not start the model compiler until that proof is
-green. R0-J's recovered evidence remains supporting only; R0-K remains incomplete.
+Let read-only R0-M task `019f757a-e84f-70c3-a6d6-8c4ff7874204` finish its one
+bounded independent recheck at exact clean integrated commit
+`fb358fc0609b81a12cee4a1a66c2dae98edf5cae`. It must reproduce the original R0-L
+registry failures and adjacent ordering/manifest/fingerprint/binding-reference
+cases, run the focused tests in both digit-limit modes plus both Ruff configurations,
+return its own terminal result, and callback I0. Do not create a replacement or
+start the model compiler while R0-M is active. If it returns GO, record the final
+foundation decision and select the next Wave 0 packet from the workflow. R0-J's
+recovered evidence remains supporting only; R0-K remains incomplete.
 
 Blocked condition: a reviewer demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -539,9 +537,11 @@ Result and adjudication:
 
 ### P0-H — Preserve registry snapshot meaning
 
-State: `DISPATCHED` as task `019f7568-a1e0-7c33-bf83-0a490e54c520` from exact clean
-base `55fcf990da8f47f612f5193529c2a6b77a823a10` in a separate worktree. One
-Sol/max writer owns this repair; no parallel replacement or compiler task is active.
+State: `COMPLETE` as task `019f7568-a1e0-7c33-bf83-0a490e54c520` from exact clean
+base `55fcf990da8f47f612f5193529c2a6b77a823a10`. Source commit
+`0947dd7ca3b70bef2ebdf986f2336f62f5b3c08b` is exactly one two-path child and was
+integrated without conflict as `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`.
+The task supplied both required terminal signals and left its worktree clean.
 
 Outcome and ownership:
 
@@ -570,6 +570,38 @@ Required proof:
   both Ruff configurations and focused format pass, `test/v3` and the full suite
   pass, `git diff --check` passes, and the committed worktree is clean.
 
+Integrated result:
+
+- one detached descriptor and detached canonical metadata/manifest carrier are
+  captured per snapshot while the exact selected callable object is retained in a
+  parallel private tuple;
+- every resolution revalidates descriptor fields, canonical ordering/uniqueness,
+  snapshot manifest/fingerprint, and selected callable identity before returning;
+- both writer and I0 integration runs passed 68 focused tests in each digit mode,
+  both Ruff configurations, focused format, 240 v3 tests, 429 full-repository
+  tests, and `git diff --check`; and
+- I0 independently replayed source descriptor key/binding/metadata changes and all
+  four missing snapshot fields successfully. The cold integration v3 run emitted
+  four existing Numba performance notices plus 40 existing SciPy warnings; the
+  warm full run emitted only the 40 SciPy warnings.
+
+### R0-M — Independently recheck captured registry meaning
+
+State: `DISPATCHED` as read-only task `019f757a-e84f-70c3-a6d6-8c4ff7874204` from
+exact clean integrated base `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`.
+
+Outcome and boundary:
+
+- return one GO/NO-GO decision only on the repaired frozen-registry invariant;
+- replay source descriptor/mapping changes, missing snapshot/nested descriptor
+  fields, descriptor ordering/duplicates, snapshot manifest/fingerprint changes,
+  selected callable-reference changes, required-key selection, and ordinary stable
+  resolution;
+- run focused identity tests in both digit modes, both Ruff configurations, and
+  `test/v3` if time permits; and
+- remain read-only with no repository changes, commits, dependencies, additional
+  tasks, or compiler/program/solver work. Completion requires both terminal signals.
+
 ## Merge and continuation order
 
 1. Completed: review and integrate P0-A.
@@ -581,14 +613,15 @@ Required proof:
 5. Completed: R0-L returned a valid terminal result and callback. Its one accepted
    frozen-registry defect is now the only active foundation repair. R0-J and R0-K
    remain incomplete; their statuses do not change.
-6. Active: P0-H repairs the R0-L defect. I0 then reviews/integrates its single
-   commit, reruns the combined foundation gates, and obtains one bounded independent
-   recheck at the integrated commit.
-7. After that repair is independently green, dispatch the dependent
+6. Completed: P0-H repaired the R0-L defect, I0 reviewed/integrated its single
+   commit, and all combined focused/static/v3/full gates passed.
+7. Active: R0-M performs the one bounded independent recheck at the integrated
+   commit. No replacement or compiler task overlaps it.
+8. After that repair is independently green, dispatch the dependent
    compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
-8. Only after P0-D and its `R0-F` reviewer dispatch `ProgramSpec`/affine constraints and
+9. Only after P0-D and its `R0-F` reviewer dispatch `ProgramSpec`/affine constraints and
    `PreparedAssemblyPlan` work.
 
 ## Packet ledger
@@ -623,17 +656,19 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `INCOMPLETE R0-J · model spec — evidence only` | `019f7184-2fe6-7403-a5fd-683e58dcee79` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Read-only spec/diagnostic repeat reviewer | Incomplete; substantial zero-blocker evidence recovered, but no final result or callback; evidence is supporting only |
 | `INCOMPLETE R0-K · identity/storage — checks not run` | `019f7184-2fe6-7403-a5fd-685f9ee1995d` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Read-only identity/provenance/registry/storage repeat reviewer | Incomplete; temporary script created but never executed; no required tests, static gates, verdict, or callback |
 | `R0-L · identity/storage — boundary independently verified` | `019f7551-0075-7383-a895-fd2d77f02419` | `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92` | Read-only identity/provenance/registry/storage replacement reviewer | Complete, valid final and callback; NO-GO with one accepted frozen-registry defect; 47 focused in both digit modes, 162 local checks per mode, 219 v3 tests, both Ruff gates |
-| `P0-H · registry snapshot — meaning detached` | `019f7568-a1e0-7c33-bf83-0a490e54c520` | `55fcf990da8f47f612f5193529c2a6b77a823a10` | `registry.py` plus focused identity tests | Active bounded writer; one R0-L root defect; Sol/max; one commit required |
+| `P0-H · registry snapshot — meaning detached` | `019f7568-a1e0-7c33-bf83-0a490e54c520` | `55fcf990da8f47f612f5193529c2a6b77a823a10` | `registry.py` plus focused identity tests | Complete; source `0947dd7`, integrated `fb358fc`; 68 focused twice, 240 v3, 429 full, static gates green |
+| `R0-M · registry snapshot — capture invariant verified` | `019f757a-e84f-70c3-a6d6-8c4ff7874204` | `fb358fc0609b81a12cee4a1a66c2dae98edf5cae` | Read-only P0-H integrated recheck | Active; one bounded Sol/max GO/NO-GO review; no writer overlap |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
-R0-L subsequently completed under the corrected terminal contract, bringing the
-record to 18 tasks: 13 properly complete and five explicitly incomplete.
+R0-L and P0-H subsequently completed under the corrected terminal contract. With
+R0-M active, the record is 20 tasks: 14 properly complete, five explicitly
+incomplete, and one active.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
-  P0-E, R0-H, R0-I, P0-F, P0-G, and R0-L.
+  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, and P0-H.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, and R0-K.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
@@ -713,6 +748,22 @@ R0-L independent review evidence at exact dispatch base
   `AttributeError`; and
 - all other required identity, provenance, array, and registry checks passed. The
   compiler gate remains closed until the accepted defect is repaired and rechecked.
+
+P0-H integration evidence at
+`fb358fc0609b81a12cee4a1a66c2dae98edf5cae`:
+
+- source commit `0947dd7ca3b70bef2ebdf986f2336f62f5b3c08b` has the exact declared parent,
+  one-commit ancestry, two owned paths, clean committed worktree, and no scope
+  expansion;
+- the repair detaches descriptor and canonical carriers from caller-owned values,
+  preserves exact selected callable objects, and validates the complete snapshot
+  meaning before every resolution;
+- I0 replayed the source-change and missing-snapshot-field cases after reviewing the
+  committed diff, then integrated it without conflict; and
+- the integrated branch passes 68 focused tests in both digit modes, both Ruff
+  configurations, focused format, 240 v3 tests, 429 full tests, and whitespace
+  checks. Only the 40 existing SciPy warnings plus four existing cold-cache Numba
+  notices appeared.
 
 Recovered R0-J supporting evidence at exact frozen ledger head
 `8a952e7668f4f6c52d39352dee7e0685593906a3`:
@@ -924,3 +975,14 @@ integration decision; do not bridge it with a compatibility carrier.
   `55fcf990da8f47f612f5193529c2a6b77a823a10`. It owns only the registry primitive
   and its focused identity tests, must return one commit plus both terminal signals,
   and cannot begin compiler work. No replacement or polling automation is active.
+- 2026-07-18: P0-H completed both terminal signals with exact one-commit source
+  `0947dd7ca3b70bef2ebdf986f2336f62f5b3c08b`. I0 reviewed its two-path diff,
+  reproduced source detachment and missing-field behavior, integrated it without
+  conflict as `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`, and reran 68 focused tests
+  in both modes, both Ruff gates, focused format, 240 v3 tests, and 429 full tests
+  successfully.
+- 2026-07-18: dispatched exactly one read-only Sol/max recheck, R0-M
+  (`019f757a-e84f-70c3-a6d6-8c4ff7874204`), from exact clean integrated commit
+  `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`. It owns only the repaired registry
+  invariant, has no writer overlap, and must provide both terminal signals before
+  I0 can close the foundation gate.
