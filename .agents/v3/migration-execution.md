@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; P1-A is integrated and independently green, P1-B source is under bounded repair after two accepted I0 findings
+- Status: active; repaired P1-B is integrated with combined proof, and its independent assembly review is the next gate
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -18,20 +18,17 @@
 - Integrated P1-A program compiler: source `ab64e0219c11b5fc4155703eb8ade32939f90064`, integrated `b7316be8befba64df0a576df6b7fd8cdcf9b9873`
 - P1-B frozen Horizon and dispatch base: `4ed975795a4917fe40ed0203c981980ac5bea9cc`
 - P1-B initial source: `ab02297c052912cb027ac6963b37667bf61f3e97` (I0-reviewed NO-GO; not integrated)
-- Active P1-B repair writer: `P1-E` at task `019f7736-ec41-7560-9d65-472551b4a6fe`
+- Integrated P1-B assembly plan: repaired source `8e94454c63a76fdc1505d8ec3ec6341128448aab`, integrated `daad22796a6b178ba9fdb33d0e444b5be0f830e7`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: P1-B reference-recipe correspondence repair 1/2
+- Active milestone: P1-B independent assembly verification
 
 ## Exact next safe action
 
-Wait for the one replacement Sol/max repair writer `P1-E` at task
-`019f7736-ec41-7560-9d65-472551b4a6fe` to return both its terminal result and direct
-I0 callback. It passed exact clean preflight at initial source `ab02297`, whose
-parent is the frozen base `4ed9757`. I0 then verifies exact one-child ancestry,
-six-path ownership, reference-recipe correspondence, metadata-free binding output,
-the literal Q8/affine oracles, focused/static/v3/full proof, and clean source state.
-Do not integrate, dispatch the independent assembly reviewer, or open P1-C before
-that adjudication.
+Commit this adjudication and the frozen R1-B reviewer card below, then dispatch
+exactly one read-only Sol/max assembly reviewer from that exact clean commit. Record
+its task ID and base immediately after dispatch. Do not open P1-C before R1-B returns
+both terminal signals, every finding is adjudicated, accepted P0/P1 findings are
+repaired, and the independent verdict is GO.
 
 The original P1-B writer returned a valid terminal source and callback, but I0's
 independent carrier review found two P1 gaps while the numerical and architecture
@@ -41,6 +38,12 @@ check. Both findings are accepted. The original repair turn was interrupted befo
 editing when it requested an avoidable destructive worktree transition. A forked
 replacement then inherited the app-removed worktree path and was also stopped before
 editing. Both are visibly marked `INCOMPLETE`; neither changed the main branch.
+Replacement writer P1-E closed both findings in exact source `8e94454`, which I0
+integrated as `daad227`. Integrated proof is 34 focused and 152 combined tests in
+both digit modes, 27 named references, 392 v3 tests, 581 repository tests, both Ruff
+configurations, focused format, zero forbidden imports, zero determinant-absolute-
+value repair, clean diff, and clean status. Only the existing 40 SciPy sparse-format
+and four cold-cache Numba parallelization notices remain.
 
 P1-A final repair source `ab64e02` has valid terminal signals, exact one-commit
 ancestry and ten-path ownership. I0 reproduced 72 focused tests in both digit
@@ -125,7 +128,7 @@ dated E0 evidence.
 |---|---:|---|---|---|
 | P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
 | P1-A immediate dependency cut | 3 | `provisional`, `E2` at `b7316be`; final repair, I0 integration proof, and independent carrier GO complete | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Consumer proof continues through P1-B/P1-C; E3 requires the verified public slice |
-| P1-B immediate dependency cut | 5 | `repairing`, `E1`; initial source `ab02297` is unintegrated and replacement writer P1-E is active | 5 change; component slices of `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, `ASM-TANGENT` | Repair terminal result/callback -> I0 review -> serial integration only if green |
+| P1-B immediate dependency cut | 5 | `integrated`, `E1` at `daad227`; repair and I0 combined proof complete, independent review pending | 5 change; component slices of `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, `ASM-TANGENT` | R1-B terminal review and adjudication -> provisional E2 only if green |
 | Later preserve/change portfolio | 115 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -1645,9 +1648,9 @@ schema, dependency, vocabulary, manifest-hash, `.pro`, skim, and test-set checks
    I0-supplied base mismatch.
 10. Completed: P1-A's final repair 2/2 closed all accepted program-carrier seams,
     I0 integrated it as `b7316be`, and independent carrier review returned GO.
-11. Active continuation: P1-B initial source returned and I0 accepted two repair
-    findings. Replacement writer P1-E now owns repair round 1/2; review/integrate it
-    serially and obtain independent assembly proof before opening P1-C.
+11. Active continuation: P1-E closed both accepted P1-B findings, I0 integrated it
+    as `daad227`, and combined proof is green. Freeze and dispatch exactly one R1-B
+    independent assembly reviewer before opening P1-C.
 
 ## Packet ledger
 
@@ -1690,22 +1693,23 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P1-A · program compiler — affine plan canonical` | `019f764f-2643-75b2-a8b5-323ed58351a2` | `b18b262b97068086b9c61618d06a2d14a50046cd` | New program spec/normalizer, immutable compiled-program carriers, compiler/evaluator, and one focused test | Complete after repair 2/2; source `ab64e02`, integrated `b7316be`; independent GO, 72 focused twice, 228 combined twice, 358 v3, 547 full |
 | `INCOMPLETE P1-B · assembly plan — approval stalled` | `019f76f1-fffd-7772-ba9c-4e17d3ee9f63` | `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Initial immutable reference assembly plan/evaluator source plus attempted repair turn | Initial source `ab02297` completed with valid final/callback; I0 accepted two P1 findings; repair turn was interrupted before editing at an avoidable worktree-transition approval |
 | `INCOMPLETE P1-D · assembly plan — worktree missing` | `019f7732-d6a9-7c61-aa50-1410cb7b7f26` | intended source `ab02297c052912cb027ac6963b37667bf61f3e97` | First replacement for P1-B repair 1/2 | Incomplete before preflight/editing because the fork inherited the app-removed worktree path; archived without repository change |
-| `P1-E · assembly plan — correspondence repaired` | `019f7736-ec41-7560-9d65-472551b4a6fe` | source `ab02297c052912cb027ac6963b37667bf61f3e97`, parent `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Close exact Q8 reference-recipe correspondence and metadata-free binding output in the same six paths | Active replacement repair 1/2; exact source/parent/count/clean preflight passed; no parallel assembly writer or reviewer |
+| `P1-E · assembly plan — correspondence repaired` | `019f7736-ec41-7560-9d65-472551b4a6fe` | source `ab02297c052912cb027ac6963b37667bf61f3e97`, parent `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Close exact Q8 reference-recipe correspondence and metadata-free binding output in the same six paths | Complete with both terminal signals; replacement `8e94454`, integrated `daad227`; 34 focused twice, 152 combined twice, 392 v3, 581 full |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
 R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N subsequently completed under the corrected
-terminal contract. The record is now 28 tasks: 19 properly complete, eight explicitly
-incomplete, and one active task.
+terminal contract. The record is now 28 tasks: 20 properly complete, eight explicitly
+incomplete, and no active task before R1-B dispatch.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
-  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, R0-N, and P1-A.
+  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, R0-N, P1-A,
+  and P1-E.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, and the P1-D missing-worktree replacement.
-- Active: P1-E on exact clean source `ab02297`; no parallel assembly writer or
-  independent reviewer is active.
+- Active: none before the one R1-B reviewer is dispatched from the frozen card
+  below.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The current risk is review/process
@@ -1798,7 +1802,7 @@ obligation is nonblocking and is recorded for comparison with a later compact
 per-referenced-DOF witness before performance claims. The three P1-A rows therefore
 advance to provisional E2; P1-B may open from the frozen card above.
 
-## P1-B source evidence — repair 1/2 active
+## P1-B component evidence — integrated, independent review pending
 
 The original P1-B writer returned valid terminal final and callback for source
 `ab02297c052912cb027ac6963b37667bf61f3e97`, exactly one commit on frozen parent
@@ -1825,13 +1829,89 @@ The carrier reviewer returned NO-GO with two P1 findings accepted by I0:
    metadata-bearing topology/quadrature/formulation/material binding outputs could
    bypass the exact output boundary.
 
-Repair 1/2 is bounded to the same six paths. It must compare compiled reference
-arrays with validated outputs from the captured quadrature/topology bindings during
-preparation, keep per-point evaluation limited to formulation/material, reject
-metadata-bearing binding output everywhere, and preserve all previous oracles,
-ownership, diagnostics, and P1-C exclusions. The original repair turn and its first
-fork changed no files and are recorded incomplete for process accuracy. P1-E is the
-sole active replacement and passed exact source/parent/clean preflight.
+P1-E completed repair 1/2 as replacement source
+`8e94454c63a76fdc1505d8ec3ec6341128448aab`, still exactly one child of the frozen
+base and within the same six paths. Preparation now invokes the exact captured
+quadrature and topology bindings once each, validates exact tuple/plain-array/shape/
+finite/metadata-free-float64 output, and compares every reference carrier byte for
+byte with the compiled values. Evaluation continues to invoke only formulation and
+material. Metadata-bearing outputs reject on both preparation and evaluation
+boundaries. The focused tests cover altered re-identified parent gradients and
+quadrature points, stateful preparation binding failures, metadata-bearing outputs,
+and repeated call counts.
+
+I0 reviewed the repair delta, reproduced 152 combined model/program/assembly tests
+in both digit modes, both Ruff configurations, and focused format, then integrated
+the source without conflict as `daad22796a6b178ba9fdb33d0e444b5be0f830e7` on top
+of the current ledger. The integrated branch passed the same 152 combined tests in
+both modes, all 27 named references, both Ruff configurations, focused format, 392
+v3 tests, and 581 full-repository tests. Forbidden-import, root-export,
+determinant-absolute-value, whitespace, exact-head, and clean-status checks are all
+green. Broad warnings are the existing 40 SciPy sparse-format notices and four
+cold-cache Numba parallelization notices; the warm full suite emitted only the 40
+SciPy notices. The original repair turn and its first fork changed no files and
+remain recorded incomplete for process accuracy.
+
+## R1-B reviewer card — `HORIZON_FROZEN`
+
+**ID/title:** `R1-B · assembly plan — contribution invariants verified`
+
+**Outcome:** independently decide whether integrated P1-B preserves the frozen
+finite-element contribution meaning and closes both accepted repair findings. This
+is one read-only component review of integrated code commit `daad227`; it does not
+review or design P1-C state, solve, reaction, result, or public-flow ownership.
+
+**Coverage rows:** `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, and
+`ASM-TANGENT`. They remain component-bounded E1 until this review is adjudicated;
+even GO advances them only to provisional E2, not public-flow E3.
+
+**Read-only scope:** the P1-B Horizon above; `pyfem/v3/assembly/**`;
+`test/v3/test_v3_assembly_plan.py`; and the exact P0-D/P1-A model, registry,
+program, and focused-test dependencies needed to check composition. Repository
+edits, staging, commits, branch changes, installs, external access, new tasks, and
+P1-C implementation are forbidden. Temporary local correctness data belongs under
+`/private/tmp` only.
+
+**Finite-element correctness matrix:**
+
+1. reproduce the two accepted repair cases: a re-identified compiled model with
+   altered parent gradients or another reference carrier must fail preparation, and
+   metadata-bearing float64 outputs must fail at topology/quadrature/formulation/
+   material boundaries;
+2. verify preparation invokes the exact captured quadrature/topology bindings in
+   the bounded count, compiled reference carriers correspond exactly, and repeated
+   evaluation invokes only formulation/material;
+3. independently check the literal `K=M/360` Q8 operator, affine full/reduced RHS
+   and derivative signs, two-cell raw attribution/canonical coalescing, deterministic
+   order, structural zeros, prescribed-load retention, identity/fully prescribed
+   reduction, and fresh-value versus shared-topology ownership;
+4. check scale extremes, positive orientation, sign-changing/inverted and relative
+   singularity rejection, finite accumulation, and absence of determinant absolute-
+   value repair;
+5. check exact model/program/plan live/content compatibility, malformed carriers,
+   plan reconstruction, separate/detached storage, binding failure translation,
+   bounded diagnostics including the 640-digit mode, and no raw incidental exception;
+6. verify no backend, dense global operator/prolongation, solver, state, candidate,
+   reaction, result-ledger, adapter, prototype, legacy, or root-public ownership
+   entered P1-B; and
+7. report whether the stated preparation/evaluation complexity and the inherited
+   P1-A full-DOF witness obligation remain honest and nonblocking.
+
+**Required evidence:** exact clean-base preflight; a bounded independent local
+correctness matrix; 34 focused assembly tests normally and with
+`PYTHONINTMAXSTRDIGITS=640`; 152 combined model/program/assembly tests in both modes;
+the 27 named references; both Ruff configurations; focused format; `test/v3` if the
+configured environment permits; forbidden-import/root-export/determinant scans;
+`git diff --check`; final exact HEAD and clean status. Existing SciPy/Numba notices
+are separated from product findings. The integrated full-repository proof above is
+I0 evidence and need not be repeated unless the reviewer finds a cross-suite reason.
+
+**Terminal contract:** return P0/P1/P2 findings with file/line or command evidence,
+then GO or NO-GO. Immediately before the final, send I0 one callback beginning
+`R1-B COMPLETE` or `R1-B BLOCKED` with exact base, verdict, counts, strongest
+evidence, warnings/deferred items, clean state, and smallest adjudication action.
+The final begins `RESULT: COMPLETE` or `RESULT: BLOCKED`. Use ordinary local
+finite-element correctness language only.
 
 ## Active watchdogs
 
@@ -2406,3 +2486,16 @@ integration decision; do not bridge it with a compatibility carrier.
   P1-E (`019f7736-ec41-7560-9d65-472551b4a6fe`). P1-E passed exact source, parent,
   one-commit, and clean preflight; it is the sole assembly writer. No P1-B code is
   integrated, no reviewer is active, and P1-C remains closed.
+- 2026-07-19: P1-E returned both terminal signals with replacement source
+  `8e94454c63a76fdc1505d8ec3ec6341128448aab`, exactly one child of the frozen base
+  and exactly six owned paths. I0 reviewed the repair, reproduced the 152 combined
+  tests in both digit modes and all static gates, and integrated it without conflict
+  as `daad22796a6b178ba9fdb33d0e444b5be0f830e7`. The integrated branch then passed
+  152 combined tests twice, 27 references, 392 v3 tests, 581 repository tests, both
+  Ruff configurations, format, import/root/determinant/whitespace scans, and clean
+  status. Only the existing SciPy/Numba notices remain.
+- 2026-07-19: I0 froze the R1-B independent assembly reviewer card after integration.
+  It covers the five P1-B rows, both accepted repair cases, literal Q8 and affine
+  oracles, geometry policy, identity/storage/diagnostic boundaries, scope exclusions,
+  and cost honesty. P1-C remains closed until the one read-only Sol/max reviewer is
+  terminal, every finding is adjudicated, and the verdict is GO.
