@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: resumed; P0-D repair round 1/2 is active after I0 integration review
+- Status: resumed; P0-D is integrated and replacement R0-N review is active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -11,24 +11,23 @@
 - Integrated exact-integer diagnostic repair: `461a8a85de622820eb627a24b8e53749489d020a`
 - Combined repaired foundation code head: `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Integrated registry-snapshot repair: source `0947dd7ca3b70bef2ebdf986f2336f62f5b3c08b`, integrated `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
+- Integrated P0-D compiler: source `f21aaed2c97e98e63f58b77d0e301c3a2107e243`, integrated `79060abb054d82fd34ac85f000e44d9de5947d60`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: `P0-D · model compiler — Q8 block frozen`, repair 1/2
+- Active milestone: `R0-N · model compiler — block invariants verified`
 
 ## Exact next safe action
 
-Wait for the direct repair callback from P0-D task
-`019f75dd-f597-7c21-adfc-d78b1e2580c0`, then mechanically precheck and semantically
-review the replacement source commit. Repair round 1/2 must close exactly two
-accepted P1 findings: valid normalized integer material scalars must compile safely
-to `float64`, and a hard-coded mathematical test must independently prove the
-shipped Q8 local-node/shape-gradient convention. Do not integrate `92f57e82`,
-dispatch R0-F, or start ProgramSpec, assembly, state, solver, or another migration
-packet while the repair is active.
+Wait for the terminal result and direct callback from read-only Sol/max task R0-N
+`019f761d-4d85-7b72-9d80-857fab45aef8`, then adjudicate every reported
+finite-element correctness finding against the frozen P0-D Horizon. Do not poll in
+a loop and do not start ProgramSpec, assembly, state, solver, or another migration
+packet while this independent review is active.
 
-If the replacement closes both findings and its gates are green, the next safe
-action is serial I0 cherry-pick plus integration proof. A repeated finding, widened
-scope, or failed evidence returns the packet to repair round 2/2 or its exact
-blocked condition.
+If R0-N returns GO with complete evidence, record the 18 dependency rows as
+component-level evidence at the exact integrated compiler commit and freeze the
+next Phase 1 Horizon before dispatch. An accepted P0/P1 finding returns only the
+smallest bounded repair to the P0-D writer for repair round 2/2; scope expansion or
+a repeated blocker enters the card's recorded blocked condition.
 
 ## Semantic decisions and open questions
 
@@ -64,9 +63,10 @@ Decided:
   are not silently excluded. The current v3 whole-problem carrier, string registry,
   duplicate assembly bridge, and direct solve surface remain causal-retirement
   candidates only after their approved replacements are proved.
-- Thread IDs are never reused. `R0-E` and `R0-F` remain reserved for the planned
-  legacy-breadth and compiler reviews; replacement/follow-up foundation reviews use
-  the next otherwise-unreserved IDs, hence `R0-G`, `R0-H`, and `R0-I`.
+- Thread IDs are never reused. `R0-E` is the completed legacy-breadth inventory;
+  `R0-F` stopped before review because I0 supplied a wrong expanded commit hash;
+  replacement compiler review `R0-N` uses the verified exact integrated hash.
+  Earlier replacements likewise used the next otherwise-unreserved IDs.
 - dtype metadata is outside the current v1 manifest/finalization boundary and must
   fail closed; do not invent a recursive dtype-metadata schema or manifest v2 before
   an executable compiler slice demonstrates that semantic requirement;
@@ -102,7 +102,7 @@ dated E0 evidence.
 
 | Live scope | Rows | Lifecycle and evidence | Disposition state | Next transition |
 |---|---:|---|---|---|
-| P0-D immediate dependency cut | 18 | `contracted`, `E0` at `2842ef8`; source `92f57e82` is under repair and not integrated | 11 preserve, 7 change; frozen Q8 compiler Horizon below | Repair 1/2 -> I0 review/integration -> R0-F before any evidence advance |
+| P0-D immediate dependency cut | 18 | `implementing`, `E0`; repaired source `f21aaed2`, integrated `79060abb`, replacement independent review active | 11 preserve, 7 change; frozen Q8 compiler Horizon below | R0-N adjudication and combined proof before component evidence advances to E2 |
 | Later preserve/change portfolio | 123 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -965,20 +965,23 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P0-H · registry snapshot — meaning detached` | `019f7568-a1e0-7c33-bf83-0a490e54c520` | `55fcf990da8f47f612f5193529c2a6b77a823a10` | `registry.py` plus focused identity tests | Complete; source `0947dd7`, integrated `fb358fc`; 68 focused twice, 240 v3, 429 full, static gates green |
 | `R0-M · registry snapshot — capture invariant verified` | `019f757a-e84f-70c3-a6d6-8c4ff7874204` | `fb358fc0609b81a12cee4a1a66c2dae98edf5cae` | Read-only P0-H integrated recheck | Complete GO, zero blockers; 42 local checks, 68 focused twice, both Ruff gates, 240 v3; one app-level resume, both terminal signals valid |
 | `R0-E · legacy breadth — semantic ledger seeded` | `019f7587-31f2-7642-b162-5fd5b7a2d07b` | `c50ca70bff884157c5645dde276c25acc6672d4a` | Complete read-only E0 capability inventory report | Complete with both terminal signals; 154 rows, 606/606 paths, zero remnants; durable report SHA `f9e326d`; independently checked and ingested |
-| `P0-D · model compiler — Q8 block frozen` | `019f75dd-f597-7c21-adfc-d78b1e2580c0` | `2842ef84b86f04f82587f5fc378584f30f6b62bd` | `pyfem/v3/compile/**`, new compiled-model carriers, one focused compiler test | Repair 1/2 active from source `92f57e82`; I0 accepted P1 integer-scalar conversion and independent Q8 local-order proof findings; replacement not yet returned or integrated |
+| `P0-D · model compiler — Q8 block frozen` | `019f75dd-f597-7c21-adfc-d78b1e2580c0` | `2842ef84b86f04f82587f5fc378584f30f6b62bd` | `pyfem/v3/compile/**`, new compiled-model carriers, one focused compiler test | Complete after repair 1/2; replacement source `f21aaed2`, integrated `79060abb`; branch proof 156 focused twice, 22 direct Q8, 286 v3, 475 full |
+| `INCOMPLETE R0-F · model compiler — base mismatch` | `019f761b-2fc2-7e20-b5d9-b9681cb83e7e` | incorrect requested hash `79060ab3186e38460595b3831b77855b3f824bc` | Intended read-only compiler review | Incomplete by coordinator error; stopped correctly at clean preflight after observing actual `79060abb`; no correctness matrix or finding was assessed |
+| `R0-N · model compiler — block invariants verified` | `019f761d-4d85-7b72-9d80-857fab45aef8` | `79060abb054d82fd34ac85f000e44d9de5947d60` | Replacement read-only P0-D integrated review | Active from verified exact clean integrated commit; no verdict yet |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
-R0-L, P0-H, R0-M, and R0-E subsequently completed under the corrected terminal
-contract. During P0-D repair round 1/2, the record is 22 tasks: 16 properly
-complete, five explicitly incomplete, and one active bounded writer.
+R0-L, P0-H, R0-M, R0-E, and P0-D subsequently completed under the corrected
+terminal contract. The record is now 24 tasks: 17 properly complete, six explicitly
+incomplete, and one active read-only reviewer.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
-  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, and R0-E.
-- Incomplete: initial R0-C, R0-D, R0-G, R0-J, and R0-K.
-- Active: P0-D repair round 1/2 in the original Sol/max task and worktree.
+  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, and P0-D.
+- Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, and R0-F.
+- Active: replacement R0-N read-only compiler review at exact integrated commit
+  `79060abb054d82fd34ac85f000e44d9de5947d60`.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The current risk is review/process
@@ -989,24 +992,37 @@ complete, five explicitly incomplete, and one active bounded writer.
 None. Direct terminal callbacks and bounded native waits are active; unchanged
 thread state does not trigger a model-consuming polling loop.
 
-## P0-D source evidence — not integration proof
+## P0-D integration evidence — independent review pending
 
-The source task reports commit `92f57e82ac6639c9f5e769ea2b28c6178673f15a`
-as the only child of frozen base
-`2842ef84b86f04f82587f5fc378584f30f6b62bd`, with a clean worktree. Its terminal
-evidence is 152 focused compiler/foundation tests in normal and strict 640-digit
-modes, 22 direct Q8 component tests, 282 v3 tests, 471 full-repository tests, both
-Ruff configurations, focused format, diff check, and a zero-hit forbidden-import
-scan. Reported warnings are existing SciPy sparse-conversion notices and cold-cache
-Numba performance notices; no new compiler warning or source blocker was reported.
+The original source `92f57e82ac6639c9f5e769ea2b28c6178673f15a`
+passed its reported gates but I0 accepted two P1 gaps: valid normalized exact
+integers were rejected as material parameters, and the direct test set reused the
+production Q8 shape implementation rather than independently establishing its
+declared local order. Repair round 1/2 replaced it with source
+`f21aaed2c97e98e63f58b77d0e301c3a2107e243`, still exactly one child of frozen base
+`2842ef84b86f04f82587f5fc378584f30f6b62bd` and within the seven owned packet
+paths.
 
-I0 verified ancestry/path scope, inspected the diff, reproduced 152 focused tests in
-both digit modes, reproduced the 22 direct-component tests, and reran Ruff/static
-checks. Review found two P1 acceptance gaps: normalized exact integers were rejected
-as material parameters, and the direct test set reused the production Q8 shape
-implementation rather than independently establishing its declared local order.
-The source remains unintegrated; the 18 rows stay `contracted` at E0 and no public
-vertical slice is claimed.
+I0 inspected the repair delta, confirmed exact integer/float-but-not-bool lowering
+through finite `float64` before domain checks, bounded failure for nonrepresentable
+integers, and hard-coded Q8 nodal and center-gradient expectations independent of
+the shipped implementation. The repaired source worktree passed 156 focused tests
+normally and with `PYTHONINTMAXSTRDIGITS=640`, 22 direct Q8 component tests, both
+Ruff configurations, and focused format.
+
+The exact repaired source was integrated without conflict as
+`79060abb054d82fd34ac85f000e44d9de5947d60`. On that branch commit, I0 reproduced
+156 focused tests in both digit modes, 22 direct Q8 component tests, both Ruff
+configurations, focused format, 286 v3 tests, and 475 full-repository tests. The
+prototype-import exclusion scan, `git diff --check`, exact-head, and clean-status
+checks passed. The broad warm-cache proof emitted only 40 existing SciPy
+`SparseEfficiencyWarning` notices; cold-cache component/v3 runs also emitted known
+Numba performance notices from existing numeric kernels.
+
+R0-F stopped before review because I0 supplied an incorrect expanded full hash; it
+made no finding. Replacement R0-N is active from the verified exact clean integrated
+commit. Until that independent review is adjudicated, the 18 rows remain
+`implementing` at E0 and no public vertical slice is claimed.
 
 ## Required combined evidence
 
@@ -1428,3 +1444,16 @@ integration decision; do not bridge it with a compatibility carrier.
   independently prove the declared local-node convention. P0-D repair round 1/2
   was sent to the original Sol/max task; no source was integrated and R0-F remains
   undispatched.
+- 2026-07-19: P0-D repair round 1/2 returned exact replacement source
+  `f21aaed2c97e98e63f58b77d0e301c3a2107e243`. I0 reviewed and reproduced the
+  repair evidence, integrated it without conflict as
+  `79060abb054d82fd34ac85f000e44d9de5947d60`, and passed 156 focused tests in both
+  digit modes, 22 direct Q8 tests, both Ruff gates, focused format, 286 v3 tests,
+  475 full-repository tests, prototype-import exclusion, whitespace, exact-head,
+  and clean-status checks.
+- 2026-07-19: I0 then supplied an incorrect expanded full hash to R0-F. R0-F
+  correctly stopped at clean preflight and evaluated no compiler invariant; it is
+  visibly marked incomplete. I0 verified the actual full hash, renamed the failed
+  task, and dispatched exactly one Sol/max replacement R0-N
+  (`019f761d-4d85-7b72-9d80-857fab45aef8`) from the exact clean integrated commit.
+  No parallel migration writer is active.
