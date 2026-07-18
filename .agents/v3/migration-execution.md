@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: foundation gate GO; R0-E legacy capability inventory active; compiler closed until inventory ingestion
+- Status: foundation gate GO; R0-E waiting on authorized local-report write; compiler closed
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -16,8 +16,10 @@
 
 ## Exact next safe action
 
-Let read-only Sol/max R0-E task `019f7587-31f2-7642-b162-5fd5b7a2d07b` finish its
-complete evidence-backed E0 inventory from exact clean foundation-closure commit
+Approve read-only Sol/max R0-E task `019f7587-31f2-7642-b162-5fd5b7a2d07b` to
+write its authorized external report at
+`/private/tmp/pyfem-r0e-capability-inventory.md`, then let it finish the complete
+evidence-backed E0 inventory from exact clean foundation-closure commit
 `c50ca70bff884157c5645dde276c25acc6672d4a`. It must account for legacy runtime,
 examples, tests, input/output, GUI, RVE/FE2, ROM, public/docs surfaces, and the v3
 prototype in `/private/tmp/pyfem-r0e-capability-inventory.md`, audit unclassified
@@ -621,9 +623,11 @@ Result:
 
 ### R0-E — Seed the complete legacy capability inventory
 
-State: `DISPATCHED` as read-only task `019f7587-31f2-7642-b162-5fd5b7a2d07b` from
-exact clean foundation-closure commit
-`c50ca70bff884157c5645dde276c25acc6672d4a`.
+State: `WAITING_FOR_APPROVAL` as read-only task
+`019f7587-31f2-7642-b162-5fd5b7a2d07b` from exact clean foundation-closure commit
+`c50ca70bff884157c5645dde276c25acc6672d4a`. Exact-base preflight and governing
+document review are complete. The task is paused only on the app's local-file
+approval for its authorized `/private/tmp` report; no repository write was requested.
 
 Outcome and boundary:
 
@@ -703,7 +707,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `R0-L · identity/storage — boundary independently verified` | `019f7551-0075-7383-a895-fd2d77f02419` | `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92` | Read-only identity/provenance/registry/storage replacement reviewer | Complete, valid final and callback; NO-GO with one accepted frozen-registry defect; 47 focused in both digit modes, 162 local checks per mode, 219 v3 tests, both Ruff gates |
 | `P0-H · registry snapshot — meaning detached` | `019f7568-a1e0-7c33-bf83-0a490e54c520` | `55fcf990da8f47f612f5193529c2a6b77a823a10` | `registry.py` plus focused identity tests | Complete; source `0947dd7`, integrated `fb358fc`; 68 focused twice, 240 v3, 429 full, static gates green |
 | `R0-M · registry snapshot — capture invariant verified` | `019f757a-e84f-70c3-a6d6-8c4ff7874204` | `fb358fc0609b81a12cee4a1a66c2dae98edf5cae` | Read-only P0-H integrated recheck | Complete GO, zero blockers; 42 local checks, 68 focused twice, both Ruff gates, 240 v3; one app-level resume, both terminal signals valid |
-| `R0-E · legacy breadth — semantic ledger seeded` | `019f7587-31f2-7642-b162-5fd5b7a2d07b` | `c50ca70bff884157c5645dde276c25acc6672d4a` | Complete read-only E0 capability inventory report | Active Sol/max research; report outside repository; compiler remains closed pending ingestion |
+| `R0-E · legacy breadth — semantic ledger seeded` | `019f7587-31f2-7642-b162-5fd5b7a2d07b` | `c50ca70bff884157c5645dde276c25acc6672d4a` | Complete read-only E0 capability inventory report | Waiting on authorized `/private/tmp` report-write approval after green preflight/document read; compiler closed pending ingestion |
 
 ## Task completion audit
 
@@ -1062,3 +1066,8 @@ integration decision; do not bridge it with a compatibility carrier.
   output is the complete external E0 capability report for I0 ingestion; it cannot
   edit the repository or begin compiler work. P0-D remains closed until the
   inventory is terminal and adjudicated.
+- 2026-07-18: R0-E confirmed its exact base and clean worktree, read all governing
+  documents, and began repository-surface reconciliation. It is paused only on the
+  app approval required to write the explicitly authorized external report at
+  `/private/tmp/pyfem-r0e-capability-inventory.md`. No repository change exists and
+  no compiler task is active.
