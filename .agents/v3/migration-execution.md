@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; P1-A is integrated and independently green, P1-B Horizon is frozen for dispatch
+- Status: active; P1-A is integrated and independently green, one P1-B writer is implementing the frozen Horizon
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -16,17 +16,18 @@
 - P1-A frozen Horizon and R0-N adjudication: `b18b262b97068086b9c61618d06a2d14a50046cd`
 - P1-A repair 1/2 replacement source: `587e3fc41a0a0fbf9ef3d7e069d8eca591006001` (I0-reviewed NO-GO; not integrated)
 - Integrated P1-A program compiler: source `ab64e0219c11b5fc4155703eb8ade32939f90064`, integrated `b7316be8befba64df0a576df6b7fd8cdcf9b9873`
+- P1-B frozen Horizon and dispatch base: `4ed975795a4917fe40ed0203c981980ac5bea9cc`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: dispatch P1-B reference assembly contributions
+- Active milestone: P1-B reference assembly implementation
 
 ## Exact next safe action
 
-Dispatch exactly one Sol/max writer from the clean documentation commit containing
-the frozen P1-B Horizon. The packet owns a
-backend-neutral, immutable reference assembly plan and one linear Q8 contribution
-evaluator. It must compose P0-D's validated compiled model with P1-A's validated
-program and must stop before sparse backend choice, solve/state/result ownership,
-public API, or prototype retirement.
+Wait for the one P1-B Sol/max writer at task
+`019f76f1-fffd-7772-ba9c-4e17d3ee9f63` to return both its terminal result and direct
+I0 callback. It passed exact clean preflight at frozen base `4ed9757`. I0 then
+verifies one-commit ancestry, owned paths, the total boundary, literal Q8/affine
+oracles, focused/static/v3/full proof, and clean source state. Do not integrate,
+dispatch the independent assembly reviewer, or open P1-C before that adjudication.
 
 P1-A final repair source `ab64e02` has valid terminal signals, exact one-commit
 ancestry and ten-path ownership. I0 reproduced 72 focused tests in both digit
@@ -111,7 +112,7 @@ dated E0 evidence.
 |---|---:|---|---|---|
 | P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
 | P1-A immediate dependency cut | 3 | `provisional`, `E2` at `b7316be`; final repair, I0 integration proof, and independent carrier GO complete | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Consumer proof continues through P1-B/P1-C; E3 requires the verified public slice |
-| P1-B immediate dependency cut | 5 | `contracted`, `E1` at the P1-B Horizon freeze commit | 5 change; component slices of `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, `ASM-TANGENT` | One reference assembly writer -> I0 review -> serial integration only if green |
+| P1-B immediate dependency cut | 5 | `implementing`, `E1` at `4ed9757`; exactly one writer active | 5 change; component slices of `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, `ASM-TANGENT` | Terminal result/callback -> I0 review -> serial integration only if green |
 | Later preserve/change portfolio | 115 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -697,13 +698,14 @@ may advance only these slices to E2. `ASM-INTERNAL`, nonlinear or stateful tange
 distributed/follower loads, `ANAL-LINEAR`, reactions/balance/results, public flow,
 and prototype retirement remain E0.
 
-**Exact base and required parent packets:** dispatch only from the clean commit that
-contains this frozen card and the integrated P1-A commit
+**Exact base and required parent packets:** the sole writer was dispatched from
+exact clean frozen-card commit `4ed975795a4917fe40ed0203c981980ac5bea9cc`, which
+contains the integrated P1-A commit
 `b7316be8befba64df0a576df6b7fd8cdcf9b9873`. P0-D is independently green at
 `79060abb054d82fd34ac85f000e44d9de5947d60`; P1-A final source
 `ab64e0219c11b5fc4155703eb8ade32939f90064` is independently green and integrated.
-The exact dispatch commit and task ID are added to the packet ledger before work
-begins. No other assembly writer runs in parallel.
+The exact task ID is recorded in the packet ledger. No other assembly writer runs
+in parallel.
 
 **Request ownership and exact vocabulary:** do not add an authored assembly spec.
 P1-C's future typed `LinearStatic` request remains the sole authored analysis
@@ -1673,19 +1675,21 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `INCOMPLETE R0-F · model compiler — base mismatch` | `019f761b-2fc2-7e20-b5d9-b9681cb83e7e` | incorrect requested hash `79060ab3186e38460595b3831b77855b3f824bc` | Intended read-only compiler review | Incomplete by coordinator error; stopped correctly at clean preflight after observing actual `79060abb`; no correctness matrix or finding was assessed |
 | `R0-N · model compiler — block invariants verified` | `019f761d-4d85-7b72-9d80-857fab45aef8` | `79060abb054d82fd34ac85f000e44d9de5947d60` | Replacement read-only P0-D integrated review | Complete GO with both terminal signals; 99 independent checks, 156 focused twice, 22 direct Q8, 286 v3, 475 full, zero findings |
 | `P1-A · program compiler — affine plan canonical` | `019f764f-2643-75b2-a8b5-323ed58351a2` | `b18b262b97068086b9c61618d06a2d14a50046cd` | New program spec/normalizer, immutable compiled-program carriers, compiler/evaluator, and one focused test | Complete after repair 2/2; source `ab64e02`, integrated `b7316be`; independent GO, 72 focused twice, 228 combined twice, 358 v3, 547 full |
+| `P1-B · assembly plan — contributions composed` | `019f76f1-fffd-7772-ba9c-4e17d3ee9f63` | `4ed975795a4917fe40ed0203c981980ac5bea9cc` | New immutable reference assembly plan/evaluator and one focused test | Active; exact clean preflight passed; sole assembly writer implementing the frozen Horizon |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
 R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N subsequently completed under the corrected
-terminal contract. The record is now 25 tasks: 19 properly complete, six explicitly
-incomplete, and no active task before P1-B dispatch.
+terminal contract. The record is now 26 tasks: 19 properly complete, six explicitly
+incomplete, and one active task.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
   P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, R0-N, and P1-A.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, and R0-F.
-- Active: none until the P1-B Horizon freeze commit is dispatched.
+- Active: P1-B on exact clean base `4ed9757`; no parallel assembly writer or
+  independent reviewer is active.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The current risk is review/process
@@ -2329,3 +2333,10 @@ integration decision; do not bridge it with a compatibility carrier.
   returned final GO after the diagnostic, alias, compatibility, singularity, and
   cost clauses were made exact. The clean commit containing this card is the sole
   permitted P1-B dispatch base.
+- 2026-07-19: I0 committed the frozen P1-B Horizon as
+  `4ed975795a4917fe40ed0203c981980ac5bea9cc`, then dispatched exactly one Sol/max
+  writer, `P1-B · assembly plan — contributions composed`
+  (`019f76f1-fffd-7772-ba9c-4e17d3ee9f63`), from that exact clean base. Its
+  preflight confirmed the exact commit and empty worktree. The five assembly rows
+  are implementing at E1; no parallel assembly writer, reviewer, or P1-C owner is
+  active.
