@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: foundation gate GO; legacy capability inventory next; compiler closed until inventory ingestion
+- Status: foundation gate GO; R0-E legacy capability inventory active; compiler closed until inventory ingestion
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -16,15 +16,15 @@
 
 ## Exact next safe action
 
-Dispatch one read-only Sol/max R0-E task from the exact clean commit containing this
-foundation closure. It must build a complete evidence-backed E0 inventory of legacy
-capabilities across runtime, examples, tests, input/output, GUI, RVE/FE2, ROM, and
-the existing v3 prototype; propose preserve/change/retire classifications and
-evidence gaps without editing the repository. The integration owner then ingests
-the inventory into this sole live ledger and adjudicates every still-undecided row.
-Only after that ingestion may P0-D, the Q8 compiled-model packet, be frozen and
-dispatched. R0-J's recovered evidence remains supporting only; R0-K remains
-incomplete.
+Let read-only Sol/max R0-E task `019f7587-31f2-7642-b162-5fd5b7a2d07b` finish its
+complete evidence-backed E0 inventory from exact clean foundation-closure commit
+`c50ca70bff884157c5645dde276c25acc6672d4a`. It must account for legacy runtime,
+examples, tests, input/output, GUI, RVE/FE2, ROM, public/docs surfaces, and the v3
+prototype in `/private/tmp/pyfem-r0e-capability-inventory.md`, audit unclassified
+remnants, return its own terminal result, and callback I0. The integration owner
+then ingests and adjudicates the inventory in this sole live ledger. Do not create a
+replacement or dispatch P0-D while R0-E is active. R0-J's recovered evidence
+remains supporting only; R0-K remains incomplete.
 
 Blocked condition: a reviewer demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -619,6 +619,32 @@ Result:
   `git diff --check`, then supplied both terminal signals. No product gate is
   missing and no replacement task was created.
 
+### R0-E — Seed the complete legacy capability inventory
+
+State: `DISPATCHED` as read-only task `019f7587-31f2-7642-b162-5fd5b7a2d07b` from
+exact clean foundation-closure commit
+`c50ca70bff884157c5645dde276c25acc6672d4a`.
+
+Outcome and boundary:
+
+- create one complete E0 report at
+  `/private/tmp/pyfem-r0e-capability-inventory.md` without modifying the repository;
+- scan and map public entry points, packaging, loaders, mesh/DOF/constraint/model/
+  assembly/solver/element/material/section/writer surfaces, every legacy test and
+  checked-in `.pro` example, every parity skim and v3 test, public docs/notebooks,
+  GUI, RVE/FE2, ROM, contact, multiphysics, structural, dynamics/eigen,
+  nonlinear/path-following, ecosystem I/O, and prototype duplicate owners;
+- provide every required capability-ledger field, stable semantic IDs, proposed
+  preserve/change/retire dispositions, exact evidence pointers, P0-D dependencies,
+  coverage mappings, and an explicit unclassified-remnants count; and
+- keep public retirement and API/GUI/RVE-FE2/ROM choices visibly proposed until I0
+  and the user adjudicate them. Code/example existence is E0, not proof of behavior.
+
+Completion requires a required-field/ID/disposition/owner/status/grade/coverage
+audit, exact HEAD and clean-status recheck, a sentinel-bearing final response, and a
+direct I0 callback. R0-E has no repository file ownership and cannot create tasks or
+design/implement compiler code.
+
 ## Merge and continuation order
 
 1. Completed: review and integrate P0-A.
@@ -677,13 +703,15 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `R0-L · identity/storage — boundary independently verified` | `019f7551-0075-7383-a895-fd2d77f02419` | `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92` | Read-only identity/provenance/registry/storage replacement reviewer | Complete, valid final and callback; NO-GO with one accepted frozen-registry defect; 47 focused in both digit modes, 162 local checks per mode, 219 v3 tests, both Ruff gates |
 | `P0-H · registry snapshot — meaning detached` | `019f7568-a1e0-7c33-bf83-0a490e54c520` | `55fcf990da8f47f612f5193529c2a6b77a823a10` | `registry.py` plus focused identity tests | Complete; source `0947dd7`, integrated `fb358fc`; 68 focused twice, 240 v3, 429 full, static gates green |
 | `R0-M · registry snapshot — capture invariant verified` | `019f757a-e84f-70c3-a6d6-8c4ff7874204` | `fb358fc0609b81a12cee4a1a66c2dae98edf5cae` | Read-only P0-H integrated recheck | Complete GO, zero blockers; 42 local checks, 68 focused twice, both Ruff gates, 240 v3; one app-level resume, both terminal signals valid |
+| `R0-E · legacy breadth — semantic ledger seeded` | `019f7587-31f2-7642-b162-5fd5b7a2d07b` | `c50ca70bff884157c5645dde276c25acc6672d4a` | Complete read-only E0 capability inventory report | Active Sol/max research; report outside repository; compiler remains closed pending ingestion |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
 R0-L, P0-H, and R0-M subsequently completed under the corrected terminal contract.
-The record is 20 tasks: 15 properly complete and five explicitly incomplete.
+With R0-E active, the record is 21 tasks: 15 properly complete, five explicitly
+incomplete, and one active.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
   P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, and R0-M.
@@ -1027,3 +1055,10 @@ integration decision; do not bridge it with a compatibility carrier.
   supplied a GO final and callback with zero blockers. The foundation gate is now
   closed green at `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`; no replacement chain
   was created.
+- 2026-07-18: committed the foundation closure as
+  `c50ca70bff884157c5645dde276c25acc6672d4a`, then dispatched exactly one
+  read-only Sol/max inventory task, R0-E
+  (`019f7587-31f2-7642-b162-5fd5b7a2d07b`), from that exact clean commit. Its sole
+  output is the complete external E0 capability report for I0 ingestion; it cannot
+  edit the repository or begin compiler work. P0-D remains closed until the
+  inventory is terminal and adjudicated.
