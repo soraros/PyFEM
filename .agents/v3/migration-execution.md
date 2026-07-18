@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; repaired P1-B is integrated with combined proof, and its independent assembly review is the next gate
+- Status: paused; P1-B is integrated and independently green at provisional E2, with P1-C still closed
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -19,17 +19,16 @@
 - P1-B frozen Horizon and dispatch base: `4ed975795a4917fe40ed0203c981980ac5bea9cc`
 - P1-B initial source: `ab02297c052912cb027ac6963b37667bf61f3e97` (I0-reviewed NO-GO; not integrated)
 - Integrated P1-B assembly plan: repaired source `8e94454c63a76fdc1505d8ec3ec6341128448aab`, integrated `daad22796a6b178ba9fdb33d0e444b5be0f830e7`
-- Active P1-B independent reviewer: `R1-B` at task `019f7750-8745-7e23-aaf2-35f50ec79fc8`, exact base `e11a07c0cc5c00e956c3d537ac94272f120621c0`
+- P1-B independent proof: exact base `e11a07c0cc5c00e956c3d537ac94272f120621c0`; the sidebar R1-B task is visibly incomplete after a temporary-file approval stall, while the exact-base internal Sol/max replacement returned GO with zero findings
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: P1-B independent assembly verification
+- Active milestone: paused after P1-B provisional E2
 
 ## Exact next safe action
 
-Wait for the one read-only Sol/max assembly reviewer R1-B at task
-`019f7750-8745-7e23-aaf2-35f50ec79fc8` to return both terminal signals from exact
-clean base `e11a07c0cc5c00e956c3d537ac94272f120621c0`. Adjudicate every finding against
-the frozen cards and exact evidence. Do not open P1-C before the verdict is GO and
-any accepted P0/P1 finding is repaired and independently rechecked.
+Remain paused. On resume, freeze the P1-C Horizon before dispatching any owner. Its
+exact semantic cut must compose the provisional-E2 model, program, and assembly
+components without silently adding solver, state-transaction, reaction, result,
+adapter, or root-public ownership. No P1-C writer or reviewer is active.
 
 The original P1-B writer returned a valid terminal source and callback, but I0's
 independent carrier review found two P1 gaps while the numerical and architecture
@@ -43,8 +42,13 @@ Replacement writer P1-E closed both findings in exact source `8e94454`, which I0
 integrated as `daad227`. Integrated proof is 34 focused and 152 combined tests in
 both digit modes, 27 named references, 392 v3 tests, 581 repository tests, both Ruff
 configurations, focused format, zero forbidden imports, zero determinant-absolute-
-value repair, clean diff, and clean status. Only the existing 40 SciPy sparse-format
-and four cold-cache Numba parallelization notices remain.
+value repair, clean diff, and clean status. The first sidebar reviewer then stalled
+on an unnecessary temporary-file approval and is visibly marked `INCOMPLETE`; its
+partial evidence is supporting only. An exact-base internal Sol/max replacement
+independently read the source/contracts, reran 34 focused and 152 combined cases in
+both digit modes, all 27 references, both Ruff configurations, format and static
+gates, and returned GO with zero P0/P1/P2 findings from a clean tree. Only the
+existing SciPy sparse-format and cold-cache Numba parallelization notices remain.
 
 P1-A final repair source `ab64e02` has valid terminal signals, exact one-commit
 ancestry and ten-path ownership. I0 reproduced 72 focused tests in both digit
@@ -129,7 +133,7 @@ dated E0 evidence.
 |---|---:|---|---|---|
 | P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
 | P1-A immediate dependency cut | 3 | `provisional`, `E2` at `b7316be`; final repair, I0 integration proof, and independent carrier GO complete | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Consumer proof continues through P1-B/P1-C; E3 requires the verified public slice |
-| P1-B immediate dependency cut | 5 | `integrated`, `E1` at `daad227`; repair and I0 combined proof complete, independent review pending | 5 change; component slices of `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, `ASM-TANGENT` | R1-B terminal review and adjudication -> provisional E2 only if green |
+| P1-B immediate dependency cut | 5 | `provisional`, `E2` at `daad227`; repair, I0 combined proof, and exact-base independent GO complete | 5 change; component slices of `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, `ASM-TANGENT` | Consumer proof continues through P1-C; E3 requires the verified public slice |
 | Later preserve/change portfolio | 115 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -1649,9 +1653,9 @@ schema, dependency, vocabulary, manifest-hash, `.pro`, skim, and test-set checks
    I0-supplied base mismatch.
 10. Completed: P1-A's final repair 2/2 closed all accepted program-carrier seams,
     I0 integrated it as `b7316be`, and independent carrier review returned GO.
-11. Active continuation: P1-E closed both accepted P1-B findings, I0 integrated it
-    as `daad227`, and combined proof is green. Freeze and dispatch exactly one R1-B
-    independent assembly reviewer before opening P1-C.
+11. Completed: P1-E closed both accepted P1-B findings, I0 integrated it as
+    `daad227`, and the exact-base replacement independent review returned GO with
+    zero findings. The five assembly rows are provisional E2; pause before P1-C.
 
 ## Packet ledger
 
@@ -1695,27 +1699,30 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `INCOMPLETE P1-B · assembly plan — approval stalled` | `019f76f1-fffd-7772-ba9c-4e17d3ee9f63` | `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Initial immutable reference assembly plan/evaluator source plus attempted repair turn | Initial source `ab02297` completed with valid final/callback; I0 accepted two P1 findings; repair turn was interrupted before editing at an avoidable worktree-transition approval |
 | `INCOMPLETE P1-D · assembly plan — worktree missing` | `019f7732-d6a9-7c61-aa50-1410cb7b7f26` | intended source `ab02297c052912cb027ac6963b37667bf61f3e97` | First replacement for P1-B repair 1/2 | Incomplete before preflight/editing because the fork inherited the app-removed worktree path; archived without repository change |
 | `P1-E · assembly plan — correspondence repaired` | `019f7736-ec41-7560-9d65-472551b4a6fe` | source `ab02297c052912cb027ac6963b37667bf61f3e97`, parent `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Close exact Q8 reference-recipe correspondence and metadata-free binding output in the same six paths | Complete with both terminal signals; replacement `8e94454`, integrated `daad227`; 34 focused twice, 152 combined twice, 392 v3, 581 full |
-| `R1-B · assembly plan — contribution invariants verified` | `019f7750-8745-7e23-aaf2-35f50ec79fc8` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Independent read-only P1-B correctness matrix and verdict | Active; exact Sol/max reviewer dispatched from the frozen card; P1-C closed |
+| `INCOMPLETE R1-B · assembly plan — temp-file approval stalled` | `019f7750-8745-7e23-aaf2-35f50ec79fc8` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Original independent read-only P1-B reviewer | Incomplete; preflight and repository gates were green, but an unnecessary temporary-file change waited on approval; archived without final/callback or repository change |
+| `I0/R1-B · assembly plan — bounded replacement GO` | internal agent `/root/r1b_inline_review` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Exact-base read-only Sol/max replacement | Complete GO; zero findings, 34 focused twice, 152 combined twice, 27 references, both Ruff configurations, format/static/diff/final-clean gates green |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
 R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N subsequently completed under the corrected
-terminal contract. The record is now 29 tasks: 20 properly complete, eight explicitly
-incomplete, and one active task.
+terminal contract. The sidebar record is now 29 tasks: 20 properly complete, nine
+explicitly incomplete, and zero active tasks. The completed internal R1-B replacement
+is recorded separately because it is not a user-visible sidebar task.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
   P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, R0-N, P1-A,
   and P1-E.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
-  repair turn, and the P1-D missing-worktree replacement.
-- Active: R1-B on exact clean base `e11a07c`; no writer or second assembly reviewer
-  is active.
+  repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
+  stalled on an unnecessary temporary-file approval.
+- Active: none. No writer, reviewer, watchdog, or P1-C owner is active.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
-- No incomplete writer commit was integrated. The current risk is review/process
-  integrity, not contamination of the integrated foundation code.
+- No incomplete writer commit was integrated. The exact-base internal replacement
+  independently completed R1-B GO; the remaining incomplete entries are process
+  history, not contamination or unfinished code on `v3`.
 
 ## P1-A component evidence — integrated and independently green
 
@@ -1804,7 +1811,7 @@ obligation is nonblocking and is recorded for comparison with a later compact
 per-referenced-DOF witness before performance claims. The three P1-A rows therefore
 advance to provisional E2; P1-B may open from the frozen card above.
 
-## P1-B component evidence — integrated, independent review pending
+## P1-B component evidence — integrated and independently green
 
 The original P1-B writer returned valid terminal final and callback for source
 `ab02297c052912cb027ac6963b37667bf61f3e97`, exactly one commit on frozen parent
@@ -1914,6 +1921,37 @@ then GO or NO-GO. Immediately before the final, send I0 one callback beginning
 evidence, warnings/deferred items, clean state, and smallest adjudication action.
 The final begins `RESULT: COMPLETE` or `RESULT: BLOCKED`. Use ordinary local
 finite-element correctness language only.
+
+## R1-B component evidence — replacement GO
+
+The original sidebar R1-B reviewer passed exact-base preflight, confirmed the exact
+34/152/27 collections, ran the required repository selections and `test/v3` green,
+then requested approval to create a temporary edge-case file despite the read-only
+packet. That approval did not resolve. I0 archived and visibly renamed the task
+`INCOMPLETE`; it produced neither a final verdict nor callback and changed no
+repository file. Its recovered results are supporting evidence only.
+
+I0 restored a detached clean worktree at exact frozen base
+`e11a07c0cc5c00e956c3d537ac94272f120621c0` and assigned an internal Sol/max
+replacement with an absolute no-file rule. It independently read the contracts and
+implementation and returned GO with zero P0/P1/P2 findings. It reran 34 focused and
+152 combined cases normally and at `PYTHONINTMAXSTRDIGITS=640`, all 27 named
+references, both Ruff configurations, focused format, forbidden-import/root-export/
+determinant scans, committed diff checks, and final exact-head/clean-status gates.
+The named references emitted three existing cold-cache Numba notices. It relied on
+I0's already-recorded 392-test v3 and 581-test repository proofs rather than
+repeating the full repository suite.
+
+The replacement authored no persistent helper and, after I0 bounded the review,
+added no new inline runtime case. This is accepted for provisional E2 because the
+frozen runtime matrix is explicitly present in the required checked-in cases, both
+original repair findings have direct regressions, the replacement independently
+checked captured-carrier correspondence, metadata-free boundaries, call separation,
+order/sign, geometry policy, identity/storage/diagnostic behavior, scope and cost,
+and the earlier independent numerical and carrier reviews supplied the literal Q8,
+affine, geometry, ownership, and failure-case scrutiny that found the repaired gaps.
+This is component proof only: `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`,
+`ASM-GATHER`, and `ASM-TANGENT` advance to provisional E2, never E3.
 
 ## Active watchdogs
 
@@ -2506,3 +2544,16 @@ integration decision; do not bridge it with a compatibility carrier.
   Sol/max reviewer, `R1-B · assembly plan — contribution invariants verified`
   (`019f7750-8745-7e23-aaf2-35f50ec79fc8`), from that exact clean base. No assembly
   writer, second reviewer, or P1-C owner is active.
+- 2026-07-19: the sidebar R1-B reviewer passed exact preflight and the required
+  repository gates, including 392 v3 tests, then stalled on approval for an
+  unnecessary temporary file before its separate edge-case matrix. I0 renamed it
+  `INCOMPLETE R1-B · assembly plan — temp-file approval stalled` and archived it.
+  The task produced no final/callback and no repository change; its partial evidence
+  is supporting only.
+- 2026-07-19: I0 restored an exact detached `e11a07c` worktree and completed one
+  no-file internal Sol/max replacement review. It returned GO with zero P0/P1/P2
+  findings after 34 focused and 152 combined cases twice, 27 references, both Ruff
+  configurations, format/static/diff/final-clean gates, and independent semantic
+  source inspection. I0 adjudicated the five P1-B rows to provisional E2. The
+  migration is paused with no active owner; the exact next action on resume is to
+  freeze P1-C before dispatch.
