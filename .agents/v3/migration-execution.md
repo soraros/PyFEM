@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: resumed; P0-D is integrated and replacement R0-N review is active
+- Status: resumed; P0-D/R0-N are closed GO and the P1-A Horizon is frozen
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -12,22 +12,22 @@
 - Combined repaired foundation code head: `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Integrated registry-snapshot repair: source `0947dd7ca3b70bef2ebdf986f2336f62f5b3c08b`, integrated `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Integrated P0-D compiler: source `f21aaed2c97e98e63f58b77d0e301c3a2107e243`, integrated `79060abb054d82fd34ac85f000e44d9de5947d60`
+- P0-D independent component proof: `79060abb054d82fd34ac85f000e44d9de5947d60`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: `R0-N · model compiler — block invariants verified`
+- Active milestone: `P1-A · program compiler — affine plan canonical`, Horizon frozen
 
 ## Exact next safe action
 
-Wait for the terminal result and direct callback from read-only Sol/max task R0-N
-`019f761d-4d85-7b72-9d80-857fab45aef8`, then adjudicate every reported
-finite-element correctness finding against the frozen P0-D Horizon. Do not poll in
-a loop and do not start ProgramSpec, assembly, state, solver, or another migration
-packet while this independent review is active.
+Commit this R0-N adjudication and frozen P1-A Horizon, verify the resulting exact
+clean branch head, then dispatch exactly one Sol/max P1-A writer from that commit.
+The writer owns only the new authored/normalized program, compiled-program carrier,
+program compiler, and focused test paths named below. Do not start P1-B assembly,
+state, solver, adapters, or another migration packet in parallel.
 
-If R0-N returns GO with complete evidence, record the 18 dependency rows as
-component-level evidence at the exact integrated compiler commit and freeze the
-next Phase 1 Horizon before dispatch. An accepted P0/P1 finding returns only the
-smallest bounded repair to the P0-D writer for repair round 2/2; scope expansion or
-a repeated blocker enters the card's recorded blocked condition.
+After P1-A returns both terminal signals, I0 mechanically prechecks ancestry and
+owned paths, semantically reviews the affine-plan and additive-load invariants, and
+runs combined gates before serial integration. An accepted P0/P1 finding returns
+only the smallest bounded repair to the same writer for at most two repair rounds.
 
 ## Semantic decisions and open questions
 
@@ -65,8 +65,8 @@ Decided:
   candidates only after their approved replacements are proved.
 - Thread IDs are never reused. `R0-E` is the completed legacy-breadth inventory;
   `R0-F` stopped before review because I0 supplied a wrong expanded commit hash;
-  replacement compiler review `R0-N` uses the verified exact integrated hash.
-  Earlier replacements likewise used the next otherwise-unreserved IDs.
+  replacement compiler review `R0-N` completed GO at the verified exact integrated
+  hash. Earlier replacements likewise used the next otherwise-unreserved IDs.
 - dtype metadata is outside the current v1 manifest/finalization boundary and must
   fail closed; do not invent a recursive dtype-metadata schema or manifest v2 before
   an executable compiler slice demonstrates that semantic requirement;
@@ -102,8 +102,9 @@ dated E0 evidence.
 
 | Live scope | Rows | Lifecycle and evidence | Disposition state | Next transition |
 |---|---:|---|---|---|
-| P0-D immediate dependency cut | 18 | `implementing`, `E0`; repaired source `f21aaed2`, integrated `79060abb`, replacement independent review active | 11 preserve, 7 change; frozen Q8 compiler Horizon below | R0-N adjudication and combined proof before component evidence advances to E2 |
-| Later preserve/change portfolio | 123 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
+| P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
+| P1-A immediate dependency cut | 3 | `contracted`, `E1`; source behavior plus analytical affine/load reference extracted below, exact Horizon proof commit recorded immediately after this commit resolves | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Frozen Horizon -> one serial writer -> I0 integration review |
+| Later preserve/change portfolio | 120 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
 | **Total** | **154** | all rows accounted for | 52 preserve, 89 change, 13 retire | no hidden or undecided row |
@@ -118,6 +119,31 @@ COMP-MESH             COMP-DOF              COMP-REGISTRY
 COMP-MODEL            KERN-SHAPES           KERN-QUADRATURE
 KERN-KINEMATICS       MAT-PLANE-STRESS      FORM-SMALL-CONT
 ```
+
+The three P1-A rows are:
+
+```text
+PROG-DIRICHLET        PROG-MPC              PROG-NODAL-LOAD
+```
+
+Their E1 reference is intentionally narrower than the eventual public program
+surface. The exact affine relation is `u = P q + u_bar(p)`; one-master chains
+compose factors and affine offsets analytically; and repeated nodal force
+declarations add on the full DOF vector, including constrained DOFs. The existing
+prototype/legacy constraint, MPC, and nodal-load checks pass 14 tests at
+`79060abb`, while source inspection confirms the prototype's known last-write load
+packing and solver-local constraint representation. P1-A preserves the physical
+meaning and deliberately replaces those ownership failures. The E1 proof commit is
+the resulting Horizon/adjudication commit, while `79060abb` remains the exact
+reference-test execution base.
+
+I0 refines the coarse E0 dependency recorded on `PROG-DIRICHLET` and
+`PROG-NODAL-LOAD`: their P1-A component proof requires the structured coordinate
+schema and direct point evaluator owned inside this same packet, not schedule
+stepping. `PROG-SCHEDULE` remains in the later E0 portfolio and becomes a hard
+dependency only when an analysis owns stepping, acceptance, tables/functions,
+restart, or schedule-driven binding. P1-A does not advance or partially claim that
+row.
 
 The seven internal/duplicate retirement candidates are `ANAL-MODAL-DUP`,
 `ROM-LINEAR-MANIFOLD`, `ROM-QUADRATIC-MANIFOLD`, `V3-PROTOTYPE-CARRIER`,
@@ -314,9 +340,10 @@ them into findings unless they change this contract.
 
 **Merge order:** writer returns one source commit; I0 checks ancestry, owned paths,
 diff, contract, focused/static/v3/full evidence, and then integrates serially. Only
-after combined proof does a fresh Sol/max R0-F task independently verify the
-integrated block invariants. Accepted findings return to the same writer for at
-most two bounded repair turns. P1-A stays closed until R0-F is adjudicated.
+after combined proof does a fresh Sol/max R0-F task, or its explicitly recorded
+replacement, independently verify the integrated block invariants. Accepted
+findings return to the same writer for at most two bounded repair turns. P1-A stays
+closed until that review is adjudicated.
 
 **Blocked condition and minimum unlock:** stop without broadening scope if the
 exact descriptor compatibility cannot represent the Q8 recipe, a correct geometry
@@ -325,6 +352,284 @@ the supported slice without a new authored owner, a forbidden shared path is
 required, or a physical convention other than the explicit per-unit-thickness
 slice must be chosen. Return the smallest reproducible conflict; I0 decides whether
 to amend design/card or create a new packet.
+
+**Integration task ID:** `019f6f49-0b72-7d73-86da-c6b85519eeaf`.
+
+## P1-A Horizon card — `HORIZON_FROZEN`
+
+**ID/title:** `P1-A · program compiler — affine plan canonical`
+
+**Outcome and ownership invariant:** `normalize_program_spec(...)` constructs a
+new exact, recursively caller-detached authored program tree. `compile_program(...)`
+consumes only that normalized meaning plus one exact validated `CompiledModel` and
+returns a fresh immutable `CompiledProgram`. The program records both the model's
+live instance identity and content fingerprint, owns a backend-neutral fixed affine
+constraint plan and canonical nodal-load contribution plan, and contains no SciPy
+object, evolving state, solver setting, or assembly workspace. `evaluate_program(...)`
+binds one exact structured program point into immutable prescribed-offset and
+full-space nodal-force values plus coordinate derivatives without mutating either
+compiled input.
+
+**Coverage rows advanced:** `PROG-DIRICHLET`, `PROG-MPC`, and
+`PROG-NODAL-LOAD`. They are `contracted` at E1 from the analytical reference and
+14 executed legacy/prototype checks above; the exact E1 proof is this resulting
+Horizon/adjudication commit, with `79060abb` retained as the test execution base.
+Successful source, I0 integration, and focused component evidence may advance them
+only to E2. `PROG-SCHEDULE`, general
+linear-combination constraints, distributed/follower loads, initial conditions,
+program state, assembly, reactions, and analysis remain later rows and receive no
+evidence advance from P1-A.
+
+**Exact base and required parent packets:** dispatch only after this Horizon and
+the R0-N GO adjudication are committed on a clean `v3` head. Required code proof is
+P0-D integrated and independently verified at
+`79060abb054d82fd34ac85f000e44d9de5947d60`. The dispatched prompt records the
+resulting exact documentation head; no worker rebases onto a later coordinator
+commit.
+
+**Exact authored vocabulary:** add exact frozen/slotted internal values with these
+roles and no opaque mapping/blob escape hatch:
+
+```text
+ProgramCoordinateSpec(name, kind, source)
+DofRef(node_id, field_id, component)
+AffineCoefficientSpec(coordinate, coefficient, source)
+AffineValueSpec(constant, coefficients, source)
+PrescribedDofSpec(id, target, value, source)
+AffineTieSpec(id, slave, master, factor, offset, source)
+NodalLoadSpec(id, target, value, source)
+ProgramSpec(coordinates, constraints, loads, source)
+ProgramCoordinateValue(name, value)
+ProgramPoint(values)
+```
+
+`kind` is exactly `time`, `load`, or `continuation`; `kind == "time"` if and only
+if `name == "time"`, and that coordinate appears at most once. Empty coordinates
+are valid for a constant program. Coordinate names are nonempty and unique.
+Constraint and load IDs use the
+existing exact `str | int` semantic-ID policy and are unique within their entity
+kind. A DOF reference is always the exact semantic triple
+`(node_id, field_id, component)`; no global integer index is authored. Every
+affine value is one finite float64-representable exact integer/float constant plus
+zero or more unique named coordinate coefficients of the same numeric policy;
+`bool`, subclasses, nonfinite values, narrowing overflow, unknown coordinates, and
+duplicate terms fail before conversion or evaluation.
+
+The first constraint slice contains prescribed DOFs and one-master affine ties
+only:
+
+```text
+u_slave = factor * u_master + offset(p)
+```
+
+The factor is finite, float64-representable, constant, and nonzero. A factor or
+prolongation coefficient may not depend on program coordinates. General
+linear-combination rows are explicitly deferred rather than encoded in parameter
+tuples. The offset and nodal load value may be affine in the declared coordinates.
+Program points contain every declared name exactly once and no extra name, with
+finite float64-representable exact integer/float values excluding `bool`.
+
+**Exact compiled meaning:** add immutable internal carriers with at least these
+semantic fields:
+
+```text
+AffineConstraintPlan
+  full_dof_count, reduced_dof_count
+  free_dofs
+  row_offsets, column_indices, coefficients
+  offset_constant, offset_coordinate_coefficients
+
+NodalLoadPlan
+  load_ids, dof_indices
+  constant_values, coordinate_coefficients
+
+ProgramCapabilities
+ProgramProvenance
+CompiledProgram
+  fresh instance ID + deterministic content fingerprint + provenance
+  compatible model instance ID + model content fingerprint
+  coordinate names/kinds
+  constraint plan + nodal-load plan
+  capabilities + entity/source maps
+
+ProgramEvaluation
+  exact program/model identities + bound coordinate names/values
+  prescribed offsets + their coordinate derivatives
+  full-space nodal force + its coordinate derivatives
+```
+
+Every numeric carrier is a detached, owning, contiguous, read-only
+`FinalizedArray`. The prolongation `P` is stored as canonical CSR-like arrays, not
+a dense matrix and not a SciPy object. Rows for independent DOFs are identity;
+prescribed rows have no column; one-master chains flatten to at most one canonical
+free-root column with factors and affine offsets composed in dependency order.
+Free reduced coordinates are ordered by compiled full DOF index. A no-constraint
+program therefore yields identity `P`; a fully prescribed program yields a valid
+`(n_full, 0)` plan rather than an accidental sparse-solve path.
+
+The compiled numeric encoding is frozen for this slice:
+
+- every program index array is exact `int64`, independent of the model's possibly
+  narrower dense-index policy; every program coefficient/value array is exact
+  `float64`;
+- `free_dofs` has shape `(n_reduced,)`, is strictly increasing, and contains exact
+  full DOF indices;
+- `row_offsets` has shape `(n_full + 1,)`, begins at zero, is nondecreasing, and
+  ends at `nnz`; `column_indices` and `coefficients` both have shape `(nnz,)`;
+- each CSR row contains zero or one entry; every column is in
+  `[0, n_reduced)`, independent rows contain coefficient `1.0`, and all other
+  coefficients are the composed finite tie factor;
+- `offset_constant` has shape `(n_full,)` and
+  `offset_coordinate_coefficients` has shape `(n_full, n_coordinate)`;
+- nodal-load `dof_indices`/`constant_values` have shape `(n_load,)`, and load
+  coordinate coefficients have shape `(n_load, n_coordinate)`; and
+- evaluation coordinate values have shape `(n_coordinate,)`; prescribed offsets
+  and nodal force have shape `(n_full,)`; each derivative array has shape
+  `(n_full, n_coordinate)`.
+
+Counts, `n_full + 1`, and `nnz` are checked against `int64` before allocation, so
+the terminal CSR offset is representable even when a model's maximum DOF index
+fits only its own narrower dtype. The manifest records program index dtype
+`int64`, floating dtype `float64`, the shapes above, and the exact reduction policy.
+
+Canonical order is also frozen: coordinates use kind order
+`time < load < continuation` then exact name; constraints and loads use the
+existing type-tagged semantic-ID order; affine terms follow canonical coordinate
+order. Constraint-chain constants and coefficients compose root-to-slave using
+binary64 multiplication and `math.fsum` for the two-term addition, rejecting any
+nonfinite intermediate. Load rows are ordered by target full DOF then semantic
+load ID; evaluation uses `math.fsum` in that order separately for the constant and
+each coordinate coefficient, followed by a `math.fsum` over canonical-coordinate
+products at the bound point. This is the one deterministic float64 accumulation
+owner; authored declaration order cannot select a different reduction path.
+
+The nodal-load plan retains one canonical row per authored load declaration so
+source attribution is not destroyed. Evaluation reduces all rows targeting the
+same full DOF with a deterministic order and addition policy. Loads on constrained
+DOFs remain in the full vector for later reaction/balance work. No pre-summed
+mutable target vector becomes a second canonical owner.
+
+Content identity includes the normalized program meaning, compatible model content
+fingerprint, numeric/index policy, coordinate schema, constraint/load plans,
+derived capabilities, and detached entity/source provenance. It excludes live
+instance tokens. Compiling the same meaning against the same live model produces a
+fresh program instance with the same content fingerprint; compiling against a
+content-equivalent but distinct model records that distinct compatible live model
+while retaining content equivalence. Declaration order that is semantically
+unordered cannot change the result, while changing a DOF reference, affine
+coefficient, coordinate kind/name, or source identity changes the corresponding
+manifest meaning.
+
+**Required constraint behavior:** reject unknown node/field/component references,
+slave=master, zero factor, duplicate dependent ownership, a DOF that is both
+prescribed and a slave, cycles of any length, malformed exact compiled-model
+carriers, index overflow, and nonfinite arithmetic during chain composition with a
+source-anchored program compilation error. Ties may chain through ties and through
+a prescribed master; all factors, constants, and coordinate derivatives compose
+exactly once. Multiple slaves may share one master. Constraint declarations never
+silently replace one another, and evaluation never patches a candidate state.
+
+**Required load and coordinate behavior:** repeated nodal contributions on one DOF
+sum. Missing, extra, duplicate, malformed, nonfinite, or wrong-type program-point
+coordinates fail deterministically before an evaluation carrier escapes. The
+derivative arrays are the exact affine coefficients and do not depend on the bound
+point. Constant zero-load and displacement-only programs are explicit valid
+programs. Program capabilities are derived conservatively: this slice has fixed
+constraint/load topology, no follower or interaction tangent, no program-owned
+state, and only constant/coordinate-affine prescribed and external nodal channels.
+
+**Independent mathematical oracle:** focused tests hard-code at least this chain,
+using one named load coordinate `lambda` and one free root `q0`:
+
+```text
+u1 = 2*q0 + (3 + 4*lambda)
+u2 = -0.5*u1 + (1 - lambda)
+   = -q0 - 0.5 - 3*lambda
+```
+
+The expected `P` rows, constant offsets, and `du_bar/dlambda` are literal test
+data, not reconstructed by the implementation. Two loads on `u2`,
+`5 + 2*lambda` and `-1 + 3*lambda`, must evaluate to `4 + 5*lambda` with derivative
+`5`. Tests also cover identity `P`, zero-free-DOF `P`, a chain whose root is
+prescribed, negative factors, constrained-DOF loads, declaration-order invariance,
+distinct live identity/content equivalence, and caller mutation after normalization,
+compilation, and evaluation.
+
+**Total-boundary correctness matrix:** exact-class/slot/container preflight occurs
+before child access, iteration, hashing, equality, formatting, or conversion for
+every new authored and runtime value. Malformed values produce stable
+`ProgramSpecValidationError`, `ProgramCompilationError`, or
+`ProgramEvaluationError` diagnostics, never raw incidental exceptions. Include
+huge exact IDs/source locations under `PYTHONINTMAXSTRDIGITS=640`, missing/forged
+children, list-to-tuple ownership, source detachment, cycles, unknown references,
+duplicate/conflicting constraints, numeric overflow, nonfinite evaluation, and
+separate finalizations. Diagnostics stay bounded and do not mutate interpreter
+global state.
+
+**Owned paths:** new `pyfem/v3/spec/program.py`, program-specific normalization and
+diagnostic modules under `pyfem/v3/spec/`, and the minimal internal exports in
+`pyfem/v3/spec/__init__.py`; new `pyfem/v3/model/program.py` plus minimal internal
+exports in `pyfem/v3/model/__init__.py`; new program compiler/evaluator and
+diagnostics under `pyfem/v3/compile/` plus minimal internal exports in
+`pyfem/v3/compile/__init__.py`; and one new focused
+`test/v3/test_v3_program_compile.py`. New files may be split inside those exact
+subtrees for clarity, but all existing non-`__init__.py` files in those subtrees
+are read-only and no existing model-compiler/spec behavior is rewritten.
+
+**Forbidden paths and non-goals:** `.agents/v3/**`, root configuration,
+`pyproject.toml`, `uv.lock`, `pyfem/v3/__init__.py`, prototype `types.py`,
+`pack.py`, `_prototype_assembly.py`, existing solver/constraint/assembly/I/O
+modules, existing numeric kernels, adapters, and existing tests outside the one
+new focused file. Do not add SciPy, a sparse backend, `PreparedAssemblyPlan`,
+physical/evolution/program state, transactions, reactions, result types, a solve
+function, initial conditions, schedule stepping, distributed/follower loads,
+general multi-master constraints, registry descriptors, public exports, or a
+compatibility wrapper.
+
+**Strongest competing design:** extend `ProblemDefinition`/`pack_problem`, reuse
+`build_prescribed_constraints`, and carry one mutable dense external-load vector
+plus a SciPy matrix into every solver. That design is rejected because it preserves
+last-write load packing, solver-local constraint meaning, a scalar program
+coordinate, and prototype carrier ownership. A second rejected design stores both
+an authoritative dense `P` and sparse `P`; P1-A has one canonical backend-neutral
+plan.
+
+**Expected migration and API consequence:** no prototype or legacy path is deleted
+in P1-A. Its types/functions are internal and are not exported from `pyfem.v3`.
+P1-B is the first consumer and must compose this plan with model/request assembly;
+P1-C may retire Q8 use of the prototype packing/constraint/load path only after the
+verified public slice proves replacement. Legacy `.dat`/`.pro` names, syntax,
+duplicate policies, root API, and CLI remain adapter/public decisions.
+
+**Performance envelope:** compilation should be linear in full DOFs plus
+coordinates, constraints, and load declarations, apart from canonical sorting.
+Graph resolution uses explicit visitation/topological state rather than repeated
+whole-pending scans. Do not allocate dense `P` or introduce a backend. Dense
+`n_full x n_coordinate` offset/derivative storage is accepted in this bounded
+slice because it is the required evaluated output; report, do not optimize, a
+measured concern if coordinate breadth makes it material.
+
+**Acceptance commands and evidence:** one focused commit and clean worker tree;
+new program tests plus P0-D foundation/compiler tests normally and with
+`PYTHONINTMAXSTRDIGITS=640`; the 14 existing constraint/MPC/load reference tests;
+both required Ruff configurations and focused format; `pytest -q test/v3`; full
+`pytest -q`; `git diff --check`; exact ancestry/path ownership; and a zero-hit scan
+showing new program paths do not import prototype types/pack/assembly, solver, I/O,
+SciPy, or root public exports. Report existing warnings separately.
+
+**Merge order and repair loop:** exactly one Sol/max writer returns one source
+commit. I0 verifies ancestry, ownership, total-boundary/affine/load semantics, and
+all focused/static/v3/full evidence before serial integration. Accepted P0/P1
+findings return to the same task for at most two bounded repair rounds. P1-B stays
+closed until P1-A is integrated with combined proof; no independent reviewer is
+dispatched in parallel.
+
+**Blocked condition and minimum unlock:** stop without broadening scope if the
+compiled model cannot address exact semantic DOFs, if correct one-master affine
+composition requires changing P0-D carriers, if a general multi-master constraint
+or schedule/state owner is required for the stated oracle, if a SciPy/backend owner
+is unavoidable, or if an owned-path boundary must be crossed. Return the smallest
+reproducible conflict; I0 amends the Horizon or creates a separate packet.
 
 **Integration task ID:** `019f6f49-0b72-7d73-86da-c6b85519eeaf`.
 
@@ -967,21 +1272,21 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `R0-E · legacy breadth — semantic ledger seeded` | `019f7587-31f2-7642-b162-5fd5b7a2d07b` | `c50ca70bff884157c5645dde276c25acc6672d4a` | Complete read-only E0 capability inventory report | Complete with both terminal signals; 154 rows, 606/606 paths, zero remnants; durable report SHA `f9e326d`; independently checked and ingested |
 | `P0-D · model compiler — Q8 block frozen` | `019f75dd-f597-7c21-adfc-d78b1e2580c0` | `2842ef84b86f04f82587f5fc378584f30f6b62bd` | `pyfem/v3/compile/**`, new compiled-model carriers, one focused compiler test | Complete after repair 1/2; replacement source `f21aaed2`, integrated `79060abb`; branch proof 156 focused twice, 22 direct Q8, 286 v3, 475 full |
 | `INCOMPLETE R0-F · model compiler — base mismatch` | `019f761b-2fc2-7e20-b5d9-b9681cb83e7e` | incorrect requested hash `79060ab3186e38460595b3831b77855b3f824bc` | Intended read-only compiler review | Incomplete by coordinator error; stopped correctly at clean preflight after observing actual `79060abb`; no correctness matrix or finding was assessed |
-| `R0-N · model compiler — block invariants verified` | `019f761d-4d85-7b72-9d80-857fab45aef8` | `79060abb054d82fd34ac85f000e44d9de5947d60` | Replacement read-only P0-D integrated review | Active from verified exact clean integrated commit; no verdict yet |
+| `R0-N · model compiler — block invariants verified` | `019f761d-4d85-7b72-9d80-857fab45aef8` | `79060abb054d82fd34ac85f000e44d9de5947d60` | Replacement read-only P0-D integrated review | Complete GO with both terminal signals; 99 independent checks, 156 focused twice, 22 direct Q8, 286 v3, 475 full, zero findings |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
-R0-L, P0-H, R0-M, R0-E, and P0-D subsequently completed under the corrected
-terminal contract. The record is now 24 tasks: 17 properly complete, six explicitly
-incomplete, and one active read-only reviewer.
+R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N subsequently completed under the corrected
+terminal contract. The record is now 24 tasks: 18 properly complete, six explicitly
+incomplete, and no active task while the frozen P1-A Horizon is committed.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
-  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, and P0-D.
+  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, and R0-F.
-- Active: replacement R0-N read-only compiler review at exact integrated commit
-  `79060abb054d82fd34ac85f000e44d9de5947d60`.
+- Active: none. P1-A is dispatched only after its Horizon commit becomes the exact
+  clean branch head.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The current risk is review/process
@@ -992,7 +1297,7 @@ incomplete, and one active read-only reviewer.
 None. Direct terminal callbacks and bounded native waits are active; unchanged
 thread state does not trigger a model-consuming polling loop.
 
-## P0-D integration evidence — independent review pending
+## P0-D component evidence — independent GO
 
 The original source `92f57e82ac6639c9f5e769ea2b28c6178673f15a`
 passed its reported gates but I0 accepted two P1 gaps: valid normalized exact
@@ -1020,9 +1325,16 @@ checks passed. The broad warm-cache proof emitted only 40 existing SciPy
 Numba performance notices from existing numeric kernels.
 
 R0-F stopped before review because I0 supplied an incorrect expanded full hash; it
-made no finding. Replacement R0-N is active from the verified exact clean integrated
-commit. Until that independent review is adjudicated, the 18 rows remain
-`implementing` at E0 and no public vertical slice is claimed.
+made no finding. Replacement R0-N completed both terminal signals at the verified
+exact clean integrated commit with GO and zero P0/P1/P2 findings. Its 99 independent
+checks covered hard-coded Q8 interpolation/gradients/quadrature, formulation and
+material meaning, membership/maps, ownership, determinism, live/content identity,
+geometry/numeric boundaries, malformed descriptor outputs, and architecture
+exclusions. It independently reproduced 156 focused tests in both digit modes, 22
+direct Q8 tests, 286 v3 tests, 475 full tests, both Ruff gates, focused format,
+whitespace/ancestry/path checks, and the zero-hit forbidden-import scan. The 18 rows
+therefore advance to `provisional` E2 at `79060abb`; no public vertical slice or E3
+claim is made.
 
 ## Required combined evidence
 
@@ -1457,3 +1769,9 @@ integration decision; do not bridge it with a compatibility carrier.
   task, and dispatched exactly one Sol/max replacement R0-N
   (`019f761d-4d85-7b72-9d80-857fab45aef8`) from the exact clean integrated commit.
   No parallel migration writer is active.
+- 2026-07-19: R0-N completed both terminal signals with GO and zero findings at
+  exact clean `79060abb`. Its 99-check independent matrix and every focused,
+  strict-digit, direct-Q8, static, v3, full-repository, path, whitespace, and import
+  gate passed. I0 adjudicated the GO, advanced the 18 P0-D dependency rows to
+  `provisional` E2, extracted the three P1-A program rows to contracted E1, and
+  froze the P1-A affine-program Horizon. No public flow or E3 evidence is claimed.
