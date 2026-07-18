@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: P0-H integrated and broad-green; R0-M independent recheck active; compiler closed
+- Status: foundation gate GO; legacy capability inventory next; compiler closed until inventory ingestion
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -12,19 +12,19 @@
 - Combined repaired foundation code head: `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Integrated registry-snapshot repair: source `0947dd7ca3b70bef2ebdf986f2336f62f5b3c08b`, integrated `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: `I0 · foundations — combined proof`
+- Active milestone: `R0-E · legacy breadth — semantic ledger seeded`
 
 ## Exact next safe action
 
-Let read-only R0-M task `019f757a-e84f-70c3-a6d6-8c4ff7874204` finish its one
-bounded independent recheck at exact clean integrated commit
-`fb358fc0609b81a12cee4a1a66c2dae98edf5cae`. It must reproduce the original R0-L
-registry failures and adjacent ordering/manifest/fingerprint/binding-reference
-cases, run the focused tests in both digit-limit modes plus both Ruff configurations,
-return its own terminal result, and callback I0. Do not create a replacement or
-start the model compiler while R0-M is active. If it returns GO, record the final
-foundation decision and select the next Wave 0 packet from the workflow. R0-J's
-recovered evidence remains supporting only; R0-K remains incomplete.
+Dispatch one read-only Sol/max R0-E task from the exact clean commit containing this
+foundation closure. It must build a complete evidence-backed E0 inventory of legacy
+capabilities across runtime, examples, tests, input/output, GUI, RVE/FE2, ROM, and
+the existing v3 prototype; propose preserve/change/retire classifications and
+evidence gaps without editing the repository. The integration owner then ingests
+the inventory into this sole live ledger and adjudicates every still-undecided row.
+Only after that ingestion may P0-D, the Q8 compiled-model packet, be frozen and
+dispatched. R0-J's recovered evidence remains supporting only; R0-K remains
+incomplete.
 
 Blocked condition: a reviewer demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -602,6 +602,23 @@ Outcome and boundary:
 - remain read-only with no repository changes, commits, dependencies, additional
   tasks, or compiler/program/solver work. Completion requires both terminal signals.
 
+Result:
+
+- state is `COMPLETE` with a `GO` verdict, zero blockers, a valid sentinel-bearing
+  final response, and a direct callback to I0;
+- 42 of 42 independent local correctness checks passed, covering caller/source
+  detachment, every required missing field, altered fields/counts, canonical
+  ordering/uniqueness, snapshot manifest/fingerprint, selected callable identity,
+  required-key selection, source rebinding/clearing, and stable descriptor identity;
+- 68 focused tests passed in both interpreter digit modes, both Ruff configurations
+  passed, and the v3 suite passed 240 tests with 40 existing SciPy warnings and four
+  existing Numba performance notices; and
+- the first task turn ended with an app-level output-capture `systemError` while the
+  v3 process was still running. The single allowed resume recovered that same
+  process at exit code zero, reconfirmed exact HEAD, empty porcelain status, and
+  `git diff --check`, then supplied both terminal signals. No product gate is
+  missing and no replacement task was created.
+
 ## Merge and continuation order
 
 1. Completed: review and integrate P0-A.
@@ -615,13 +632,15 @@ Outcome and boundary:
    remain incomplete; their statuses do not change.
 6. Completed: P0-H repaired the R0-L defect, I0 reviewed/integrated its single
    commit, and all combined focused/static/v3/full gates passed.
-7. Active: R0-M performs the one bounded independent recheck at the integrated
-   commit. No replacement or compiler task overlaps it.
-8. After that repair is independently green, dispatch the dependent
+7. Completed: R0-M independently returned GO with zero blockers at the integrated
+   commit after one bounded resume recovered the already-running v3 result.
+8. Active next: R0-E produces the complete E0 legacy capability inventory; I0
+   ingests and adjudicates its rows into this sole live ledger.
+9. After inventory ingestion, dispatch the dependent
    compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
-9. Only after P0-D and its `R0-F` reviewer dispatch `ProgramSpec`/affine constraints and
+10. Only after P0-D and its `R0-F` reviewer dispatch `ProgramSpec`/affine constraints and
    `PreparedAssemblyPlan` work.
 
 ## Packet ledger
@@ -637,7 +656,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 
 | Exact title | Thread | Exact base | Owner/output | State and evidence |
 |---|---|---|---|---|
-| `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | Integration, shared docs, combined proof | Active |
+| `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | Integration, shared docs, combined proof | Complete GO through integrated repair `fb358fc`; coordinator continues to next milestone |
 | `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | Assembly quarantine | Integrated as `92bc87d` from `db486f5`; repair 0 |
 | `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | `pyfem/v3/spec/**` | Integrated through `f2a0cd2`; two integration repairs plus one critic repair |
 | `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | `pyfem/v3/model/**` | Integrated through `e1d7fe7`; one integration repair plus one critic repair |
@@ -657,18 +676,17 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `INCOMPLETE R0-K · identity/storage — checks not run` | `019f7184-2fe6-7403-a5fd-685f9ee1995d` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Read-only identity/provenance/registry/storage repeat reviewer | Incomplete; temporary script created but never executed; no required tests, static gates, verdict, or callback |
 | `R0-L · identity/storage — boundary independently verified` | `019f7551-0075-7383-a895-fd2d77f02419` | `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92` | Read-only identity/provenance/registry/storage replacement reviewer | Complete, valid final and callback; NO-GO with one accepted frozen-registry defect; 47 focused in both digit modes, 162 local checks per mode, 219 v3 tests, both Ruff gates |
 | `P0-H · registry snapshot — meaning detached` | `019f7568-a1e0-7c33-bf83-0a490e54c520` | `55fcf990da8f47f612f5193529c2a6b77a823a10` | `registry.py` plus focused identity tests | Complete; source `0947dd7`, integrated `fb358fc`; 68 focused twice, 240 v3, 429 full, static gates green |
-| `R0-M · registry snapshot — capture invariant verified` | `019f757a-e84f-70c3-a6d6-8c4ff7874204` | `fb358fc0609b81a12cee4a1a66c2dae98edf5cae` | Read-only P0-H integrated recheck | Active; one bounded Sol/max GO/NO-GO review; no writer overlap |
+| `R0-M · registry snapshot — capture invariant verified` | `019f757a-e84f-70c3-a6d6-8c4ff7874204` | `fb358fc0609b81a12cee4a1a66c2dae98edf5cae` | Read-only P0-H integrated recheck | Complete GO, zero blockers; 42 local checks, 68 focused twice, both Ruff gates, 240 v3; one app-level resume, both terminal signals valid |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
-R0-L and P0-H subsequently completed under the corrected terminal contract. With
-R0-M active, the record is 20 tasks: 14 properly complete, five explicitly
-incomplete, and one active.
+R0-L, P0-H, and R0-M subsequently completed under the corrected terminal contract.
+The record is 20 tasks: 15 properly complete and five explicitly incomplete.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
-  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, and P0-H.
+  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, and R0-M.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, and R0-K.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
@@ -764,6 +782,21 @@ P0-H integration evidence at
   configurations, focused format, 240 v3 tests, 429 full tests, and whitespace
   checks. Only the 40 existing SciPy warnings plus four existing cold-cache Numba
   notices appeared.
+
+R0-M independent closure evidence at exact integrated base
+`fb358fc0609b81a12cee4a1a66c2dae98edf5cae`:
+
+- 42 of 42 local correctness checks reproduced the original R0-L failure shapes
+  and adjacent invalid-order, duplicate, manifest, fingerprint, binding-reference,
+  required-key, source-rebinding, and stable-identity cases with zero blockers;
+- 68 focused tests passed normally and under the 640-digit interpreter limit, both
+  Ruff configurations passed, and the v3 suite passed 240 tests;
+- exact HEAD, empty porcelain status, and `git diff --check` were reconfirmed after
+  the one app-level output-capture interruption; the same running v3 process was
+  recovered with exit code zero rather than duplicated; and
+- R0-M returned a valid GO final plus callback. Combined with P0-H's writer and I0
+  integration evidence, this closes the foundation gate without changing any
+  recorded later-phase callable, transaction, or restore/rebind obligation.
 
 Recovered R0-J supporting evidence at exact frozen ledger head
 `8a952e7668f4f6c52d39352dee7e0685593906a3`:
@@ -986,3 +1019,11 @@ integration decision; do not bridge it with a compatibility carrier.
   `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`. It owns only the repaired registry
   invariant, has no writer overlap, and must provide both terminal signals before
   I0 can close the foundation gate.
+- 2026-07-18: R0-M's first turn suffered an app-level output-capture `systemError`
+  while its broad test process was still running. It had no final or callback, so
+  I0 did not count it complete and issued the one workflow-permitted resume. That
+  resume recovered the existing 240-pass process, confirmed 42/42 local checks, 68
+  focused tests in both modes, both Ruff gates, exact HEAD and clean status, then
+  supplied a GO final and callback with zero blockers. The foundation gate is now
+  closed green at `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`; no replacement chain
+  was created.
