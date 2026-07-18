@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: resumed; P0-D/R0-N are closed GO and the P1-A Horizon is frozen
+- Status: resumed; P0-D/R0-N are closed GO and P1-A implementation is active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -13,16 +13,17 @@
 - Integrated registry-snapshot repair: source `0947dd7ca3b70bef2ebdf986f2336f62f5b3c08b`, integrated `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Integrated P0-D compiler: source `f21aaed2c97e98e63f58b77d0e301c3a2107e243`, integrated `79060abb054d82fd34ac85f000e44d9de5947d60`
 - P0-D independent component proof: `79060abb054d82fd34ac85f000e44d9de5947d60`
+- P1-A frozen Horizon and R0-N adjudication: `b18b262b97068086b9c61618d06a2d14a50046cd`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: `P1-A · program compiler — affine plan canonical`, Horizon frozen
+- Active milestone: `P1-A · program compiler — affine plan canonical`, writer active
 
 ## Exact next safe action
 
-Commit this R0-N adjudication and frozen P1-A Horizon, verify the resulting exact
-clean branch head, then dispatch exactly one Sol/max P1-A writer from that commit.
-The writer owns only the new authored/normalized program, compiled-program carrier,
-program compiler, and focused test paths named below. Do not start P1-B assembly,
-state, solver, adapters, or another migration packet in parallel.
+Wait for the one active Sol/max P1-A writer at exact base `b18b262` to return both
+its own terminal final and direct callback. The writer owns only the new
+authored/normalized program, compiled-program carrier, program compiler, and focused
+test paths named below. Do not start P1-B assembly, state, solver, adapters, or
+another migration packet in parallel.
 
 After P1-A returns both terminal signals, I0 mechanically prechecks ancestry and
 owned paths, semantically reviews the affine-plan and additive-load invariants, and
@@ -103,7 +104,7 @@ dated E0 evidence.
 | Live scope | Rows | Lifecycle and evidence | Disposition state | Next transition |
 |---|---:|---|---|---|
 | P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
-| P1-A immediate dependency cut | 3 | `contracted`, `E1`; source behavior plus analytical affine/load reference extracted below, exact Horizon proof commit recorded immediately after this commit resolves | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Frozen Horizon -> one serial writer -> I0 integration review |
+| P1-A immediate dependency cut | 3 | `implementing`, `E1` at `b18b262`; source behavior plus analytical affine/load reference extracted below | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | One serial writer active -> I0 integration review |
 | Later preserve/change portfolio | 120 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -134,7 +135,7 @@ prototype/legacy constraint, MPC, and nodal-load checks pass 14 tests at
 `79060abb`, while source inspection confirms the prototype's known last-write load
 packing and solver-local constraint representation. P1-A preserves the physical
 meaning and deliberately replaces those ownership failures. The E1 proof commit is
-the resulting Horizon/adjudication commit, while `79060abb` remains the exact
+`b18b262b97068086b9c61618d06a2d14a50046cd`, while `79060abb` remains the exact
 reference-test execution base.
 
 I0 refines the coarse E0 dependency recorded on `PROG-DIRICHLET` and
@@ -372,8 +373,9 @@ compiled input.
 
 **Coverage rows advanced:** `PROG-DIRICHLET`, `PROG-MPC`, and
 `PROG-NODAL-LOAD`. They are `contracted` at E1 from the analytical reference and
-14 executed legacy/prototype checks above; the exact E1 proof is this resulting
-Horizon/adjudication commit, with `79060abb` retained as the test execution base.
+14 executed legacy/prototype checks above; the exact E1 proof is
+`b18b262b97068086b9c61618d06a2d14a50046cd`, with `79060abb` retained as the test
+execution base.
 Successful source, I0 integration, and focused component evidence may advance them
 only to E2. `PROG-SCHEDULE`, general
 linear-combination constraints, distributed/follower loads, initial conditions,
@@ -1273,20 +1275,21 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P0-D · model compiler — Q8 block frozen` | `019f75dd-f597-7c21-adfc-d78b1e2580c0` | `2842ef84b86f04f82587f5fc378584f30f6b62bd` | `pyfem/v3/compile/**`, new compiled-model carriers, one focused compiler test | Complete after repair 1/2; replacement source `f21aaed2`, integrated `79060abb`; branch proof 156 focused twice, 22 direct Q8, 286 v3, 475 full |
 | `INCOMPLETE R0-F · model compiler — base mismatch` | `019f761b-2fc2-7e20-b5d9-b9681cb83e7e` | incorrect requested hash `79060ab3186e38460595b3831b77855b3f824bc` | Intended read-only compiler review | Incomplete by coordinator error; stopped correctly at clean preflight after observing actual `79060abb`; no correctness matrix or finding was assessed |
 | `R0-N · model compiler — block invariants verified` | `019f761d-4d85-7b72-9d80-857fab45aef8` | `79060abb054d82fd34ac85f000e44d9de5947d60` | Replacement read-only P0-D integrated review | Complete GO with both terminal signals; 99 independent checks, 156 focused twice, 22 direct Q8, 286 v3, 475 full, zero findings |
+| `P1-A · program compiler — affine plan canonical` | `019f764f-2643-75b2-a8b5-323ed58351a2` | `b18b262b97068086b9c61618d06a2d14a50046cd` | New program spec/normalizer, immutable compiled-program carriers, compiler/evaluator, and one focused test | Active on exact clean base with Sol/max; repair 0/2; P1-B remains closed |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
 R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N subsequently completed under the corrected
-terminal contract. The record is now 24 tasks: 18 properly complete, six explicitly
-incomplete, and no active task while the frozen P1-A Horizon is committed.
+terminal contract. The record is now 25 tasks: 18 properly complete, six explicitly
+incomplete, and one active task.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
   P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, and R0-F.
-- Active: none. P1-A is dispatched only after its Horizon commit becomes the exact
-  clean branch head.
+- Active: P1-A, dispatched from its exact clean Horizon base `b18b262`; no other
+  migration writer or reviewer is active.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The current risk is review/process
@@ -1775,3 +1778,9 @@ integration decision; do not bridge it with a compatibility carrier.
   gate passed. I0 adjudicated the GO, advanced the 18 P0-D dependency rows to
   `provisional` E2, extracted the three P1-A program rows to contracted E1, and
   froze the P1-A affine-program Horizon. No public flow or E3 evidence is claimed.
+- 2026-07-19: I0 committed the R0-N adjudication and frozen P1-A Horizon as
+  `b18b262b97068086b9c61618d06a2d14a50046cd`, then dispatched exactly one Sol/max
+  writer, `P1-A · program compiler — affine plan canonical`
+  (`019f764f-2643-75b2-a8b5-323ed58351a2`), from that exact clean base. The three
+  program rows are `implementing` at E1; P1-B and all other migration packets remain
+  closed pending P1-A terminal final, callback, and I0 integration review.
