@@ -20,11 +20,31 @@ from pyfem.v3.spec.model import (
   SpecId,
 )
 from pyfem.v3.spec.normalize import normalize_model_spec
+from pyfem.v3.spec.normalize_program import normalize_program_spec
+from pyfem.v3.spec.program import (
+  AffineCoefficientSpec,
+  AffineTieSpec,
+  AffineValueSpec,
+  DofRef,
+  NodalLoadSpec,
+  PrescribedDofSpec,
+  ProgramConstraintSpec,
+  ProgramCoordinateKind,
+  ProgramCoordinateSpec,
+  ProgramCoordinateValue,
+  ProgramPoint,
+  ProgramSpec,
+)
+from pyfem.v3.spec.program_diagnostics import (
+  ProgramSpecDiagnostic,
+  ProgramSpecValidationError,
+)
 
 __all__ = [
   "CellBlockSpec",
   "CellRef",
   "CellSpec",
+  "DofRef",
   "FieldSpec",
   "MaterialParameterSpec",
   "MaterialParameterValue",
@@ -33,9 +53,23 @@ __all__ = [
   "ModelSpec",
   "ModelSpecValidationError",
   "NodeSpec",
+  "NodalLoadSpec",
+  "PrescribedDofSpec",
+  "ProgramConstraintSpec",
+  "ProgramCoordinateKind",
+  "ProgramCoordinateSpec",
+  "ProgramCoordinateValue",
+  "ProgramPoint",
+  "ProgramSpec",
+  "ProgramSpecDiagnostic",
+  "ProgramSpecValidationError",
   "RegionSpec",
   "SourceContext",
   "SpecDiagnostic",
   "SpecId",
+  "AffineCoefficientSpec",
+  "AffineTieSpec",
+  "AffineValueSpec",
   "normalize_model_spec",
+  "normalize_program_spec",
 ]

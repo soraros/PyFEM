@@ -18,9 +18,22 @@ from pyfem.v3.compile.model import (
   ModelCompilationPolicy,
   compile_model,
 )
+from pyfem.v3.compile.program import (
+  COMPILED_PROGRAM_MANIFEST_SCHEMA,
+  PROGRAM_REDUCTION_POLICY,
+  compile_program,
+  evaluate_program,
+)
+from pyfem.v3.compile.program_diagnostics import (
+  ProgramCompilationDiagnostic,
+  ProgramCompilationError,
+  ProgramEvaluationDiagnostic,
+  ProgramEvaluationError,
+)
 
 __all__ = [
   "COMPILED_MODEL_MANIFEST_SCHEMA",
+  "COMPILED_PROGRAM_MANIFEST_SCHEMA",
   "Q8_FORMULATION_KEY",
   "Q8_MATERIAL_KEY",
   "Q8_QUADRATURE_KEY",
@@ -29,7 +42,14 @@ __all__ = [
   "ModelCompilationDiagnostic",
   "ModelCompilationError",
   "ModelCompilationPolicy",
+  "PROGRAM_REDUCTION_POLICY",
+  "ProgramCompilationDiagnostic",
+  "ProgramCompilationError",
+  "ProgramEvaluationDiagnostic",
+  "ProgramEvaluationError",
   "compile_model",
+  "compile_program",
+  "evaluate_program",
   "q8_descriptor_metadata",
   "q8_reference_registry",
 ]
