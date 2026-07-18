@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; P1-A repair 2/2 is running after I0 rejected repair 1/2
+- Status: active; P1-A is integrated and independently green, P1-B Horizon is frozen for dispatch
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -15,28 +15,26 @@
 - P0-D independent component proof: `79060abb054d82fd34ac85f000e44d9de5947d60`
 - P1-A frozen Horizon and R0-N adjudication: `b18b262b97068086b9c61618d06a2d14a50046cd`
 - P1-A repair 1/2 replacement source: `587e3fc41a0a0fbf9ef3d7e069d8eca591006001` (I0-reviewed NO-GO; not integrated)
+- Integrated P1-A program compiler: source `ab64e0219c11b5fc4155703eb8ade32939f90064`, integrated `b7316be8befba64df0a576df6b7fd8cdcf9b9873`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: P1-A repair 2/2 on the original Sol/max task
+- Active milestone: dispatch P1-B reference assembly contributions
 
 ## Exact next safe action
 
-Wait for the original P1-A task's repair 2/2 terminal result and callback. I0 has
-reviewed `a749972..587e3fc`, reproduced all seven repair-1 cases through structured
-errors, passed 59 focused tests in both digit modes, passed 105 model/program tests
-in both modes, passed the 14 reference tests and both Ruff checks, and received GO
-from the spec and math reviewers. Focused format was not counted because Ruff could
-not create its worktree-local cache; rerun it with a private cache after the final
-source returns.
+Dispatch exactly one Sol/max writer from the clean documentation commit containing
+the frozen P1-B Horizon. The packet owns a
+backend-neutral, immutable reference assembly plan and one linear Q8 contribution
+evaluator. It must compose P0-D's validated compiled model with P1-A's validated
+program and must stop before sparse backend choice, solve/state/result ownership,
+public API, or prototype retirement.
 
-Repair 1/2 remains unintegrated because the carrier reviewer found three further
-P1 consistency gaps accepted under the frozen Horizon: six initialized model slots
-are not validated against model content identity; a dependent CSR row can carry a
-zero coefficient; and visible plan/entity/source meaning can contradict the
-retained normalized program meaning after outer identity is recomputed. Repair 2/2
-must close the general seams, not only the examples, while remaining one replacement
-commit on `b18b262` in the ten owned paths. If it cannot, it must return `BLOCKED`
-with the smallest required Horizon change. Do not integrate, open P1-B, or advance
-evidence before I0 re-review and the complete required proof.
+P1-A final repair source `ab64e02` has valid terminal signals, exact one-commit
+ancestry and ten-path ownership. I0 reproduced 72 focused tests in both digit
+modes, 228 combined P0-D/P1-A tests in both modes, 14 reference tests, both Ruff
+configurations, focused format, a zero-hit forbidden-import scan, 358 v3 tests, and
+547 full-repository tests. Independent carrier review returned GO with zero
+P0/P1/P2 findings. The integrated commit is `b7316be`; P1-B may now consume its
+private validation seam without copying that validation logic.
 
 ## Semantic decisions and open questions
 
@@ -112,8 +110,9 @@ dated E0 evidence.
 | Live scope | Rows | Lifecycle and evidence | Disposition state | Next transition |
 |---|---:|---|---|---|
 | P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
-| P1-A immediate dependency cut | 3 | `repairing`, `E1` at `b18b262`; repair 1/2 `587e3fc` is I0-reviewed NO-GO and repair 2/2 is active | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Final repair -> I0 review -> serial integration only if green |
-| Later preserve/change portfolio | 120 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
+| P1-A immediate dependency cut | 3 | `provisional`, `E2` at `b7316be`; final repair, I0 integration proof, and independent carrier GO complete | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Consumer proof continues through P1-B/P1-C; E3 requires the verified public slice |
+| P1-B immediate dependency cut | 5 | `contracted`, `E1` at the P1-B Horizon freeze commit | 5 change; component slices of `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, `ASM-TANGENT` | One reference assembly writer -> I0 review -> serial integration only if green |
+| Later preserve/change portfolio | 115 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
 | **Total** | **154** | all rows accounted for | 52 preserve, 89 change, 13 retire | no hidden or undecided row |
@@ -134,6 +133,23 @@ The three P1-A rows are:
 ```text
 PROG-DIRICHLET        PROG-MPC              PROG-NODAL-LOAD
 ```
+
+The five P1-B rows are:
+
+```text
+ASM-COO               ASM-PREPARE           ASM-EXTERNAL
+ASM-GATHER            ASM-TANGENT
+```
+
+Their E1 contract is deliberately component-bounded. `ASM-COO` covers canonical
+raw Q8 element contributions and an explicitly coalesced reference operator;
+`ASM-PREPARE` covers immutable request-specific topology and compatibility;
+`ASM-EXTERNAL` covers P1-A nodal force and affine derivative channels only;
+`ASM-GATHER` covers compiled Q8 coordinates/DOFs/material descriptors only; and
+`ASM-TANGENT` covers constant small-strain plane-stress Q8 stiffness only.
+Internal force, nonlinear/material state, geometric/follower tangents, distributed
+loads, optimized backend storage, solve/reaction/result behavior, and prototype
+retirement remain E0.
 
 Their E1 reference is intentionally narrower than the eventual public program
 surface. The exact affine relation is `u = P q + u_bar(p)`; one-master chains
@@ -640,6 +656,377 @@ composition requires changing P0-D carriers, if a general multi-master constrain
 or schedule/state owner is required for the stated oracle, if a SciPy/backend owner
 is unavoidable, or if an owned-path boundary must be crossed. Return the smallest
 reproducible conflict; I0 amends the Horizon or creates a separate packet.
+
+**Integration task ID:** `019f6f49-0b72-7d73-86da-c6b85519eeaf`.
+
+## P1-B Horizon card — `HORIZON_FROZEN`
+
+**ID/title:** `P1-B · assembly plan — contributions composed`
+
+**Outcome and ownership invariant:** P1-B composes one exact validated
+`CompiledModel` and compatible exact validated `CompiledProgram` into an immutable,
+backend-neutral `PreparedAssemblyPlan`, then evaluates one structured program point
+into immutable linear Q8 operator/vector contributions. Preparation owns topology,
+compatibility, attribution, and deterministic reduction policy. Evaluation owns
+values at one program point. Neither object owns evolving state, a sparse backend,
+a factorization, a reduced unknown, a solution, or a public request.
+
+P1-B consumes P1-A's private `_validated_model(...)`, `_validated_program(...)`,
+and `evaluate_program(...)` internal seams. It must not copy their deep carrier
+validation into a third implementation. Those names are frozen as internal
+consumer seams for this packet; no shared-validator extraction or P1-A rewrite is
+authorized unless the writer returns a concrete blocker first. The two validators
+raise P1-A's private `_BoundaryError`; P1-B is authorized to import that type only
+for immediate boundary translation. In `prepare_assembly_plan(...)`, validator and
+model/program compatibility failures become stable `AssemblyPreparationError`.
+In `assemble_reference_linear(...)`, the exact model, program, and plan are
+revalidated; validator, plan/input compatibility, and live-identity failures become
+stable `AssemblyEvaluationError`. P1-B catches `IdentityMismatchError` (or the exact
+existing live-identity helper's equivalent) at both entry points and translates it
+to the entry point's assembly error. `ProgramEvaluationError` from binding the
+point through `evaluate_program(...)` also becomes `AssemblyEvaluationError` while
+preserving every diagnostic's code, bounded message, and source in order. Assembly
+errors use the nearest copied compiled source when available and otherwise fixed
+assembly context.
+P1-A-specific or raw incidental exceptions never cross the assembly boundary.
+
+**Coverage rows advanced:** component slices only of `ASM-COO`, `ASM-PREPARE`,
+`ASM-EXTERNAL`, `ASM-GATHER`, and `ASM-TANGENT`. Freezing this card contracts those
+five rows at E1. Successful source, I0 integration, and focused component evidence
+may advance only these slices to E2. `ASM-INTERNAL`, nonlinear or stateful tangent,
+distributed/follower loads, `ANAL-LINEAR`, reactions/balance/results, public flow,
+and prototype retirement remain E0.
+
+**Exact base and required parent packets:** dispatch only from the clean commit that
+contains this frozen card and the integrated P1-A commit
+`b7316be8befba64df0a576df6b7fd8cdcf9b9873`. P0-D is independently green at
+`79060abb054d82fd34ac85f000e44d9de5947d60`; P1-A final source
+`ab64e0219c11b5fc4155703eb8ade32939f90064` is independently green and integrated.
+The exact dispatch commit and task ID are added to the packet ledger before work
+begins. No other assembly writer runs in parallel.
+
+**Request ownership and exact vocabulary:** do not add an authored assembly spec.
+P1-C's future typed `LinearStatic` request remains the sole authored analysis
+request and source owner. P1-B adds one exact frozen/slotted zero-field internal
+marker with versioned meaning:
+
+```text
+LinearStaticContributionRequest()
+```
+
+It requests exactly the constant model material tangent, P1-A external nodal force,
+affine constraint reduction, full-balance inputs, and program-coordinate
+derivatives. Subclasses, foreign values, extra fields, and optional channel names
+reject. Future analysis families add exact request/result types rather than fields
+on a universal carrier.
+
+Add only this bounded internal vocabulary:
+
+```text
+DomainCooPlan
+NodalVectorContributionPlan
+AssemblyPlanProvenance
+PreparedAssemblyPlan
+CanonicalCooOperator
+LinearStaticContributions
+AssemblyPreparationDiagnostic / AssemblyPreparationError
+AssemblyEvaluationDiagnostic / AssemblyEvaluationError
+```
+
+The two entry points are:
+
+```text
+prepare_assembly_plan(model, program, request) -> PreparedAssemblyPlan
+
+assemble_reference_linear(
+    model,
+    program,
+    plan,
+    program_point,
+) -> LinearStaticContributions
+```
+
+The evaluation entry point binds `program_point` through P1-A
+`evaluate_program(...)`; it never trusts a caller-built `ProgramEvaluation`.
+
+**Prepared topology and attribution:** `DomainCooPlan` records finalized exact
+`int64` arrays for canonical raw full-operator rows and columns plus exact block,
+cell, local-row, and local-column attribution. Raw order is block index, canonical
+cell order, local row `0..15`, then local column `0..15`. Every Q8 cell has exactly
+256 raw entries. Structural zeros and shared-DOF duplicates remain present in raw
+topology and raw values; numeric nonzero detection never defines structure.
+
+The plan also owns lexicographically sorted unique full `(row, column)` pairs, an
+exact raw-to-canonical coalescing map, and the corresponding reduced topology and
+maps derived from P1-A's zero-or-one-entry-per-full-row prolongation. A prescribed
+full row maps to no reduced column. A retained row maps to its exact reduced column
+and finite nonzero prolongation coefficient. Reduced raw values use frozen binary64
+multiplication order `(left_factor * full_entry) * right_factor` before canonical
+coalescing. All duplicate groups reduce with `math.fsum` in raw source order.
+
+`NodalVectorContributionPlan` records the full-to-reduced mapping and deterministic
+source order required to reduce full nodal/offset vectors. Full DOFs are visited in
+ascending order and every reduced component uses `math.fsum`. No dense global
+matrix and no dense prolongation are allocated. Count arithmetic, `256 * n_cell`,
+shape products, terminal offsets, indices, and allocations are checked against both
+exact `int64` and `np.intp` capacity before conversion or allocation.
+
+**Exact result meaning and alias policy:** `CanonicalCooOperator` contains exact
+shape, finalized `int64` row/column arrays in unique lexicographic order, and one
+finalized `float64` value array. Its row/column carriers are the exact immutable
+topology carriers owned and finalized once by the compatible plan; only operator
+values are fresh per evaluation. `LinearStaticContributions` has exactly these
+semantic fields:
+
+```text
+program_evaluation
+plan_content_fingerprint
+full and reduced CanonicalCooOperator
+full raw Q8 operator values
+reduced raw operator values
+full affine-offset internal force and coordinate derivatives
+full offset-corrected RHS and coordinate derivatives
+reduced external force and coordinate derivatives
+reduced affine-offset internal force and coordinate derivatives
+reduced RHS and coordinate derivatives
+```
+
+The retained `program_evaluation` is the sole owner of bound coordinate values,
+prescribed offsets and derivatives, and full external nodal force and derivatives;
+P1-B references those exact P1-A carriers and does not duplicate them as sibling
+fields. Every assembly-derived raw/canonical value, offset-internal, RHS, reduced,
+and derivative array is a fresh exact `float64` detached, owning, contiguous,
+read-only finalization with no cross-field or prior-evaluation value alias. The only
+intentional sharing is immutable plan row/column topology and the exact retained
+`ProgramEvaluation` channels.
+
+Empty forms are first-class: zero coordinates produce `(n, 0)` and `(m, 0)`
+derivative arrays; a fully prescribed program produces valid reduced `(0, 0)`,
+`(0,)`, and `(0, c)` carriers. A load on a prescribed DOF remains in
+`program_evaluation.nodal_force` even when its reduced contribution is zero.
+Repeated evaluations reuse immutable plan topology but cannot mutate or alias one
+another's value storage.
+
+**Mathematical and sign contract:** for full tangent `K`, full external nodal force
+`f`, P1-A prolongation `P`, and prescribed affine offset `u_bar(p)`:
+
+```text
+K_q       = P.T K P
+f_q       = P.T f
+g_q       = P.T K u_bar
+b_full    = f - K u_bar
+b_q       = f_q - g_q = P.T (f - K u_bar)
+db_q / dp = P.T (df / dp - K du_bar / dp)
+```
+
+External force is positive. `K u_bar` is an explicitly attributed offset-internal
+contribution. Reduced RHS is external minus offset-internal. P1-B does not define a
+residual at a candidate displacement, internal force at `u`, reactions, or balance
+acceptance. Full matrix-vector products traverse canonical raw COO source order and
+use `math.fsum` per output row. Nonfinite product, integration, coalescing, matvec,
+or reduction results fail through an assembly evaluation diagnostic.
+
+**Q8 reference evaluation and registry meaning:** during preparation, validate the
+captured `serendipity-quad8`, `gauss-3x3`, `small-strain-continuum`, and
+`plane-stress-linear-elastic` descriptor identities against the exact model registry
+snapshot. Do not bypass, rebind, or introspect a different registry. Preparation
+reuses and validates the compiled domain block's quadrature weights, parent
+gradients, shapes, points, and material parameters; it does not reevaluate topology
+or quadrature at each program point. Reference evaluation invokes only the captured
+formulation and material bindings needed to form the local kinematic/constitutive
+response. Validate every binding result, array rank/shape/dtype/finiteness,
+quadrature weight, and the declared constant/symmetric material meaning. Do not
+symmetrize a computed operator to hide an inconsistent binding.
+
+Each cell is evaluated with bounded local scratch. A naive physical-coordinate
+Jacobian is forbidden because valid P0-D geometry may have uniform scales such as
+`1e-200` or `1e200`. Use translation-free scalar-normalized geometry:
+
+1. subtract a reference node, using a scaled finite fallback if direct subtraction
+   overflows;
+2. divide relative coordinates by their maximum finite magnitude;
+3. form normalized `J_hat`, gradients, and `B_hat`; and
+4. compute exactly
+   `K_e = sum_p w_p * B_hat[p].T * C * B_hat[p] * det(J_hat[p])` in canonical
+   quadrature order.
+
+For two-dimensional per-unit-thickness elasticity the scalar scale cancels between
+`B = B_hat / s` and `dOmega = s**2 dOmega_hat`. Let `t` be the exact validated
+`model.provenance.geometry_relative_tolerance`. At every point, both
+`det(J_hat) > t` and `det(J_hat) / sum(J_hat**2) > t` are required after finite,
+nonzero-norm checks. This retains P0-D's near-singular policy while additionally
+requiring positive orientation. Never use `abs(det J)`, silently reorder nodes, or
+call a prototype wrapper whose orientation policy differs.
+
+**Independent literal Q8 oracle:** focused tests embed the unit square in frozen
+local order
+`(0,0), (.5,0), (1,0), (1,.5), (1,1), (.5,1), (0,1), (0,.5)` with
+`E=1`, `nu=0`, and unit thickness. Exact polynomial integration gives `K=M/360`.
+The test embeds this literal integer matrix and does not reconstruct it through
+production shape, quadrature, material, or assembly code:
+
+```text
+M = [
+[312,85,-308,-100,146,15,-104,-20,138,35,-172,-20,124,-15,-136,20],
+[85,312,20,-136,-15,124,-20,-172,35,138,-20,-104,15,146,-100,-308],
+[-308,20,736,0,-308,-20,0,-80,-172,-20,224,0,-172,20,0,80],
+[-100,-136,0,512,100,-136,-80,0,-20,-104,0,-32,20,-104,80,0],
+[146,-15,-308,100,312,-85,-136,-20,124,15,-172,20,138,-35,-104,20],
+[15,124,-20,-136,-85,312,100,-308,-15,146,20,-104,-35,138,20,-172],
+[-104,-20,0,-80,-136,100,512,0,-136,-100,0,80,-104,20,-32,0],
+[-20,-172,-80,0,-20,-308,0,736,20,-308,80,0,20,-172,0,224],
+[138,35,-172,-20,124,-15,-136,20,312,85,-308,-100,146,15,-104,-20],
+[35,138,-20,-104,15,146,-100,-308,85,312,20,-136,-15,124,-20,-172],
+[-172,-20,224,0,-172,20,0,80,-308,20,736,0,-308,-20,0,-80],
+[-20,-104,0,-32,20,-104,80,0,-100,-136,0,512,100,-136,-80,0],
+[124,15,-172,20,138,-35,-104,20,146,-15,-308,100,312,-85,-136,-20],
+[-15,146,20,-104,-35,138,20,-172,15,124,-20,-136,-85,312,100,-308],
+[-136,-100,0,80,-104,20,-32,0,-104,-20,0,-80,-136,100,512,0],
+[20,-308,80,0,20,-172,0,224,-20,-172,-80,0,-20,-308,0,736],
+]
+```
+
+This oracle also proves symmetry, two rigid translations, infinitesimal rotation,
+and zero row sums. Unit-scale full stiffness uses `rtol=0, atol=2e-14`; reduced
+stiffness/RHS uses `rtol=0, atol=5e-13`.
+
+Compose that literal operator with the P1-A chain oracle. At `lambda=2`,
+`u_bar[1]=11`, `u_bar[2]=-6.5`, `f[2]=14`, and their coordinate derivatives are
+`4`, `-3`, and `5`. The literal reduced RHS and derivative are:
+
+```text
+b_q = [
+-3829/72, 187/45, -1837/360, -83/20,
+11/18, 343/90, -167/40, -206/45,
+419/90, 143/45, -1283/360, -41/10,
+55/18, 977/90,
+]
+
+db_q/dlambda = [
+-946/45, 68/45, -12/5, -139/90,
+2/9, 56/45, -82/45, -17/10,
+94/45, 52/45, -8/5, -131/90,
+10/9, 184/45,
+]
+```
+
+The test may use literal dense `P` and `M/360` only as an independent oracle;
+production uses the prepared sparse maps. The existing two-cell P0-D fixture must
+produce 512 raw entries, 476 distinct structural pairs, and exactly 36 shared-pair
+duplicates, then coalesce two translated copies of the literal operator. This
+proves duplicate addition and canonical cell-order invariance without claiming
+multi-block order invariance or optimized sparse-slot equivalence.
+
+**Required focused correctness matrix:** in addition to the literal matrix/RHS and
+failure cases below, tests explicitly prove:
+
+- uniformly scaled cells at `1e-200`, `1`, and `1e200` produce the same reference
+  stiffness within the frozen tolerance;
+- no constraints produce identity reduction;
+- one directly prescribed full row is absent from reduced topology;
+- all prescribed DOFs produce the exact empty reduced shapes stated above;
+- a prescribed-DOF load survives in the full program force while its reduced force
+  is zero;
+- zero program coordinates produce exact full/reduced zero-width derivative shapes;
+- model dense-index arrays narrower than `int64` lower safely into exact `int64`
+  assembly topology; and
+- repeated evaluation reuses exact immutable topology while every value carrier is
+  fresh and prior results remain unchanged.
+
+**Capability and failure policy:** P1-A currently has no follower or interaction
+tangent. P1-B records an exact empty program-operator recipe set and rejects any
+program capability that claims an operator contribution without a matching exact
+recipe. It does not add placeholder arrays for future physics. Reject malformed,
+subclassed, missing-slot, altered-manifest, writeable, cross-owner carrier reuse,
+or mutable-storage aliasing where separate value ownership is required;
+model/program live mismatch despite content equality; plan/input mismatch; invalid
+counts/indices/maps; binding failures or wrong binding outputs; singular, inverted,
+nonfinite, or orientation-changing geometry; and any dynamic-pattern, stateful,
+follower, interaction, or unsupported contribution channel.
+
+Exact-class/slot/container checks precede unsafe access, iteration, hashing,
+comparison, formatting, or conversion. Diagnostics are stable, bounded, escaped,
+and anchored to copied compiled model/program sources where meaningful. Huge exact
+IDs and source coordinates remain total under `PYTHONINTMAXSTRDIGITS=640`; raw
+incidental exceptions do not cross the preparation/evaluation boundary.
+
+**Identity and content policy:** `PreparedAssemblyPlan` has deterministic content
+fingerprint and provenance, but no fresh live `InstanceId`; P1-C's future
+`PreparedAnalysis` owns live workspace/cache identity. The plan records exact
+compatible model/program live IDs and content fingerprints. Its manifest includes
+the fixed request meaning, model/program meaning, registry snapshot, numeric/index
+policy, raw and canonical topology, reduction maps, shapes, attribution, and empty
+program-operator recipe set. Separately preparing equivalent topology for the same
+exact live model/program yields the same plan content fingerprint and is
+interchangeable after full plan validation. A plan prepared from content-equivalent
+but distinct live model/program instances remains incompatible. Contributions
+record exactly the plan content fingerprint; their retained exact
+`program_evaluation` is the sole owner of compatible model/program instance and
+content identities, which result validation requires to equal the plan's recorded
+compatibility. There is no plan live ID and no sibling copy of model/program
+identity meaning. The result does not become a second request or state owner.
+
+**Owned paths:** new `pyfem/v3/assembly/__init__.py`, `contracts.py`,
+`diagnostics.py`, `prepare.py`, and `reference.py`; and one new focused
+`test/v3/test_v3_assembly_plan.py`. Files may be split only inside the new
+`pyfem/v3/assembly/**` namespace when necessary for clarity. All P0-D/P1-A
+production paths are read-only dependencies.
+
+**Forbidden paths and P1-C boundary:** `.agents/v3/**`, root configuration,
+`pyproject.toml`, `uv.lock`, `pyfem/v3/__init__.py`, `pyfem/v3/spec/**`,
+`pyfem/v3/model/**`, `pyfem/v3/compile/**`, prototype `types.py`, `pack.py`,
+`_prototype_assembly.py`, `pyfem/v3/fem/assembly.py`, existing numeric kernels,
+solver/analysis/state/result/I/O paths, and existing tests. Do not add SciPy, Numba,
+a sparse backend, factorization, candidate displacement, internal force at a
+candidate, physical/evolution/program state, transactions/generations, reactions,
+balance/result/verification types, public/root exports, a solve function, schedule,
+distributed/follower loads, mass/damping, general multi-master constraints,
+adapters, compatibility wrappers, prototype edits, or deletion.
+
+**Performance envelope:** with `raw_nnz = 256 * n_cell`, preparation time is
+`O(raw_nnz log(raw_nnz) + n_full + nnz(P) + n_load)` and preparation memory is
+`O(raw_nnz + canonical_nnz + n_full + nnz(P) + n_load)`. Reference evaluation time
+is
+`O(elements * 9 * 16**2 + raw_nnz * (1 + n_coordinate) +
+(n_full + n_reduced) * (1 + n_coordinate) + P1-A validation/evaluation cost)`;
+fresh evaluation-value memory is
+`O(raw_nnz + canonical_nnz + (n_full + n_reduced) * (1 + n_coordinate))`.
+Evaluation processes one element at a time with bounded local scratch and allocates
+no dense `n x n` or dense `P`. The packet sets no timing, Numba, chunk, or backend
+threshold. The correctness path retains raw attribution and canonical coalesced
+views. Fixed optimized CSR slots and scale benchmarks belong to Phase 2.
+
+P1-A's full-DOF `ProgramMeaningWitness` is a nonblocking O(full DOFs) duplication
+and evaluation-cost obligation. P1-B must not expand that witness. Measure the
+combined cost before Phase-1 performance claims and compare later with a compact
+per-referenced-DOF witness without weakening P1-A's total-boundary proof.
+
+**Acceptance commands and evidence:** one focused commit and clean worker tree;
+focused assembly tests; P0-D/P1-A/P1-B combined tests normally and with
+`PYTHONINTMAXSTRDIGITS=640`; existing element-stiffness, COO, chunked-assembly,
+constraint, load, and MPC reference tests; both required Ruff configurations and
+focused format; `pytest -q test/v3`; full `pytest -q`; `git diff --check`; exact
+one-commit ancestry and owned-path proof; and zero direct imports from new assembly
+code of prototype carriers/packing/assembly, solver, I/O, legacy `pyfem.fem`,
+SciPy, Numba, or root public exports. A source scan must also find zero use of
+`abs(det J)` in the new assembly namespace. Existing warnings are reported
+separately.
+
+**Merge order and repair loop:** exactly one Sol/max writer returns one source
+commit. I0 verifies ancestry, ownership, total-boundary behavior, literal Q8 and
+affine-reduction oracles, topology/identity semantics, and all focused/static/
+v3/full evidence before serial integration. One independent Sol/max assembly
+reviewer runs only after candidate proof is complete. Accepted P0/P1 findings
+return to the same writer for at most two bounded repair rounds. P1-C remains
+closed until P1-B is integrated and independently green.
+
+**Blocked condition and minimum unlock:** stop without broadening scope if P1-A's
+validators cannot be safely reused, the captured registry bindings cannot evaluate
+the declared Q8 recipe with the required scale/orientation policy, correct
+contribution attribution requires modifying P0-D/P1-A carriers, an authored
+assembly request or state owner is required, a backend/SciPy object is unavoidable,
+or an owned-path boundary must be crossed. Return the smallest reproducible
+conflict; I0 amends this card or creates a prerequisite packet.
 
 **Integration task ID:** `019f6f49-0b72-7d73-86da-c6b85519eeaf`.
 
@@ -1228,9 +1615,9 @@ schema, dependency, vocabulary, manifest-hash, `.pro`, skim, and test-set checks
    review findings, and rerun combined v3 plus full repository tests.
 4. Completed: P0-F repaired the R0-H diagnostic blocker; P0-G plus its direct
    provenance follow-up repaired the five R0-I seams and integration-audit findings.
-5. Completed: R0-L returned a valid terminal result and callback. Its one accepted
-   frozen-registry defect is now the only active foundation repair. R0-J and R0-K
-   remain incomplete; their statuses do not change.
+5. Completed: R0-L returned a valid terminal result and callback with one accepted
+   frozen-registry defect. R0-J and R0-K remain incomplete; their statuses do not
+   change.
 6. Completed: P0-H repaired the R0-L defect, I0 reviewed/integrated its single
    commit, and all combined focused/static/v3/full gates passed.
 7. Completed: R0-M independently returned GO with zero blockers at the integrated
@@ -1238,12 +1625,14 @@ schema, dependency, vocabulary, manifest-hash, `.pro`, skim, and test-set checks
 8. Completed: R0-E produced the complete E0 legacy capability inventory; I0
    preserved its exact report, independently checked it, and ingested the live state
    overlay into this ledger.
-9. Source complete: P0-D returned one candidate commit from the frozen Horizon for
-   one explicit Q8 region -> immutable `CompiledModel` recipe with entity/source
-   maps and an empty physical-state layout. It is not reviewed or integrated.
-10. Paused: only after I0 reviews/integrates P0-D and its `R0-F` reviewer returns
-   green may `ProgramSpec`/affine constraints and `PreparedAssemblyPlan` work be
-   dispatched.
+9. Completed: P0-D's repaired Q8 compiler was reviewed and integrated; replacement
+   R0-N returned independent GO after the original R0-F stopped correctly on an
+   I0-supplied base mismatch.
+10. Completed: P1-A's final repair 2/2 closed all accepted program-carrier seams,
+    I0 integrated it as `b7316be`, and independent carrier review returned GO.
+11. Active continuation: freeze and commit P1-B's reference assembly Horizon,
+    dispatch exactly one writer from that base, then review/integrate it serially
+    before opening P1-C.
 
 ## Packet ledger
 
@@ -1283,27 +1672,26 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P0-D · model compiler — Q8 block frozen` | `019f75dd-f597-7c21-adfc-d78b1e2580c0` | `2842ef84b86f04f82587f5fc378584f30f6b62bd` | `pyfem/v3/compile/**`, new compiled-model carriers, one focused compiler test | Complete after repair 1/2; replacement source `f21aaed2`, integrated `79060abb`; branch proof 156 focused twice, 22 direct Q8, 286 v3, 475 full |
 | `INCOMPLETE R0-F · model compiler — base mismatch` | `019f761b-2fc2-7e20-b5d9-b9681cb83e7e` | incorrect requested hash `79060ab3186e38460595b3831b77855b3f824bc` | Intended read-only compiler review | Incomplete by coordinator error; stopped correctly at clean preflight after observing actual `79060abb`; no correctness matrix or finding was assessed |
 | `R0-N · model compiler — block invariants verified` | `019f761d-4d85-7b72-9d80-857fab45aef8` | `79060abb054d82fd34ac85f000e44d9de5947d60` | Replacement read-only P0-D integrated review | Complete GO with both terminal signals; 99 independent checks, 156 focused twice, 22 direct Q8, 286 v3, 475 full, zero findings |
-| `P1-A · program compiler — affine plan canonical` | `019f764f-2643-75b2-a8b5-323ed58351a2` | `b18b262b97068086b9c61618d06a2d14a50046cd` | New program spec/normalizer, immutable compiled-program carriers, compiler/evaluator, and one focused test | Active repair 2/2; repair 1/2 `587e3fc` closed the original seven cases but I0 accepted three remaining model/program cross-representation consistency gaps; still unintegrated |
+| `P1-A · program compiler — affine plan canonical` | `019f764f-2643-75b2-a8b5-323ed58351a2` | `b18b262b97068086b9c61618d06a2d14a50046cd` | New program spec/normalizer, immutable compiled-program carriers, compiler/evaluator, and one focused test | Complete after repair 2/2; source `ab64e02`, integrated `b7316be`; independent GO, 72 focused twice, 228 combined twice, 358 v3, 547 full |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
 R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N subsequently completed under the corrected
-terminal contract. The record is now 25 tasks: 18 properly complete, six explicitly
-incomplete, and one active task.
+terminal contract. The record is now 25 tasks: 19 properly complete, six explicitly
+incomplete, and no active task before P1-B dispatch.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
-  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N.
+  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, R0-N, and P1-A.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, and R0-F.
-- Active: P1-A repair 2/2 on the original task. P1-B and every other migration
-  writer remain closed.
+- Active: none until the P1-B Horizon freeze commit is dispatched.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The current risk is review/process
   integrity, not contamination of the integrated foundation code.
 
-## P1-A source review — repair 1/2 rejected; repair 2/2 active
+## P1-A component evidence — integrated and independently green
 
 P1-A returned valid terminal final and callback for source
 `a749972dca8a97ae4801017ac686d114225432f3`, exactly one commit on frozen parent
@@ -1361,10 +1749,34 @@ The carrier reviewer returned NO-GO with three further P1 gaps accepted by I0:
    contradict the retained normalized program meaning after outer identity is
    recomputed.
 
-These contradict the frozen validated-model, flattened nonzero affine-plan,
-content-identity, and total-boundary clauses. Repair 2/2 is active on the original
-Sol/max task with a general cross-representation requirement. No code is integrated,
-P1-B remains closed, and the three capability rows remain E1.
+These contradicted the frozen validated-model, flattened nonzero affine-plan,
+content-identity, and total-boundary clauses. Repair 2/2 returned final replacement
+source `ab64e0219c11b5fc4155703eb8ade32939f90064`, exactly one commit on the frozen
+base and exactly the same ten paths. It closes the three general seams with complete
+12-slot compiled-model reconstruction, finite nonzero dependent CSR coefficients,
+and an exact typed compiler-owned normalized-meaning witness covering model,
+coordinate, constraint, load, target, affine, entity, and source correspondence.
+
+The worker reported 72 focused tests and 228 combined P0-D/P1-A tests in both
+normal and strict-digit modes, 14 reference tests, both Ruff configurations,
+focused format, 358 v3 tests, 547 full-repository tests, clean ancestry/path/import/
+whitespace gates, and only existing warnings. I0 verified exact ancestry, path
+ownership, and the final delta; reproduced 72 focused tests in both modes, the prior
+failure matrix, bounded diagnostics, 228 combined tests in both modes, 14 references,
+both Ruff configurations, focused format, and zero forbidden imports; and integrated
+the source without conflict as `b7316be8befba64df0a576df6b7fd8cdcf9b9873`.
+The integrated branch then passed 358 v3 tests with 40 existing SciPy and four
+cold-cache Numba notices, followed by 547 full-repository tests with only the 40
+existing SciPy notices.
+
+Independent final carrier review returned GO with zero P0/P1/P2 findings. Its
+12-slot model matrix rejected 12 of 12 alterations; its normalized-witness matrix
+rejected 10 of 10 alterations through structured errors; and it confirmed detached,
+owning, read-only witness storage. The full-DOF witness is correctness-valid but
+duplicates O(full DOFs) storage and validation work per program. That measured-cost
+obligation is nonblocking and is recorded for comparison with a later compact
+per-referenced-DOF witness before performance claims. The three P1-A rows therefore
+advance to provisional E2; P1-B may open from the frozen card above.
 
 ## Active watchdogs
 
@@ -1548,6 +1960,24 @@ Recovered R0-J supporting evidence at exact frozen ledger head
   corrected workflow this evidence is retained, but the R0-J task remains
   incomplete and cannot itself advance the packet state.
 
+P1-A integration and independent component evidence at
+`b7316be8befba64df0a576df6b7fd8cdcf9b9873`:
+
+- final source `ab64e0219c11b5fc4155703eb8ade32939f90064` is exactly one commit on
+  frozen base `b18b262b97068086b9c61618d06a2d14a50046cd`, changes exactly the ten
+  authorized paths, and returned both terminal signals from the original task;
+- I0 reproduced 72 focused program tests and 228 combined P0-D/P1-A tests in both
+  normal and 640-digit modes, 14 constraint/load/MPC reference tests, both Ruff
+  configurations, focused format, clean diff/path/ancestry checks, and a zero-hit
+  forbidden-import scan before serial integration;
+- the integrated branch passed 358 v3 tests with 40 existing SciPy plus four
+  cold-cache Numba notices and 547 full-repository tests with only the 40 existing
+  SciPy notices; and
+- independent carrier review returned GO with zero P0/P1/P2 findings after a
+  12-slot compiled-model matrix, a ten-case normalized-witness matrix, direct
+  detachment/ownership checks, and strict-digit focused replay. The three program
+  rows are provisional E2; no public flow or E3 claim is made.
+
 ## Accepted later-phase obligations
 
 - Registry snapshot fingerprints trust callable purity and truthful, behavior-bound
@@ -1573,6 +2003,12 @@ Recovered R0-J supporting evidence at exact frozen ledger head
   succeed through depth 247, while depth 248 returns the stable malformed-carrier
   `TypeError`. Iterative decoding or a larger explicit bound remains a later-phase
   restore decision; do not widen the current registry repair for it.
+- P1-A's exact `ProgramMeaningWitness` currently embeds a separately finalized full
+  `DofPlan`. This is correctness-valid and preserves total-boundary proof, but it
+  duplicates O(full DOFs) storage per compiled program and repeats full-layout
+  validation during evaluation. Measure representative combined P1-B/P1-C cost
+  before performance claims and compare with a compact per-referenced-DOF witness;
+  any change must retain the adversarial model/program consistency matrix.
 
 ## Blocked condition
 
@@ -1877,3 +2313,19 @@ integration decision; do not bridge it with a compatibility carrier.
   further P1 model/program cross-representation gaps; I0 accepted them against the
   frozen Horizon and withheld integration. Final repair 2/2 was dispatched to the
   original Sol/max P1-A task. P1-B and all other writers remain closed.
+- 2026-07-19: P1-A repair 2/2 returned exact replacement source `ab64e02` with
+  valid terminal signals, one-commit ancestry, and exact ten-path ownership. I0
+  reviewed and integrated it as `b7316be`, reproduced 72 focused and 228 combined
+  tests in both digit modes, 14 references, both Ruff configurations, format and
+  import gates, then passed 358 v3 and 547 full-repository tests. Independent final
+  carrier review returned GO with zero findings. The three P1-A rows advance to
+  provisional E2.
+- 2026-07-19: I0 froze the P1-B reference assembly Horizon from three independent
+  read-only design/numerical reviews. It fixes one zero-field internal linear
+  contribution request, raw-attributed plus canonical COO topology, scale-safe
+  positive-Jacobian Q8 integration, exact affine reduction/sign semantics, literal
+  operator/RHS oracles, five component rows, disjoint assembly-only ownership, and
+  an explicit P1-C boundary. Carrier, numerical, and request-ownership rechecks
+  returned final GO after the diagnostic, alias, compatibility, singularity, and
+  cost clauses were made exact. The clean commit containing this card is the sole
+  permitted P1-B dispatch base.
