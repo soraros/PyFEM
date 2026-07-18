@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: foundation gate GO; R0-E ingested; P0-D Horizon frozen; writer not yet dispatched
+- Status: foundation gate GO; R0-E ingested; P0-D dispatched from frozen Horizon
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -16,13 +16,13 @@
 
 ## Exact next safe action
 
-Commit the frozen P0-D Horizon below, then dispatch exactly one Sol/max writer from
-that exact clean commit. The packet remains one internal compiler slice: one
-explicit Q8 region becomes an immutable `CompiledModel` recipe with complete
-entity/source maps, derived capabilities, frozen registry meaning, audited
-reference geometry, and a physical-state layout containing no evolving values.
-No other task may overlap the compiler/model paths until P0-D returns both terminal
-signals and I0 reviews its commit.
+Let the single Sol/max P0-D task `019f75dd-f597-7c21-adfc-d78b1e2580c0` execute
+the frozen Horizon from exact clean base
+`2842ef84b86f04f82587f5fc378584f30f6b62bd`. It is performing its required
+base/document preflight in an isolated worktree. Do not dispatch a second writer,
+R0-F, ProgramSpec, assembly, state, or solver work. On P0-D's own final plus direct
+callback, I0 reviews ancestry, owned paths, design/physics meaning, diagnostics,
+correctness matrix, and all reported gates before any integration or repair action.
 
 Blocked condition: the P0-D Horizon cannot assign one target owner and one exact
 descriptor/compiler contract without a new design, physics, compatibility,
@@ -101,7 +101,7 @@ dated E0 evidence.
 
 | Live scope | Rows | Lifecycle and evidence | Disposition state | Next transition |
 |---|---:|---|---|---|
-| P0-D immediate dependency cut | 18 | `contracted`, `E0` at `80edd4a` | 11 preserve, 7 change; frozen Q8 compiler Horizon below | Dispatch P0-D, then component proof toward `provisional`/E2 |
+| P0-D immediate dependency cut | 18 | `contracted`, `E0` at `2842ef8` | 11 preserve, 7 change; frozen Q8 compiler Horizon below | P0-D implementation, then component proof toward `provisional`/E2 |
 | Later preserve/change portfolio | 123 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -922,8 +922,8 @@ schema, dependency, vocabulary, manifest-hash, `.pro`, skim, and test-set checks
 8. Completed: R0-E produced the complete E0 legacy capability inventory; I0
    preserved its exact report, independently checked it, and ingested the live state
    overlay into this ledger.
-9. Horizon frozen; active next is dispatch of the dependent compiler-integration
-   packet: one explicit Q8 region ->
+9. Active: the dependent compiler-integration packet is dispatched from the frozen
+   Horizon: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
 10. Only after P0-D and its `R0-F` reviewer dispatch `ProgramSpec`/affine constraints and
@@ -964,18 +964,20 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P0-H · registry snapshot — meaning detached` | `019f7568-a1e0-7c33-bf83-0a490e54c520` | `55fcf990da8f47f612f5193529c2a6b77a823a10` | `registry.py` plus focused identity tests | Complete; source `0947dd7`, integrated `fb358fc`; 68 focused twice, 240 v3, 429 full, static gates green |
 | `R0-M · registry snapshot — capture invariant verified` | `019f757a-e84f-70c3-a6d6-8c4ff7874204` | `fb358fc0609b81a12cee4a1a66c2dae98edf5cae` | Read-only P0-H integrated recheck | Complete GO, zero blockers; 42 local checks, 68 focused twice, both Ruff gates, 240 v3; one app-level resume, both terminal signals valid |
 | `R0-E · legacy breadth — semantic ledger seeded` | `019f7587-31f2-7642-b162-5fd5b7a2d07b` | `c50ca70bff884157c5645dde276c25acc6672d4a` | Complete read-only E0 capability inventory report | Complete with both terminal signals; 154 rows, 606/606 paths, zero remnants; durable report SHA `f9e326d`; independently checked and ingested |
+| `P0-D · model compiler — Q8 block frozen` | `019f75dd-f597-7c21-adfc-d78b1e2580c0` | `2842ef84b86f04f82587f5fc378584f30f6b62bd` | `pyfem/v3/compile/**`, new compiled-model carriers, one focused compiler test | Dispatched to Sol/max from frozen Horizon; isolated worktree preflight active; no callback, commit, or integration claim yet |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
 R0-L, P0-H, R0-M, and R0-E subsequently completed under the corrected terminal
-contract. The record is 21 tasks: 16 properly complete and five explicitly
-incomplete; no worker or reviewer is active while P0-D is being frozen.
+contract. With P0-D dispatched, the record is 22 tasks: 16 properly complete, five
+explicitly incomplete, and one active bounded writer.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
   P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, and R0-E.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, and R0-K.
+- Active: P0-D on the frozen Q8 compiler Horizon.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The current risk is review/process
@@ -1377,3 +1379,11 @@ integration decision; do not bridge it with a compatibility carrier.
   keeps program, section, assembly, state, public API, adapters, and prototype
   paths outside P0-D. Exactly one Sol/max writer may now be dispatched from this
   card's clean commit.
+- 2026-07-18: committed the frozen Horizon as
+  `2842ef84b86f04f82587f5fc378584f30f6b62bd` after 132 focused
+  spec/identity/Q8 component tests and 110 strict-digit foundation tests passed,
+  then dispatched exactly one Sol/max writer, P0-D
+  (`019f75dd-f597-7c21-adfc-d78b1e2580c0`), from that exact clean commit. Its
+  worktree preflight is active. No parallel compiler owner or R0-F reviewer exists;
+  neither completion nor integration is claimed until both terminal signals and I0
+  review are present.
