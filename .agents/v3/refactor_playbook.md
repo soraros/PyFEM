@@ -160,7 +160,7 @@ Use these as proof gates, not a script to narrate:
 4. **Verify and repair.** Run focused proof, real integration flow, and relevant
    broader checks at every milestone. Compare baseline and repair a failed milestone
    before building on it.
-5. **Seek disconfirmation.** For high-risk work, use independent read-only critics
+5. **Seek disconfirmation.** For high-risk work, use independent read-only reviewers
    when available and authorized. Ask for the strongest competing design, dangerous
    counterexample, missing proof, and scope violation—not general approval.
 6. **Adjudicate and persist.** Mark every finding accepted, rejected with evidence,
@@ -192,7 +192,7 @@ terminal property being established:
 Use these ledger-id classes:
 
 - `P<phase>-<letter>` for a code-and-test work packet;
-- `R<phase>-<letter>` for a read-only research or adversarial-review packet;
+- `R<phase>-<letter>` for a read-only research or independent-review packet;
 - `D<phase>-<letter>` for a bounded design decision owned by the delegator; and
 - `I<phase>` for the phase integration and combined-proof thread.
 
@@ -204,8 +204,9 @@ and `assembly — prototype quarantined` over `refactor assembly module`.
 Title rules:
 
 - use the exact ID recorded in the execution-state artifact and never reuse it;
-- keep the title stable while status changes; record active, blocked, review, and
-  complete states in the execution artifact instead;
+- keep the title stable during normal active, blocked, review, and complete states;
+  if a task ends without the required terminal result, prefix its visible title
+  with `INCOMPLETE` and record the exact reason and any replacement separately;
 - omit `PyFEM`, `v3`, worker/model names, `thread`, `task`, `implement`, `work on`,
   and other context or motion words;
 - aim for 30 to 60 characters and at most one punctuation-delimited qualification;
@@ -218,7 +219,7 @@ Examples:
 
 ```text
 P0-A · assembly — prototype quarantined
-R0-A · topology — shape inference attacked
+R0-A · topology — explicit meaning verified
 D1-A · constraints — affine owner selected
 I0 · foundations — combined proof
 ```
@@ -232,7 +233,7 @@ Before dispatching parallel writers:
 - require a focused commit in the worker branch; and
 - reserve shared design, routing, and execution-state documents for the delegator.
 
-Read-only critics need a question, attack lens, evidence requirement, and output;
+Read-only reviewers need a question, validation focus, evidence requirement, and output;
 they do not need file ownership. Editing workers need both file ownership and a
 merge contract. Only one writer owns a path at a time. If safe ownership cannot be
 established, make the overlapping package review-only until dependencies are
@@ -263,6 +264,13 @@ The callback is part of handoff, costs no extra monitoring turn, and does not gr
 merge, push, shared-file, or scope authority. If the callback tool is unavailable,
 the worker marks `CALLBACK UNAVAILABLE` prominently in its own final response.
 
+A task is complete only when its own final response begins with
+`RESULT: COMPLETE` or `RESULT: BLOCKED`, contains the required evidence and clean
+worktree state, and the callback is received or explicitly marked unavailable.
+Idle status, commentary, partial command output, and recovered evidence do not
+complete a task. After one unsuccessful resume, mark the task visibly incomplete
+and record any replacement under a distinct ID.
+
 While the delegator is already active, use the app's native thread wait/status
 mechanism; do not spend a model turn repeatedly rediscovering `active`. Add a
 scheduled watchdog only when direct callbacks are unavailable or a packet is
@@ -281,7 +289,7 @@ side effect.
 For a process/instruction refactor, inventory inherited behavior and classify each
 item as **preserve**, **change**, or **retire**, with its invariant/evidence. Treat
 current wording as an untrusted behavior inventory. Change one policy group at a
-time and replay the same cases. Pre-register adversarial cases, compare the
+time and replay the same cases. Pre-register edge cases, compare the
 strongest alternative structure, scan stale terms/conflicts, and compare line/byte
 counts. Do not describe author-written cases as independent proof.
 

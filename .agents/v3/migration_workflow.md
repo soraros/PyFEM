@@ -44,7 +44,7 @@ The current foundation at adoption consists of:
 - six accepted `R0-A`/`R0-B` blockers repaired in the spec and identity/storage
   owners, with 41 focused, 171 v3, and 360 repository tests passing at the combined
   implementation head; and
-- fresh, read-only Sol/max foundation criticism as a hard gate before any compiler
+- fresh, read-only Sol/max foundation review as a hard gate before any compiler
   packet; exact active, failed, replacement, and terminal task IDs live only in the
   execution ledger.
 
@@ -91,12 +91,12 @@ The durable rule is:
 discover behavior -> classify intent -> select a dependency-ready slice
 -> freeze its Horizon contract -> implement in bounded ownership
 -> receive a terminal callback -> review and integrate serially
--> seek adversarial disconfirmation -> run combined proof
+-> obtain independent robustness review -> run combined proof
 -> advance coverage or stop with an exact blocker
 ```
 
 Only a verified transition changes migration state. A green worker branch, an old
-example that happens to run, a final displacement parity number, or a critic's
+example that happens to run, a final displacement parity number, or a reviewer's
 approval sentence is not a transition by itself.
 
 ## Competing orchestration designs
@@ -145,7 +145,7 @@ Failure modes:
 Keep one integration owner and one live ledger. Select a small dependency-aware
 portfolio, then dispatch only packets with a frozen Horizon contract, disjoint path
 ownership, exact base, exact evidence, and a terminal callback. Integrate one
-commit at a time. Run read-only critics against combined semantic boundaries, not
+commit at a time. Run read-only reviewers against combined semantic boundaries, not
 against isolated code style.
 
 This is less failure-prone because it combines the serial safety of Design A with
@@ -344,7 +344,7 @@ nearby class merely because its filename resembles the last packet.
 
 ### Wave 0: finish and operationalize foundations
 
-No compiler writer is dispatched while required foundation adversarial review or
+No compiler writer is dispatched while required foundation independent review or
 repair is active.
 
 After the required callbacks:
@@ -363,7 +363,7 @@ reused for them:
 |---|---|---|---|
 | `R0-E · legacy breadth — semantic ledger seeded` | Complete E0 inventory and proposed preserve/change/retire classifications with evidence gaps | Foundation re-review terminal; adopted ledger schema | Read-only research may overlap P0-D; only integrator writes the ledger |
 | `P0-D · model compiler — Q8 block frozen` | Normalized Q8 region compiles into immutable model/block recipe, entity/source maps, capabilities, and empty physical-state layout | Foundation re-review adjudicated and combined proof green | Serial core writer |
-| `R0-F · model compiler — block invariants attacked` | Try topology inference, registry drift, missing membership, caller aliasing, invalid geometry, and identity substitution | P0-D integrated | Read-only Sol/max critic |
+| `R0-F · model compiler — block invariants verified` | Check topology meaning, registry stability, membership, caller isolation, geometry validation, and identity compatibility | P0-D integrated | Read-only Sol/max reviewer |
 
 `P0-D` must not introduce `ProgramSpec`, a public solver, a second whole-problem
 carrier, or a compatibility shim. It is the exact next dependency already implied
@@ -379,7 +379,7 @@ would freeze mutually invented APIs before the architecture is executable.
 | `P1-A · program compiler — affine plan canonical` | `ProgramSpec`, additive nodal loads, fixed affine constraints, structured coordinates, and model-compatible `CompiledProgram` | P0-D and R0-F adjudication | Replaces prototype constraint/load packing on the new flow |
 | `P1-B · assembly plan — contributions composed` | Reference COO oracle plus composed model/program/reduction/request plan | P1-A | Proves loads are added and program tangents cannot be absent from topology |
 | `P1-C · linear slice — verified public flow` | Minimal physical/evolution state transaction, typed `LinearStatic`, reusable and one-shot solve, result ledger, `verify_record`, and fresh `verify` | P1-B | New Q8 public flow contains no `ProblemDefinition` or `LoadedProblem` |
-| `R1-A · linear slice — physics and state attacked` | Attack geometry, constraints, loads, identity, reactions, balance, snapshot isolation, and false verification | P1-C integrated | Independent Sol/max report |
+| `R1-A · linear slice — physics and state verified` | Check geometry, constraints, loads, identity, reactions, balance, snapshot isolation, and verification integrity | P1-C integrated | Independent Sol/max report |
 | `I1 · linear slice — combined proof` | Adjudicate findings and run all Phase 1 exit gates | R1-A terminal and repairs integrated | Capability rows reach E3; no breadth claim |
 
 The Phase 1 exit includes the existing Q8 book oracle, but the success bar is the
@@ -491,8 +491,8 @@ capability rows, and one capability may require several packets.
 | `CALLBACK_RECEIVED` | Exactly one terminal COMPLETE/BLOCKED message | `INTEGRATION_REVIEW`, `REPAIR_REQUESTED`, `BLOCKED` | Integrator | Callback receipt and deterministic prechecks |
 | `INTEGRATION_REVIEW` | Commit, diff, ownership, contract, evidence, base, and warnings reviewed | `REPAIR_REQUESTED`, `CHERRY_PICKED`, `REJECTED`, `BLOCKED` | Sol/max integrator | No semantic approval automation |
 | `REPAIR_REQUESTED` | Accepted findings and round `1/2` or `2/2` recorded | `DISPATCHED`, `CALLBACK_RECEIVED`, `BLOCKED` | Integrator/original writer | Mechanical repair may be redispatched |
-| `CHERRY_PICKED` | Source and integrated hashes plus clean focused gate recorded | `ADVERSARIAL_REVIEW`, `REPAIR_REQUESTED`, `BLOCKED` | Integrator | Cherry-pick is serial and human/model reviewed |
-| `ADVERSARIAL_REVIEW` | Independent critic findings returned and adjudicated | `REPAIR_REQUESTED`, `COMBINED_PROOF`, `BLOCKED` | Sol/max critic/integrator | Callback receipt only |
+| `CHERRY_PICKED` | Source and integrated hashes plus clean focused gate recorded | `INDEPENDENT_REVIEW`, `REPAIR_REQUESTED`, `BLOCKED` | Integrator | Cherry-pick is serial and human/model reviewed |
+| `INDEPENDENT_REVIEW` | Independent reviewer findings returned and adjudicated | `REPAIR_REQUESTED`, `COMBINED_PROOF`, `BLOCKED` | Sol/max reviewer/integrator | Callback receipt only |
 | `COMBINED_PROOF` | Focused, public-flow, dangerous, relevant full-suite, static, and performance gates complete | `ADVANCED`, `REPAIR_REQUESTED`, `BLOCKED` | Sol/max integrator | Commands may run automatically; interpretation may not |
 | `ADVANCED` | Capability statuses/evidence grades and next safe action updated | terminal | Integrator | Ledger bookkeeping after approved proof |
 
@@ -515,7 +515,7 @@ The integration thread owns:
 - Horizon Gate adjudication;
 - dispatch bases, path ownership, and merge order;
 - commit review and serial cherry-pick;
-- critic finding adjudication;
+- reviewer finding adjudication;
 - combined proof and capability advancement; and
 - shutdown of watchdogs and completed packet surfaces.
 
@@ -531,10 +531,11 @@ research within scope and repair its packet. It may not edit shared design/ledge
 files, merge, push, absorb unrelated changes, create compatibility shims, or decide
 an unresolved physical/API question.
 
-### Read only researcher or critic
+### Read only researcher or reviewer
 
-A researcher receives a question, evidence surface, attack lens, exact commit, and
-named output. It has no file ownership and makes no commit. Good attack lenses are:
+A researcher receives a question, evidence surface, validation focus, exact commit,
+and named output. It has no file ownership and makes no commit. Useful validation
+focuses are:
 
 - strongest competing semantic owner;
 - dangerous numerical/physical counterexample;
@@ -543,7 +544,7 @@ named output. It has no file ownership and makes no commit. Good attack lenses a
 - false independence in proof; and
 - scope or authority expansion.
 
-Critic reports are evidence, not votes. Findings are `P0` correctness/authority,
+Reviewer reports are evidence, not votes. Findings are `P0` correctness/authority,
 `P1` required proof/design, or `P2` advisory. Unresolved `P0` or `P1` findings block
 advancement.
 
@@ -557,7 +558,9 @@ Use the recorded title format exactly:
 
 Use `P` for code/test packets, `R` for read-only research/review, `D` for bounded
 design decisions, and `I` for phase integration. IDs are never reused. Titles stay
-stable; state lives in the ledger.
+stable during normal execution; a task that ends without the required terminal
+result is visibly prefixed `INCOMPLETE`, with its reason and replacement recorded
+separately in the ledger.
 
 Default topology for a risky slice:
 
@@ -565,7 +568,7 @@ Default topology for a risky slice:
 I<phase> integration owner
   <- terminal callback from P<phase>-A bounded writer
   <- terminal callback from optional disjoint P<phase>-B writer
-  <- terminal callback from R<phase>-A independent critic
+  <- terminal callback from R<phase>-A independent reviewer
 ```
 
 ### Work that must remain serial
@@ -639,7 +642,8 @@ terminal callback:
 <ID> COMPLETE|BLOCKED · <commit or none> · paths=<...> · proof=<...>
 · warning/blocker=<...> · next=<review, repair, or dependency action>
 
-Return the same data plus assumptions and unresolved findings in your final.
+Begin your final response with `RESULT: COMPLETE` or `RESULT: BLOCKED`, then return
+the same data plus assumptions, unresolved findings, and clean worktree state.
 ```
 
 ### Terminal callback contract
@@ -727,33 +731,65 @@ Only the integrator cherry-picks. It must:
 If a cherry-pick conflicts because the base is stale, redispatch or repair from the
 current integrated base. Do not ask the worker to merge the integration branch.
 
-### Critic prompt
+### Reviewer prompt
 
 ```text
-You are <R-ID>, a read-only Sol/max adversarial critic.
+You are <R-ID>, a read-only Sol/max correctness reviewer for a local finite-element
+Python library.
 Review integrated commit <40-char hash> against design.md, migration_workflow.md,
 the packet Horizon card, and coverage rows <IDs>. Make no edits or commits.
 
-Attack lens: <one distinct lens>.
-Seek the strongest competing design, a concrete dangerous counterexample, missing
-independent proof, hidden duplicate semantic owner, scope/authority violation, and
-public-flow or numerical regression. Reproduce evidence where safe.
+Validation focus: <one distinct local correctness lens>.
+Check the strongest competing design, concrete numerical and input edge cases,
+missing independent proof, duplicate semantic ownership, scope or authority drift,
+and public-flow or numerical regressions. Use repository-local tests and temporary
+local data only.
 
 Return findings as P0/P1/P2 with file/line or command evidence, then GO or NO-GO.
 Immediately before the final, send <integration-thread-id> one callback:
 <R-ID> COMPLETE|BLOCKED · commit=none · verdict=<GO|NO-GO|blocked>
 · findings=<counts/summary> · next=<smallest adjudication action>
+
+Begin the final response with `RESULT: COMPLETE` or `RESULT: BLOCKED`, then record
+the exact base, command evidence, warnings, worktree state, and smallest next action.
 ```
 
-Use different lenses for multiple critics; duplicate generic reviews add cost but
+Use different focuses for multiple reviewers; duplicate generic reviews add cost but
 not independence.
+
+### Task prompt and terminal-result integrity
+
+Task prompts use domain-specific correctness language only: finite-element model
+meaning, numerical edge cases, type and shape validation, ownership, determinism,
+exception safety, and independent verification. Avoid metaphorical language from
+unrelated technical domains. Keep each prompt short by linking the frozen packet
+card instead of restating the full migration history. Every task is limited to the
+repository checkout, its configured test tools, and task-specific temporary local
+data; it does not inspect external systems.
+
+A task is terminal only when all of the following exist together:
+
+1. its own final response begins with `RESULT: COMPLETE` or `RESULT: BLOCKED`;
+2. the final response records the exact base, commit or `none`, required command
+   results, warnings, worktree state, and smallest next action;
+3. the required callback was received, or the final response places
+   `CALLBACK UNAVAILABLE` immediately after the result line; and
+4. the integration owner verifies the thread ID and evidence before changing the
+   packet state.
+
+An idle thread, a completed turn, commentary, partial command output, an approval
+request, or recovered evidence is never task completion. A replacement task does
+not retroactively complete the task it replaced. After one unsuccessful resume,
+rename the task visibly as incomplete, record it separately, and either issue one
+new bounded replacement or complete the remaining verification in the integration
+thread. Do not create a chain of nominally active replacements.
 
 ### Phase completion contract
 
 A phase integration packet can advance only when:
 
 - every source commit is reviewed and recorded in merge order;
-- all accepted critic findings are repaired;
+- all accepted reviewer findings are repaired;
 - all rejected findings cite evidence and all deferrals are outside the exit bar;
 - focused, public-flow, dangerous-case, v3, relevant full-suite, Ruff, format, and
   diff gates pass at one exact integrated commit;
@@ -812,7 +848,7 @@ Within already authorized scope, automation may:
 - mark a mechanical gate pass/fail at an exact commit; and
 - disable its own watchdog when all watched packets are terminal.
 
-Automation may not move from integration review, critic adjudication, or combined
+Automation may not move from integration review, reviewer adjudication, or combined
 proof to advancement merely because commands are green.
 
 ### Required Sol max adjudication
@@ -825,7 +861,7 @@ Sol/max owns:
   conservation interpretation;
 - tolerance or oracle conflicts;
 - public API and compatibility consequences;
-- commit integration and critic finding adjudication;
+- commit integration and reviewer finding adjudication;
 - representative performance tradeoffs; and
 - the final migration-complete claim.
 
@@ -874,7 +910,7 @@ Use GPT-5.6 Sol with max reasoning for:
 - constraint, state, solver, material, formulation, and result semantics;
 - numerical/physical reference design;
 - integration review and finding adjudication;
-- adversarial critics; and
+- independent correctness reviewers; and
 - phase and migration completion.
 
 A cheaper model is eligible only after the Sol/max owner freezes the contract and
@@ -893,7 +929,7 @@ physics, numerical behavior, ownership, compatibility, or proof returns to Sol/m
 
 Do not use cheaper writers for the first implementation of a semantic boundary,
 kernel port, state schema, constraint compiler, nonlinear algorithm, capability
-classification, or critic review. Savings from one cheap writer do not justify an
+classification, or independent review. Savings from one cheap writer do not justify an
 expensive repair/integration loop.
 
 ## Numerical and physical proof strategy
@@ -1059,7 +1095,7 @@ conversation but cannot replace this resume packet.
 | Tool/environment failure | Record exact command/error and separate sandbox/platform failure from code failure | Block after three bounded retries or when external change/authority is required |
 
 Safe in-scope alternatives must be exhausted before `BLOCKED`. “Hard,” “slow,”
-“budget nearly used,” or “critic has not replied yet” is not blocked. Waiting work
+“budget nearly used,” or “reviewer has not replied yet” is not blocked. Waiting work
 with a direct callback simply yields; it does not promise continuous background
 agency.
 
@@ -1075,7 +1111,7 @@ Do not automate:
   destructive worktree cleanup;
 - optional dependency, GUI, external service, secret, or authority expansion;
 - acceptance of a performance/correctness tradeoff;
-- conversion of unresolved critic findings into “advisory” status;
+- conversion of unresolved reviewer findings into “advisory” status;
 - deletion or rewriting of durable evidence/ledger history; or
 - a migration-complete declaration.
 
@@ -1122,15 +1158,15 @@ are true:
 9. **No hidden duplicate owner remains.** Import/dependency and semantic scans show
    one active owner for model/program compilation, contribution topology,
    constraints, accepted/trial state, each analysis family, verification, adapters,
-   and output projection. Independent critics find no unresolved P0/P1 duplicate.
+   and output projection. Independent reviewers find no unresolved P0/P1 duplicate.
 10. **Operations are closed.** The ledger names the completion commit and evidence,
-    all worker/critic packets are terminal, all watchdogs are disabled, the
+    all worker/reviewer packets are terminal, all watchdogs are disabled, the
     worktree is clean, and landing/push remains a separate explicit action.
 
 This definition is falsified by one unclassified legacy example, one maintained
 public flow that still constructs `GlobalData` or a prototype carrier, one
 path-dependent result that cannot be restarted/verified, one hidden compatibility
-fallback, or one unresolved required critic finding.
+fallback, or one unresolved required reviewer finding.
 
 ## Adoption and rollout state
 
@@ -1155,7 +1191,7 @@ bounded native waits remain sufficient.
 
 ### Foundation re-review at adoption
 
-Fresh critics were launched against exact combined repaired commit
+Fresh reviewers were launched against exact combined repaired commit
 `faab0c938705f59fc5a22e702413f295af1dcadb`. Task failures, replacements,
 callbacks, findings, and repairs are deliberately recorded only in
 `migration-execution.md`, so this method does not become a second status ledger.
@@ -1165,7 +1201,7 @@ accepted P0/P1 findings are repaired and re-proved.
 ### Next trial
 
 - Seed every legacy capability at E0 and classify high-level rows with Sol/max.
-- Trial the workflow on `P0-D`, its `R0-F` critic, and then the serial Phase 1
+- Trial the workflow on `P0-D`, its `R0-F` reviewer, and then the serial Phase 1
   packets.
 - Record friction as concrete transition failures, not another process roadmap.
 - Change this method only if the trial exposes a falsifiable operating defect.
@@ -1230,17 +1266,17 @@ function coordinator_activation():
         move packet to CHERRY_PICKED
         persist and continue locally
 
-    packet = first CHERRY_PICKED packet requiring adversarial review
+    packet = first CHERRY_PICKED packet requiring independent review
     if packet exists:
-        if critic not dispatched:
-            freeze critic lens/output/callback contract and dispatch if authorized
+        if reviewer not dispatched:
+            freeze reviewer focus/output/callback contract and dispatch if authorized
             persist thread ID/title/base; return and rely on callback
-        if critic active and no callback:
+        if reviewer active and no callback:
             use at most one bounded native wait while this activation is useful
             persist only a transition; otherwise return without polling
 
-    critic = first unadjudicated critic callback
-    if critic exists:
+    reviewer = first unadjudicated reviewer callback
+    if reviewer exists:
         adjudicate each P0/P1/P2 finding with evidence
         if accepted P0/P1:
             create bounded repair packet from current integrated commit
@@ -1265,7 +1301,7 @@ function coordinator_activation():
         return ADVANCED
 
     # No produced evidence is waiting. Select new work only now.
-    if any active worker or critic exists:
+    if any active worker or reviewer exists:
         rely on direct callbacks; optionally one native wait in current activation
         return WAITING_WITHOUT_POLLING
 
@@ -1275,7 +1311,7 @@ function coordinator_activation():
 
     if selected is none:
         if every capability is proved or retired-proved:
-            run falsifiable migration-complete audit with independent critic
+            run falsifiable migration-complete audit with independent reviewer
             if all completion conditions pass:
                 record completion commit; disable all automation; return COMPLETE
         record missing dependency/evidence or minimum user decision
