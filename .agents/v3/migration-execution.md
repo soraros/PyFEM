@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: foundation code broad-green; repeat-review task gate incomplete; compiler closed
+- Status: foundation code broad-green; R0-L identity/storage review active; compiler closed
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -15,14 +15,12 @@
 
 ## Exact next safe action
 
-Do not treat R0-J or R0-K as completed tasks. R0-J produced substantial supporting
-evidence from exact ledger head `8a952e7668f4f6c52d39352dee7e0685593906a3`,
-but never produced its required final result or callback. R0-K created one temporary
-script but did not execute it, run the required focused/static gates, or report a
-verdict. After this audit and workflow correction are committed, dispatch exactly
-one bounded replacement identity/storage reviewer from the resulting exact clean
-head. The replacement must satisfy the new terminal-result contract before model
-compiler work begins. Do not create another replacement chain.
+Wait for R0-L task `019f7551-0075-7383-a895-fd2d77f02419`, dispatched from exact
+clean base `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92`. Accept no state transition
+until its own final response and callback satisfy the terminal-result contract,
+then adjudicate every finding and rerun any required integration evidence. R0-J's
+recovered evidence remains supporting only; R0-K remains incomplete. Do not start
+the model compiler or create another replacement while R0-L is active.
 
 Blocked condition: a reviewer demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -444,9 +442,10 @@ integrated directly after it.
 
 ### R0-L — Independently verify the identity/storage boundary
 
-State: `HORIZON_FROZEN`. Dispatch exactly once after this audit/workflow correction
-is committed. The dispatch prompt records that resulting 40-character commit as the
-exact base. This replaces incomplete R0-K; it does not change R0-K's status.
+State: `DISPATCHED` as task `019f7551-0075-7383-a895-fd2d77f02419` from exact clean
+base `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92`. Its preflight confirmed that
+base and an empty worktree. This replaces incomplete R0-K; it does not change
+R0-K's status.
 
 Role and outcome:
 
@@ -520,10 +519,10 @@ Required evidence and environment:
    review findings, and rerun combined v3 plus full repository tests.
 4. Completed: P0-F repaired the R0-H diagnostic blocker; P0-G plus its direct
    provenance follow-up repaired the five R0-I seams and integration-audit findings.
-5. R0-J and R0-K are incomplete tasks. R0-J's recovered spec evidence is supporting
-   evidence only; R0-K did not run its assigned validation. Dispatch one bounded
-   identity/storage replacement after this audit commit and require a valid terminal
-   result before advancement.
+5. R0-J and R0-K remain incomplete. R0-J's recovered spec evidence is supporting
+   only; R0-K did not run its assigned validation. R0-L is the single active bounded
+   identity/storage replacement and must return a valid terminal result before
+   advancement.
 6. After that replacement is independently green, dispatch the dependent
    compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
@@ -562,6 +561,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P0-G · identity/storage — exact boundaries enforced` | `019f7146-e871-76c2-a3e6-75d87fac83fd` | `7d1ededb6d11fc183ff506b989b6d1f72fd12600` | Close five accepted R0-I seams plus integration-audit carrier gaps | Complete; source `9504467` + child `8612d01`, integrated `e04f86a` + `afaac4d`; 47 focused, 212 v3, 401 full passed |
 | `INCOMPLETE R0-J · model spec — evidence only` | `019f7184-2fe6-7403-a5fd-683e58dcee79` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Read-only spec/diagnostic repeat reviewer | Incomplete; substantial zero-blocker evidence recovered, but no final result or callback; evidence is supporting only |
 | `INCOMPLETE R0-K · identity/storage — checks not run` | `019f7184-2fe6-7403-a5fd-685f9ee1995d` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Read-only identity/provenance/registry/storage repeat reviewer | Incomplete; temporary script created but never executed; no required tests, static gates, verdict, or callback |
+| `R0-L · identity/storage — boundary independently verified` | `019f7551-0075-7383-a895-fd2d77f02419` | `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92` | Read-only identity/provenance/registry/storage replacement reviewer | Active; exact base and clean worktree confirmed; terminal result required |
 
 ## Task completion audit
 
@@ -821,3 +821,8 @@ integration decision; do not bridge it with a compatibility carrier.
   language for future reviewer prompts, and forbids promotion from idle state,
   commentary, or recovered partial evidence. Compiler integration remains closed
   pending one bounded identity/storage replacement review.
+- 2026-07-18: dispatched exactly one Sol/max replacement, R0-L
+  (`019f7551-0075-7383-a895-fd2d77f02419`), from exact audit commit
+  `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92`. Its concise prompt links only the
+  neutral local correctness card and relevant implementation/tests. Initial
+  preflight confirmed the exact base and clean worktree; no other task is active.
