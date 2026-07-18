@@ -236,6 +236,18 @@ def _forged_manifest(payload: bytes) -> CanonicalManifest:
   return manifest
 
 
+def _single_registry_snapshot() -> RegistrySnapshot:
+  descriptor = RegistryDescriptor(
+    kind="material",
+    name="elastic",
+    version="1",
+    implementation_id="elastic-v1",
+    metadata={"components": ["xx", "yy"]},
+    binding=_original_kernel,
+  )
+  return RegistrySnapshot({descriptor.key: descriptor})
+
+
 def test_finalization_detaches_converts_contiguity_and_rejects_writes() -> None:
   source = np.arange(12, dtype=np.float32).reshape(3, 4)
   expected = source.astype(np.float64)
@@ -512,27 +524,47 @@ def test_registry_snapshot_freezes_metadata_and_exact_binding() -> None:
     metadata={"components": ["xx"], "weights": [7.0]},
     binding=_replacement_kernel,
   )
-  registry = {original.key: original}
+  original_key = original.key
+  registry = {original_key: original}
   snapshot = RegistrySnapshot.capture(registry)
+  captured = snapshot.resolve(*original_key)
   frozen_manifest = snapshot.manifest.to_bytes()
   frozen_fingerprint = snapshot.fingerprint
+  frozen_descriptor_manifest = captured.manifest.to_bytes()
+  frozen_metadata = captured.metadata.to_bytes()
+
+  assert captured is not original
+  assert captured.binding is _original_kernel
+  with pytest.raises(FrozenInstanceError):
+    original.version = "2"
 
   weights.fill(-1.0)
   components.clear()
   metadata.clear()
-  registry[original.key] = replacement
+  object.__setattr__(original, "kind", "changed-material")
+  object.__setattr__(original, "name", "changed-elastic")
+  object.__setattr__(original, "binding", _replacement_kernel)
+  object.__setattr__(
+    object.__getattribute__(original, "metadata"),
+    "_payload",
+    object.__getattribute__(replacement.metadata, "_payload"),
+  )
+  object.__setattr__(original, "manifest", replacement.manifest)
+  registry[original_key] = replacement
   registry.clear()
 
   resolved = snapshot.resolve("material", "elastic")
-  assert resolved is original
+  assert resolved is captured
+  assert resolved.key == original_key
+  assert resolved.binding is _original_kernel
   assert resolved.binding(2.0) == 3.0
+  assert resolved.metadata.to_bytes() == frozen_metadata
+  assert resolved.manifest.to_bytes() == frozen_descriptor_manifest
   assert snapshot.manifest.to_bytes() == frozen_manifest
   assert snapshot.fingerprint == frozen_fingerprint
   assert (
     RegistrySnapshot({replacement.key: replacement}).fingerprint != frozen_fingerprint
   )
-  with pytest.raises(FrozenInstanceError):
-    original.version = "2"
 
 
 def test_registry_manifest_is_independent_of_source_mapping_order() -> None:
@@ -558,6 +590,20 @@ def test_registry_manifest_is_independent_of_source_mapping_order() -> None:
 
   assert forward.fingerprint == reverse.fingerprint
   assert forward.manifest.to_bytes() == reverse.manifest.to_bytes()
+  assert tuple(descriptor.key for descriptor in forward.descriptors) == (
+    formulation.key,
+    material.key,
+  )
+  assert forward.resolve(*formulation.key).binding is _replacement_kernel
+  assert forward.resolve(*material.key).binding is _original_kernel
+
+  source = {material.key: material, formulation.key: formulation}
+  selected = RegistrySnapshot(source, required=[material.key])
+  source[material.key] = formulation
+  source.clear()
+  assert selected.resolve(*material.key).binding is _original_kernel
+  with pytest.raises(KeyError, match="has no descriptor"):
+    selected.resolve(*formulation.key)
 
 
 def test_generation_helpers_fail_closed_for_foreign_values_and_lineages() -> None:
@@ -1144,3 +1190,157 @@ def test_registry_descriptor_cannot_subclass_to_drift_key_or_binding() -> None:
         "key": property(lambda self: ("material", "drifted")),
       },
     )
+
+
+@pytest.mark.parametrize(
+  "field_name",
+  ["descriptors", "manifest", "fingerprint", "_binding_references"],
+)
+def test_registry_snapshot_missing_fields_fail_deterministically(
+  field_name: str,
+) -> None:
+  snapshot = _single_registry_snapshot()
+  object.__delattr__(snapshot, field_name)
+
+  with pytest.raises(TypeError, match="malformed exact snapshot"):
+    snapshot.resolve("material", "elastic")
+
+
+@pytest.mark.parametrize(
+  ("field_name", "altered", "message"),
+  [
+    ("descriptors", [], "descriptors must be an exact tuple"),
+    ("manifest", object(), "manifest must be an exact CanonicalManifest"),
+    ("fingerprint", object(), "fingerprint must be an exact ContentFingerprint"),
+    (
+      "_binding_references",
+      [],
+      "binding references must be an exact tuple",
+    ),
+  ],
+)
+def test_registry_snapshot_altered_field_types_fail_deterministically(
+  field_name: str,
+  altered: object,
+  message: str,
+) -> None:
+  snapshot = _single_registry_snapshot()
+  object.__setattr__(snapshot, field_name, altered)
+
+  with pytest.raises(TypeError, match=message):
+    snapshot.resolve("material", "elastic")
+
+
+@pytest.mark.parametrize(
+  "field_name",
+  [
+    "kind",
+    "name",
+    "version",
+    "implementation_id",
+    "metadata",
+    "binding",
+    "manifest",
+  ],
+)
+def test_registry_snapshot_missing_nested_descriptor_fields_fail_deterministically(
+  field_name: str,
+) -> None:
+  snapshot = _single_registry_snapshot()
+  object.__delattr__(snapshot.descriptors[0], field_name)
+
+  with pytest.raises(TypeError, match="malformed exact descriptor"):
+    snapshot.resolve("material", "elastic")
+
+
+@pytest.mark.parametrize(
+  ("field_name", "altered", "message"),
+  [
+    ("kind", "formulation", "descriptor manifest does not match"),
+    (
+      "metadata",
+      CanonicalManifest({"components": ["zz"]}),
+      "descriptor manifest does not match",
+    ),
+    (
+      "manifest",
+      CanonicalManifest({"changed": True}),
+      "descriptor manifest does not match",
+    ),
+    ("binding", _replacement_kernel, "selected binding reference changed"),
+  ],
+)
+def test_registry_snapshot_altered_nested_descriptor_fields_fail_deterministically(
+  field_name: str,
+  altered: object,
+  message: str,
+) -> None:
+  snapshot = _single_registry_snapshot()
+  object.__setattr__(snapshot.descriptors[0], field_name, altered)
+
+  with pytest.raises(ValueError, match=message):
+    snapshot.resolve("material", "elastic")
+
+
+def test_registry_snapshot_rejects_noncanonical_order_and_duplicate_keys() -> None:
+  material = RegistryDescriptor(
+    kind="material",
+    name="elastic",
+    version="1",
+    implementation_id="elastic-v1",
+    metadata={},
+    binding=_original_kernel,
+  )
+  formulation = RegistryDescriptor(
+    kind="formulation",
+    name="small-strain",
+    version="1",
+    implementation_id="small-strain-v1",
+    metadata={},
+    binding=_replacement_kernel,
+  )
+  source = {material.key: material, formulation.key: formulation}
+
+  reversed_snapshot = RegistrySnapshot(source)
+  object.__setattr__(
+    reversed_snapshot,
+    "descriptors",
+    tuple(reversed(reversed_snapshot.descriptors)),
+  )
+  with pytest.raises(ValueError, match="not canonically ordered"):
+    reversed_snapshot.resolve(*material.key)
+
+  duplicate_snapshot = RegistrySnapshot(source)
+  first = duplicate_snapshot.descriptors[0]
+  object.__setattr__(duplicate_snapshot, "descriptors", (first, first))
+  with pytest.raises(ValueError, match="duplicate descriptor key"):
+    duplicate_snapshot.resolve(*first.key)
+
+
+def test_registry_snapshot_revalidates_manifest_fingerprint_and_bindings() -> None:
+  altered_manifest = _single_registry_snapshot()
+  object.__setattr__(
+    altered_manifest,
+    "manifest",
+    CanonicalManifest({"changed": True}),
+  )
+  with pytest.raises(ValueError, match="snapshot manifest does not match"):
+    altered_manifest.resolve("material", "elastic")
+
+  altered_fingerprint = _single_registry_snapshot()
+  object.__setattr__(
+    altered_fingerprint,
+    "fingerprint",
+    ContentFingerprint.capture({"changed": True}),
+  )
+  with pytest.raises(ValueError, match="fingerprint does not match"):
+    altered_fingerprint.resolve("material", "elastic")
+
+  altered_binding_reference = _single_registry_snapshot()
+  object.__setattr__(
+    altered_binding_reference,
+    "_binding_references",
+    (_replacement_kernel,),
+  )
+  with pytest.raises(ValueError, match="selected binding reference changed"):
+    altered_binding_reference.resolve("material", "elastic")
