@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: foundation code broad-green; R0-L waiting on local-temp approval; compiler closed
+- Status: R0-L complete with one accepted registry-snapshot defect; repair required; compiler closed
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -15,14 +15,16 @@
 
 ## Exact next safe action
 
-Approve R0-L task `019f7551-0075-7383-a895-fd2d77f02419` to create its authorized
-task-specific validation script under `/private/tmp`, then let it continue from
-exact clean base `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92`. Its two focused
-pytest modes (47 passed each) and both Ruff configurations are already green, but
-that partial evidence is not completion. Accept no state transition until its own
-final response and callback satisfy the terminal-result contract. R0-J's recovered
-evidence remains supporting only; R0-K remains incomplete. Do not start the model
-compiler or create another replacement while R0-L is active.
+Repair the accepted R0-L registry-snapshot defect inside
+`pyfem/v3/model/registry.py` and `test/v3/test_v3_model_identity.py`: capture
+descriptor meaning independently of the caller-owned descriptor and validate reused
+snapshot/descriptor fields, canonical ordering, manifest, fingerprint, and selected
+binding references before resolution. Missing or altered fields must fail with a
+stable library exception rather than changing resolved meaning or leaking an
+incidental `AttributeError`. Rerun the focused tests in both digit-limit modes, both
+Ruff configurations, `test/v3`, and the full repository suite, then obtain one
+bounded independent recheck. Do not start the model compiler until that proof is
+green. R0-J's recovered evidence remains supporting only; R0-K remains incomplete.
 
 Blocked condition: a reviewer demonstrates an invariant failure that cannot be
 repaired inside the existing spec or identity/storage owner without a new design,
@@ -444,10 +446,11 @@ integrated directly after it.
 
 ### R0-L — Independently verify the identity/storage boundary
 
-State: `DISPATCHED` as task `019f7551-0075-7383-a895-fd2d77f02419` from exact clean
-base `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92`. Its preflight confirmed that
-base and an empty worktree. This replaces incomplete R0-K; it does not change
-R0-K's status.
+State: `COMPLETE` with a `NO-GO` verdict as task
+`019f7551-0075-7383-a895-fd2d77f02419` from exact clean base
+`dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92`. Its own final response began with
+the required terminal sentinel and its direct callback reached I0. This replaces
+incomplete R0-K; it does not change R0-K's status.
 
 Role and outcome:
 
@@ -513,6 +516,25 @@ Required evidence and environment:
 - send the same compact result to I0. Commentary, idle state, or partial results do
   not complete this task.
 
+Result and adjudication:
+
+- 47 focused identity/storage tests passed normally and under
+  `PYTHONINTMAXSTRDIGITS=640`; both Ruff configurations passed; the bounded local
+  matrix passed 162 checks in each digit mode; and `test/v3` passed 219 tests with
+  40 existing SciPy `SparseEfficiencyWarning` notices;
+- acyclic manifest capture and `to_bytes()` passed through depth 247; depth 248
+  returned the stable library malformed-carrier `TypeError`, which is recorded as a
+  bounded later-phase decoding obligation rather than a current blocker;
+- one P1 defect is accepted: `RegistrySnapshot.resolve()` trusts retained or reused
+  snapshot/descriptor fields. Changing the caller-owned descriptor's selected
+  binding changes the resolved binding while manifest and fingerprint stay stable,
+  and missing snapshot or nested descriptor fields leak `AttributeError`;
+- the integration owner reproduced all three manifestations at the current branch
+  head. They are one root failure of the frozen-snapshot contract in `design.md`,
+  not three separate repair packets; and
+- callable implementation truth, transaction semantics, restore/rebind, and
+  untrusted restored-data decoding remain later-phase obligations.
+
 ## Merge and continuation order
 
 1. Completed: review and integrate P0-A.
@@ -521,15 +543,16 @@ Required evidence and environment:
    review findings, and rerun combined v3 plus full repository tests.
 4. Completed: P0-F repaired the R0-H diagnostic blocker; P0-G plus its direct
    provenance follow-up repaired the five R0-I seams and integration-audit findings.
-5. R0-J and R0-K remain incomplete. R0-J's recovered spec evidence is supporting
-   only; R0-K did not run its assigned validation. R0-L is the single active bounded
-   identity/storage replacement and must return a valid terminal result before
-   advancement.
-6. After that replacement is independently green, dispatch the dependent
+5. Completed: R0-L returned a valid terminal result and callback. Its one accepted
+   frozen-registry defect is now the only active foundation repair. R0-J and R0-K
+   remain incomplete; their statuses do not change.
+6. Repair and independently recheck the R0-L defect, then rerun the combined
+   foundation gates at one exact commit.
+7. After that repair is independently green, dispatch the dependent
    compiler-integration packet: one explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
-7. Only after P0-D and its `R0-F` reviewer dispatch `ProgramSpec`/affine constraints and
+8. Only after P0-D and its `R0-F` reviewer dispatch `ProgramSpec`/affine constraints and
    `PreparedAssemblyPlan` work.
 
 ## Packet ledger
@@ -563,15 +586,17 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P0-G · identity/storage — exact boundaries enforced` | `019f7146-e871-76c2-a3e6-75d87fac83fd` | `7d1ededb6d11fc183ff506b989b6d1f72fd12600` | Close five accepted R0-I seams plus integration-audit carrier gaps | Complete; source `9504467` + child `8612d01`, integrated `e04f86a` + `afaac4d`; 47 focused, 212 v3, 401 full passed |
 | `INCOMPLETE R0-J · model spec — evidence only` | `019f7184-2fe6-7403-a5fd-683e58dcee79` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Read-only spec/diagnostic repeat reviewer | Incomplete; substantial zero-blocker evidence recovered, but no final result or callback; evidence is supporting only |
 | `INCOMPLETE R0-K · identity/storage — checks not run` | `019f7184-2fe6-7403-a5fd-685f9ee1995d` | `8a952e7668f4f6c52d39352dee7e0685593906a3` | Read-only identity/provenance/registry/storage repeat reviewer | Incomplete; temporary script created but never executed; no required tests, static gates, verdict, or callback |
-| `R0-L · identity/storage — boundary independently verified` | `019f7551-0075-7383-a895-fd2d77f02419` | `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92` | Read-only identity/provenance/registry/storage replacement reviewer | Waiting on authorized `/private/tmp` script approval; 47 focused passed in both digit modes and both Ruff gates passed; final result still required |
+| `R0-L · identity/storage — boundary independently verified` | `019f7551-0075-7383-a895-fd2d77f02419` | `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92` | Read-only identity/provenance/registry/storage replacement reviewer | Complete, valid final and callback; NO-GO with one accepted frozen-registry defect; 47 focused in both digit modes, 162 local checks per mode, 219 v3 tests, both Ruff gates |
 
 ## Task completion audit
 
-The 2026-07-18 audit inspected the actual final turns of all 17 user-visible
+The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
+R0-L subsequently completed under the corrected terminal contract, bringing the
+record to 18 tasks: 13 properly complete and five explicitly incomplete.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
-  P0-E, R0-H, R0-I, P0-F, and P0-G.
+  P0-E, R0-H, R0-I, P0-F, P0-G, and R0-L.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, and R0-K.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
@@ -637,6 +662,21 @@ Combined foundation evidence at
   clean integration worktree; and
 - the old `pyfem.v3.assembly` Python-reference scan has zero matches.
 
+R0-L independent review evidence at exact dispatch base
+`dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92`:
+
+- the task satisfied the corrected terminal contract with both a sentinel-bearing
+  final response and a direct callback;
+- 47 focused tests passed in both interpreter digit-limit modes, 162 bounded local
+  checks passed per mode, both Ruff gates passed, and the 219-test v3 suite passed
+  with only 40 existing SciPy warnings;
+- the review accepted one frozen-registry P1 defect, reproduced by the integration
+  owner: retained descriptor binding meaning can change under a stable snapshot
+  manifest/fingerprint, while missing snapshot or nested descriptor fields leak raw
+  `AttributeError`; and
+- all other required identity, provenance, array, and registry checks passed. The
+  compiler gate remains closed until the accepted defect is repaired and rechecked.
+
 Recovered R0-J supporting evidence at exact frozen ledger head
 `8a952e7668f4f6c52d39352dee7e0685593906a3`:
 
@@ -677,9 +717,10 @@ Recovered R0-J supporting evidence at exact frozen ledger head
   exceptions after deliberate `object.__new__`/`object.__setattr__` construction.
   This is not an authored/live primitive blocker; future restore/rebind decoding
   must validate exact `UUID`/integer fields before invoking identity comparisons.
-- Deep acyclic manifest behavior remains unproven because R0-I obtained no depth
-  probe output. Bound or iteratively prove it before accepting untrusted detached
-  manifest/restore input; do not widen P0-G solely for this missing evidence.
+- Deep acyclic manifest behavior is now bounded by R0-L: capture and `to_bytes()`
+  succeed through depth 247, while depth 248 returns the stable malformed-carrier
+  `TypeError`. Iterative decoding or a larger explicit bound remains a later-phase
+  restore decision; do not widen the current registry repair for it.
 
 ## Blocked condition
 
@@ -834,3 +875,10 @@ integration decision; do not bridge it with a compatibility carrier.
   authorized task-specific `/private/tmp` script for its remaining independent
   cross-product and depth checks. No final result or callback exists yet, so the
   packet remains active and the compiler gate remains closed.
+- 2026-07-18: after approval, R0-L completed 162 bounded local checks per digit mode,
+  the 219-test v3 suite, a valid terminal final, and its direct callback. It returned
+  NO-GO with one P1 frozen-registry defect. I0 reproduced the shared-descriptor
+  binding change under a stable manifest/fingerprint and the two incidental
+  `AttributeError` paths, accepted them as one root contract failure, and kept the
+  compiler gate closed for a bounded registry/test repair plus one independent
+  recheck.
