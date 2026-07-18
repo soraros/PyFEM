@@ -1,12 +1,13 @@
 # v1 → v3 feature parity matrix
 
-> **Temporary requirements inventory only.** This file describes legacy breadth;
-> it is not an implementation order, current status authority, retirement decision,
-> or architecture acceptance test. Its rows—including old `done`, `deferred`, and
-> `out of scope` labels—must be absorbed and reclassified in the capability ledger
-> governed by [migration_workflow.md](migration_workflow.md) and maintained in
-> [migration-execution.md](migration-execution.md). The architecture and proof gates
-> remain authoritative in [design.md](design.md).
+> **Historical requirements inventory; absorbed 2026-07-18.** This file describes
+> legacy breadth but is not an implementation order, current status authority,
+> retirement decision, or architecture acceptance test. R0-E re-inventoried its
+> useful breadth plus the complete repository into 154 E0 capability rows in
+> [the dated evidence note](evidence/2026-07-18-r0e-capability-inventory.md); live
+> lifecycle and decision state is maintained only in
+> [migration-execution.md](migration-execution.md). Old `done`, `deferred`, and
+> `out of scope` labels below have no migration authority.
 
 Legacy PyFEM (`pyfem/`, excluding `pyfem/v3/`) vs the typed v3 core. Status: **done** | **next** (current phase) | **deferred**.
 

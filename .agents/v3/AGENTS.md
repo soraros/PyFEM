@@ -15,6 +15,12 @@ For the full legacy-to-v3 migration, also read
 migration which crosses ownership/state boundaries or multiple milestones, read
 [refactor_playbook.md](refactor_playbook.md).
 
+The full 154-row E0 source inventory is preserved in
+[evidence/2026-07-18-r0e-capability-inventory.md](evidence/2026-07-18-r0e-capability-inventory.md).
+Read or query that large evidence note only when selecting, classifying, or auditing
+a capability; mutable lifecycle and next-action state remains in the execution
+ledger.
+
 The current `pyfem/v3` code is an executable prototype. Its kernels, tests, and
 benchmarks may be reused when they satisfy the new contracts, but these current
 types are explicitly not architectural constraints:
@@ -92,7 +98,8 @@ Run the full suite when code changes cross the legacy/v3 boundary:
 | Refactor method | [refactor_playbook.md](refactor_playbook.md) | Generic Horizon Gate and proof loop for non-migration structural refactors |
 | Active tooling | [conventions.md](conventions.md) | Style, typing, Ruff, tests |
 | Numerical evidence | [parity.md](parity.md), [scaling.md](scaling.md), [plane_strain.md](plane_strain.md), [structural.md](structural.md), [tangent_assembly.md](tangent_assembly.md) | Oracles and historical measurements |
-| Temporary requirements inventory | [feature-parity.md](feature-parity.md) | Legacy breadth awaiting absorption into the live capability ledger; not an implementation order |
+| Capability discovery evidence | [evidence/2026-07-18-r0e-capability-inventory.md](evidence/2026-07-18-r0e-capability-inventory.md) | Immutable 154-row E0 inventory and zero-remnant coverage proof; query by capability ID |
+| Historical requirements inventory | [feature-parity.md](feature-parity.md) | Absorbed by R0-E; old statuses are not an implementation order or live state |
 | Historical/superseded | [architecture.md](architecture.md), [roadmap.md](roadmap.md), [WORKFLOW.md](WORKFLOW.md), [hardening.md](hardening.md) | Understand the prototype; do not execute as a plan |
 
 ## Decision discipline

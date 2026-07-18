@@ -38,7 +38,8 @@ uv sync
 | [refactor_playbook.md](refactor_playbook.md) | **Active outside the migration:** generic structural refactor proof method |
 | [conventions.md](conventions.md) | **Active where compatible with the design:** style, typing, tooling |
 | [parity.md](parity.md) | Numerical-reference workflow; parity is evidence, not architecture proof |
-| [feature-parity.md](feature-parity.md) | Temporary legacy inventory pending absorption into the live capability ledger |
+| [evidence/2026-07-18-r0e-capability-inventory.md](evidence/2026-07-18-r0e-capability-inventory.md) | Immutable 154-row E0 capability inventory and 606-path coverage proof |
+| [feature-parity.md](feature-parity.md) | Historical source list absorbed by R0-E; old statuses have no live authority |
 | [architecture.md](architecture.md) | Historical snapshot of the prototype carrier |
 | [roadmap.md](roadmap.md) | Superseded P0-P8 checklist |
 | [WORKFLOW.md](WORKFLOW.md), [hardening.md](hardening.md) | Superseded Cursor-era execution process |

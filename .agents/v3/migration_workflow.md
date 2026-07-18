@@ -178,8 +178,9 @@ The normal migration session should need exactly four durable inputs:
 [refactor_playbook.md](refactor_playbook.md) is the source from which the Horizon
 Gate and proof discipline were adapted. It remains the generic
 method for non-migration structural refactors; it is not a second live migration
-roadmap. [feature-parity.md](feature-parity.md) remains an input inventory until
-its rows have been absorbed into the coverage ledger, then becomes historical.
+roadmap. [feature-parity.md](feature-parity.md) became historical after R0-E
+absorbed its useful breadth and the complete repository into
+[the dated E0 evidence note](evidence/2026-07-18-r0e-capability-inventory.md).
 `WORKFLOW.md`, `roadmap.md`, `hardening.md`, and the Cursor-era artifacts remain
 history.
 
@@ -1192,7 +1193,7 @@ documentation-only changes:
 3. `phase0-execution.md` became the sole live `migration-execution.md` ledger while
    retaining the foundation history;
 4. `README.md` routes new sessions to the same method and ledger;
-5. `feature-parity.md` is explicitly a temporary inventory whose old statuses and
+5. `feature-parity.md` is historical after R0-E absorption; its old statuses and
    exclusions have no classification authority; and
 6. `design.md` remains unchanged because no architectural invariant was amended.
 
@@ -1220,7 +1221,8 @@ accepted P0/P1 findings are repaired and re-proved.
 
 After the first complete Phase 1 trial:
 
-- absorb any unique legacy breadth from `feature-parity.md` into the live ledger;
+- verify that any unique legacy breadth from `feature-parity.md` remains represented
+  in the R0-E evidence and live ledger overlay;
 - mark old P0-P8/Cursor workflow artifacts historical in the document map;
 - retain numerical notes as evidence only; and
 - ensure the standard resume packet reads one design, this one migration method,

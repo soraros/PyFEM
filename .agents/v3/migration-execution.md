@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: foundation gate GO; R0-E active in inventory/report assembly; compiler closed
+- Status: foundation gate GO; R0-E complete; E0 inventory ingested; P0-D Horizon not yet frozen
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -12,26 +12,25 @@
 - Combined repaired foundation code head: `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Integrated registry-snapshot repair: source `0947dd7ca3b70bef2ebdf986f2336f62f5b3c08b`, integrated `fb358fc0609b81a12cee4a1a66c2dae98edf5cae`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: `R0-E · legacy breadth — semantic ledger seeded`
+- Active milestone: `I0 · capability inventory — accepted at E0`
 
 ## Exact next safe action
 
-Let read-only Sol/max R0-E task `019f7587-31f2-7642-b162-5fd5b7a2d07b` finish its
-authorized external report at `/private/tmp/pyfem-r0e-capability-inventory.md`.
-It has confirmed exact clean foundation-closure base
-`c50ca70bff884157c5645dde276c25acc6672d4a`, completed the required source/test/
-example/documentation census, and is assembling the evidence-backed per-capability
-E0 ledger plus its coverage appendix. The report must account for legacy runtime,
-examples, tests, input/output, GUI, RVE/FE2, ROM, public/docs surfaces, and the v3
-prototype; use the `failure_cases` field and neutral finite-element correctness
-wording; audit unclassified remnants; return its own terminal result; and callback
-I0. The integration owner then ingests and adjudicates it in this sole live ledger.
-Do not create a replacement or dispatch P0-D while R0-E is active. R0-J's recovered
-evidence remains supporting only; R0-K remains incomplete.
+Freeze the P0-D Horizon contract from the 18 classified immediate-dependency rows
+below and the compiler invariants in [design.md](design.md). Start from the exact
+clean `v3` commit containing the durable R0-E evidence and this state overlay. The
+packet must remain one internal compiler slice: one explicit Q8 region becomes an
+immutable `CompiledModel` recipe with complete entity/source maps, explicit
+capabilities, and an empty physical-state-value layout. It must not add
+`ProgramSpec`, constraints/loads, prepared assembly, a solver/public API, a legacy
+adapter, GUI, RVE/FE2, ROM, output compatibility, or a wrapper around the prototype
+carrier. After the Horizon is recorded, dispatch exactly one Sol/max writer; no
+other packet overlaps the compiler/spec/model owners.
 
-Blocked condition: a reviewer demonstrates an invariant failure that cannot be
-repaired inside the existing spec or identity/storage owner without a new design,
-physics, compatibility, dependency, or authority decision.
+Blocked condition: the P0-D Horizon cannot assign one target owner and one exact
+descriptor/compiler contract without a new design, physics, compatibility,
+dependency, or authority decision, or its exact clean base and required evidence
+cannot be established.
 
 ## Semantic decisions and open questions
 
@@ -42,7 +41,8 @@ Decided:
 - Development continues on local branch `v3`; the separate unmerged modernization
   line is not silently imported.
 - Full migration uses the bounded packet conveyor in `migration_workflow.md`, direct
-  terminal callbacks, serial integration, and independent robustness proof.
+  terminal callbacks, serial integration, and independent finite-element
+  correctness proof.
 - A task is complete only when its own final response and callback satisfy the
   terminal-result contract. Idle state, commentary, recovered evidence, or a
   completed replacement never completes the original task.
@@ -54,6 +54,18 @@ Decided:
 - The 2026-07-18 audit found 12 properly completed migration tasks and five
   incomplete tasks. All five are visibly prefixed `INCOMPLETE` in the task list and
   recorded separately below.
+- R0-E completed with both terminal signals. Its exact E0 inventory is preserved in
+  [the dated evidence note](evidence/2026-07-18-r0e-capability-inventory.md) at
+  SHA-256 `f9e326da3adc8e6bb3a777fb4134965ade6f9b364df352c53e68c2cbb7e377cf`;
+  all 154 rows remain E0, and classification does not upgrade behavioral evidence.
+- The R0-E preserve/change/retire values are accepted as working migration
+  dispositions. A working `retire` disposition records the intended successor or
+  loss decision; it does not authorize deletion, compatibility loss, or a public
+  deprecation. The six public retirement candidates below remain decision-blocked.
+- RVE/FE2 and implemented ROM intent are preserved through explicit redesign; they
+  are not silently excluded. The current v3 whole-problem carrier, string registry,
+  duplicate assembly bridge, and direct solve surface remain causal-retirement
+  candidates only after their approved replacements are proved.
 - Thread IDs are never reused. `R0-E` and `R0-F` remain reserved for the planned
   legacy-breadth and compiler reviews; replacement/follow-up foundation reviews use
   the next otherwise-unreserved IDs, hence `R0-G`, `R0-H`, and `R0-I`.
@@ -71,17 +83,50 @@ Open and not implicitly decided:
 
 - root Python API, `pyfem` CLI, and `.pro`/`.dat` compatibility;
 - optional GUI preservation, replacement, or retirement;
-- RVE/FE2 and ROM preservation, redesign, or retirement; and
+- approval of public retirement candidates `ECO-ROOT-MESH-API`,
+  `ECO-PYTHON-API`, `ECO-GUI`, `ECO-ARCHIVES`, `ADP-PICKLE-IN`, and
+  `RES-PICKLE`;
+- exact RVE/FE2 nesting, state, restart, cost, and result semantics, plus exact ROM
+  snapshot/basis/reduced-solve contracts; and
 - the later-phase registry-callable trust and accepted-generation transaction
   obligations recorded below.
 
 ## Capability coverage ledger
 
-The complete legacy capability ledger is not yet seeded. Until `R0-E` produces a
-reviewable E0 inventory and the integration owner ingests it, [feature-parity.md](feature-parity.md)
-is only a temporary source list. Its old `done`, `deferred`, and `out of scope`
-labels are not preserve/change/retire decisions. No unclassified capability is
-silently excluded from the migration-complete bar.
+The complete E0 discovery payload is frozen in
+[2026-07-18-r0e-capability-inventory.md](evidence/2026-07-18-r0e-capability-inventory.md).
+That immutable evidence note contains all 154 exact 15-field JSONL rows, the source
+audit, the 606-path zero-remnant coverage proof, all 122 property-file mappings,
+all 33 skim paths, all 41 test/support paths, the dependency view, limits, and
+machine audit. This section is the sole mutable status overlay; corrections to
+disposition, lifecycle, grade, or proof are recorded here and never rewrite the
+dated E0 evidence.
+
+| Live scope | Rows | Lifecycle and evidence | Disposition state | Next transition |
+|---|---:|---|---|---|
+| P0-D immediate dependency cut | 18 | `classified`, `E0` at `c50ca70` | 11 preserve, 7 change; owner/dependencies/failure cases accepted for the Q8 compiler Horizon | Freeze P0-D, then `contracted` |
+| Later preserve/change portfolio | 123 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
+| Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
+| Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
+| **Total** | **154** | all rows accounted for | 52 preserve, 89 change, 13 retire | no hidden or undecided row |
+
+The 18 classified P0-D rows are:
+
+```text
+V3-AUTHORED-SPEC      V3-SPEC-NORMALIZE     V3-ARRAY-OWNERSHIP
+V3-LIVE-ID            V3-CONTENT-ID         V3-REGISTRY-SNAPSHOT
+MESH-NODES            MESH-CELLS            MESH-GROUPS
+COMP-MESH             COMP-DOF              COMP-REGISTRY
+COMP-MODEL            KERN-SHAPES           KERN-QUADRATURE
+KERN-KINEMATICS       MAT-PLANE-STRESS      FORM-SMALL-CONT
+```
+
+The seven internal/duplicate retirement candidates are `ANAL-MODAL-DUP`,
+`ROM-LINEAR-MANIFOLD`, `ROM-QUADRATIC-MANIFOLD`, `V3-PROTOTYPE-CARRIER`,
+`V3-PROTOTYPE-REGISTRY`, `V3-PROTOTYPE-ASSEMBLY`, and
+`V3-PROTOTYPE-ANALYSIS`. The six public candidates are listed under open decisions
+above. [feature-parity.md](feature-parity.md) is now historical input: its old
+`done`, `deferred`, and `out of scope` labels have no live status authority.
 
 ## Outcome and invariant
 
@@ -626,11 +671,12 @@ Result:
 
 ### R0-E — Seed the complete legacy capability inventory
 
-State: `WAITING_FOR_APPROVAL` as read-only task
+State: `COMPLETE` as read-only task
 `019f7587-31f2-7642-b162-5fd5b7a2d07b` from exact clean foundation-closure commit
-`c50ca70bff884157c5645dde276c25acc6672d4a`. Exact-base preflight and governing
-document review are complete. The task is paused only on the app's local-file
-approval for its authorized `/private/tmp` report; no repository write was requested.
+`c50ca70bff884157c5645dde276c25acc6672d4a`. It returned both the required
+sentinel-bearing final and direct I0 callback. The exact report is now preserved as
+[dated evidence](evidence/2026-07-18-r0e-capability-inventory.md) with SHA-256
+`f9e326da3adc8e6bb3a777fb4134965ade6f9b364df352c53e68c2cbb7e377cf`.
 
 Outcome and boundary:
 
@@ -652,6 +698,13 @@ audit, exact HEAD and clean-status recheck, a sentinel-bearing final response, a
 direct I0 callback. R0-E has no repository file ownership and cannot create tasks or
 design/implement compiler code.
 
+Completion evidence: 154 valid E0 rows; 606/606 tracked paths, 122/122 `.pro`
+files, 33/33 skim paths, and 41/41 test/support paths classified; zero duplicate
+IDs, missing required fields, undefined dependency IDs, unclassified remnants, or
+coordinator-terminology matches; 22 historical-manual pages inspected; exact HEAD,
+empty porcelain, and `git diff --check` green. I0 independently reproduced the row,
+schema, dependency, vocabulary, manifest-hash, `.pro`, skim, and test-set checks.
+
 ## Merge and continuation order
 
 1. Completed: review and integrate P0-A.
@@ -667,10 +720,11 @@ design/implement compiler code.
    commit, and all combined focused/static/v3/full gates passed.
 7. Completed: R0-M independently returned GO with zero blockers at the integrated
    commit after one bounded resume recovered the already-running v3 result.
-8. Active next: R0-E produces the complete E0 legacy capability inventory; I0
-   ingests and adjudicates its rows into this sole live ledger.
-9. After inventory ingestion, dispatch the dependent
-   compiler-integration packet: one explicit Q8 region ->
+8. Completed: R0-E produced the complete E0 legacy capability inventory; I0
+   preserved its exact report, independently checked it, and ingested the live state
+   overlay into this ledger.
+9. Active next: freeze and dispatch the dependent compiler-integration packet: one
+   explicit Q8 region ->
    immutable `CompiledModel` recipe with entity/source maps and empty physical-state
    layout.
 10. Only after P0-D and its `R0-F` reviewer dispatch `ProgramSpec`/affine constraints and
@@ -710,18 +764,18 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `R0-L · identity/storage — boundary independently verified` | `019f7551-0075-7383-a895-fd2d77f02419` | `dc9e588a50c21596dfc2b7f2a879c3a4dd31ee92` | Read-only identity/provenance/registry/storage replacement reviewer | Complete, valid final and callback; NO-GO with one accepted frozen-registry defect; 47 focused in both digit modes, 162 local checks per mode, 219 v3 tests, both Ruff gates |
 | `P0-H · registry snapshot — meaning detached` | `019f7568-a1e0-7c33-bf83-0a490e54c520` | `55fcf990da8f47f612f5193529c2a6b77a823a10` | `registry.py` plus focused identity tests | Complete; source `0947dd7`, integrated `fb358fc`; 68 focused twice, 240 v3, 429 full, static gates green |
 | `R0-M · registry snapshot — capture invariant verified` | `019f757a-e84f-70c3-a6d6-8c4ff7874204` | `fb358fc0609b81a12cee4a1a66c2dae98edf5cae` | Read-only P0-H integrated recheck | Complete GO, zero blockers; 42 local checks, 68 focused twice, both Ruff gates, 240 v3; one app-level resume, both terminal signals valid |
-| `R0-E · legacy breadth — semantic ledger seeded` | `019f7587-31f2-7642-b162-5fd5b7a2d07b` | `c50ca70bff884157c5645dde276c25acc6672d4a` | Complete read-only E0 capability inventory report | Waiting on authorized `/private/tmp` report-write approval after green preflight/document read; compiler closed pending ingestion |
+| `R0-E · legacy breadth — semantic ledger seeded` | `019f7587-31f2-7642-b162-5fd5b7a2d07b` | `c50ca70bff884157c5645dde276c25acc6672d4a` | Complete read-only E0 capability inventory report | Complete with both terminal signals; 154 rows, 606/606 paths, zero remnants; durable report SHA `f9e326d`; independently checked and ingested |
 
 ## Task completion audit
 
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
-R0-L, P0-H, and R0-M subsequently completed under the corrected terminal contract.
-With R0-E active, the record is 21 tasks: 15 properly complete, five explicitly
-incomplete, and one active.
+R0-L, P0-H, R0-M, and R0-E subsequently completed under the corrected terminal
+contract. The record is 21 tasks: 16 properly complete and five explicitly
+incomplete; no worker or reviewer is active while P0-D is being frozen.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
-  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, and R0-M.
+  P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, and R0-E.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, and R0-K.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
@@ -832,6 +886,25 @@ R0-M independent closure evidence at exact integrated base
 - R0-M returned a valid GO final plus callback. Combined with P0-H's writer and I0
   integration evidence, this closes the foundation gate without changing any
   recorded later-phase callable, transaction, or restore/rebind obligation.
+
+R0-E inventory evidence at exact audit base
+`c50ca70bff884157c5645dde276c25acc6672d4a`:
+
+- both terminal signals are valid, and the durable report hash is
+  `f9e326da3adc8e6bb3a777fb4134965ade6f9b364df352c53e68c2cbb7e377cf`;
+- 154 JSONL rows contain all 15 required fields plus domain, with 52 preserve, 89
+  change, and 13 retire working dispositions, ten valid semantic owners, E0 grade,
+  inventoried source state, and the exact proof commit;
+- 606/606 tracked paths, 118/118 legacy paths, 51/51 v3 paths, 218/218 examples,
+  26/26 exercises, 85/85 docs, 33/33 skim paths, 122/122 `.pro` files, 100/100
+  `.dat` files, and 41/41 test/support paths are classified with zero remnants;
+- duplicate IDs, missing/blank required cells, invalid dispositions/owners/status/
+  grades, unknown dependency IDs, missing local evidence paths, and coordinator
+  terminology matches are all zero; and
+- I0 independently reproduced the JSON/schema, tracked-manifest hash, dependency,
+  `.pro` brace expansion, skim selector, test-path, and vocabulary checks. This is
+  source-discovery evidence only; no behavior, compatibility, or retirement was
+  proved.
 
 Recovered R0-J supporting evidence at exact frozen ledger head
 `8a952e7668f4f6c52d39352dee7e0685593906a3`:
@@ -1086,3 +1159,12 @@ integration decision; do not bridge it with a compatibility carrier.
   ledger plus coverage appendix with `failure_cases` and neutral finite-element
   wording. No repository output or terminal callback exists yet, so R0-E remains
   active and P0-D remains closed.
+- 2026-07-18: R0-E completed both terminal signals after producing and auditing a
+  154-row E0 inventory with 606/606 tracked paths, 122/122 property files, 33/33
+  skim paths, 41/41 test/support paths, and zero unclassified remnants. I0
+  independently reproduced its schema, ID, dependency, manifest, mapping, and
+  terminology checks, preserved the exact report under `evidence/` at SHA-256
+  `f9e326da3adc8e6bb3a777fb4134965ade6f9b364df352c53e68c2cbb7e377cf`,
+  classified the 18-row Q8 compiler dependency cut, and retained explicit blocks
+  on six public retirement candidates. P0-D is not dispatched until its Horizon is
+  frozen from the resulting clean ledger commit.
