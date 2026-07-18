@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: resumed; P0-D/R0-N are closed GO and P1-A implementation is active
+- Status: resumed; P0-D/R0-N are closed GO and P1-A repair round 1/2 is active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -14,21 +14,22 @@
 - Integrated P0-D compiler: source `f21aaed2c97e98e63f58b77d0e301c3a2107e243`, integrated `79060abb054d82fd34ac85f000e44d9de5947d60`
 - P0-D independent component proof: `79060abb054d82fd34ac85f000e44d9de5947d60`
 - P1-A frozen Horizon and R0-N adjudication: `b18b262b97068086b9c61618d06a2d14a50046cd`
+- Current integration head: `e548978a3044098ead1fcee68e95b42d184b96ff`
+- P1-A source candidate under repair: `a749972dca8a97ae4801017ac686d114225432f3` (not integrated)
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: `P1-A · program compiler — affine plan canonical`, writer active
+- Active milestone: `P1-A · program compiler — affine plan canonical`, repair 1/2
 
 ## Exact next safe action
 
-Wait for the one active Sol/max P1-A writer at exact base `b18b262` to return both
-its own terminal final and direct callback. The writer owns only the new
-authored/normalized program, compiled-program carrier, program compiler, and focused
-test paths named below. Do not start P1-B assembly, state, solver, adapters, or
-another migration packet in parallel.
+Wait for the original Sol/max P1-A task to return repair 1/2 as one replacement
+source commit with exact parent `b18b262`, both terminal signals, the unchanged ten
+owned paths, and focused regressions for the seven accepted integration-review
+findings below. Source `a749972` remains unintegrated. Do not start P1-B assembly,
+state, solver, adapters, a reviewer, or another migration packet in parallel.
 
-After P1-A returns both terminal signals, I0 mechanically prechecks ancestry and
-owned paths, semantically reviews the affine-plan and additive-load invariants, and
-runs combined gates before serial integration. An accepted P0/P1 finding returns
-only the smallest bounded repair to the same writer for at most two repair rounds.
+I0 then repeats ancestry/path prechecks, the seven local reproductions, the frozen
+affine/load semantic review, and all focused/static/v3/full gates before serial
+integration. A remaining accepted P0/P1 finding may use only repair round 2/2.
 
 ## Semantic decisions and open questions
 
@@ -104,7 +105,7 @@ dated E0 evidence.
 | Live scope | Rows | Lifecycle and evidence | Disposition state | Next transition |
 |---|---:|---|---|---|
 | P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
-| P1-A immediate dependency cut | 3 | `implementing`, `E1` at `b18b262`; source behavior plus analytical affine/load reference extracted below | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | One serial writer active -> I0 integration review |
+| P1-A immediate dependency cut | 3 | `repairing`, `E1` at `b18b262`; source `a749972` completed but failed I0 integration review and is not integrated | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Repair 1/2 -> repeat I0 review -> serial integration only if green |
 | Later preserve/change portfolio | 120 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -1275,7 +1276,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P0-D · model compiler — Q8 block frozen` | `019f75dd-f597-7c21-adfc-d78b1e2580c0` | `2842ef84b86f04f82587f5fc378584f30f6b62bd` | `pyfem/v3/compile/**`, new compiled-model carriers, one focused compiler test | Complete after repair 1/2; replacement source `f21aaed2`, integrated `79060abb`; branch proof 156 focused twice, 22 direct Q8, 286 v3, 475 full |
 | `INCOMPLETE R0-F · model compiler — base mismatch` | `019f761b-2fc2-7e20-b5d9-b9681cb83e7e` | incorrect requested hash `79060ab3186e38460595b3831b77855b3f824bc` | Intended read-only compiler review | Incomplete by coordinator error; stopped correctly at clean preflight after observing actual `79060abb`; no correctness matrix or finding was assessed |
 | `R0-N · model compiler — block invariants verified` | `019f761d-4d85-7b72-9d80-857fab45aef8` | `79060abb054d82fd34ac85f000e44d9de5947d60` | Replacement read-only P0-D integrated review | Complete GO with both terminal signals; 99 independent checks, 156 focused twice, 22 direct Q8, 286 v3, 475 full, zero findings |
-| `P1-A · program compiler — affine plan canonical` | `019f764f-2643-75b2-a8b5-323ed58351a2` | `b18b262b97068086b9c61618d06a2d14a50046cd` | New program spec/normalizer, immutable compiled-program carriers, compiler/evaluator, and one focused test | Active on exact clean base with Sol/max; repair 0/2; P1-B remains closed |
+| `P1-A · program compiler — affine plan canonical` | `019f764f-2643-75b2-a8b5-323ed58351a2` | `b18b262b97068086b9c61618d06a2d14a50046cd` | New program spec/normalizer, immutable compiled-program carriers, compiler/evaluator, and one focused test | Source `a749972` returned both terminal signals and all reported gates green; I0 reproduced seven P1 gaps, withheld integration, and activated repair 1/2; P1-B remains closed |
 
 ## Task completion audit
 
@@ -1288,12 +1289,47 @@ incomplete, and one active task.
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
   P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, and R0-F.
-- Active: P1-A, dispatched from its exact clean Horizon base `b18b262`; no other
+- Active: P1-A repair 1/2 in the original task from source `a749972`; no other
   migration writer or reviewer is active.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The current risk is review/process
   integrity, not contamination of the integrated foundation code.
+
+## P1-A source review — repair 1/2 requested
+
+P1-A returned valid terminal final and callback for source
+`a749972dca8a97ae4801017ac686d114225432f3`, exactly one commit on frozen parent
+`b18b262b97068086b9c61618d06a2d14a50046cd` and exactly the ten authorized paths.
+Its reported 53 focused, 209 combined twice, 14 reference, both Ruff, format, 339
+v3, 528 full-suite, ancestry, path, whitespace, and import gates were complete.
+I0 also reproduced the 53 focused tests normally and at the 640-digit limit.
+
+The source remains unintegrated because I0 accepted these seven P1 findings from
+the frozen total-boundary and semantic-consistency contract:
+
+1. accepted exact string names and source labels can produce unbounded diagnostics
+   and literal control characters instead of bounded escaped output;
+2. `compile_program` accepts an exact `CompiledModel` missing half of its canonical
+   slots because only six of twelve fields are preflighted;
+3. a model DOF count that exceeds its recorded signed dense-index dtype wraps a
+   semantic DOF negative and silently loses a prescribed constraint;
+4. fixed-width subtraction in `free_dofs` ordering validation can wrap, accept
+   out-of-range entries, and leak raw `IndexError`;
+5. evaluation accepts two semantic array fields sharing the same finalized storage,
+   contrary to the separate-finalization invariant;
+6. plan-bearing programs can report empty capability channels and empty
+   entity/source maps when the manifest and fingerprint are recomputed from those
+   inconsistent fields; derived meaning is not revalidated; and
+7. recursively nested invalid entity IDs can leak raw `RecursionError` instead of
+   one deterministic `ProgramEvaluationError`.
+
+Independent bounded review otherwise found the affine composition, hard-coded
+oracle, canonical load reduction, derivatives, cycle handling, zero-free and
+identity plans, and graph complexity sound, including a separate 40-case affine/load
+matrix. Repair 1/2 preserves the frozen outcome, owned paths, numeric policy, and
+non-goals; it adds only the smallest validation/diagnostic changes and regressions
+for these seven cases.
 
 ## Active watchdogs
 
@@ -1784,3 +1820,9 @@ integration decision; do not bridge it with a compatibility carrier.
   (`019f764f-2643-75b2-a8b5-323ed58351a2`), from that exact clean base. The three
   program rows are `implementing` at E1; P1-B and all other migration packets remain
   closed pending P1-A terminal final, callback, and I0 integration review.
+- 2026-07-19: P1-A returned valid terminal final and callback with one exact source
+  commit `a749972dca8a97ae4801017ac686d114225432f3` and all preregistered reported
+  gates green. I0 verified ancestry and path ownership, reproduced focused proof,
+  and completed three bounded semantic reviews. Seven P1 total-boundary and carrier
+  consistency findings were accepted; source integration was withheld and repair
+  round 1/2 was returned to the original task. P1-B remains closed.
