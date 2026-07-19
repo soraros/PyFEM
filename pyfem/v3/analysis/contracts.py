@@ -22,11 +22,15 @@ LINEAR_STATIC_SYMMETRY_EPSILON_FACTOR = 64
 LINEAR_STATIC_CHOLESKY_PIVOT_RATIO = 1.0e-12
 LINEAR_STATIC_WORKSPACE_BUDGET_BYTES = 256 * 1024 * 1024
 LINEAR_STATIC_WORKSPACE_BUDGET_SCOPE = (
-  "private-solver-workspace-only; fresh-verification-workspace-measured-separately"
+  "private-solver-workspace-only; peak=4*n^2+6*n-float64; "
+  "explicit-cholesky-factorization; explicit-triangular-solve; "
+  "fresh-verification-workspace-measured-separately"
 )
 LINEAR_STATIC_BACKEND_POLICY = (
-  "private-dense-cholesky; audit=canonical-Kq; projection=0.5*(Kq+Kq.T); "
-  "pivot>1e-12*infinity-norm; cache=bitwise-constant"
+  "private-dense-cholesky; factor=explicit-scalar-cholesky; "
+  "audit=canonical-Kq; projection=0.5*(Kq+Kq.T); "
+  "pivot>1e-12*infinity-norm; solve=explicit-forward-back-substitution; "
+  "cache=bitwise-constant"
 )
 
 
@@ -54,6 +58,8 @@ def linear_static_request_manifest(request: object) -> CanonicalManifest:
         "family": "private-dense-symmetric-cholesky-reference",
         "audit_operator": "original-canonical-reduced-coo",
         "solver_projection": "0.5*(K_q+K_q.T)",
+        "factorization": "explicit-scalar-cholesky",
+        "triangular_solve": "explicit-forward-back-substitution",
         "symmetry_epsilon_factor": LINEAR_STATIC_SYMMETRY_EPSILON_FACTOR,
         "unscaled_pivot_ratio": LINEAR_STATIC_CHOLESKY_PIVOT_RATIO,
         "workspace_budget_bytes": LINEAR_STATIC_WORKSPACE_BUDGET_BYTES,
@@ -134,8 +140,6 @@ class LinearConvergenceRecord:
 
   converged: bool
   iteration_count: int
-  factorization_performed: bool
-  factorization_reused: bool
   factorization_bypassed: bool
   operator_infinity_norm: float
   minimum_unscaled_pivot: float | None

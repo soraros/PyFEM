@@ -33,6 +33,7 @@ from pyfem.v3.analysis.diagnostics import (
   AnalysisSolveError,
   StateTransactionError,
 )
+from pyfem.v3.analysis.numerics import _explicit_cholesky, _strict_ratio_greater
 from pyfem.v3.assembly import (
   AssemblyEvaluationError,
   AssemblyPreparationError,
@@ -125,10 +126,12 @@ def _checked_workspace_bytes(reduced_count: int) -> int:
       "reduced DOF count must be a nonnegative exact integer",
     )
   matrix_entries = reduced_count * reduced_count
-  # Copying the first audit/projection/factor would transiently retain six dense
-  # matrices.  The chosen private direct-retention design seals those three
-  # already-owned arrays; one fresh audit matrix may coexist with them on reuse.
-  value_count = 4 * matrix_entries + 8 * reduced_count
+  # Direct retention owns three cached matrices; one fresh audit may coexist on
+  # reuse.  The explicit triangular solve peaks at four vector arrays
+  # (RHS/pivots/forward/solution); residual construction peaks at five
+  # (RHS/pivots/solution/matvec/residual).  Six float64 vector slots therefore
+  # remain conservative without any opaque matrix-sized solve scratch.
+  value_count = 4 * matrix_entries + 6 * reduced_count
   byte_count = value_count * _FLOAT64.itemsize
   if byte_count > LINEAR_STATIC_WORKSPACE_BUDGET_BYTES:
     _preparation_failure(
@@ -158,23 +161,84 @@ def _infinity_norm(value: np.ndarray) -> float:
   return largest
 
 
-def _strict_ratio_greater(value: float, scale: float, threshold: float) -> bool:
-  if value <= 0.0 or scale <= 0.0:
-    return False
-  value_fraction, value_exponent = math.frexp(value)
-  scale_fraction, scale_exponent = math.frexp(scale)
-  ratio_fraction, normalization_exponent = math.frexp(value_fraction / scale_fraction)
-  ratio_exponent = value_exponent - scale_exponent + normalization_exponent
-  threshold_fraction, threshold_exponent = math.frexp(threshold)
-  if ratio_exponent != threshold_exponent:
-    return ratio_exponent > threshold_exponent
-  return ratio_fraction > threshold_fraction
+def _all_finite(value: np.ndarray) -> bool:
+  """Check dense arrays without allocating an array-shaped boolean mask."""
+  return all(math.isfinite(float(item)) for item in value.flat)
 
 
 def _bitwise_equal(left: np.ndarray, right: np.ndarray) -> bool:
-  return left.shape == right.shape and bool(
-    np.array_equal(left.view(np.uint64), right.view(np.uint64))
+  return (
+    left.shape == right.shape
+    and left.dtype == right.dtype
+    and all(
+      int(left_item) == int(right_item)
+      for left_item, right_item in zip(
+        left.view(np.uint64).flat,
+        right.view(np.uint64).flat,
+        strict=True,
+      )
+    )
   )
+
+
+def _bounded_cholesky_solve(
+  factor: np.ndarray,
+  rhs: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+  """Solve one triangular pair with exactly two owned vector outputs."""
+  if (
+    type(factor) is not np.ndarray
+    or type(rhs) is not np.ndarray
+    or factor.dtype != _FLOAT64
+    or rhs.dtype != _FLOAT64
+    or factor.ndim != 2
+    or factor.shape[0] != factor.shape[1]
+    or rhs.shape != (factor.shape[0],)
+    or not _all_finite(factor)
+    or not _all_finite(rhs)
+  ):
+    _solve_failure(
+      "malformed-cholesky-solve-input",
+      "explicit triangular solve requires finite float64 factor and RHS arrays",
+    )
+  reduced_count = rhs.shape[0]
+  forward = np.empty(reduced_count, dtype=np.float64)
+  coordinates = np.empty(reduced_count, dtype=np.float64)
+  for row in range(reduced_count):
+    diagonal = float(factor[row, row])
+    if not math.isfinite(diagonal) or diagonal <= 0.0:
+      _solve_failure(
+        "malformed-cholesky-factor",
+        "explicit forward substitution requires positive finite diagonals",
+      )
+    remainder = float(rhs[row])
+    for column in range(row):
+      remainder -= float(factor[row, column]) * float(forward[column])
+    quotient = remainder / diagonal
+    if not math.isfinite(quotient):
+      _solve_failure(
+        "nonfinite-forward-substitution",
+        "explicit forward substitution produced a nonfinite value",
+      )
+    forward[row] = quotient
+  for row in range(reduced_count - 1, -1, -1):
+    diagonal = float(factor[row, row])
+    if not math.isfinite(diagonal) or diagonal <= 0.0:
+      _solve_failure(
+        "malformed-cholesky-factor",
+        "explicit back substitution requires positive finite diagonals",
+      )
+    remainder = float(forward[row])
+    for column in range(row + 1, reduced_count):
+      remainder -= float(factor[column, row]) * float(coordinates[column])
+    quotient = remainder / diagonal
+    if not math.isfinite(quotient):
+      _solve_failure(
+        "nonfinite-back-substitution",
+        "explicit back substitution produced a nonfinite value",
+      )
+    coordinates[row] = quotient
+  return forward, coordinates
 
 
 def _program_point(evaluation: object) -> ProgramPoint:
@@ -757,8 +821,8 @@ class PreparedAnalysis:
     if (
       operator.shape != (reduced_count, reduced_count)
       or rhs.shape != (reduced_count,)
-      or not bool(np.isfinite(operator).all())
-      or not bool(np.isfinite(rhs).all())
+      or not _all_finite(operator)
+      or not _all_finite(rhs)
     ):
       _solve_failure(
         "malformed-or-nonfinite-reduced-system",
@@ -773,8 +837,6 @@ class PreparedAnalysis:
         LinearConvergenceRecord(
           converged=True,
           iteration_count=1,
-          factorization_performed=False,
-          factorization_reused=False,
           factorization_bypassed=True,
           operator_infinity_norm=0.0,
           minimum_unscaled_pivot=None,
@@ -786,8 +848,6 @@ class PreparedAnalysis:
 
     with self._workspace.lock:
       self._workspace.evaluation_count += 1
-      performed = False
-      reused = False
       if self._workspace.audit_operator is None:
         maximum = max(abs(float(item)) for item in operator.flat)
         asymmetry = max(
@@ -813,7 +873,7 @@ class PreparedAnalysis:
         solve_operator = np.array(operator, dtype=np.float64, copy=True)
         np.add(solve_operator, operator.T, out=solve_operator)
         solve_operator *= 0.5
-        if not bool(np.isfinite(solve_operator).all()):
+        if not _all_finite(solve_operator):
           _solve_failure(
             "nonfinite-solver-projection",
             "symmetric solver projection must remain finite",
@@ -825,16 +885,15 @@ class PreparedAnalysis:
             "nonempty symmetric reduced operator must have positive finite "
             "infinity norm",
           )
-        try:
-          factor = np.linalg.cholesky(solve_operator)
-        except np.linalg.LinAlgError:
+        factorization = _explicit_cholesky(solve_operator)
+        if factorization is None:
           _solve_failure(
             "cholesky-factorization-failed",
             "reduced operator is indefinite or singular under the frozen "
             "Cholesky policy",
           )
-        pivots = np.square(np.diag(factor))
-        if not bool(np.isfinite(pivots).all()) or any(
+        factor, pivots = factorization
+        if not _all_finite(pivots) or any(
           not _strict_ratio_greater(
             float(pivot),
             operator_scale,
@@ -854,7 +913,6 @@ class PreparedAnalysis:
         self._workspace.solve_operator = solve_operator
         self._workspace.factor = factor
         self._workspace.factorization_count += 1
-        performed = True
       else:
         if not _bitwise_equal(operator, self._workspace.audit_operator):
           _solve_failure(
@@ -873,9 +931,9 @@ class PreparedAnalysis:
         if (
           factor.shape != operator.shape
           or solve_operator.shape != operator.shape
-          or not bool(np.isfinite(factor).all())
-          or not bool(np.isfinite(solve_operator).all())
-          or not bool(np.isfinite(pivots).all())
+          or not _all_finite(factor)
+          or not _all_finite(solve_operator)
+          or not _all_finite(pivots)
           or not math.isfinite(operator_scale)
           or operator_scale <= 0.0
           or any(
@@ -892,17 +950,10 @@ class PreparedAnalysis:
             "cached solver projection or Cholesky factor violates its policy",
           )
         self._workspace.factorization_reuse_count += 1
-        reused = True
       minimum_pivot = float(np.min(pivots))
-      try:
-        intermediate = np.linalg.solve(factor, rhs)
-        coordinates = np.linalg.solve(factor.T, intermediate)
-      except np.linalg.LinAlgError:
-        _solve_failure(
-          "cholesky-solve-failed",
-          "bounded dense Cholesky solve failed",
-        )
-      if not bool(np.isfinite(coordinates).all()):
+      forward, coordinates = _bounded_cholesky_solve(factor, rhs)
+      del forward
+      if not _all_finite(coordinates):
         _solve_failure(
           "nonfinite-reduced-solution",
           "reduced solution contains nonfinite values",
@@ -912,8 +963,6 @@ class PreparedAnalysis:
       convergence = LinearConvergenceRecord(
         converged=True,
         iteration_count=1,
-        factorization_performed=performed,
-        factorization_reused=reused,
         factorization_bypassed=False,
         operator_infinity_norm=operator_scale,
         minimum_unscaled_pivot=minimum_pivot,
@@ -1275,8 +1324,21 @@ class PreparedAnalysis:
     record, validated_trial = self._registered_trial(trial)
     trial_key = _instance_key(validated_trial.trial_id)
     with self._lock:
+      if record.closed:
+        _transaction_failure(
+          "closed-transaction",
+          "transaction closed before atomic discard",
+        )
       if record.trials.get(trial_key) is not validated_trial:
-        _transaction_failure("foreign-or-forged-trial", "trial registration changed")
+        _transaction_failure(
+          "foreign-or-forged-trial",
+          "trial registration changed before atomic discard",
+        )
+      if trial_key in record.discarded_trials:
+        _transaction_failure(
+          "already-discarded-trial",
+          "trial was already discarded",
+        )
       record.discarded_trials.add(trial_key)
 
   def abandon(self, transaction: StepTransaction) -> None:

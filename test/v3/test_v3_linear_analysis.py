@@ -8,7 +8,10 @@ import math
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from threading import Event
+from fractions import Fraction
+from threading import Barrier, Event, current_thread, main_thread
+from typing import NoReturn
+from uuid import UUID
 
 import numpy as np
 import pytest
@@ -16,6 +19,12 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
+from pyfem.v3.analysis import (
+  AcceptedTransition,
+  LinearConvergenceRecord,
+  LinearPredictor,
+  StepTransaction,
+)
 from pyfem.v3.api import (
   AnalysisPreparationError,
   AnalysisSolveError,
@@ -31,6 +40,7 @@ from pyfem.v3.assembly import (
   CanonicalCooOperator,
   LinearStaticContributionRequest,
   LinearStaticContributions,
+  assemble_reference_linear,
   prepare_assembly_plan,
 )
 from pyfem.v3.compile import compile_model, compile_program, q8_reference_registry
@@ -38,11 +48,16 @@ from pyfem.v3.model import (
   CommittedAnalysisState,
   CompiledModel,
   CompiledProgram,
+  EvolutionState,
   FinalizedArray,
   InstanceId,
+  PhysicalState,
   ProgramEvaluation,
+  ProgramHistory,
   StateGeneration,
 )
+from pyfem.v3.results.contracts import LinearBalanceLedger
+from pyfem.v3.results.verification import validate_state_record
 from pyfem.v3.spec import (
   AffineCoefficientSpec,
   AffineTieSpec,
@@ -822,12 +837,14 @@ def test_dense_workspace_capacity_fails_before_analysis_allocation(
     linear_static_request_manifest,
   )
 
-  assert linear_module._checked_workspace_bytes(2895) == 268378080
+  assert linear_module._checked_workspace_bytes(2895) == 268331760
+  assert 8 * (4 * 2896 * 2896 + 6 * 2896) == 268517120
   with pytest.raises(AnalysisPreparationError, match="256 MiB"):
     linear_module._checked_workspace_bytes(2896)
-  assert LINEAR_STATIC_WORKSPACE_BUDGET_SCOPE.encode() in (
-    linear_static_request_manifest(LinearStatic()).to_bytes()
-  )
+  manifest = linear_static_request_manifest(LinearStatic()).to_bytes()
+  assert LINEAR_STATIC_WORKSPACE_BUDGET_SCOPE.encode() in manifest
+  assert b"explicit-scalar-cholesky" in manifest
+  assert b"explicit-forward-back-substitution" in manifest
 
   model = compile_model(_model_spec(), q8_reference_registry())
   program = compile_program(model, _rational_program())
@@ -850,29 +867,154 @@ def test_dense_workspace_capacity_fails_before_analysis_allocation(
     prepare_analysis(model, program, LinearStatic())
 
 
-def test_strict_pivot_ratio_boundary_across_binary_binades() -> None:
-  import pyfem.v3.analysis.linear as linear_module
+def _exact_ratio_greater(value: float, scale: float, threshold: float) -> bool:
+  return Fraction(value) > Fraction(scale) * Fraction(threshold)
+
+
+def test_strict_pivot_ratio_exact_matrix_across_binary_binades() -> None:
   from pyfem.v3.analysis.contracts import LINEAR_STATIC_CHOLESKY_PIVOT_RATIO
+  from pyfem.v3.analysis.numerics import _strict_ratio_greater
 
   threshold = LINEAR_STATIC_CHOLESKY_PIVOT_RATIO
   for exponent in (-900, 0, 900):
     scale = math.ldexp(1.0, exponent)
     boundary = scale * threshold
-    assert not linear_module._strict_ratio_greater(
+    assert not _strict_ratio_greater(
       float(np.nextafter(boundary, 0.0)),
       scale,
       threshold,
     )
-    assert not linear_module._strict_ratio_greater(boundary, scale, threshold)
-    assert linear_module._strict_ratio_greater(
+    assert not _strict_ratio_greater(boundary, scale, threshold)
+    assert _strict_ratio_greater(
       float(np.nextafter(boundary, math.inf)),
       scale,
       threshold,
     )
-    assert linear_module._strict_ratio_greater(
-      scale * 1.5e-12,
-      scale,
-      threshold,
+    assert _strict_ratio_greater(scale * 1.5e-12, scale, threshold)
+
+  non_power_scales = (
+    float.fromhex("0x1.79eaa73e7f552p-202"),
+    float.fromhex("0x1.004189374bc6ap+0"),
+    1.5,
+    math.ldexp(1.75, 700),
+  )
+  for scale in non_power_scales:
+    rounded_boundary = scale * threshold
+    values = (
+      float(np.nextafter(rounded_boundary, 0.0)),
+      rounded_boundary,
+      float(np.nextafter(rounded_boundary, math.inf)),
+    )
+    expected = tuple(_exact_ratio_greater(value, scale, threshold) for value in values)
+    assert any(expected)
+    assert not all(expected)
+    assert (
+      tuple(_strict_ratio_greater(value, scale, threshold) for value in values)
+      == expected
+    )
+
+  concrete_scale = float.fromhex("0x1.79eaa73e7f552p-202")
+  concrete_pivot = float.fromhex("0x1.9f8611fbd4c2cp-242")
+  assert _exact_ratio_greater(concrete_pivot, concrete_scale, threshold)
+  assert not concrete_pivot > threshold * concrete_scale
+  assert _strict_ratio_greater(concrete_pivot, concrete_scale, threshold)
+
+
+@pytest.mark.parametrize(
+  ("scale_hex", "pivot_hex"),
+  [
+    ("0x1.79eaa73e7f552p-202", "0x1.9f8611fbd4c2cp-242"),
+    ("0x1.004189374bc6ap+0", "0x1.19c1a6d15a3e6p-40"),
+  ],
+)
+def test_concrete_non_power_of_two_spd_solve(
+  scale_hex: str,
+  pivot_hex: str,
+) -> None:
+  model, program, analysis = _prepared()
+  contributions = assemble_reference_linear(
+    model,
+    program,
+    analysis.assembly_plan,
+    _point(1.0),
+  )
+  reduced_count = analysis.workspace_statistics().reduced_dof_count
+  scale = float.fromhex(scale_hex)
+  pivot = float.fromhex(pivot_hex)
+  dense = np.eye(reduced_count, dtype=np.float64) * scale
+  dense[-1, -1] = pivot
+  operator = contributions.reduced_operator
+  changed = replace(
+    contributions,
+    reduced_operator=replace(operator, values=_operator_values(operator, dense)),
+    reduced_rhs=FinalizedArray(np.zeros(reduced_count), dtype=np.float64),
+  )
+  coordinates, convergence = analysis._solve_reduced(changed)
+  np.testing.assert_array_equal(coordinates, 0.0)
+  assert convergence.operator_infinity_norm == scale
+  assert convergence.minimum_unscaled_pivot == pivot
+
+
+def test_explicit_factor_and_triangular_solve_own_only_declared_storage(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  import pyfem.v3.analysis.linear as linear_module
+  from pyfem.v3.analysis.numerics import _explicit_cholesky
+
+  operator = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float64)
+  factorization = _explicit_cholesky(operator)
+  assert factorization is not None
+  factor, pivots = factorization
+  rhs = np.array([1.0, 2.0], dtype=np.float64)
+  forward, coordinates = linear_module._bounded_cholesky_solve(
+    factor,
+    rhs,
+  )
+  for array in (operator, factor, pivots, rhs, forward, coordinates):
+    assert array.flags.owndata
+    assert array.base is None
+  declared = (operator, factor, pivots, rhs, forward, coordinates)
+  for index, left in enumerate(declared):
+    for right in declared[index + 1 :]:
+      assert not np.shares_memory(left, right)
+  np.testing.assert_allclose(
+    operator @ coordinates,
+    np.array([1.0, 2.0]),
+    rtol=0.0,
+    atol=2.0e-15,
+  )
+
+  def forbidden(*_args: object, **_kwargs: object) -> None:
+    msg = "opaque NumPy factorization/solve is forbidden"
+    raise AssertionError(msg)
+
+  monkeypatch.setattr(np.linalg, "solve", forbidden)
+  monkeypatch.setattr(np.linalg, "cholesky", forbidden)
+  _, _, analysis = _prepared()
+  solution = analysis.solve(initial_point=_point(0.0), point=_point(1.0))
+  assert solution.verify().passed
+
+
+@pytest.mark.parametrize(
+  ("factor", "expected"),
+  [
+    (np.array([[0.0]], dtype=np.float64), "positive finite diagonals"),
+    (
+      np.array([[float.fromhex("0x0.0000000000001p-1022")]], dtype=np.float64),
+      "nonfinite value",
+    ),
+  ],
+)
+def test_explicit_triangular_solve_fails_closed(
+  factor: np.ndarray,
+  expected: str,
+) -> None:
+  import pyfem.v3.analysis.linear as linear_module
+
+  with pytest.raises(AnalysisSolveError, match=expected):
+    linear_module._bounded_cholesky_solve(
+      factor,
+      np.ones(factor.shape[0], dtype=np.float64),
     )
 
 
@@ -884,8 +1026,8 @@ def test_factorization_reuse_and_all_published_storage_is_disjoint() -> None:
   statistics = analysis.workspace_statistics()
   assert statistics.factorization_count == 1
   assert statistics.factorization_reuse_count == 1
-  assert first.convergence.factorization_performed
-  assert second.convergence.factorization_reused
+  assert not hasattr(first.convergence, "factorization_performed")
+  assert not hasattr(second.convergence, "factorization_reused")
   retained = (
     analysis._workspace.audit_operator,
     analysis._workspace.solve_operator,
@@ -898,7 +1040,7 @@ def test_factorization_reuse_and_all_published_storage_is_disjoint() -> None:
     if array is not None
   )
   assert sum(array.nbytes for array in retained if array is not None) == 3 * 13 * 13 * 8
-  assert statistics.checked_workspace_bytes == 6240
+  assert statistics.checked_workspace_bytes == 6032
   np.testing.assert_array_equal(first.primary_values.values, first_snapshot)
   assert not _shares_any(_state_arrays(first), _state_arrays(second))
   assert not _shares_any(_ledger_arrays(first), _ledger_arrays(second))
@@ -970,7 +1112,13 @@ def test_discard_and_accept_ordering_is_atomic(
   assert not analysis._consumed_generations
   analysis.begin_step(initial=initial, point=_point(0.5))
 
-  monkeypatch.setattr(linear_module, "fresh_verify", original)
+
+def test_accept_wins_racing_discard_and_only_one_concurrent_discard_succeeds(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  import pyfem.v3.analysis.linear as linear_module
+
+  original = linear_module.PreparedAnalysis._registered_trial
   _, _, accepted_first = _prepared()
   accepted_initial = accepted_first.initialize(point=_point(0.0))
   accepted_transaction = accepted_first.begin_step(
@@ -978,9 +1126,81 @@ def test_discard_and_accept_ordering_is_atomic(
     point=_point(1.0),
   )
   accepted_trial = accepted_first.evaluate_trial(accepted_transaction)
-  accepted_first.accept(accepted_trial)
-  with pytest.raises(StateTransactionError, match="closed"):
-    accepted_first.discard(accepted_trial)
+  entered = Event()
+  released = Event()
+
+  def blocked_registered_trial(
+    owner: PreparedAnalysis,
+    candidate: object,
+  ) -> tuple[object, object]:
+    registered = original(owner, candidate)
+    if owner is accepted_first and current_thread() is not main_thread():
+      entered.set()
+      if not released.wait(timeout=10.0):
+        msg = "discard barrier timed out"
+        raise AssertionError(msg)
+    return registered
+
+  monkeypatch.setattr(
+    linear_module.PreparedAnalysis,
+    "_registered_trial",
+    blocked_registered_trial,
+  )
+  with ThreadPoolExecutor(max_workers=1) as executor:
+    discard = executor.submit(accepted_first.discard, accepted_trial)
+    assert entered.wait(timeout=10.0)
+    solution = accepted_first.accept(accepted_trial)
+    released.set()
+    with pytest.raises(StateTransactionError, match="closed"):
+      discard.result(timeout=10.0)
+  assert solution.state.generation.ordinal == 1
+  assert len(accepted_first._consumed_generations) == 1
+
+  monkeypatch.setattr(
+    linear_module.PreparedAnalysis,
+    "_registered_trial",
+    original,
+  )
+  _, _, concurrent = _prepared()
+  concurrent_initial = concurrent.initialize(point=_point(0.0))
+  concurrent_transaction = concurrent.begin_step(
+    initial=concurrent_initial,
+    point=_point(1.0),
+  )
+  concurrent_trial = concurrent.evaluate_trial(concurrent_transaction)
+  barrier = Barrier(2)
+
+  def synchronized_registered_trial(
+    owner: PreparedAnalysis,
+    candidate: object,
+  ) -> tuple[object, object]:
+    registered = original(owner, candidate)
+    if owner is concurrent:
+      barrier.wait(timeout=10.0)
+    return registered
+
+  monkeypatch.setattr(
+    linear_module.PreparedAnalysis,
+    "_registered_trial",
+    synchronized_registered_trial,
+  )
+  with ThreadPoolExecutor(max_workers=2) as executor:
+    discards = tuple(
+      executor.submit(concurrent.discard, concurrent_trial) for _ in range(2)
+    )
+    successes = 0
+    failures: list[str] = []
+    for discard in discards:
+      try:
+        discard.result(timeout=10.0)
+        successes += 1
+      except StateTransactionError as error:
+        failures.append(str(error))
+  assert successes == 1
+  assert len(failures) == 1
+  assert "already discarded" in failures[0]
+  assert not concurrent._consumed_generations
+  concurrent.begin_step(initial=concurrent_initial, point=_point(0.5))
 
 
 @pytest.mark.parametrize(
@@ -1053,9 +1273,538 @@ def test_result_arrays_require_owned_and_disjoint_storage() -> None:
     empty_alias.verify_record()
 
 
+_COMPARISON_CALLS: list[str] = []
+
+
+class _StringSubclass(str):
+  pass
+
+
+class _ComparisonBomb(str):
+  def __eq__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("eq")
+    msg = "comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  def __ne__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("ne")
+    msg = "comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  __hash__ = str.__hash__
+
+
+class _TupleSubclass(tuple[object, ...]):
+  pass
+
+
+class _TupleBomb(tuple[object, ...]):
+  def __iter__(self) -> NoReturn:
+    _COMPARISON_CALLS.append("tuple-iter")
+    msg = "tuple iteration bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  def __len__(self) -> int:
+    _COMPARISON_CALLS.append("tuple-len")
+    msg = "tuple length bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  def __eq__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("tuple-eq")
+    msg = "tuple comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  def __ne__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("tuple-ne")
+    msg = "tuple comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+
+class _IntSubclass(int):
+  pass
+
+
+class _IntBomb(int):
+  def __eq__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("int-eq")
+    msg = "integer comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  def __lt__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("int-lt")
+    msg = "integer comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  def __ne__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("int-ne")
+    msg = "integer comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  __hash__ = int.__hash__
+
+
+class _FloatSubclass(float):
+  pass
+
+
+class _FloatBomb(float):
+  def __eq__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("float-eq")
+    msg = "float comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  def __lt__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("float-lt")
+    msg = "float comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  def __ne__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("float-ne")
+    msg = "float comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  __hash__ = float.__hash__
+
+
+class _BoolBomb:
+  def __bool__(self) -> bool:
+    _COMPARISON_CALLS.append("bool")
+    msg = "boolean conversion bomb must not be invoked"
+    raise RuntimeError(msg)
+
+
+class _UUIDSubclass(UUID):
+  pass
+
+
+class _UUIDBomb(UUID):
+  def __eq__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("uuid-eq")
+    msg = "UUID comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  def __ne__(self, other: object) -> bool:
+    del other
+    _COMPARISON_CALLS.append("uuid-ne")
+    msg = "UUID comparison bomb must not be invoked"
+    raise RuntimeError(msg)
+
+  __hash__ = UUID.__hash__
+
+
+def _with_state(solution: Solution, state: CommittedAnalysisState) -> Solution:
+  return replace(
+    solution,
+    state=state,
+    transition=replace(solution.transition, committed_state=state),
+  )
+
+
+def _assert_structured_without_comparison(solution: Solution) -> None:
+  _COMPARISON_CALLS.clear()
+  with pytest.raises(SolutionVerificationError):
+    solution.verify_record()
+  assert not _COMPARISON_CALLS
+
+
+@pytest.mark.parametrize(
+  "field",
+  [
+    "physical_schema",
+    "evolution_schema",
+    "program_history_schema",
+    "algebraic_field_id",
+    "coordinate_name",
+    "constraint_id",
+    "backend_policy",
+  ],
+)
+@pytest.mark.parametrize("carrier", [_StringSubclass, _ComparisonBomb])
+def test_result_scalar_preflight_rejects_subclasses_without_comparison(
+  field: str,
+  carrier: type[str],
+) -> None:
+  _, _, _, _, solution = _solve_rational()
+  state = solution.state
+  if field == "physical_schema":
+    state = replace(
+      state,
+      physical=replace(
+        state.physical,
+        schema=carrier(state.physical.schema),
+      ),
+    )
+  elif field == "evolution_schema":
+    state = replace(
+      state,
+      evolution=replace(
+        state.evolution,
+        schema=carrier(state.evolution.schema),
+      ),
+    )
+  elif field == "program_history_schema":
+    state = replace(
+      state,
+      program_history=replace(
+        state.program_history,
+        schema=carrier(state.program_history.schema),
+      ),
+    )
+  elif field == "algebraic_field_id":
+    identifiers = state.evolution.algebraic_field_ids
+    state = replace(
+      state,
+      evolution=replace(
+        state.evolution,
+        algebraic_field_ids=(carrier(str(identifiers[0])), *identifiers[1:]),
+      ),
+    )
+  elif field == "coordinate_name":
+    evaluation = state.evolution.program_evaluation
+    coordinate_names = evaluation.coordinate_names
+    state = replace(
+      state,
+      evolution=replace(
+        state.evolution,
+        program_evaluation=replace(
+          evaluation,
+          coordinate_names=(
+            carrier(coordinate_names[0]),
+            *coordinate_names[1:],
+          ),
+        ),
+      ),
+    )
+  elif field == "constraint_id":
+    constraint_ids = solution.ledger.constraint_ids
+    changed = replace(
+      solution,
+      ledger=replace(
+        solution.ledger,
+        constraint_ids=(carrier(str(constraint_ids[0])), *constraint_ids[1:]),
+      ),
+    )
+  else:
+    changed = replace(
+      solution,
+      convergence=replace(
+        solution.convergence,
+        backend_policy=carrier(solution.convergence.backend_policy),
+      ),
+    )
+
+  if field not in {"constraint_id", "backend_policy"}:
+    changed = replace(
+      solution,
+      state=state,
+      transition=replace(solution.transition, committed_state=state),
+    )
+  _COMPARISON_CALLS.clear()
+  with pytest.raises(SolutionVerificationError):
+    changed.verify_record()
+  assert not _COMPARISON_CALLS
+
+
+@pytest.mark.parametrize("carrier", [_TupleSubclass, _TupleBomb])
+def test_result_tuple_preflight_rejects_outer_subclasses_without_operations(
+  carrier: type[tuple[object, ...]],
+) -> None:
+  _, _, _, _, solution = _solve_rational()
+  for field in (
+    "coordinate_names",
+    "algebraic_field_ids",
+    "constraint_ids",
+    "material_histories",
+    "formulation_histories",
+    "history_entries",
+  ):
+    state = solution.state
+    if field == "coordinate_names":
+      evaluation = state.evolution.program_evaluation
+      state = replace(
+        state,
+        evolution=replace(
+          state.evolution,
+          program_evaluation=replace(
+            evaluation,
+            coordinate_names=carrier(evaluation.coordinate_names),
+          ),
+        ),
+      )
+      changed = _with_state(solution, state)
+    elif field == "algebraic_field_ids":
+      state = replace(
+        state,
+        evolution=replace(
+          state.evolution,
+          algebraic_field_ids=carrier(state.evolution.algebraic_field_ids),
+        ),
+      )
+      changed = _with_state(solution, state)
+    elif field == "constraint_ids":
+      changed = replace(
+        solution,
+        ledger=replace(
+          solution.ledger,
+          constraint_ids=carrier(solution.ledger.constraint_ids),
+        ),
+      )
+    elif field == "material_histories":
+      state = replace(
+        state,
+        physical=replace(
+          state.physical,
+          material_histories=carrier(state.physical.material_histories),
+        ),
+      )
+      changed = _with_state(solution, state)
+    elif field == "formulation_histories":
+      state = replace(
+        state,
+        physical=replace(
+          state.physical,
+          formulation_histories=carrier(state.physical.formulation_histories),
+        ),
+      )
+      changed = _with_state(solution, state)
+    else:
+      state = replace(
+        state,
+        program_history=replace(
+          state.program_history,
+          entries=carrier(state.program_history.entries),
+        ),
+      )
+      changed = _with_state(solution, state)
+    _assert_structured_without_comparison(changed)
+
+
+@pytest.mark.parametrize("carrier", [_IntSubclass, _IntBomb])
+def test_result_integer_preflight_rejects_subclasses_without_comparison(
+  carrier: type[int],
+) -> None:
+  _, _, _, _, solution = _solve_rational()
+  for field in (
+    "algebraic_field_id",
+    "constraint_id",
+    "accepted_step_index",
+    "retry",
+    "cutback",
+    "iteration_count",
+    "generation_ordinal",
+  ):
+    state = solution.state
+    if field == "algebraic_field_id":
+      identifiers = state.evolution.algebraic_field_ids
+      state = replace(
+        state,
+        evolution=replace(
+          state.evolution,
+          algebraic_field_ids=(carrier(1), *identifiers[1:]),
+        ),
+      )
+      changed = _with_state(solution, state)
+    elif field == "constraint_id":
+      identifiers = solution.ledger.constraint_ids
+      changed = replace(
+        solution,
+        ledger=replace(
+          solution.ledger,
+          constraint_ids=(carrier(1), *identifiers[1:]),
+        ),
+      )
+    elif field == "accepted_step_index":
+      state = replace(
+        state,
+        evolution=replace(
+          state.evolution,
+          accepted_step_index=carrier(state.evolution.accepted_step_index),
+        ),
+      )
+      changed = _with_state(solution, state)
+    elif field in {"retry", "cutback"}:
+      transaction = replace(
+        solution.transition.transaction,
+        **{
+          field: carrier(getattr(solution.transition.transaction, field)),
+        },
+      )
+      changed = replace(
+        solution,
+        transition=replace(solution.transition, transaction=transaction),
+      )
+    elif field == "iteration_count":
+      changed = replace(
+        solution,
+        convergence=replace(
+          solution.convergence,
+          iteration_count=carrier(solution.convergence.iteration_count),
+        ),
+      )
+    else:
+      generation = object.__new__(StateGeneration)
+      object.__setattr__(generation, "_lineage", state.generation._lineage)
+      object.__setattr__(
+        generation,
+        "ordinal",
+        carrier(state.generation.ordinal),
+      )
+      state = replace(state, generation=generation)
+      changed = _with_state(solution, state)
+    _assert_structured_without_comparison(changed)
+
+
+@pytest.mark.parametrize("carrier", [_FloatSubclass, _FloatBomb])
+def test_result_float_preflight_rejects_subclasses_without_comparison(
+  carrier: type[float],
+) -> None:
+  _, _, _, _, solution = _solve_rational()
+  convergence_fields = (
+    "operator_infinity_norm",
+    "minimum_unscaled_pivot",
+    "reduced_residual_norm",
+    "verification_tolerance",
+  )
+  ledger_fields = (
+    "constraint_work",
+    "external_work",
+    "internal_work",
+    "full_force_scale",
+    "reduced_force_scale",
+    "reconstruction_scale",
+    "work_scale",
+    "full_operator_infinity_norm",
+    "reduced_operator_infinity_norm",
+    "prolongation_transpose_infinity_norm",
+    "verification_tolerance",
+  )
+  for field in convergence_fields:
+    value = getattr(solution.convergence, field)
+    assert type(value) is float
+    changed = replace(
+      solution,
+      convergence=replace(
+        solution.convergence,
+        **{field: carrier(value)},
+      ),
+    )
+    _assert_structured_without_comparison(changed)
+  for field in ledger_fields:
+    value = getattr(solution.ledger, field)
+    assert type(value) is float
+    changed = replace(
+      solution,
+      ledger=replace(solution.ledger, **{field: carrier(value)}),
+    )
+    _assert_structured_without_comparison(changed)
+
+
+@pytest.mark.parametrize("kind", ["numpy", "bomb"])
+def test_result_boolean_preflight_never_invokes_conversion(kind: str) -> None:
+  _, _, _, _, solution = _solve_rational()
+
+  def changed_value(value: bool) -> object:
+    return np.bool_(value) if kind == "numpy" else _BoolBomb()
+
+  for field in ("accepted", "converged", "factorization_bypassed"):
+    if field == "accepted":
+      changed = replace(
+        solution,
+        transition=replace(
+          solution.transition,
+          accepted=changed_value(solution.transition.accepted),
+        ),
+      )
+    else:
+      changed = replace(
+        solution,
+        convergence=replace(
+          solution.convergence,
+          **{field: changed_value(getattr(solution.convergence, field))},
+        ),
+      )
+    _assert_structured_without_comparison(changed)
+
+
+@pytest.mark.parametrize("carrier", [_UUIDSubclass, _UUIDBomb])
+def test_result_uuid_preflight_rejects_subclasses_without_comparison(
+  carrier: type[UUID],
+) -> None:
+  _, _, _, _, solution = _solve_rational()
+  token = solution.prepared_instance_id._token
+  foreign_token = carrier(str(token))
+  identity = object.__new__(InstanceId)
+  object.__setattr__(identity, "_token", foreign_token)
+  _assert_structured_without_comparison(
+    replace(solution, prepared_instance_id=identity)
+  )
+
+  generation = object.__new__(StateGeneration)
+  object.__setattr__(
+    generation,
+    "_lineage",
+    carrier(str(solution.state.generation._lineage)),
+  )
+  object.__setattr__(generation, "ordinal", solution.state.generation.ordinal)
+  _assert_structured_without_comparison(
+    _with_state(solution, replace(solution.state, generation=generation))
+  )
+
+
+def test_result_uuid_preflight_rejects_partial_and_noncanonical_integer() -> None:
+  _, _, _, _, solution = _solve_rational()
+  partial_uuid = object.__new__(UUID)
+  integer_bomb_uuid = object.__new__(UUID)
+  object.__setattr__(integer_bomb_uuid, "int", _IntBomb(1))
+  negative_uuid = object.__new__(UUID)
+  object.__setattr__(negative_uuid, "int", -1)
+  oversized_uuid = object.__new__(UUID)
+  object.__setattr__(oversized_uuid, "int", 1 << 128)
+  for token in (partial_uuid, integer_bomb_uuid, negative_uuid, oversized_uuid):
+    identity = object.__new__(InstanceId)
+    object.__setattr__(identity, "_token", token)
+    _assert_structured_without_comparison(
+      replace(solution, prepared_instance_id=identity)
+    )
+
+  partial_ledger_id = object.__new__(InstanceId)
+  _assert_structured_without_comparison(
+    replace(
+      solution,
+      ledger=replace(solution.ledger, ledger_id=partial_ledger_id),
+    )
+  )
+
+
 @pytest.mark.parametrize(
   "partial",
-  ["solution", "identity", "generation", "committed", "evaluation", "array"],
+  [
+    "solution",
+    "committed",
+    "physical",
+    "evolution",
+    "program_history",
+    "evaluation",
+    "transition",
+    "transaction",
+    "predictor",
+    "convergence",
+    "ledger",
+    "identity",
+    "generation",
+    "array",
+  ],
 )
 def test_result_boundary_totalizes_partially_initialized_exact_carriers(
   partial: str,
@@ -1077,21 +1826,73 @@ def test_result_boundary_totalizes_partially_initialized_exact_carriers(
       ),
     )
   elif partial == "committed":
+    changed = _with_state(solution, object.__new__(CommittedAnalysisState))
+  elif partial == "physical":
+    changed = _with_state(
+      solution,
+      replace(
+        solution.state,
+        physical=object.__new__(PhysicalState),
+      ),
+    )
+  elif partial == "evolution":
+    changed = _with_state(
+      solution,
+      replace(
+        solution.state,
+        evolution=object.__new__(EvolutionState),
+      ),
+    )
+  elif partial == "program_history":
+    changed = _with_state(
+      solution,
+      replace(
+        solution.state,
+        program_history=object.__new__(ProgramHistory),
+      ),
+    )
+  elif partial == "evaluation":
+    changed = _with_state(
+      solution,
+      replace(
+        solution.state,
+        evolution=replace(
+          solution.state.evolution,
+          program_evaluation=object.__new__(ProgramEvaluation),
+        ),
+      ),
+    )
+  elif partial == "transition":
+    changed = replace(
+      solution,
+      transition=object.__new__(AcceptedTransition),
+    )
+  elif partial == "transaction":
     changed = replace(
       solution,
       transition=replace(
         solution.transition,
-        committed_state=object(),
+        transaction=object.__new__(StepTransaction),
       ),
     )
-  elif partial == "evaluation":
+  elif partial == "predictor":
     changed = replace(
       solution,
-      ledger=replace(
-        solution.ledger,
-        program_evaluation=object.__new__(ProgramEvaluation),
+      transition=replace(
+        solution.transition,
+        transaction=replace(
+          solution.transition.transaction,
+          predictor=object.__new__(LinearPredictor),
+        ),
       ),
     )
+  elif partial == "convergence":
+    changed = replace(
+      solution,
+      convergence=object.__new__(LinearConvergenceRecord),
+    )
+  elif partial == "ledger":
+    changed = replace(solution, ledger=object.__new__(LinearBalanceLedger))
   else:
     changed = replace(
       solution,
@@ -1100,8 +1901,21 @@ def test_result_boundary_totalizes_partially_initialized_exact_carriers(
         balance=object.__new__(FinalizedArray),
       ),
     )
+  _assert_structured_without_comparison(changed)
+
+
+def test_validate_state_record_totalizes_partial_exact_committed_state() -> None:
+  model, program, _, _, solution = _solve_rational()
+  _COMPARISON_CALLS.clear()
   with pytest.raises(SolutionVerificationError):
-    changed.verify_record()
+    validate_state_record(
+      state=object.__new__(CommittedAnalysisState),
+      model=model,
+      program=program,
+      prepared_instance_id=solution.prepared_instance_id,
+      request_manifest=solution.request_manifest,
+    )
+  assert not _COMPARISON_CALLS
 
 
 def test_verify_record_rejects_internally_inconsistent_work() -> None:
@@ -1121,29 +1935,61 @@ def test_verify_record_rejects_internally_inconsistent_work() -> None:
 def test_fresh_verification_recomputes_complete_backend_evidence() -> None:
   _, _, analysis, _, solution = _solve_rational()
   reused = analysis.solve(initial_point=_point(0.0), point=_point(0.5))
-  assert reused.convergence.factorization_reused
-  changed = replace(
+  statistics = analysis.workspace_statistics()
+  assert statistics.factorization_count == 1
+  assert statistics.factorization_reuse_count == 1
+  assert not hasattr(reused.convergence, "factorization_performed")
+  assert not hasattr(reused.convergence, "factorization_reused")
+  assert reused.verify().passed
+
+  for field, check_name in (
+    ("operator_infinity_norm", "backend_operator_norm"),
+    ("minimum_unscaled_pivot", "backend_minimum_pivot"),
+  ):
+    value = getattr(reused.convergence, field)
+    assert type(value) is float
+    changed = replace(
+      reused,
+      convergence=replace(
+        reused.convergence,
+        **{field: float(np.nextafter(value, math.inf))},
+      ),
+    )
+    assert changed.verify_record().passed
+    report = changed.verify()
+    assert not report.passed
+    assert not report.check(check_name).passed
+
+  policy_changed = replace(
     reused,
     convergence=replace(
       reused.convergence,
-      operator_infinity_norm=0.0,
-      minimum_unscaled_pivot=float(np.nextafter(0.0, 1.0)),
       backend_policy="changed-backend-policy",
     ),
   )
-  assert changed.verify_record().passed
-  report = changed.verify()
-  assert not report.passed
-  assert not report.check("backend_policy").passed
-  assert not report.check("backend_operator_norm").passed
-  assert not report.check("backend_minimum_pivot").passed
-  assert report.check("backend_convergence_record").passed
-  assert report.check("backend_reduced_residual_norm").passed
-  assert report.check("backend_symmetry_admission").passed
-  assert report.check("backend_solver_projection").passed
-  assert report.check("backend_factorization_mode").passed
-  assert report.check("backend_cholesky").passed
-  assert report.check("backend_pivot_policy").passed
+  assert policy_changed.verify_record().passed
+  policy_report = policy_changed.verify()
+  assert not policy_report.passed
+  assert not policy_report.check("backend_policy").passed
+  assert policy_report.check("backend_convergence_record").passed
+  assert policy_report.check("backend_symmetry_admission").passed
+  assert policy_report.check("backend_solver_projection").passed
+  assert policy_report.check("backend_factorization_bypass").passed
+  assert policy_report.check("backend_cholesky").passed
+  assert policy_report.check("backend_pivot_policy").passed
+
+  residual = reused.convergence.reduced_residual_norm
+  residual_changed = replace(
+    reused,
+    convergence=replace(
+      reused.convergence,
+      reduced_residual_norm=float(np.nextafter(residual, math.inf)),
+    ),
+  )
+  record = residual_changed.verify_record()
+  assert not record.passed
+  assert not record.check("record_convergence_residual").passed
+  assert not residual_changed.verify().passed
 
 
 def test_coherent_perturbed_field_passes_record_but_fails_fresh_exactly() -> None:

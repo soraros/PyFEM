@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import sys
 from typing import NoReturn
+from uuid import UUID
 
 import numpy as np
 
@@ -70,6 +71,71 @@ def _malformed(code: str, message: str) -> NoReturn:
   raise SolutionVerificationError((SolutionVerificationDiagnostic(code, message),))
 
 
+def _require_exact_schema(value: object, expected: str, label: str) -> None:
+  if type(value) is not str or value != expected:
+    _malformed("malformed-schema", f"{label} schema is not exact")
+
+
+def _require_exact_str_tuple(value: object, label: str) -> tuple[str, ...]:
+  if type(value) is not tuple or any(type(item) is not str for item in value):
+    _malformed("malformed-scalar-sequence", f"{label} must contain exact strings")
+  return value
+
+
+def _require_exact_identifier_tuple(
+  value: object,
+  label: str,
+) -> tuple[str | int, ...]:
+  if type(value) is not tuple or any(
+    type(item) is not str and type(item) is not int for item in value
+  ):
+    _malformed(
+      "malformed-scalar-sequence",
+      f"{label} must contain exact string or integer identifiers",
+    )
+  return value
+
+
+def _require_valid_uuid(value: object, label: str) -> UUID:
+  if type(value) is not UUID:
+    _malformed("malformed-uuid", f"{label} is not an exact UUID")
+  try:
+    integer = value.int
+  except AttributeError:
+    _malformed("malformed-uuid", f"{label} is uninitialized")
+  if type(integer) is not int or integer < 0 or integer >= 1 << 128:
+    _malformed("malformed-uuid", f"{label} integer payload is not canonical")
+  return value
+
+
+def _require_valid_instance_id(value: object, label: str) -> InstanceId:
+  if type(value) is not InstanceId:
+    _malformed("malformed-live-identity", f"{label} has a foreign type")
+  try:
+    token = value._token
+  except AttributeError:
+    _malformed("malformed-live-identity", f"{label} is uninitialized")
+  _require_valid_uuid(token, f"{label} token")
+  return value
+
+
+def _require_valid_generation(value: object, label: str) -> StateGeneration:
+  if type(value) is not StateGeneration:
+    _malformed("malformed-state-generation", f"{label} has a foreign type")
+  try:
+    lineage = value._lineage
+    ordinal = value.ordinal
+  except AttributeError:
+    _malformed("malformed-state-generation", f"{label} is uninitialized")
+  _require_valid_uuid(lineage, f"{label} lineage")
+  if type(ordinal) is not int or ordinal < 0:
+    _malformed(
+      "malformed-state-generation",
+      f"{label} lineage or ordinal is not canonical",
+    )
+  return value
+
+
 def _manifest_equal(left: object, right: object) -> bool:
   if type(left) is not CanonicalManifest or type(right) is not CanonicalManifest:
     return False
@@ -104,6 +170,8 @@ def _same_fingerprint(left: object, right: object) -> bool:
 
 
 def _require_instance(expected: object, actual: object, label: str) -> None:
+  _require_valid_instance_id(expected, f"{label} expected identity")
+  _require_valid_instance_id(actual, f"{label} actual identity")
   try:
     require_same_instance(expected, actual, context=label)
   except (AttributeError, TypeError, ValueError):
@@ -111,6 +179,8 @@ def _require_instance(expected: object, actual: object, label: str) -> None:
 
 
 def _require_generation(expected: object, actual: object, label: str) -> None:
+  _require_valid_generation(expected, f"{label} expected generation")
+  _require_valid_generation(actual, f"{label} actual generation")
   try:
     require_same_generation(expected, actual, context=label)
   except (AttributeError, TypeError, ValueError):
@@ -121,6 +191,8 @@ def _require_generation(expected: object, actual: object, label: str) -> None:
 
 
 def _require_successor(base: object, candidate: object, label: str) -> None:
+  _require_valid_generation(base, f"{label} base generation")
+  _require_valid_generation(candidate, f"{label} candidate generation")
   try:
     require_generation_successor(base, candidate, context=label)
   except (AttributeError, TypeError, ValueError):
@@ -296,6 +368,10 @@ def _infinity_norm(value: np.ndarray) -> float:
   return largest
 
 
+def _all_finite(value: np.ndarray) -> bool:
+  return all(math.isfinite(float(item)) for item in value.flat)
+
+
 def _difference_norm(left: np.ndarray, right: np.ndarray) -> float:
   with np.errstate(over="ignore", invalid="ignore"):
     difference = left - right
@@ -310,19 +386,6 @@ def _dot(left: np.ndarray, right: np.ndarray, label: str) -> float:
   if not math.isfinite(value):
     _malformed("nonfinite-verification-value", f"{label} is nonfinite")
   return value
-
-
-def _strict_ratio_greater(value: float, scale: float, threshold: float) -> bool:
-  if value <= 0.0 or scale <= 0.0:
-    return False
-  value_fraction, value_exponent = math.frexp(value)
-  scale_fraction, scale_exponent = math.frexp(scale)
-  ratio_fraction, normalization_exponent = math.frexp(value_fraction / scale_fraction)
-  ratio_exponent = value_exponent - scale_exponent + normalization_exponent
-  threshold_fraction, threshold_exponent = math.frexp(threshold)
-  if ratio_exponent != threshold_exponent:
-    return ratio_exponent > threshold_exponent
-  return ratio_fraction > threshold_fraction
 
 
 def _ratio(error: float, scale: float) -> float:
@@ -662,8 +725,6 @@ def _fresh_program_evaluation_checks(
 def _fresh_backend_checks(
   convergence: object,
   operator: np.ndarray,
-  reduced_residual: np.ndarray,
-  reduced_force_scale: float,
   tolerance: float,
 ) -> tuple[VerificationCheck, ...]:
   from pyfem.v3.analysis.contracts import (
@@ -673,6 +734,7 @@ def _fresh_backend_checks(
     LINEAR_STATIC_VERIFICATION_TOLERANCE,
     LinearConvergenceRecord,
   )
+  from pyfem.v3.analysis.numerics import _explicit_cholesky, _strict_ratio_greater
 
   if type(convergence) is not LinearConvergenceRecord:
     _malformed(
@@ -693,24 +755,13 @@ def _fresh_backend_checks(
       tolerance,
     ),
   ]
-  residual_norm = _infinity_norm(reduced_residual)
-  checks.append(
-    verification_check(
-      "backend_reduced_residual_norm",
-      abs(convergence.reduced_residual_norm - residual_norm),
-      reduced_force_scale,
-      tolerance,
-    )
-  )
   reduced_count = operator.shape[0]
   if reduced_count == 0:
     checks.extend(
       (
         _boolean_check(
           "backend_zero_free_bypass",
-          convergence.factorization_bypassed is True
-          and convergence.factorization_performed is False
-          and convergence.factorization_reused is False,
+          convergence.factorization_bypassed is True,
           tolerance,
         ),
         verification_check(
@@ -743,7 +794,7 @@ def _fresh_backend_checks(
     )
   )
   solve_operator = 0.5 * (operator + operator.T)
-  solve_finite = bool(np.isfinite(solve_operator).all())
+  solve_finite = _all_finite(solve_operator)
   operator_scale = _infinity_norm(solve_operator) if solve_finite else math.inf
   checks.extend(
     (
@@ -752,28 +803,25 @@ def _fresh_backend_checks(
         solve_finite and bool(np.array_equal(solve_operator, solve_operator.T)),
         tolerance,
       ),
-      verification_check(
+      _boolean_check(
         "backend_operator_norm",
-        abs(convergence.operator_infinity_norm - operator_scale),
-        max(convergence.operator_infinity_norm, operator_scale),
+        convergence.operator_infinity_norm == operator_scale,
         tolerance,
       ),
       _boolean_check(
-        "backend_factorization_mode",
-        convergence.factorization_bypassed is False
-        and (convergence.factorization_performed != convergence.factorization_reused),
+        "backend_factorization_bypass",
+        convergence.factorization_bypassed is False,
         tolerance,
       ),
     )
   )
-  factor: np.ndarray | None = None
+  factorization: tuple[np.ndarray, np.ndarray] | None = None
   if solve_finite and math.isfinite(operator_scale) and operator_scale > 0.0:
-    try:
-      factor = np.linalg.cholesky(solve_operator)
-    except np.linalg.LinAlgError:
-      factor = None
-  checks.append(_boolean_check("backend_cholesky", factor is not None, tolerance))
-  if factor is None:
+    factorization = _explicit_cholesky(solve_operator)
+  checks.append(
+    _boolean_check("backend_cholesky", factorization is not None, tolerance)
+  )
+  if factorization is None:
     checks.extend(
       (
         _boolean_check("backend_pivot_policy", False, tolerance),
@@ -787,7 +835,7 @@ def _fresh_backend_checks(
     )
     return tuple(checks)
 
-  pivots = np.square(np.diag(factor))
+  _, pivots = factorization
   minimum_pivot = float(np.min(pivots))
   pivot_policy_passed = bool(np.isfinite(pivots).all()) and all(
     _strict_ratio_greater(
@@ -800,12 +848,10 @@ def _fresh_backend_checks(
   checks.extend(
     (
       _boolean_check("backend_pivot_policy", pivot_policy_passed, tolerance),
-      verification_check(
+      _boolean_check(
         "backend_minimum_pivot",
-        abs(convergence.minimum_unscaled_pivot - minimum_pivot)
-        if type(convergence.minimum_unscaled_pivot) is float
-        else math.inf,
-        minimum_pivot,
+        type(convergence.minimum_unscaled_pivot) is float
+        and convergence.minimum_unscaled_pivot == minimum_pivot,
         tolerance,
       ),
     )
@@ -834,8 +880,6 @@ def _fresh_checks(
     _fresh_backend_checks(
       convergence,
       operator,
-      fresh.reduced_residual.values,
-      fresh.reduced_force_scale,
       tolerance,
     )
   )
@@ -1189,10 +1233,11 @@ def _validate_program_evaluation(
       "program evaluation fingerprints do not match the retained owners",
     )
   coordinate_count = len(program.coordinate_names)
-  if (
-    type(evaluation.coordinate_names) is not tuple
-    or evaluation.coordinate_names != program.coordinate_names
-  ):
+  coordinate_names = _require_exact_str_tuple(
+    evaluation.coordinate_names,
+    "program evaluation coordinate names",
+  )
+  if coordinate_names != program.coordinate_names:
     _malformed(
       "malformed-program-evaluation",
       "program evaluation coordinate order is not exact",
@@ -1235,6 +1280,13 @@ def _program_evaluations_equal(
   left: ProgramEvaluation, right: ProgramEvaluation
 ) -> bool:
   """Compare bound meaning exactly while keeping storage ownership separate."""
+  if (
+    type(left.coordinate_names) is not tuple
+    or any(type(item) is not str for item in left.coordinate_names)
+    or type(right.coordinate_names) is not tuple
+    or any(type(item) is not str for item in right.coordinate_names)
+  ):
+    return False
   try:
     require_same_instance(left.program_instance_id, right.program_instance_id)
     require_same_instance(
@@ -1270,7 +1322,7 @@ def _program_evaluations_equal(
     return False
 
 
-def validate_state_record(
+def _validate_state_record(
   *,
   state: object,
   model: CompiledModel,
@@ -1282,8 +1334,7 @@ def validate_state_record(
   if type(state) is not CommittedAnalysisState:
     _malformed("malformed-committed-state", "committed state has a foreign type")
   _require_instance(prepared_instance_id, state.prepared_instance_id, "committed state")
-  if type(state.generation) is not StateGeneration:
-    _malformed("malformed-state-generation", "committed generation has a foreign type")
+  _require_valid_generation(state.generation, "committed generation")
   if type(state.physical) is not PhysicalState:
     _malformed("malformed-physical-state", "physical state has a foreign type")
   physical = state.physical
@@ -1297,8 +1348,7 @@ def validate_state_record(
       "solution-fingerprint-mismatch",
       "physical-state fingerprint does not match the retained model",
     )
-  if physical.schema != PHYSICAL_STATE_SCHEMA:
-    _malformed("malformed-physical-state", "physical-state schema is not exact")
+  _require_exact_schema(physical.schema, PHYSICAL_STATE_SCHEMA, "physical state")
   _require_generation(state.generation, physical.generation, "physical state")
   full_count = model.physical_state_layout.global_primary_size
   arrays: list[np.ndarray] = [
@@ -1341,10 +1391,8 @@ def validate_state_record(
   _require_instance(
     prepared_instance_id, evolution.prepared_instance_id, "evolution state"
   )
-  if evolution.schema != EVOLUTION_STATE_SCHEMA or not _manifest_equal(
-    evolution.request_manifest,
-    request_manifest,
-  ):
+  _require_exact_schema(evolution.schema, EVOLUTION_STATE_SCHEMA, "evolution state")
+  if not _manifest_equal(evolution.request_manifest, request_manifest):
     _malformed(
       "malformed-evolution-state", "evolution schema or request manifest is not exact"
     )
@@ -1352,7 +1400,11 @@ def validate_state_record(
   expected_fields = tuple(
     item.field_id for item in model.physical_state_layout.primary_fields
   )
-  if evolution.algebraic_field_ids != expected_fields:
+  algebraic_field_ids = _require_exact_identifier_tuple(
+    evolution.algebraic_field_ids,
+    "evolution algebraic field identifiers",
+  )
+  if algebraic_field_ids != expected_fields:
     _malformed(
       "malformed-evolution-state", "algebraic field classification is not exact"
     )
@@ -1385,11 +1437,11 @@ def validate_state_record(
     _malformed("malformed-program-history", "program history has a foreign type")
   history = state.program_history
   _require_instance(program.instance_id, history.program_instance_id, "program history")
+  _require_exact_schema(history.schema, PROGRAM_HISTORY_SCHEMA, "program history")
   if (
     not _same_fingerprint(
       program.content_fingerprint, history.program_content_fingerprint
     )
-    or history.schema != PROGRAM_HISTORY_SCHEMA
     or type(history.entries) is not tuple
     or history.entries != ()
   ):
@@ -1398,6 +1450,44 @@ def validate_state_record(
     )
   _require_generation(state.generation, history.generation, "program history")
   return tuple(arrays)
+
+
+def validate_state_record(
+  *,
+  state: object,
+  model: CompiledModel,
+  program: CompiledProgram,
+  prepared_instance_id: InstanceId,
+  request_manifest: CanonicalManifest,
+) -> tuple[np.ndarray, ...]:
+  """Total structured boundary for one retained committed state."""
+  try:
+    return _validate_state_record(
+      state=state,
+      model=model,
+      program=program,
+      prepared_instance_id=prepared_instance_id,
+      request_manifest=request_manifest,
+    )
+  except SolutionVerificationError:
+    raise
+  except (
+    AttributeError,
+    IndexError,
+    KeyError,
+    OverflowError,
+    RecursionError,
+    TypeError,
+    ValueError,
+  ) as error:
+    raise SolutionVerificationError(
+      (
+        SolutionVerificationDiagnostic(
+          "malformed-committed-state",
+          "committed state is partially initialized or structurally malformed",
+        ),
+      )
+    ) from error
 
 
 def _validate_ledger_arrays(
@@ -1535,8 +1625,7 @@ def _verify_record_data(
   expected_manifest = linear_static_request_manifest(request)
   if not _manifest_equal(request_manifest, expected_manifest):
     _malformed("malformed-solution-request", "solution request manifest is not exact")
-  if type(prepared_instance_id) is not InstanceId:
-    _malformed("malformed-solution-owner", "prepared-analysis identity is malformed")
+  _require_valid_instance_id(prepared_instance_id, "prepared-analysis identity")
   if type(plan_content_fingerprint) is not ContentFingerprint:
     _malformed("malformed-solution-owner", "plan fingerprint is malformed")
   if not _fingerprint_matches_manifest(
@@ -1573,11 +1662,10 @@ def _verify_record_data(
       "accepted transition does not retain its exact StepTransaction",
     )
   transaction = transition.transaction
-  if type(transaction.transaction_id) is not InstanceId:
-    _malformed(
-      "malformed-transition-record",
-      "accepted transaction identity is malformed",
-    )
+  _require_valid_instance_id(
+    transaction.transaction_id,
+    "accepted transaction identity",
+  )
   _require_instance(
     transaction.transaction_id,
     transition.transaction_id,
@@ -1635,8 +1723,7 @@ def _verify_record_data(
   _require_instance(
     prepared_instance_id, transition.prepared_instance_id, "accepted transition"
   )
-  if type(transition.trial_id) is not InstanceId:
-    _malformed("malformed-transition-record", "accepted trial identity is malformed")
+  _require_valid_instance_id(transition.trial_id, "accepted trial identity")
   _require_generation(
     transaction.base_generation,
     transition.base_generation,
@@ -1769,23 +1856,7 @@ def _verify_record_data(
     convergence.converged is not True
     or type(convergence.iteration_count) is not int
     or convergence.iteration_count != 1
-    or convergence.verification_tolerance != LINEAR_STATIC_VERIFICATION_TOLERANCE
-    or any(
-      type(flag) is not bool
-      for flag in (
-        convergence.factorization_performed,
-        convergence.factorization_reused,
-        convergence.factorization_bypassed,
-      )
-    )
-    or sum(
-      (
-        convergence.factorization_performed,
-        convergence.factorization_reused,
-        convergence.factorization_bypassed,
-      )
-    )
-    != 1
+    or type(convergence.factorization_bypassed) is not bool
   ):
     _malformed(
       "malformed-convergence-record", "linear convergence record is inconsistent"
@@ -1800,6 +1871,11 @@ def _verify_record_data(
     for value in scalar_values
   ):
     _malformed("malformed-convergence-record", "convergence scalars are invalid")
+  if convergence.verification_tolerance != LINEAR_STATIC_VERIFICATION_TOLERANCE:
+    _malformed(
+      "malformed-convergence-record",
+      "convergence tolerance is not the frozen request tolerance",
+    )
   if convergence.minimum_unscaled_pivot is not None and (
     type(convergence.minimum_unscaled_pivot) is not float
     or not math.isfinite(convergence.minimum_unscaled_pivot)
@@ -1811,8 +1887,7 @@ def _verify_record_data(
 
   if type(ledger) is not LinearBalanceLedger:
     _malformed("malformed-balance-ledger", "balance ledger has a foreign type")
-  if type(ledger.ledger_id) is not InstanceId:
-    _malformed("malformed-balance-ledger", "balance ledger identity is malformed")
+  _require_valid_instance_id(ledger.ledger_id, "balance ledger identity")
   _require_instance(prepared_instance_id, ledger.prepared_instance_id, "balance ledger")
   _require_instance(model.instance_id, ledger.model_instance_id, "balance ledger model")
   _require_instance(
@@ -1874,9 +1949,11 @@ def _verify_record_data(
     direct_count=direct_count,
     constraint_count=constraint_count,
   )
-  if ledger.constraint_ids != tuple(
-    item.id for item in program.meaning_witness.constraints
-  ):
+  constraint_ids = _require_exact_identifier_tuple(
+    ledger.constraint_ids,
+    "balance ledger constraint identifiers",
+  )
+  if constraint_ids != tuple(item.id for item in program.meaning_witness.constraints):
     _malformed("malformed-balance-ledger", "constraint row identities are not exact")
   direct_indices = ledger.direct_reaction_dof_indices.values
   if bool(np.any(direct_indices < 0)) or bool(np.any(direct_indices >= full_count)):
@@ -2104,13 +2181,10 @@ def _verify_record_data(
       expected_work_scale,
       ledger.verification_tolerance,
     ),
-    verification_check(
+    _boolean_check(
       "record_convergence_residual",
-      abs(
-        convergence.reduced_residual_norm
-        - _infinity_norm(ledger.reduced_residual.values)
-      ),
-      ledger.reduced_force_scale,
+      convergence.reduced_residual_norm
+      == _infinity_norm(ledger.reduced_residual.values),
       ledger.verification_tolerance,
     ),
     verification_check(
