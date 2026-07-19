@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; P1-C repair 1/2 is withheld after independent NO-GO and repair 2/2 is the sole writer; both final support cards are complete and read-only
+- Status: active; P1-C is integrated and independently gated at component-qualified E2; three read-only R1-A reviews are active and Phase 2 implementation remains closed until I1
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -21,51 +21,47 @@
 - Integrated P1-B assembly plan: repaired source `8e94454c63a76fdc1505d8ec3ec6341128448aab`, integrated `daad22796a6b178ba9fdb33d0e444b5be0f830e7`
 - P1-B independent proof: exact base `e11a07c0cc5c00e956c3d537ac94272f120621c0`; the sidebar R1-B task is visibly incomplete after a temporary-file approval stall, while the exact-base internal Sol/max replacement returned GO with zero findings
 - P1-C frozen Horizon and planned common dispatch base: `02cff1ca76b02969b91eac6e889de78c7a4ef9e2`
-- P1-C initial source: `c263d95830df8284ab55c82dbd771f4690301283` (I0-reviewed NO-GO; not integrated)
-- P1-C repair 1/2 source: `8524c2337a408e69be215a78044d54d6af968a6b` (independently reviewed NO-GO; not integrated)
+- P1-C source chain: initial `c263d95830df8284ab55c82dbd771f4690301283`; repair 1/2 `8524c2337a408e69be215a78044d54d6af968a6b`; repair 2/2 `ba6fc4e16d62b5d2b1b6066694930e9cd1dede1b`; convergence closure `3ee920a4659d7bb37f09ed094fe5c0f9651805e1`
+- Integrated P1-C chain: `c9b9480` -> `bfc1d80` -> `d78201d` -> `7ee65c3ea5c50278b17dce63f2569e22412e0ebd`
+- P1-C integrated proof: 86 focused and 348 combined tests in both normal and 640-digit modes; 478 v3; 667 repository; both Ruff configurations, focused format, ancestry, ownership, and static gates green
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: P1-C repair 2/2; R2-A/R2-B and downstream Phase 2 card research are complete and read-only
+- Active milestone: R1-A integrated linear-slice review in three read-only parts; R2-A/R2-B and downstream Phase 2 card research remain complete and read-only
 
 ## Exact next safe action
 
-P1-C initial source `c263d95830df8284ab55c82dbd771f4690301283`
-is exactly one clean child of the frozen base and passed its reported focused,
-combined, v3, repository, Ruff, format, ownership, and measurement gates. I0 did
-not integrate it. Independent source/result/state checks accepted seven repair
-areas: final-lock discard ordering; owning and identity-disjoint published arrays;
-truthful convergence/backend evidence; the exact strict-pivot boundary; dense
-workspace peak accounting; total structured result diagnostics; and retained and
-fresh `ProgramEvaluation` correspondence.
+P1-C is integrated at exact code head
+`7ee65c3ea5c50278b17dce63f2569e22412e0ebd`. The four source commits were
+reviewed and cherry-picked serially as `c9b9480`, `bfc1d80`, `d78201d`, and
+`7ee65c3`. Repair 2/2 closed the transaction, exact-ratio, convergence-record,
+bounded explicit-factorization, storage, and scalar-preflight findings. Two fresh
+reviews then found one remaining P1: a coherently changed retained residual and
+matching convergence norm was not bound exactly to the independently rebuilt
+residual. The one-issue closure `3ee920a` added that exact fresh correspondence
+without changing tolerance-based equilibrium acceptance; three post-closure
+checks returned GO with zero findings.
 
-Repair 1/2 `8524c2337a408e69be215a78044d54d6af968a6b` closed the
-original array, evaluation, gross convergence, diagnostic, and discard-wins cases,
-but I0 and two fresh exact-base reviews withheld it. They reproduced five remaining
-roots: opposite-order discard atomicity; rounded non-power-of-two pivot comparison;
-unverifiable cache-history flags and inexact convergence scalars; opaque
-`np.linalg.solve` matrix scratch omitted by the memory formula; and scalar/tuple
-subclasses reaching overloaded comparisons before exact preflight.
+The integrated tree passed 86 focused tests and 348 exact Phase 1 tests in both
+normal and `PYTHONINTMAXSTRDIGITS=640` modes, 478 v3 tests, 667 repository tests,
+both Ruff configurations, focused format, ancestry, path ownership, dependency,
+and explicit-solver scans. Broad runs emitted only the existing 40 SciPy sparse
+conversion notices and four cold-cache Numba transformation notices. A broad
+format-only check still names nine pre-existing non-P1-C files; the focused P1-C
+format gate is green.
 
-The original Sol/max owner is the sole repair 2/2 writer in
-`/private/tmp/pyfem-p1c-02cff1c`, producing at most one direct child of `8524c233`.
-No parallel state, analysis, result, API, compiler, or assembly writer is permitted.
-`/root/p1c_numeric_repair_card` and `/root/p1c_scalar_repair_card` completed
-read-only acceptance cards for the numeric workspace and complete result scalar
-preflight respectively; neither owns a path or evidence grade.
-The independent Sol/max task `/root/p1c_repair_gate` completed a read-only exact
-post-repair correctness matrix for the seven accepted areas; it advances no
-evidence grade and owns no path. `/root/p2a_freeze_draft` also completed a
-read-only proposed P2-A card using the corrected literal 15-node Q8/Q4/T3 oracle.
-That card is not frozen and authorizes no code before I1.
-R2-A and R2-B are terminal, clean, read-only research results and advance no grade.
-Kimi was attempted twice as a read-only second opinion: the first run could not
-obtain ordinary read access through its local approval bridge, and the bounded
-disposable-clone retry timed out without a report or repository change. It is not
-completion evidence and will not be retried in this pass.
+Three read-only R1-A tasks now share frozen detached worktree
+`/private/tmp/pyfem-r1a-7ee65c3`: `r1a_physics_balance`,
+`r1a_state_lifecycle`, and `r1a_public_contracts`. They own no source and cannot
+advance a grade. I1 must reconcile their evidence, rerun the combined proof, and
+freeze the public Phase 1 contract. Only then may the bounded component slices
+advance to E3 and P2-A implementation open. R2-A, R2-B, and the proposed P2-A
+card remain read-only inputs; no Phase 2 implementation is authorized yet.
 
-Next: accept the repair only after I0 reproduces every counterexample and all
-combined gates; integrate serially; dispatch one fresh read-only R1-A reviewer at
-the exact integrated hash; then I1 alone may advance the bounded Phase 1 slices.
-Do not start P2-A code before I1 is frozen.
+Two public-flow completion attempts are explicitly unfinished and are not evidence:
+`p1c_source_review` was stopped twice by erroneous output routing, and
+`p1c_public_flow_redo` did not start because Sol/max was at capacity. Fresh
+replacement `p1c_public_flow_redo2` completed the same local FEM matrix on
+Terra/max. The earlier bounded Kimi attempts likewise produced no review result or
+repository change and are not counted.
 
 ### Basis for the selection
 
@@ -144,7 +140,7 @@ exact-base checks, adjudication, integration, the live ledger, and combined proo
 | `P1-C · linear flow — public solution verified` | Frozen card below; sole state/analysis/result/API writer | One focused source commit; integrates first and serially | Authored Q8 to immutable verified solution through reusable and one-shot flows; exact rational and analytical oracles; full Phase 1 gates |
 | `R2-A · topology — Q4/T3 contracts extracted` | P1-C dispatched; read-only topology research | Literal Q4/T3 interpolation, quadrature, element oracles; mixed-partition failure cases; smallest common block API; no merge | Terminal report and callback only; no grade advance |
 | `R2-B · ownership — Phase 2 leaves separated` | P1-C dispatched; read-only ownership/backend research | Disjoint material-slot, field-layout, boundary-recipe and sparse-backend seams; recipe-union and memory measurement design; no merge | Terminal report and callback only; no grade advance |
-| `R1-A · linear slice — physics and state verified` | P1-C integrated and I0-focused gates green; independent read-only owner | Fresh finite-element correctness review; no edits | GO required on identities, generations, balance/reactions, storage isolation, failed acceptance, and fresh strong verification |
+| `R1-A · linear slice — physics and state verified` | P1-C integrated and I0-focused gates green; three disjoint read-only reviewers | Physics/balance, state lifecycle, and public-contract correctness reviews; no edits | Combined GO required on identities, generations, balance/reactions, storage isolation, failed acceptance, and fresh strong verification |
 | `I1 · linear slice — public proof complete` | R1-A terminal and accepted findings repaired | Serial adjudication, combined proof, contract freeze, and ledger update | Exact Phase 1 component slices reach E3 only here; schedules, nonlinear history, adapters, prototype retirement, and root compatibility remain outside the claim |
 | `P2-A · mixed blocks — Q4/T3 composition explicit` | I1 frozen plus R2-A/R2-B reports; sole compiler/block owner | Shared mixed-block carrier/compiler/assembly interfaces; serial integration | One genuine Q8/Q4/T3 mixed solve; heterogeneous local sizes; no padding, node-count dispatch, solver branch, or new whole-model optional field |
 | `R2-C · mixed blocks — common API verified` | P2-A integrated; independent read-only owner | Review the proposed leaf-builder/recipe interfaces required by later writers; no edits or authority change | GO on topology meaning, partitions, ordering, attribution, identities, and source mapping |
@@ -645,7 +641,7 @@ dated E0 evidence.
 | P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
 | P1-A immediate dependency cut | 3 | `provisional`, `E2` at `b7316be`; final repair, I0 integration proof, and independent carrier GO complete | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Consumer proof continues through P1-B/P1-C; E3 requires the verified public slice |
 | P1-B immediate dependency cut | 5 | `provisional`, `E2` at `daad227`; repair, I0 combined proof, and exact-base independent GO complete | 5 change; component slices of `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, `ASM-TANGENT` | Consumer proof continues through P1-C; E3 requires the verified public slice |
-| P1-C immediate dependency cut | 10 | `contracted`, component-qualified `E1` at proof `02cff1c`; initial source `c263d95` passed its worker gates but is withheld after I0 NO-GO; repair 1/2 active | 1 preserve, 9 change; exact bounded slices listed below | Repair, I0 re-review, serial integration, independent R1-A, then I1 alone may assign E3 |
+| P1-C immediate dependency cut | 10 | `provisional`, component-qualified `E2` at integrated proof `7ee65c3`; four-commit source chain, closure, three post-closure GO checks, and I0 integration gates complete | 1 preserve, 9 change; exact bounded slices listed below | Three-part read-only R1-A, then I1 alone may assign E3 and open P2-A implementation |
 | Later preserve/change portfolio | 105 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -2227,9 +2223,21 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P1-E · assembly plan — correspondence repaired` | `019f7736-ec41-7560-9d65-472551b4a6fe` | source `ab02297c052912cb027ac6963b37667bf61f3e97`, parent `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Close exact Q8 reference-recipe correspondence and metadata-free binding output in the same six paths | Complete with both terminal signals; replacement `8e94454`, integrated `daad227`; 34 focused twice, 152 combined twice, 392 v3, 581 full |
 | `INCOMPLETE R1-B · assembly plan — temp-file approval stalled` | `019f7750-8745-7e23-aaf2-35f50ec79fc8` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Original independent read-only P1-B reviewer | Incomplete; preflight and repository gates were green, but an unnecessary temporary-file change waited on approval; archived without final/callback or repository change |
 | `I0/R1-B · assembly plan — bounded replacement GO` | internal agent `/root/r1b_inline_review` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Exact-base read-only Sol/max replacement | Complete GO; zero findings, 34 focused twice, 152 combined twice, 27 references, both Ruff configurations, format/static/diff/final-clean gates green |
-| `P1-C · linear flow — public solution verified` | internal Sol/max agent `/root/p1c_writer`; `/private/tmp/pyfem-p1c-02cff1c`; branch `agnet/p1c-linear-flow` | base `02cff1ca76b02969b91eac6e889de78c7a4ef9e2`; initial `c263d958`; repair 1/2 `8524c233` | Sole state/analysis/result/API writer and bounded repair owner | Initial source and repair 1/2 complete but independently withheld; repair 2/2 active on five accepted roots; nothing integrated |
+| `P1-C · linear flow — public solution verified` | internal Sol/max agent `/root/p1c_writer`; source worktrees `/private/tmp/pyfem-p1c-02cff1c` and `/private/tmp/pyfem-p1c-convergence-closure` | base `02cff1c`; source chain `c263d958` -> `8524c233` -> `ba6fc4e` -> `3ee920a` | Sole state/analysis/result/API writer plus one bounded convergence closure | Complete; integrated chain `c9b9480` -> `bfc1d80` -> `d78201d` -> `7ee65c3`; 86 focused twice, 348 combined twice, 478 v3, 667 repository |
 | `R0/P1-C · repair 1 solver/state check` | internal Sol/max agent `/root/p1c_repair_solver_review` | `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only transaction, solver, convergence, and workspace check | Complete NO-GO; P0/P1/P2 `0/3/0`; opposite discard race, exact-ratio false negatives, and unverifiable cache history |
 | `R0/P1-C · repair 1 result check` | internal Sol/max agent `/root/p1c_repair_result_review` | `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only result, storage, scalar-preflight, and evaluation check | Complete NO-GO; P0/P1/P2 `0/2/0`; convergence evidence and exact/total scalar preflight |
+| `R0/P1-C · repair 2 solver/state check` | internal Sol/max agent `/root/p1c_repair_solver_review` | `ba6fc4e16d62b5d2b1b6066694930e9cd1dede1b` | Read-only transaction, exact-ratio, explicit-factorization, convergence, and capacity check | Complete GO; P0/P1/P2 `0/0/0`; 85 focused twice, 750,000 exact-ratio cases, concurrency and 2,895/2,896 capacity boundary green |
+| `R0/P1-C · repair 2 result check` | internal Sol/max agent `/root/p1c_repair_result_review` | `ba6fc4e16d62b5d2b1b6066694930e9cd1dede1b` | Read-only result and fresh-verification correspondence check | Complete NO-GO; P0/P1/P2 `0/1/0`; accepted exact fresh reduced-residual norm finding |
+| `P1-C closure · fresh convergence correspondence` | internal Sol/max agent `/root/p1c_writer` | parent `ba6fc4e16d62b5d2b1b6066694930e9cd1dede1b`; source `3ee920a4659d7bb37f09ed094fe5c0f9651805e1` | One exact fresh-ledger convergence check plus focused regression in two paths | Complete; 86 focused twice, 348 combined twice, 478 v3, 667 repository; no public-schema change |
+| `R0/P1-C closure · result correspondence verified` | internal Sol/max agent `/root/p1c_repair_result_review` | `3ee920a4659d7bb37f09ed094fe5c0f9651805e1` | Read-only residual, zero, subnormal, signed-zero, and admitted-asymmetry checks | Complete GO; P0/P1/P2 `0/0/0`; exact fresh check rejects coherent changed evidence while equilibrium remains tolerance-based |
+| `R0/P1-C closure · solver regression verified` | internal Sol/max agent `/root/p1c_repair_solver_review` | `3ee920a4659d7bb37f09ed094fe5c0f9651805e1` | Read-only solver/state regression check | Complete GO; P0/P1/P2 `0/0/0`; 86 focused twice plus concurrency, exact-ratio, capacity, ownership, and cache-independence checks |
+| `INCOMPLETE R0/P1-C · public-flow output routing` | internal Sol/max agent `/root/p1c_source_review` | first `ba6fc4e`, then closure `3ee920a` | Intended read-only Q8/public-flow completion | Incomplete; interim local tests were green, but two final turns were stopped by erroneous output classification; no verdict counted and no repository change |
+| `INCOMPLETE R0/P1-C · public-flow Sol capacity` | internal Sol/max agent `/root/p1c_public_flow_redo` | intended closure `3ee920a` | Fresh minimal local FEM test replacement | Incomplete before work because the selected model was at capacity; no evidence or repository change |
+| `R0/P1-C · public-flow replacement verified` | internal Terra/max agent `/root/p1c_public_flow_redo2` | `3ee920a4659d7bb37f09ed094fe5c0f9651805e1` | Fresh local Q8/public-flow and combined Phase 1 verification | Complete PASS; 86 focused twice, 348 combined twice, eight named flows, both Ruff configurations, focused format, clean tree |
+| `I0/P1-C · integrated proof` | internal agents `/root/p1c_repair_solver_review`, `/root/p1c_repair_result_review`, `/root/p1c_public_flow_redo2` | integrated head `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Parallel read-only focused/combined, broad, and static integration gates | Complete PASS; 86 focused twice, 348 combined twice, 478 v3, 667 repository, both Ruff configurations, focused format, ancestry/static/clean gates |
+| `R1-A · physics and balance` | internal Sol/max agent `/root/r1a_physics_balance`; frozen `/private/tmp/pyfem-r1a-7ee65c3` | `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Read-only rational Q8, PatchTest8, equilibrium, reaction, work, and orientation review | Active; no edit or grade authority |
+| `R1-A · state lifecycle` | internal Sol/max agent `/root/r1a_state_lifecycle`; frozen `/private/tmp/pyfem-r1a-7ee65c3` | `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Read-only identity, generation, transaction, storage, cache, and capacity review | Active; no edit or grade authority |
+| `R1-A · public contracts` | internal Terra/max agent `/root/r1a_public_contracts`; frozen `/private/tmp/pyfem-r1a-7ee65c3` | `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Read-only public compile/assemble/solve/verify flow and diagnostics review | Active; no edit or grade authority |
 | `I0/P1-C · numeric repair card` | internal Sol/max agent `/root/p1c_numeric_repair_card` | repair parent `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only exact-ratio, explicit factor/solve, and workspace acceptance design | Complete and clean; exact cross-products and deterministic 4-matrix/6-vector private-backend proposal; no edit or grade authority |
 | `I0/P1-C · scalar repair card` | internal Sol/max agent `/root/p1c_scalar_repair_card` | repair parent `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only complete result scalar/tuple preflight inventory | Complete and clean; canonical UUID/identity/generation and scalar/tuple matrix; no edit, grade, or integration authority |
 | `I0/P1-C · repair gate matrix` | internal Sol/max agent `/root/p1c_repair_gate` | initial source `c263d95830df8284ab55c82dbd771f4690301283` | Read-only exact post-repair correctness-matrix design | Complete and clean; seven-area matrix plus cross-fix interactions and bounded command set; no edit, grade, or integration authority |
@@ -2242,9 +2250,9 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 The 2026-07-18 audit inspected the actual final turns of the first 17 user-visible
 migration tasks rather than relying on titles, idle state, or ledger summaries.
 R0-L, P0-H, R0-M, R0-E, P0-D, and R0-N subsequently completed under the corrected
-terminal contract. The sidebar record is now 29 tasks: 20 properly complete, nine
-explicitly incomplete, and zero active tasks. The completed internal R1-B replacement
-is recorded separately because it is not a user-visible sidebar task.
+terminal contract. That historical sidebar set contains 29 tasks: 20 properly
+complete and nine explicitly incomplete. Current internal tasks and replacements
+are recorded separately because they are not part of that user-visible audit set.
 
 - Properly completed: P0-A, P0-B, P0-C, R0-A, R0-B, D0-A, replacement R0-C,
   P0-E, R0-H, R0-I, P0-F, P0-G, R0-L, P0-H, R0-M, R0-E, P0-D, R0-N, P1-A,
@@ -2252,12 +2260,13 @@ is recorded separately because it is not a user-visible sidebar task.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
   stalled on an unnecessary temporary-file approval.
-- Active: one internal Sol/max task, P1-C repair 2/2, as the sole source writer.
-  `/root/p1c_repair_gate`, `/root/p2a_freeze_draft`, R2-A/R2-B, and the other
-  downstream proposal tasks are complete and read-only. No
-  user-visible task or watchdog is active. I0 retains integration and ledger
-  ownership. Two bounded Kimi attempts produced no review result and changed no
-  source; no further retry is planned in this pass.
+- Active: three read-only R1-A tasks at exact integrated head `7ee65c3`:
+  `/root/r1a_physics_balance`, `/root/r1a_state_lifecycle`, and
+  `/root/r1a_public_contracts`. No source writer or watchdog is active. I0 retains
+  integration and ledger ownership. The two Kimi attempts, the twice-routed
+  `/root/p1c_source_review`, and the Sol-capacity
+  `/root/p1c_public_flow_redo` are explicitly incomplete and provide no evidence;
+  replacement `/root/p1c_public_flow_redo2` completed cleanly.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The exact-base internal replacement
@@ -3193,3 +3202,35 @@ integration decision; do not bridge it with a compatibility carrier.
   totalization, and produced the normal/640-digit comparison-subclass and partial
   carrier matrix. Source preflights were present at final read; the sole writer
   still owns the required complete test evidence.
+- 2026-07-19: P1-C repair 2/2 returned clean source `ba6fc4e`, one child of
+  `8524c233`, with explicit bounded scalar Cholesky and triangular solve, exact
+  integer cross-product pivot comparison, atomic accept/discard ordering, truthful
+  convergence records, total result-carrier preflight, and exact private workspace
+  formula `8 * (4*n*n + 6*n)`. Worker proof was 85 focused tests twice, 347
+  combined tests twice, 477 v3, 666 repository, both Ruff configurations, focused
+  format, and clean ownership/static gates. The solver/state reviewer returned GO;
+  the result and public-flow reviewers independently found one remaining P1 in
+  fresh reduced-residual norm correspondence, so I0 withheld integration.
+- 2026-07-19: one-issue convergence closure `3ee920a`, direct child of `ba6fc4e`,
+  exact-compared the recorded convergence norm to the independently rebuilt fresh
+  residual while leaving equilibrium acceptance tolerance-based. It touched only
+  `pyfem/v3/results/verification.py` and the focused linear-analysis test. Worker
+  proof was 86 focused twice, 348 combined twice, 478 v3, and 667 repository.
+  Independent result and solver/state checks returned GO with P0/P1/P2 `0/0/0`.
+  The original public-flow completion task was explicitly incomplete after two
+  erroneous output-routing stops, and a fresh Sol/max replacement did not start
+  because the model was at capacity. Terra/max replacement
+  `/root/p1c_public_flow_redo2` completed 86 focused twice, 348 combined twice,
+  eight named FEM flows, Ruff, format, and clean-tree proof.
+- 2026-07-19: I0 cherry-picked the four P1-C commits serially as `c9b9480`,
+  `bfc1d80`, `d78201d`, and `7ee65c3`. Parallel integrated gates at exact clean
+  `7ee65c3` passed 86 focused tests twice, 348 combined tests twice, 478 v3 tests,
+  667 repository tests, both Ruff configurations, focused format, ancestry,
+  ownership, dependency, and explicit-solver scans. Broad warnings were the
+  existing 40 SciPy sparse-conversion notices plus four cold-cache Numba
+  transformation notices. P1-C advances to component-qualified E2; only I1 after
+  R1-A may assign E3.
+- 2026-07-19: I0 dispatched three parallel read-only R1-A tasks at frozen detached
+  worktree `/private/tmp/pyfem-r1a-7ee65c3`: Sol/max physics/balance, Sol/max state
+  lifecycle, and Terra/max public contracts. They own no paths and cannot advance
+  a grade. P2-A implementation remains closed until I1 adjudicates all three.
