@@ -21,6 +21,13 @@ LINEAR_STATIC_VERIFICATION_TOLERANCE = 1.0e-12
 LINEAR_STATIC_SYMMETRY_EPSILON_FACTOR = 64
 LINEAR_STATIC_CHOLESKY_PIVOT_RATIO = 1.0e-12
 LINEAR_STATIC_WORKSPACE_BUDGET_BYTES = 256 * 1024 * 1024
+LINEAR_STATIC_WORKSPACE_BUDGET_SCOPE = (
+  "private-solver-workspace-only; fresh-verification-workspace-measured-separately"
+)
+LINEAR_STATIC_BACKEND_POLICY = (
+  "private-dense-cholesky; audit=canonical-Kq; projection=0.5*(Kq+Kq.T); "
+  "pivot>1e-12*infinity-norm; cache=bitwise-constant"
+)
 
 
 @final
@@ -50,6 +57,7 @@ def linear_static_request_manifest(request: object) -> CanonicalManifest:
         "symmetry_epsilon_factor": LINEAR_STATIC_SYMMETRY_EPSILON_FACTOR,
         "unscaled_pivot_ratio": LINEAR_STATIC_CHOLESKY_PIVOT_RATIO,
         "workspace_budget_bytes": LINEAR_STATIC_WORKSPACE_BUDGET_BYTES,
+        "workspace_budget_scope": LINEAR_STATIC_WORKSPACE_BUDGET_SCOPE,
         "constant_operator_reuse": "bitwise-identical-only",
       },
       "verification": {

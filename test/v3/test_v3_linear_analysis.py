@@ -4,8 +4,11 @@
 
 from __future__ import annotations
 
+import math
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from threading import Event
 
 import numpy as np
 import pytest
@@ -37,6 +40,7 @@ from pyfem.v3.model import (
   CompiledProgram,
   FinalizedArray,
   InstanceId,
+  ProgramEvaluation,
   StateGeneration,
 )
 from pyfem.v3.spec import (
@@ -370,6 +374,76 @@ def _coherent_primary_copy(
   return replace(solution, state=state, transition=transition, ledger=ledger)
 
 
+def _evaluation_copy(
+  evaluation: object,
+  *,
+  field: str,
+  values: np.ndarray,
+) -> object:
+  arrays = {
+    name: FinalizedArray(
+      values
+      if name == field
+      else np.array(getattr(evaluation, name).values, copy=True),
+      dtype=np.float64,
+    )
+    for name in (
+      "coordinate_values",
+      "prescribed_offsets",
+      "prescribed_offset_derivatives",
+      "nodal_force",
+      "nodal_force_derivatives",
+    )
+  }
+  return replace(evaluation, **arrays)
+
+
+def _coherent_target_evaluation_copy(
+  solution: Solution,
+  *,
+  field: str,
+  values: np.ndarray,
+  ledger_changes: dict[str, object] | None = None,
+) -> Solution:
+  transaction = replace(
+    solution.transition.transaction,
+    target_evaluation=_evaluation_copy(
+      solution.transition.transaction.target_evaluation,
+      field=field,
+      values=values,
+    ),
+  )
+  evolution = replace(
+    solution.state.evolution,
+    program_evaluation=_evaluation_copy(
+      solution.state.evolution.program_evaluation,
+      field=field,
+      values=values,
+    ),
+  )
+  state = replace(solution.state, evolution=evolution)
+  transition = replace(
+    solution.transition,
+    transaction=transaction,
+    target_evaluation=_evaluation_copy(
+      solution.transition.target_evaluation,
+      field=field,
+      values=values,
+    ),
+    committed_state=state,
+  )
+  ledger = replace(
+    solution.ledger,
+    program_evaluation=_evaluation_copy(
+      solution.ledger.program_evaluation,
+      field=field,
+      values=values,
+    ),
+    **({} if ledger_changes is None else ledger_changes),
+  )
+  return replace(solution, state=state, transition=transition, ledger=ledger)
+
+
 def _operator_values(
   operator: CanonicalCooOperator,
   dense: np.ndarray,
@@ -489,7 +563,10 @@ def test_zero_load_nonzero_rigid_offset_and_fully_prescribed_bypass() -> None:
   assert statistics.factorization_count == 0
   assert statistics.factorization_reuse_count == 0
   assert statistics.zero_free_bypass_count == 1
-  assert solution.verify().passed
+  report = solution.verify()
+  assert report.passed
+  assert report.check("backend_zero_free_bypass").passed
+  assert report.check("backend_minimum_pivot").passed
 
 
 def test_additive_and_constrained_dof_loads_keep_direct_reaction_semantics() -> None:
@@ -740,6 +817,17 @@ def test_dense_workspace_capacity_fails_before_analysis_allocation(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   import pyfem.v3.analysis.linear as linear_module
+  from pyfem.v3.analysis.contracts import (
+    LINEAR_STATIC_WORKSPACE_BUDGET_SCOPE,
+    linear_static_request_manifest,
+  )
+
+  assert linear_module._checked_workspace_bytes(2895) == 268378080
+  with pytest.raises(AnalysisPreparationError, match="256 MiB"):
+    linear_module._checked_workspace_bytes(2896)
+  assert LINEAR_STATIC_WORKSPACE_BUDGET_SCOPE.encode() in (
+    linear_static_request_manifest(LinearStatic()).to_bytes()
+  )
 
   model = compile_model(_model_spec(), q8_reference_registry())
   program = compile_program(model, _rational_program())
@@ -750,7 +838,7 @@ def test_dense_workspace_capacity_fails_before_analysis_allocation(
   )
   oversized_domain = replace(
     plan.domain_coo_plan,
-    reduced_shape=(4000, 4000),
+    reduced_shape=(2896, 2896),
   )
   oversized = replace(plan, domain_coo_plan=oversized_domain)
   monkeypatch.setattr(
@@ -760,6 +848,32 @@ def test_dense_workspace_capacity_fails_before_analysis_allocation(
   )
   with pytest.raises(AnalysisPreparationError, match="256 MiB"):
     prepare_analysis(model, program, LinearStatic())
+
+
+def test_strict_pivot_ratio_boundary_across_binary_binades() -> None:
+  import pyfem.v3.analysis.linear as linear_module
+  from pyfem.v3.analysis.contracts import LINEAR_STATIC_CHOLESKY_PIVOT_RATIO
+
+  threshold = LINEAR_STATIC_CHOLESKY_PIVOT_RATIO
+  for exponent in (-900, 0, 900):
+    scale = math.ldexp(1.0, exponent)
+    boundary = scale * threshold
+    assert not linear_module._strict_ratio_greater(
+      float(np.nextafter(boundary, 0.0)),
+      scale,
+      threshold,
+    )
+    assert not linear_module._strict_ratio_greater(boundary, scale, threshold)
+    assert linear_module._strict_ratio_greater(
+      float(np.nextafter(boundary, math.inf)),
+      scale,
+      threshold,
+    )
+    assert linear_module._strict_ratio_greater(
+      scale * 1.5e-12,
+      scale,
+      threshold,
+    )
 
 
 def test_factorization_reuse_and_all_published_storage_is_disjoint() -> None:
@@ -772,6 +886,19 @@ def test_factorization_reuse_and_all_published_storage_is_disjoint() -> None:
   assert statistics.factorization_reuse_count == 1
   assert first.convergence.factorization_performed
   assert second.convergence.factorization_reused
+  retained = (
+    analysis._workspace.audit_operator,
+    analysis._workspace.solve_operator,
+    analysis._workspace.factor,
+  )
+  assert all(array is not None for array in retained)
+  assert all(
+    array.flags.owndata and array.base is None and not array.flags.writeable
+    for array in retained
+    if array is not None
+  )
+  assert sum(array.nbytes for array in retained if array is not None) == 3 * 13 * 13 * 8
+  assert statistics.checked_workspace_bytes == 6240
   np.testing.assert_array_equal(first.primary_values.values, first_snapshot)
   assert not _shares_any(_state_arrays(first), _state_arrays(second))
   assert not _shares_any(_ledger_arrays(first), _ledger_arrays(second))
@@ -810,6 +937,50 @@ def test_exactly_once_acceptance_siblings_double_accept_discard_and_forgery() ->
   with pytest.raises(StateTransactionError, match="foreign|forged"):
     analysis.accept(forged)
   assert another.generation.ordinal == 0
+
+
+def test_discard_and_accept_ordering_is_atomic(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  import pyfem.v3.analysis.linear as linear_module
+
+  _, _, analysis = _prepared()
+  initial = analysis.initialize(point=_point(0.0))
+  transaction = analysis.begin_step(initial=initial, point=_point(1.0))
+  trial = analysis.evaluate_trial(transaction)
+  entered = Event()
+  released = Event()
+  original = linear_module.fresh_verify
+
+  def blocked_fresh_verify(**kwargs: object) -> object:
+    entered.set()
+    if not released.wait(timeout=10.0):
+      msg = "acceptance barrier timed out"
+      raise AssertionError(msg)
+    return original(**kwargs)
+
+  monkeypatch.setattr(linear_module, "fresh_verify", blocked_fresh_verify)
+  with ThreadPoolExecutor(max_workers=1) as executor:
+    future = executor.submit(analysis.accept, trial)
+    assert entered.wait(timeout=10.0)
+    analysis.discard(trial)
+    released.set()
+    with pytest.raises(StateTransactionError, match="discarded"):
+      future.result(timeout=10.0)
+  assert not analysis._consumed_generations
+  analysis.begin_step(initial=initial, point=_point(0.5))
+
+  monkeypatch.setattr(linear_module, "fresh_verify", original)
+  _, _, accepted_first = _prepared()
+  accepted_initial = accepted_first.initialize(point=_point(0.0))
+  accepted_transaction = accepted_first.begin_step(
+    initial=accepted_initial,
+    point=_point(1.0),
+  )
+  accepted_trial = accepted_first.evaluate_trial(accepted_transaction)
+  accepted_first.accept(accepted_trial)
+  with pytest.raises(StateTransactionError, match="closed"):
+    accepted_first.discard(accepted_trial)
 
 
 @pytest.mark.parametrize(
@@ -851,6 +1022,88 @@ def test_verify_record_rejects_structural_corruption(corrupt: str) -> None:
     changed.verify_record()
 
 
+def test_result_arrays_require_owned_and_disjoint_storage() -> None:
+  _, _, _, _, solution = _solve_rational()
+  writable_base = np.array(solution.ledger.full_primary_values.values, copy=True)
+  read_only_view = writable_base.view()
+  read_only_view.setflags(write=False)
+  viewed = object.__new__(FinalizedArray)
+  object.__setattr__(viewed, "values", read_only_view)
+  viewed_solution = replace(
+    solution,
+    ledger=replace(solution.ledger, full_primary_values=viewed),
+  )
+  with pytest.raises(SolutionVerificationError, match="ownership"):
+    viewed_solution.verify_record()
+  writable_base[0] = 123.0
+
+  shared_empty = (
+    solution.transition.transaction.base_state.physical.formulation_histories[0]
+  )
+  physical = replace(
+    solution.state.physical,
+    formulation_histories=(shared_empty,),
+  )
+  state = replace(solution.state, physical=physical)
+  transition = replace(solution.transition, committed_state=state)
+  empty_alias = replace(solution, state=state, transition=transition)
+  assert shared_empty.values.shape == (1, 0)
+  assert not np.shares_memory(shared_empty.values, shared_empty.values)
+  with pytest.raises(SolutionVerificationError, match="aliased"):
+    empty_alias.verify_record()
+
+
+@pytest.mark.parametrize(
+  "partial",
+  ["solution", "identity", "generation", "committed", "evaluation", "array"],
+)
+def test_result_boundary_totalizes_partially_initialized_exact_carriers(
+  partial: str,
+) -> None:
+  _, _, _, _, solution = _solve_rational()
+  if partial == "solution":
+    changed = object.__new__(Solution)
+  elif partial == "identity":
+    changed = replace(
+      solution,
+      prepared_instance_id=object.__new__(InstanceId),
+    )
+  elif partial == "generation":
+    changed = replace(
+      solution,
+      transition=replace(
+        solution.transition,
+        candidate_generation=object.__new__(StateGeneration),
+      ),
+    )
+  elif partial == "committed":
+    changed = replace(
+      solution,
+      transition=replace(
+        solution.transition,
+        committed_state=object(),
+      ),
+    )
+  elif partial == "evaluation":
+    changed = replace(
+      solution,
+      ledger=replace(
+        solution.ledger,
+        program_evaluation=object.__new__(ProgramEvaluation),
+      ),
+    )
+  else:
+    changed = replace(
+      solution,
+      ledger=replace(
+        solution.ledger,
+        balance=object.__new__(FinalizedArray),
+      ),
+    )
+  with pytest.raises(SolutionVerificationError):
+    changed.verify_record()
+
+
 def test_verify_record_rejects_internally_inconsistent_work() -> None:
   _, _, _, _, solution = _solve_rational()
   changed = replace(
@@ -863,6 +1116,34 @@ def test_verify_record_rejects_internally_inconsistent_work() -> None:
   report = changed.verify_record()
   assert not report.passed
   assert not report.check("record_external_work").passed
+
+
+def test_fresh_verification_recomputes_complete_backend_evidence() -> None:
+  _, _, analysis, _, solution = _solve_rational()
+  reused = analysis.solve(initial_point=_point(0.0), point=_point(0.5))
+  assert reused.convergence.factorization_reused
+  changed = replace(
+    reused,
+    convergence=replace(
+      reused.convergence,
+      operator_infinity_norm=0.0,
+      minimum_unscaled_pivot=float(np.nextafter(0.0, 1.0)),
+      backend_policy="changed-backend-policy",
+    ),
+  )
+  assert changed.verify_record().passed
+  report = changed.verify()
+  assert not report.passed
+  assert not report.check("backend_policy").passed
+  assert not report.check("backend_operator_norm").passed
+  assert not report.check("backend_minimum_pivot").passed
+  assert report.check("backend_convergence_record").passed
+  assert report.check("backend_reduced_residual_norm").passed
+  assert report.check("backend_symmetry_admission").passed
+  assert report.check("backend_solver_projection").passed
+  assert report.check("backend_factorization_mode").passed
+  assert report.check("backend_cholesky").passed
+  assert report.check("backend_pivot_policy").passed
 
 
 def test_coherent_perturbed_field_passes_record_but_fails_fresh_exactly() -> None:
@@ -920,12 +1201,83 @@ def test_fresh_verification_catches_constraint_and_coherent_balance_changes() ->
     external_work=external_work,
     constraint_work=constraint_work,
   )
-  coherent = replace(solution, ledger=coherent_ledger)
+  coherent = _coherent_target_evaluation_copy(
+    replace(solution, ledger=coherent_ledger),
+    field="nodal_force",
+    values=external,
+  )
   assert coherent.verify_record().passed
   report = coherent.verify()
   assert not report.passed
+  assert not report.check("program_nodal_force").passed
   assert not report.check("external_force_record").passed
   assert not report.check("constraint_force_record").passed
+
+
+@pytest.mark.parametrize(
+  ("ledger_field", "evaluation_field", "check_name"),
+  [
+    (
+      "prescribed_offsets",
+      "prescribed_offsets",
+      "record_program_prescribed_offsets",
+    ),
+    ("external_force", "nodal_force", "record_program_nodal_force"),
+  ],
+)
+def test_record_exactly_links_program_evaluation_to_ledger_values(
+  ledger_field: str,
+  evaluation_field: str,
+  check_name: str,
+) -> None:
+  _, _, _, _, solution = _solve_rational()
+  values = np.array(getattr(solution.ledger, ledger_field).values, copy=True)
+  values[0] = np.nextafter(values[0], math.inf)
+  changed = replace(
+    solution,
+    ledger=replace(
+      solution.ledger,
+      **{ledger_field: FinalizedArray(values, dtype=np.float64)},
+    ),
+  )
+  report = changed.verify_record()
+  assert not report.passed
+  assert not report.check(check_name).passed
+  np.testing.assert_array_equal(
+    getattr(changed.ledger.program_evaluation, evaluation_field).values,
+    getattr(solution.ledger.program_evaluation, evaluation_field).values,
+  )
+
+
+@pytest.mark.parametrize(
+  ("field", "check_name"),
+  [
+    (
+      "prescribed_offset_derivatives",
+      "program_prescribed_offset_derivatives",
+    ),
+    ("nodal_force_derivatives", "program_nodal_force_derivatives"),
+  ],
+)
+def test_fresh_verification_compares_program_derivative_meaning(
+  field: str,
+  check_name: str,
+) -> None:
+  _, _, _, _, solution = _solve_rational()
+  values = np.array(
+    getattr(solution.ledger.program_evaluation, field).values,
+    copy=True,
+  )
+  values.flat[0] = np.nextafter(values.flat[0], math.inf)
+  changed = _coherent_target_evaluation_copy(
+    solution,
+    field=field,
+    values=values,
+  )
+  assert changed.verify_record().passed
+  report = changed.verify()
+  assert not report.passed
+  assert not report.check(check_name).passed
 
 
 def test_poisoned_solve_cache_cannot_affect_fresh_solution_verification() -> None:
@@ -935,7 +1287,9 @@ def test_poisoned_solve_cache_cannot_affect_fresh_solution_verification() -> Non
   factor.setflags(write=True)
   factor[:] = np.nan
   factor.setflags(write=False)
+  before = analysis.workspace_statistics()
   assert solution.verify().passed
+  assert analysis.workspace_statistics() == before
   with pytest.raises(AnalysisSolveError, match="cache"):
     analysis.solve(initial_point=_point(0.0), point=_point(0.5))
 

@@ -75,7 +75,7 @@ def _manifest_equal(left: object, right: object) -> bool:
     return False
   try:
     return left.to_bytes() == right.to_bytes()
-  except (OverflowError, RecursionError, TypeError, ValueError):
+  except (AttributeError, OverflowError, RecursionError, TypeError, ValueError):
     return False
 
 
@@ -90,7 +90,7 @@ def _fingerprint_matches_manifest(
     return False
   try:
     return fingerprint == ContentFingerprint.from_manifest(manifest)
-  except (OverflowError, RecursionError, TypeError, ValueError):
+  except (AttributeError, OverflowError, RecursionError, TypeError, ValueError):
     return False
 
 
@@ -99,21 +99,21 @@ def _same_fingerprint(left: object, right: object) -> bool:
     return False
   try:
     return left == right
-  except (TypeError, ValueError):
+  except (AttributeError, TypeError, ValueError):
     return False
 
 
 def _require_instance(expected: object, actual: object, label: str) -> None:
   try:
     require_same_instance(expected, actual, context=label)
-  except (TypeError, ValueError):
+  except (AttributeError, TypeError, ValueError):
     _malformed("solution-identity-mismatch", f"{label} has a foreign live identity")
 
 
 def _require_generation(expected: object, actual: object, label: str) -> None:
   try:
     require_same_generation(expected, actual, context=label)
-  except (TypeError, ValueError):
+  except (AttributeError, TypeError, ValueError):
     _malformed(
       "solution-generation-mismatch",
       f"{label} has a foreign accepted-state generation",
@@ -123,7 +123,7 @@ def _require_generation(expected: object, actual: object, label: str) -> None:
 def _require_successor(base: object, candidate: object, label: str) -> None:
   try:
     require_generation_successor(base, candidate, context=label)
-  except (TypeError, ValueError):
+  except (AttributeError, TypeError, ValueError):
     _malformed(
       "solution-generation-mismatch",
       f"{label} is not the exact next accepted-state generation",
@@ -151,6 +151,8 @@ def _array(
     or array.shape != shape
     or array.flags.writeable
     or not array.flags.c_contiguous
+    or not array.flags.owndata
+    or array.base is not None
   ):
     _malformed(
       "malformed-solution-array",
@@ -310,6 +312,19 @@ def _dot(left: np.ndarray, right: np.ndarray, label: str) -> float:
   return value
 
 
+def _strict_ratio_greater(value: float, scale: float, threshold: float) -> bool:
+  if value <= 0.0 or scale <= 0.0:
+    return False
+  value_fraction, value_exponent = math.frexp(value)
+  scale_fraction, scale_exponent = math.frexp(scale)
+  ratio_fraction, normalization_exponent = math.frexp(value_fraction / scale_fraction)
+  ratio_exponent = value_exponent - scale_exponent + normalization_exponent
+  threshold_fraction, threshold_exponent = math.frexp(threshold)
+  if ratio_exponent != threshold_exponent:
+    return ratio_exponent > threshold_exponent
+  return ratio_fraction > threshold_fraction
+
+
 def _ratio(error: float, scale: float) -> float:
   if error == 0.0:
     return 0.0
@@ -353,6 +368,14 @@ def verification_check(
     normalized_error=normalized,
     tolerance=tolerance,
   )
+
+
+def _boolean_check(
+  name: str,
+  passed: bool,
+  tolerance: float,
+) -> VerificationCheck:
+  return verification_check(name, 0.0 if passed else 1.0, 0.0, tolerance)
 
 
 def _dof_index(model: CompiledModel, witness: ProgramDofWitness) -> int:
@@ -594,15 +617,228 @@ def _point_from_evaluation(evaluation: ProgramEvaluation) -> ProgramPoint:
   )
 
 
+def _fresh_program_evaluation_checks(
+  retained: ProgramEvaluation,
+  fresh: ProgramEvaluation,
+  tolerance: float,
+) -> tuple[VerificationCheck, ...]:
+  checks = [
+    _boolean_check(
+      "program_coordinate_names",
+      retained.coordinate_names == fresh.coordinate_names,
+      tolerance,
+    )
+  ]
+  fields = (
+    ("program_coordinate_values", retained.coordinate_values, fresh.coordinate_values),
+    (
+      "program_prescribed_offsets",
+      retained.prescribed_offsets,
+      fresh.prescribed_offsets,
+    ),
+    (
+      "program_prescribed_offset_derivatives",
+      retained.prescribed_offset_derivatives,
+      fresh.prescribed_offset_derivatives,
+    ),
+    ("program_nodal_force", retained.nodal_force, fresh.nodal_force),
+    (
+      "program_nodal_force_derivatives",
+      retained.nodal_force_derivatives,
+      fresh.nodal_force_derivatives,
+    ),
+  )
+  for name, retained_array, fresh_array in fields:
+    checks.append(
+      _boolean_check(
+        name,
+        bool(np.array_equal(retained_array.values, fresh_array.values)),
+        tolerance,
+      )
+    )
+  return tuple(checks)
+
+
+def _fresh_backend_checks(
+  convergence: object,
+  operator: np.ndarray,
+  reduced_residual: np.ndarray,
+  reduced_force_scale: float,
+  tolerance: float,
+) -> tuple[VerificationCheck, ...]:
+  from pyfem.v3.analysis.contracts import (
+    LINEAR_STATIC_BACKEND_POLICY,
+    LINEAR_STATIC_CHOLESKY_PIVOT_RATIO,
+    LINEAR_STATIC_SYMMETRY_EPSILON_FACTOR,
+    LINEAR_STATIC_VERIFICATION_TOLERANCE,
+    LinearConvergenceRecord,
+  )
+
+  if type(convergence) is not LinearConvergenceRecord:
+    _malformed(
+      "malformed-convergence-record",
+      "fresh verification requires the complete exact convergence record",
+    )
+  checks: list[VerificationCheck] = [
+    _boolean_check(
+      "backend_policy",
+      convergence.backend_policy == LINEAR_STATIC_BACKEND_POLICY,
+      tolerance,
+    ),
+    _boolean_check(
+      "backend_convergence_record",
+      convergence.converged is True
+      and convergence.iteration_count == 1
+      and convergence.verification_tolerance == LINEAR_STATIC_VERIFICATION_TOLERANCE,
+      tolerance,
+    ),
+  ]
+  residual_norm = _infinity_norm(reduced_residual)
+  checks.append(
+    verification_check(
+      "backend_reduced_residual_norm",
+      abs(convergence.reduced_residual_norm - residual_norm),
+      reduced_force_scale,
+      tolerance,
+    )
+  )
+  reduced_count = operator.shape[0]
+  if reduced_count == 0:
+    checks.extend(
+      (
+        _boolean_check(
+          "backend_zero_free_bypass",
+          convergence.factorization_bypassed is True
+          and convergence.factorization_performed is False
+          and convergence.factorization_reused is False,
+          tolerance,
+        ),
+        verification_check(
+          "backend_operator_norm",
+          abs(convergence.operator_infinity_norm),
+          0.0,
+          tolerance,
+        ),
+        _boolean_check(
+          "backend_minimum_pivot",
+          convergence.minimum_unscaled_pivot is None,
+          tolerance,
+        ),
+      )
+    )
+    return tuple(checks)
+
+  maximum = float(np.max(np.abs(operator)))
+  asymmetry = float(np.max(np.abs(operator - operator.T)))
+  symmetry_bound = (
+    0.0
+    if maximum == 0.0
+    else LINEAR_STATIC_SYMMETRY_EPSILON_FACTOR * np.finfo(np.float64).eps * maximum
+  )
+  checks.append(
+    _boolean_check(
+      "backend_symmetry_admission",
+      asymmetry <= symmetry_bound,
+      tolerance,
+    )
+  )
+  solve_operator = 0.5 * (operator + operator.T)
+  solve_finite = bool(np.isfinite(solve_operator).all())
+  operator_scale = _infinity_norm(solve_operator) if solve_finite else math.inf
+  checks.extend(
+    (
+      _boolean_check(
+        "backend_solver_projection",
+        solve_finite and bool(np.array_equal(solve_operator, solve_operator.T)),
+        tolerance,
+      ),
+      verification_check(
+        "backend_operator_norm",
+        abs(convergence.operator_infinity_norm - operator_scale),
+        max(convergence.operator_infinity_norm, operator_scale),
+        tolerance,
+      ),
+      _boolean_check(
+        "backend_factorization_mode",
+        convergence.factorization_bypassed is False
+        and (convergence.factorization_performed != convergence.factorization_reused),
+        tolerance,
+      ),
+    )
+  )
+  factor: np.ndarray | None = None
+  if solve_finite and math.isfinite(operator_scale) and operator_scale > 0.0:
+    try:
+      factor = np.linalg.cholesky(solve_operator)
+    except np.linalg.LinAlgError:
+      factor = None
+  checks.append(_boolean_check("backend_cholesky", factor is not None, tolerance))
+  if factor is None:
+    checks.extend(
+      (
+        _boolean_check("backend_pivot_policy", False, tolerance),
+        verification_check(
+          "backend_minimum_pivot",
+          math.inf,
+          operator_scale if math.isfinite(operator_scale) else 0.0,
+          tolerance,
+        ),
+      )
+    )
+    return tuple(checks)
+
+  pivots = np.square(np.diag(factor))
+  minimum_pivot = float(np.min(pivots))
+  pivot_policy_passed = bool(np.isfinite(pivots).all()) and all(
+    _strict_ratio_greater(
+      float(pivot),
+      operator_scale,
+      LINEAR_STATIC_CHOLESKY_PIVOT_RATIO,
+    )
+    for pivot in pivots
+  )
+  checks.extend(
+    (
+      _boolean_check("backend_pivot_policy", pivot_policy_passed, tolerance),
+      verification_check(
+        "backend_minimum_pivot",
+        abs(convergence.minimum_unscaled_pivot - minimum_pivot)
+        if type(convergence.minimum_unscaled_pivot) is float
+        else math.inf,
+        minimum_pivot,
+        tolerance,
+      ),
+    )
+  )
+  return tuple(checks)
+
+
 def _fresh_checks(
   retained: LinearBalanceLedger,
   fresh: LinearBalanceLedger,
   primary: np.ndarray,
   projected_constraint_force: np.ndarray,
-  convergence_flag: bool,
+  operator: np.ndarray,
+  convergence: object,
 ) -> tuple[VerificationCheck, ...]:
   tolerance = fresh.verification_tolerance
   checks: list[VerificationCheck] = []
+  checks.extend(
+    _fresh_program_evaluation_checks(
+      retained.program_evaluation,
+      fresh.program_evaluation,
+      tolerance,
+    )
+  )
+  checks.extend(
+    _fresh_backend_checks(
+      convergence,
+      operator,
+      fresh.reduced_residual.values,
+      fresh.reduced_force_scale,
+      tolerance,
+    )
+  )
   checks.append(
     verification_check(
       "field_reconstruction",
@@ -835,12 +1071,6 @@ def _fresh_checks(
         fresh.work_scale,
         tolerance,
       ),
-      verification_check(
-        "convergence_record",
-        0.0 if convergence_flag else 1.0,
-        0.0,
-        tolerance,
-      ),
     )
   )
   return tuple(checks)
@@ -859,7 +1089,7 @@ def fresh_verify(
   candidate_generation: StateGeneration,
   state: CommittedAnalysisState,
   retained_ledger: LinearBalanceLedger,
-  converged: bool,
+  convergence: object,
 ) -> VerificationReport:
   """Prepare and evaluate P1-B anew without reading any solve workspace."""
   try:
@@ -912,12 +1142,14 @@ def fresh_verify(
   projected_constraint_force = prolongation(fresh_plan).T @ (
     fresh_ledger.constraint_force.values
   )
+  fresh_operator = dense_operator(fresh_contributions.reduced_operator)
   checks = _fresh_checks(
     retained_ledger,
     fresh_ledger,
     primary,
     projected_constraint_force,
-    converged,
+    fresh_operator,
+    convergence,
   )
   return VerificationReport(
     passed=all(item.passed for item in checks),
@@ -1260,7 +1492,7 @@ def _validate_ledger_arrays(
   )
 
 
-def verify_record_data(
+def _verify_record_data(
   *,
   model: object,
   program: object,
@@ -1433,14 +1665,17 @@ def verify_record_data(
   _require_generation(
     state.generation, transition.candidate_generation, "accepted transition candidate"
   )
-  _require_generation(
-    state.generation, transition.committed_state.generation, "accepted transition state"
-  )
-  if transition.committed_state is not state:
+  if (
+    type(transition.committed_state) is not CommittedAnalysisState
+    or transition.committed_state is not state
+  ):
     _malformed(
       "malformed-transition-record",
       "accepted transition does not own the exact final state",
     )
+  _require_generation(
+    state.generation, transition.committed_state.generation, "accepted transition state"
+  )
   _require_successor(
     transition.base_generation, transition.candidate_generation, "accepted transition"
   )
@@ -1744,7 +1979,7 @@ def verify_record_data(
   )
   for index, left in enumerate(authoritative_arrays):
     for right in authoritative_arrays[index + 1 :]:
-      if np.shares_memory(left, right):
+      if left is right or np.shares_memory(left, right):
         _malformed(
           "aliased-solution-storage",
           "published state, transition, evaluation, and ledger arrays must "
@@ -1758,6 +1993,26 @@ def verify_record_data(
         ledger.full_primary_values.values, state.physical.primary_values.values
       ),
       ledger.reconstruction_scale,
+      ledger.verification_tolerance,
+    ),
+    _boolean_check(
+      "record_program_prescribed_offsets",
+      bool(
+        np.array_equal(
+          ledger.prescribed_offsets.values,
+          ledger.program_evaluation.prescribed_offsets.values,
+        )
+      ),
+      ledger.verification_tolerance,
+    ),
+    _boolean_check(
+      "record_program_nodal_force",
+      bool(
+        np.array_equal(
+          ledger.external_force.values,
+          ledger.program_evaluation.nodal_force.values,
+        )
+      ),
       ledger.verification_tolerance,
     ),
     verification_check(
@@ -1870,3 +2125,51 @@ def verify_record_data(
     level="record-only",
     checks=record_checks,
   )
+
+
+def verify_record_data(
+  *,
+  model: object,
+  program: object,
+  request: object,
+  request_manifest: object,
+  prepared_instance_id: object,
+  plan_content_fingerprint: object,
+  state: object,
+  transition: object,
+  convergence: object,
+  ledger: object,
+) -> VerificationReport:
+  """Provide one total structured boundary around retained-result validation."""
+  try:
+    return _verify_record_data(
+      model=model,
+      program=program,
+      request=request,
+      request_manifest=request_manifest,
+      prepared_instance_id=prepared_instance_id,
+      plan_content_fingerprint=plan_content_fingerprint,
+      state=state,
+      transition=transition,
+      convergence=convergence,
+      ledger=ledger,
+    )
+  except SolutionVerificationError:
+    raise
+  except (
+    AttributeError,
+    IndexError,
+    KeyError,
+    OverflowError,
+    RecursionError,
+    TypeError,
+    ValueError,
+  ) as error:
+    raise SolutionVerificationError(
+      (
+        SolutionVerificationDiagnostic(
+          "malformed-solution-record",
+          "retained result is partially initialized or structurally malformed",
+        ),
+      )
+    ) from error

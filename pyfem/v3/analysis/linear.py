@@ -10,6 +10,7 @@ from typing import NoReturn, final
 import numpy as np
 
 from pyfem.v3.analysis.contracts import (
+  LINEAR_STATIC_BACKEND_POLICY,
   LINEAR_STATIC_CHOLESKY_PIVOT_RATIO,
   LINEAR_STATIC_SYMMETRY_EPSILON_FACTOR,
   LINEAR_STATIC_VERIFICATION_TOLERANCE,
@@ -76,10 +77,6 @@ from pyfem.v3.results.verification import (
 from pyfem.v3.spec import ProgramCoordinateValue, ProgramPoint
 
 _FLOAT64 = np.dtype(np.float64)
-_BACKEND_POLICY = (
-  "private-dense-cholesky; audit=canonical-Kq; projection=0.5*(Kq+Kq.T); "
-  "pivot>1e-12*infinity-norm; cache=bitwise-constant"
-)
 _EVOLUTION_LAYOUT_SCHEMA = "pyfem-v3-evolution-layout-linear-static-v1"
 _PREPARED_CONSTRUCTION_TOKEN = object()
 
@@ -128,12 +125,16 @@ def _checked_workspace_bytes(reduced_count: int) -> int:
       "reduced DOF count must be a nonnegative exact integer",
     )
   matrix_entries = reduced_count * reduced_count
-  value_count = 3 * matrix_entries + 8 * reduced_count
+  # Copying the first audit/projection/factor would transiently retain six dense
+  # matrices.  The chosen private direct-retention design seals those three
+  # already-owned arrays; one fresh audit matrix may coexist with them on reuse.
+  value_count = 4 * matrix_entries + 8 * reduced_count
   byte_count = value_count * _FLOAT64.itemsize
   if byte_count > LINEAR_STATIC_WORKSPACE_BUDGET_BYTES:
     _preparation_failure(
       "linear-backend-capacity-exceeded",
-      "dense operator, factor, and scratch exceed the frozen 256 MiB workspace budget",
+      "dense audit, projection, factor, and scratch exceed the frozen "
+      "256 MiB workspace budget",
     )
   return byte_count
 
@@ -162,11 +163,12 @@ def _strict_ratio_greater(value: float, scale: float, threshold: float) -> bool:
     return False
   value_fraction, value_exponent = math.frexp(value)
   scale_fraction, scale_exponent = math.frexp(scale)
-  ratio_exponent = value_exponent - scale_exponent
+  ratio_fraction, normalization_exponent = math.frexp(value_fraction / scale_fraction)
+  ratio_exponent = value_exponent - scale_exponent + normalization_exponent
   threshold_fraction, threshold_exponent = math.frexp(threshold)
   if ratio_exponent != threshold_exponent:
     return ratio_exponent > threshold_exponent
-  return value_fraction / scale_fraction > threshold_fraction
+  return ratio_fraction > threshold_fraction
 
 
 def _bitwise_equal(left: np.ndarray, right: np.ndarray) -> bool:
@@ -778,40 +780,51 @@ class PreparedAnalysis:
           minimum_unscaled_pivot=None,
           reduced_residual_norm=0.0,
           verification_tolerance=LINEAR_STATIC_VERIFICATION_TOLERANCE,
-          backend_policy=_BACKEND_POLICY,
+          backend_policy=LINEAR_STATIC_BACKEND_POLICY,
         ),
       )
 
     with self._workspace.lock:
       self._workspace.evaluation_count += 1
-      maximum = float(np.max(np.abs(operator)))
-      asymmetry = float(np.max(np.abs(operator - operator.T)))
-      bound = (
-        0.0
-        if maximum == 0.0
-        else LINEAR_STATIC_SYMMETRY_EPSILON_FACTOR * np.finfo(np.float64).eps * maximum
-      )
-      if asymmetry > bound:
-        _solve_failure(
-          "reduced-operator-asymmetry",
-          "canonical K_q exceeds the frozen 64-eps symmetry admission bound",
-        )
-      solve_operator = 0.5 * (operator + operator.T)
-      if not bool(np.isfinite(solve_operator).all()):
-        _solve_failure(
-          "nonfinite-solver-projection",
-          "symmetric solver projection must remain finite",
-        )
-      operator_scale = _infinity_norm(solve_operator)
-      if not math.isfinite(operator_scale) or operator_scale <= 0.0:
-        _solve_failure(
-          "singular-reduced-operator",
-          "nonempty symmetric reduced operator must have positive finite infinity norm",
-        )
-
       performed = False
       reused = False
       if self._workspace.audit_operator is None:
+        maximum = max(abs(float(item)) for item in operator.flat)
+        asymmetry = max(
+          (
+            abs(float(operator[row, column]) - float(operator[column, row]))
+            for row in range(reduced_count)
+            for column in range(row + 1, reduced_count)
+          ),
+          default=0.0,
+        )
+        bound = (
+          0.0
+          if maximum == 0.0
+          else LINEAR_STATIC_SYMMETRY_EPSILON_FACTOR
+          * np.finfo(np.float64).eps
+          * maximum
+        )
+        if asymmetry > bound:
+          _solve_failure(
+            "reduced-operator-asymmetry",
+            "canonical K_q exceeds the frozen 64-eps symmetry admission bound",
+          )
+        solve_operator = np.array(operator, dtype=np.float64, copy=True)
+        np.add(solve_operator, operator.T, out=solve_operator)
+        solve_operator *= 0.5
+        if not bool(np.isfinite(solve_operator).all()):
+          _solve_failure(
+            "nonfinite-solver-projection",
+            "symmetric solver projection must remain finite",
+          )
+        operator_scale = _infinity_norm(solve_operator)
+        if not math.isfinite(operator_scale) or operator_scale <= 0.0:
+          _solve_failure(
+            "singular-reduced-operator",
+            "nonempty symmetric reduced operator must have positive finite "
+            "infinity norm",
+          )
         try:
           factor = np.linalg.cholesky(solve_operator)
         except np.linalg.LinAlgError:
@@ -834,15 +847,12 @@ class PreparedAnalysis:
             "an unscaled Cholesky pivot does not exceed 1e-12 times the "
             "operator infinity norm",
           )
-        audit_cache = np.array(operator, dtype=np.float64, copy=True)
-        solve_cache = np.array(solve_operator, dtype=np.float64, copy=True)
-        factor_cache = np.array(factor, dtype=np.float64, copy=True)
-        audit_cache.setflags(write=False)
-        solve_cache.setflags(write=False)
-        factor_cache.setflags(write=False)
-        self._workspace.audit_operator = audit_cache
-        self._workspace.solve_operator = solve_cache
-        self._workspace.factor = factor_cache
+        operator.setflags(write=False)
+        solve_operator.setflags(write=False)
+        factor.setflags(write=False)
+        self._workspace.audit_operator = operator
+        self._workspace.solve_operator = solve_operator
+        self._workspace.factor = factor
         self._workspace.factorization_count += 1
         performed = True
       else:
@@ -857,15 +867,29 @@ class PreparedAnalysis:
             "constant-operator cache is incomplete",
           )
         factor = self._workspace.factor
+        solve_operator = self._workspace.solve_operator
+        operator_scale = _infinity_norm(solve_operator)
         pivots = np.square(np.diag(factor))
         if (
           factor.shape != operator.shape
+          or solve_operator.shape != operator.shape
           or not bool(np.isfinite(factor).all())
+          or not bool(np.isfinite(solve_operator).all())
           or not bool(np.isfinite(pivots).all())
+          or not math.isfinite(operator_scale)
+          or operator_scale <= 0.0
+          or any(
+            not _strict_ratio_greater(
+              float(pivot),
+              operator_scale,
+              LINEAR_STATIC_CHOLESKY_PIVOT_RATIO,
+            )
+            for pivot in pivots
+          )
         ):
           _solve_failure(
             "corrupt-factorization-cache",
-            "cached Cholesky factor is malformed or nonfinite",
+            "cached solver projection or Cholesky factor violates its policy",
           )
         self._workspace.factorization_reuse_count += 1
         reused = True
@@ -895,7 +919,7 @@ class PreparedAnalysis:
         minimum_unscaled_pivot=minimum_pivot,
         reduced_residual_norm=residual_norm,
         verification_tolerance=LINEAR_STATIC_VERIFICATION_TOLERANCE,
-        backend_policy=_BACKEND_POLICY,
+        backend_policy=LINEAR_STATIC_BACKEND_POLICY,
       )
     return coordinates, convergence
 
@@ -1006,7 +1030,7 @@ class PreparedAnalysis:
       candidate_generation=candidate_generation,
       state=candidate,
       retained_ledger=ledger,
-      converged=convergence.converged,
+      convergence=convergence,
     )
     if not candidate_verification.passed:
       failed = ", ".join(
@@ -1164,7 +1188,7 @@ class PreparedAnalysis:
       candidate_generation=validated_trial.candidate_generation,
       state=validated_trial.candidate_state,
       retained_ledger=validated_trial.ledger,
-      converged=validated_trial.convergence.converged,
+      convergence=validated_trial.convergence,
     )
     if not fresh_report.passed:
       _transaction_failure(
@@ -1219,12 +1243,21 @@ class PreparedAnalysis:
 
     base_key = _generation_key(transaction.base_generation)
     transaction_key = _instance_key(transaction.transaction_id)
+    trial_key = _instance_key(validated_trial.trial_id)
     with self._lock:
       current = self._transactions.get(transaction_key)
       if current is not record or current.closed:
         _transaction_failure(
           "double-accept-or-closed-transaction",
           "transaction closed before atomic acceptance",
+        )
+      if (
+        current.trials.get(trial_key) is not validated_trial
+        or trial_key in current.discarded_trials
+      ):
+        _transaction_failure(
+          "discarded-or-changed-trial",
+          "trial was discarded or its exact registration changed before acceptance",
         )
       if base_key in self._consumed_generations:
         _transaction_failure(
