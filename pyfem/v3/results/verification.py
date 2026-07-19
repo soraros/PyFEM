@@ -884,6 +884,14 @@ def _fresh_checks(
     )
   )
   checks.append(
+    _boolean_check(
+      "backend_reduced_residual_norm",
+      convergence.reduced_residual_norm
+      == _infinity_norm(fresh.reduced_residual.values),
+      tolerance,
+    )
+  )
+  checks.append(
     verification_check(
       "field_reconstruction",
       _difference_norm(

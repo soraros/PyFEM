@@ -710,6 +710,7 @@ def test_64_eps_admission_projects_only_private_solver_operator(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   import pyfem.v3.analysis.linear as linear_module
+  import pyfem.v3.results.verification as verification_module
 
   _, _, analysis = _prepared()
   original = linear_module.assemble_reference_linear
@@ -733,6 +734,11 @@ def test_64_eps_admission_projects_only_private_solver_operator(
     )
 
   monkeypatch.setattr(linear_module, "assemble_reference_linear", within_bound)
+  monkeypatch.setattr(
+    verification_module,
+    "assemble_reference_linear",
+    within_bound,
+  )
   solution = analysis.solve(initial_point=_point(0.0), point=_point(1.0))
   workspace = analysis._workspace
   assert not np.array_equal(workspace.audit_operator, workspace.audit_operator.T)
@@ -1990,6 +1996,37 @@ def test_fresh_verification_recomputes_complete_backend_evidence() -> None:
   assert not record.passed
   assert not record.check("record_convergence_residual").passed
   assert not residual_changed.verify().passed
+
+
+def test_fresh_convergence_residual_matches_rebuilt_ledger_exactly() -> None:
+  _, _, analysis, _, _ = _solve_rational()
+  reused = analysis.solve(initial_point=_point(0.0), point=_point(0.5))
+  assert reused.verify().passed
+
+  reduced_residual = np.array(reused.ledger.reduced_residual.values, copy=True)
+  index = int(np.argmax(np.abs(reduced_residual)))
+  direction = math.copysign(math.inf, float(reduced_residual[index]))
+  reduced_residual[index] = np.nextafter(reduced_residual[index], direction)
+  changed_norm = float(np.max(np.abs(reduced_residual)))
+  assert changed_norm != reused.convergence.reduced_residual_norm
+  changed = replace(
+    reused,
+    convergence=replace(
+      reused.convergence,
+      reduced_residual_norm=changed_norm,
+    ),
+    ledger=replace(
+      reused.ledger,
+      reduced_residual=FinalizedArray(reduced_residual, dtype=np.float64),
+    ),
+  )
+
+  assert changed.verify_record().passed
+  report = changed.verify()
+  assert not report.passed
+  assert not report.check("backend_reduced_residual_norm").passed
+  assert report.check("reduced_equilibrium").passed
+  assert report.check("reduced_residual_record").passed
 
 
 def test_coherent_perturbed_field_passes_record_but_fails_fresh_exactly() -> None:
