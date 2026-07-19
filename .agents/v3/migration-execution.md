@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; initial P1-C source is withheld after I0 NO-GO, bounded repair 1/2 is the sole writer, and one independent repair-gate task is read-only
+- Status: active; initial P1-C source is withheld after I0 NO-GO and bounded repair 1/2 is the sole writer; its independent gate matrix and the proposed P2-A freeze draft are complete and read-only
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -39,9 +39,11 @@ fresh `ProgramEvaluation` correspondence.
 The original Sol/max owner is the sole repair writer in
 `/private/tmp/pyfem-p1c-02cff1c`, producing at most one direct child of `c263d958`.
 No parallel state, analysis, result, API, compiler, or assembly writer is permitted.
-One independent Sol/max task, `/root/p1c_repair_gate`, is read-only and is turning
-the seven accepted areas into an exact post-repair correctness matrix; it advances
-no evidence grade and owns no path.
+The independent Sol/max task `/root/p1c_repair_gate` completed a read-only exact
+post-repair correctness matrix for the seven accepted areas; it advances no
+evidence grade and owns no path. `/root/p2a_freeze_draft` also completed a
+read-only proposed P2-A card using the corrected literal 15-node Q8/Q4/T3 oracle.
+That card is not frozen and authorizes no code before I1.
 R2-A and R2-B are terminal, clean, read-only research results and advance no grade.
 Kimi was attempted twice as a read-only second opinion: the first run could not
 obtain ordinary read access through its local approval bridge, and the bounded
@@ -2214,7 +2216,8 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `INCOMPLETE R1-B · assembly plan — temp-file approval stalled` | `019f7750-8745-7e23-aaf2-35f50ec79fc8` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Original independent read-only P1-B reviewer | Incomplete; preflight and repository gates were green, but an unnecessary temporary-file change waited on approval; archived without final/callback or repository change |
 | `I0/R1-B · assembly plan — bounded replacement GO` | internal agent `/root/r1b_inline_review` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Exact-base read-only Sol/max replacement | Complete GO; zero findings, 34 focused twice, 152 combined twice, 27 references, both Ruff configurations, format/static/diff/final-clean gates green |
 | `P1-C · linear flow — public solution verified` | internal Sol/max agent `/root/p1c_writer`; `/private/tmp/pyfem-p1c-02cff1c`; branch `agnet/p1c-linear-flow` | base `02cff1ca76b02969b91eac6e889de78c7a4ef9e2`; initial source `c263d95830df8284ab55c82dbd771f4690301283` | Sole state/analysis/result/API writer and bounded repair owner | Initial source complete and clean; 31 focused twice, 183 combined twice, 423 v3, 612 repository; I0 NO-GO on seven repair areas; repair 1/2 active; nothing integrated |
-| `I0/P1-C · repair gate matrix` | internal Sol/max agent `/root/p1c_repair_gate` | initial source `c263d95830df8284ab55c82dbd771f4690301283` | Read-only exact post-repair correctness-matrix design | Active; no edit, evidence grade, or integration authority |
+| `I0/P1-C · repair gate matrix` | internal Sol/max agent `/root/p1c_repair_gate` | initial source `c263d95830df8284ab55c82dbd771f4690301283` | Read-only exact post-repair correctness-matrix design | Complete and clean; seven-area matrix plus cross-fix interactions and bounded command set; no edit, grade, or integration authority |
+| `P2-A · mixed blocks — proposed freeze draft` | internal Sol/max agent `/root/p2a_freeze_draft`; main `d18800f7df2dcd8ceafb00254316d05cf94714f9` | post-I1 proposal only | Read-only packet design for descriptor-driven Q8/Q4/T3 composition | Complete and clean; proposed 15-node exact oracle and bounded ownership; not frozen, no edit or grade advance |
 | `R2-A · topology — Q4/T3 contracts extracted` | internal Sol/max agent `/root/r2a_topology`; `/private/tmp/pyfem-r2a-02cff1c`; detached | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Read-only Phase 2 topology research | Complete and clean; Q4 corner audit, descriptor-local ordering, native-width homogeneous blocks, and literal Q4/T3 oracles proposed; no edit or grade advance |
 | `R2-B · ownership — Phase 2 leaves separated` | internal Sol/max agent `/root/r2b_ownership`; `/private/tmp/pyfem-r2b-02cff1c`; detached | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Read-only Phase 2 ownership/backend research | Complete and clean; neutral partition/entity/recipe seam and disjoint leaf waves proposed; no edit or grade advance |
 
@@ -2233,9 +2236,9 @@ is recorded separately because it is not a user-visible sidebar task.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
   stalled on an unnecessary temporary-file approval.
-- Active: two internal Sol/max tasks: P1-C repair 1/2 as the sole source writer,
-  and `/root/p1c_repair_gate` as an independent read-only matrix designer.
-  R2-A/R2-B and the downstream proposal tasks are complete. No
+- Active: one internal Sol/max task, P1-C repair 1/2, as the sole source writer.
+  `/root/p1c_repair_gate`, `/root/p2a_freeze_draft`, R2-A/R2-B, and the other
+  downstream proposal tasks are complete and read-only. No
   user-visible task or watchdog is active. I0 retains integration and ledger
   ownership. Two bounded Kimi attempts produced no review result and changed no
   source; no further retry is planned in this pass.
@@ -3139,3 +3142,16 @@ integration decision; do not bridge it with a compatibility carrier.
   remaining available agent slot for `/root/p1c_repair_gate`, a read-only Sol/max
   task that converts the seven accepted areas into an exact independent acceptance
   matrix. It owns no path and cannot integrate or advance a grade.
+- 2026-07-19: `/root/p1c_repair_gate` completed cleanly with an exact seven-area
+  matrix. It additionally required the 256 MiB boundary to distinguish the private
+  solver workspace from fresh cache-independent verification. The repair chose and
+  will manifest the solver-workspace interpretation: four reduced matrices plus
+  eight vectors on reuse, with 2,895 reduced DOFs admitted and 2,896 rejected;
+  verification workspace is measured separately and must leave cache statistics
+  unchanged.
+- 2026-07-19: `/root/p2a_freeze_draft` completed cleanly with a proposed, non-frozen
+  P2-A card. It derived 15 nodes, 30 full DOFs, 21 reduced DOFs, 356 raw full pairs,
+  203 raw reduced pairs, raw offsets `(0,256,320,356)`, and integration-point
+  offsets `(0,9,13,14)` from one literal disconnected Q8/Q4/T3 cell each. I1 must
+  still inspect final P1-C schemas for Q8-named persisted meaning before freezing;
+  no P2-A implementation is authorized.
