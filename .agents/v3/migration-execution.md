@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; I1 is complete and the bounded Phase 1 slices are component-qualified E3; three read-only tasks are refreshing the final P2-A freeze before any Phase 2 writer starts
+- Status: active; I1 is complete and the bounded Phase 1 slices are component-qualified E3; the P2-A Horizon is frozen and one sole mixed-block writer is active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -25,7 +25,7 @@
 - Integrated P1-C chain: `c9b9480` -> `bfc1d80` -> `d78201d` -> `7ee65c3ea5c50278b17dce63f2569e22412e0ebd`
 - P1-C integrated proof: 86 focused and 348 combined tests in both normal and 640-digit modes; 478 v3; 667 repository; both Ruff configurations, focused format, ancestry, ownership, and static gates green
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: final P2-A Horizon freeze against the I1 product schemas; no Phase 2 source writer is active
+- Active milestone: P2-A mixed Q8/Q4/T3 public slice implementation by one sole writer
 
 ## Exact next safe action
 
@@ -65,10 +65,20 @@ or prototype retirement. The measured eager import chain through
 `pyfem/v3/__init__.py` remains explicitly deferred to the root-package/CLI
 compatibility wave because the P1-C Horizon forbade changing that initializer.
 
-`p2a_freeze_draft`, `r2a_topology`, and `r2b_ownership` are now rechecking the
-proposed P2-A card against the final I1 schemas. They are read-only and own no
-paths. P2-A implementation may start only after I0 reconciles their terminal
-reports into one exact frozen writer card.
+`p2a_freeze_draft`, `r2a_topology`, `r2b_ownership`, and a fresh contract
+reconciliation task completed read-only final-schema review. I0 rejected the
+compiler-only alternative after three independent scope adjudications confirmed it
+would violate the recorded mixed public-solve exit and add a temporary solver
+topology branch. The frozen card below therefore keeps the genuine public mixed
+slice, uses new neutral v1 schema families, persists only full raw block offsets,
+uses `gauss-tria3-order1`, and grants exactly 13 paths.
+
+Fresh Sol/max task `/root/p2a_mixed_blocks_writer` is the sole source owner in
+`/private/tmp/pyfem-p2a-7ee65c3`, branch `agnet/p2a-mixed-blocks`, from exact parent
+`7ee65c3ea5c50278b17dce63f2569e22412e0ebd`. It must return exactly one focused
+commit and every frozen gate. No parallel Phase 2 writer is permitted. After I0
+review and serial integration, one fresh read-only R2-C must return GO before the
+P2-B/P2-C leaf cards freeze.
 
 Two public-flow completion attempts are explicitly unfinished and are not evidence:
 `p1c_source_review` was stopped twice by erroneous output routing, and
@@ -578,6 +588,207 @@ pretending MPC multipliers are unique; if strong verification must reuse solver
 caches; if an owned public flow cannot exist without a forbidden root/adapter path;
 or if the frozen Q8 operator cannot satisfy the private Cholesky policy. Create a
 separate prerequisite or design decision rather than widening P1-C informally.
+
+## P2-A Horizon card — `HORIZON_FROZEN`
+
+**ID/title:** `P2-A · mixed blocks — Q4/T3 composition explicit`
+
+**Exact source parent:** `7ee65c3ea5c50278b17dce63f2569e22412e0ebd`.
+The later I1 ledger commits are coordination evidence and do not change this product
+parent. One sole writer owns P2-A. No concurrent compiler, model, assembly, state,
+analysis, result, API, or mixed-block writer is permitted.
+
+**Objective:** extend the proved domain-only linear-static slice from one Q8 block
+to explicit homogeneous Q8, Q4, and T3 blocks and prove one genuine mixed public
+solve through reusable and one-shot flows. The solver, transaction, reaction,
+balance, convergence, and fresh-verification algorithms remain topology-blind.
+Do not add a temporary Q8 guard: that would be the solver topology branch this
+packet is required to prove unnecessary and would create later removal work.
+
+**Bounded model contract:** accept any nonempty combination of these descriptors,
+with one or more cells per homogeneous source block:
+
+| Geometry interpolation | Topology | Quadrature | Nodes | Local DOFs | Points |
+|---|---|---|---:|---:|---:|
+| `serendipity-quad8` | quadrilateral | `gauss-3x3` | 8 | 16 | 9 |
+| `bilinear-quad4` | quadrilateral | `gauss-2x2` | 4 | 8 | 4 |
+| `linear-tria3` | triangle | `gauss-tria3-order1` | 3 | 6 | 1 |
+
+Keep one node field `("x", "y")`, one shared plane-stress linear-elastic material,
+one complete region per source block, the existing small-strain engineering-shear
+formulation, zero material/formulation histories, and unit out-of-plane thickness.
+Multiple materials or regions within one block belong to P2-B; active-field layout
+belongs to P2-C. Canonical domain order is exact semantic
+`(source_cell_block_id, source_region_id)` order; cells are semantic-ID ordered
+within a block; descriptor-authored local node order is never sorted or repaired.
+
+**Frozen schema families:** replace the Q8-only strings without aliases:
+
+```text
+pyfem-v3-compiled-model-domain-blocks-v1
+pyfem-v3-prepared-assembly-plan-domain-coo-v1
+pyfem-v3-physical-state-stateless-domain-blocks-v1
+```
+
+These are version 1 of new neutral schema families, not version 2 of the old
+`...-q8-v1` families. Compiled-program, request, evolution-state, and empty-history
+schemas remain unchanged. The persisted assembly geometry policy must describe
+descriptor-driven signed audits rather than Q8 geometry.
+
+**Registry and geometry contract:** preserve `q8_reference_registry()` and every
+existing Q8 descriptor byte-for-byte. Add exact keys
+`("topology", "bilinear-quad4")`, `("quadrature", "gauss-2x2")`,
+`("topology", "linear-tria3")`, and
+`("quadrature", "gauss-tria3-order1")`, plus a bounded
+`linear_plane_stress_reference_registry()` containing the required union.
+Compilation captures only descriptors required by authored blocks.
+
+Q4 topology metadata contains exact
+`reference_geometry_audit_parent_points = ((-1,-1),(1,-1),(1,1),(-1,1))`.
+Evaluate its topology binding separately at those corners; never pad or alter its
+four Gauss rows and add no compiled audit-point carrier. Q8 retains its nine-point
+audit; T3's constant Jacobian uses its centroid quadrature row. Every audit requires
+finite normalized geometry, strictly positive signed determinant, and the existing
+scale-relative condition bound. Never use `abs(det J)` or reorder nodes. Resolve
+bindings once per block signature, not once per cell.
+
+**Native ownership and plan contract:** each `CompiledCellBlock.connectivity` is
+the exact object also referenced by its `DomainBlock`; each domain DOF map is the
+exact object referenced by its coupling recipe. No padded, ragged, object, sentinel,
+or second connectivity owner is permitted. Prepared plan arrays remain separately
+owned from compiled model/program arrays.
+
+Add exactly one plan carrier:
+
+```text
+DomainCooPlan.full_raw_block_offsets: FinalizedArray
+```
+
+It is exact owning, read-only, canonical integer storage. Raw order is block, cell,
+local row, local column. Do not persist reduced block offsets: the strictly ordered
+`reduced_raw_source_indices` derive them from full offsets. Validate every block,
+recipe, state-layout row, entity/source record, offset, and manifest entry; never
+validate block zero and trust later blocks. Checked arithmetic covers summed cells,
+DOFs, points, raw entries, offsets, and index capacity before allocation.
+
+**Exact disconnected oracle:** semantic IDs canonically order one unit Q8, one unit
+Q4, then one unit T3 cell. They use disjoint nodes: Q8 IDs 1..8 on `[0,1]^2`, Q4
+IDs 9..12 on `[2,3]x[0,1]`, and T3 IDs 13..15 at `(4,0),(5,0),(4,1)`.
+Use `E=1`, `nu=0`, and unit thickness.
+
+```text
+nodes / cells / blocks / regions        15 / 3 / 3 / 3
+full / reduced DOFs                     30 / 21
+direct prescribed DOFs                  9
+integration points                      14
+full raw / canonical entries            356 / 356
+reduced raw / canonical entries         203 / 203
+node offsets                            (0,8,12,15)
+full-DOF offsets                        (0,16,24,30)
+reduced-DOF offsets                     (0,13,18,21)
+full raw block offsets                  (0,256,320,356)   # persisted
+reduced raw oracle offsets              (0,169,194,203)   # derived only
+integration-point offsets               (0,9,13,14)
+cell offsets                            (0,1,2,3)
+```
+
+The test owns element-qualified hard-coded literals: the frozen Q8 integer operator
+divided by 360, this Q4 integer operator divided by 8, and this T3 integer operator
+divided by 4. They must not be generated through production bindings.
+
+```text
+Q4 = [
+ [ 4, 1,-2,-1,-2,-1, 0, 1], [ 1, 4, 1, 0,-1,-2,-1,-2],
+ [-2, 1, 4,-1, 0,-1,-2, 1], [-1, 0,-1, 4, 1,-2, 1,-2],
+ [-2,-1, 0, 1, 4, 1,-2,-1], [-1,-2,-1,-2, 1, 4, 1, 0],
+ [ 0,-1,-2, 1,-2, 1, 4,-1], [ 1,-2, 1,-2,-1, 0,-1, 4],
+]
+T3 = [
+ [ 3, 1,-2,-1,-1, 0], [ 1, 3, 0,-1,-1,-2],
+ [-2, 0, 2, 0, 0, 0], [-1,-1, 0, 1, 1, 0],
+ [-1,-1, 0, 1, 1, 0], [ 0,-2, 0, 0, 0, 2],
+]
+```
+
+Directly prescribe local DOFs `(0,1,3)` in every block; use no MPC in this literal
+count fixture. The exact solution is `(u_x,u_y)=(x_local,y_local)`. Free external
+entries equal the independent literal `K u`; prescribed entries are zero. Direct
+reactions in local `(0,1,3)` order are Q8 `(-1/6,-1/6,-2/3)`, Q4
+`(-1/2,-1/2,-1/2)`, and T3 `(-1/2,-1/2,0)`. Require `rtol=0`, local-operator
+`atol<=2e-14`, complete-solve `atol<=5e-13`, and full force/moment balance.
+
+**Public acceptance:** the same literal model must pass both
+`compile_model -> compile_program -> prepare_analysis -> initialize -> solve` and
+the existing one-shot `pyfem.v3.api.solve`. Require exact generation 0 to 1,
+reusable/one-shot equality of primary values, reactions, ledgers, and verification
+checks, repeated prepared solve through the same generic factorization path,
+record verification, and cache-independent fresh verification that rebuilds the
+mixed plan and response. Existing Q8-only flows remain unchanged. No Q4/T3 branch
+may appear in analysis, results, or API.
+
+**Ordering, provenance, and local edge cases:** authored node, block, region, cell,
+and registry-order permutations preserve compiled fingerprint and physical result
+after source remapping. Entity/source records cover all nodes, cells, blocks,
+regions, DOFs, and 14 integration points. Live-distinct content-equal compiles have
+distinct instance IDs; later registry mutation cannot change compiled meaning; all
+arrays are exact dtype, metadata-free, owning, contiguous, read-only, and detached.
+Cover Q4 corner-only inversion, uniform inversion, sign change, T3 degeneracy,
+near-singular/nonfinite/extreme-scale geometry, wrong explicit descriptor pairing,
+wrong binding type/dtype/shape/order, missing/duplicate/cross-block region membership,
+wrong second/third block data, shared-node Q4/T3 COO duplicate addition, malformed
+offsets/recipes/state rows/source records/manifests, declaration permutations, and
+partially initialized carriers with structured diagnostics.
+
+**Exact owned paths:**
+
+```text
+pyfem/v3/model/compiled.py             # topology-neutral wording only
+pyfem/v3/model/state.py                # neutral physical-state schema and wording
+pyfem/v3/compile/contracts.py
+pyfem/v3/compile/model.py
+pyfem/v3/compile/program.py
+pyfem/v3/compile/__init__.py
+pyfem/v3/assembly/contracts.py
+pyfem/v3/assembly/prepare.py
+pyfem/v3/assembly/reference.py
+pyfem/v3/analysis/linear.py            # topology-neutral diagnostic only
+pyfem/v3/results/solution.py           # topology-neutral module wording only
+pyfem/v3/results/verification.py       # topology-neutral module wording only
+test/v3/test_v3_mixed_blocks.py
+```
+
+The last three production paths may not change algorithms. Do not modify existing
+tests, `api.py`, specs, kernels, prototype modules, solver/I/O/root paths, project
+configuration, lock files, or the ledger. Add no helper module, whole-model optional
+field, material slot, active-field layout, boundary recipe, sparse backend, output
+projection, nonlinear/stateful meaning, compatibility shim, or timing threshold.
+
+**Required gates:** run the new test plus model-spec, identity, model-compile,
+program-compile, assembly-plan, and linear-analysis tests normally and with
+`PYTHONINTMAXSTRDIGITS=640`; direct Q8/Q4/T3 shape, quadrature, stiffness, COO,
+constraint, load, and MPC references; reusable and one-shot mixed flows; both Ruff
+configurations; focused format; all `test/v3`; full repository pytest;
+`git diff --check`; exact ancestry/path/final-clean checks. Static scans prove zero
+prototype/legacy/solver/I/O dependencies, production `fem.element` dispatch,
+determinant absolute-value repair, topology choice from node count or width,
+padded/object connectivity, and Q4/T3 branches outside compiler/assembly. Report
+existing SciPy/Numba notices separately. Measure compile, prepare, first solve, warm
+reuse, verification, retained bytes, and peak bytes for the literal fixture without
+using timing thresholds.
+
+**Commit and callback:** exactly one focused commit, exactly one child of
+`7ee65c3ea5c50278b17dce63f2569e22412e0ebd`, only the 13 paths above, no amend,
+merge, rebase, push, install, or external action, and final clean worktree.
+
+```text
+P2-A COMPLETE · commit=<40> · parent=7ee65c3ea5c50278b17dce63f2569e22412e0ebd · paths=<exact list> · oracle=15 nodes/30 full/21 reduced; full offsets (0,256,320,356); integration offsets (0,9,13,14); 356 full/203 reduced · proof=<focused twice; references; public flows; Ruff; v3; repository; static/path/ancestry/clean> · warnings=<exact notices> · next=I0 inspect and integrate serially, then dispatch R2-C
+```
+
+After integration, one fresh read-only R2-C must independently rederive the oracle
+and verify complete multi-block validation, descriptor meaning, native-width
+ownership, offsets, ordering, provenance/source attribution, public solve and fresh
+verification, and absence of topology branches outside compiler/assembly. R2-C GO
+is required before P2-B/P2-C leaf cards freeze.
 
 ## Semantic decisions and open questions
 
@@ -2253,9 +2464,11 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `R1-A · state lifecycle` | internal Sol/max agent `/root/r1a_state_lifecycle`; frozen `/private/tmp/pyfem-r1a-7ee65c3` | `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Read-only identity, generation, transaction, storage, cache, and capacity review | Complete GO; P0/P1/P2 `0/0/0`; 2,020 normal and 1,628 restricted independent checks plus focused identity/linear suites |
 | `R1-A · public contracts` | internal Terra/max agent `/root/r1a_public_contracts`; frozen `/private/tmp/pyfem-r1a-7ee65c3` | `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Read-only public compile/assemble/solve/verify flow and diagnostics review | Complete GO; P0/P1/P2 `0/0/0`; 348 combined twice, nine named flows, 32 carrier-boundary cases, exact reusable/one-shot equality |
 | `I1 · linear slice — public proof complete` | delegating/integration owner | product `7ee65c3`; ledger checkpoint follows | Reconcile P1-C integrated proof and three R1-A verdicts; freeze component-qualified Phase 1 contract | Complete; P0-D/P1-A/P1-B/P1-C bounded slices advance to E3; all deferred breadth remains explicit |
-| `P2-A · final freeze refresh` | internal Sol/max agent `/root/p2a_freeze_draft` | product `7ee65c3`; current main ledger | Read-only final writer-card refresh against I1 schemas | Active; no edit or grade authority |
-| `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle and final-schema delta check | Active; no edit or grade authority |
-| `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Active; no edit or grade authority |
+| `P2-A · final freeze refresh` | internal Sol/max agent `/root/p2a_freeze_draft` | product `7ee65c3`; current main ledger | Read-only final writer-card refresh and public-scope adjudication | Complete; retained genuine public mixed solve, removed optional helpers, froze exact oracle and full gates |
+| `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
+| `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
+| `P2-A · contract reconciliation` | internal Sol/max agent `/root/p2a_contract_reconcile` | product `7ee65c3` | Read-only schema/key/offset/audit/path decision comparison | Complete; froze new-family v1 schemas, `gauss-tria3-order1`, one persisted full-offset carrier, transient Q4 corner audit, and element-qualified literals; compiler-only scope recommendation was separately rejected |
+| `P2-A · mixed blocks writer` | internal Sol/max agent `/root/p2a_mixed_blocks_writer`; `/private/tmp/pyfem-p2a-7ee65c3`; branch `agnet/p2a-mixed-blocks` | exact parent `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Sole 13-path Q8/Q4/T3 public mixed-slice writer | Active; exactly one focused commit required; no parallel Phase 2 writer |
 | `I0/P1-C · numeric repair card` | internal Sol/max agent `/root/p1c_numeric_repair_card` | repair parent `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only exact-ratio, explicit factor/solve, and workspace acceptance design | Complete and clean; exact cross-products and deterministic 4-matrix/6-vector private-backend proposal; no edit or grade authority |
 | `I0/P1-C · scalar repair card` | internal Sol/max agent `/root/p1c_scalar_repair_card` | repair parent `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only complete result scalar/tuple preflight inventory | Complete and clean; canonical UUID/identity/generation and scalar/tuple matrix; no edit, grade, or integration authority |
 | `I0/P1-C · repair gate matrix` | internal Sol/max agent `/root/p1c_repair_gate` | initial source `c263d95830df8284ab55c82dbd771f4690301283` | Read-only exact post-repair correctness-matrix design | Complete and clean; seven-area matrix plus cross-fix interactions and bounded command set; no edit, grade, or integration authority |
@@ -2278,10 +2491,11 @@ are recorded separately because they are not part of that user-visible audit set
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
   stalled on an unnecessary temporary-file approval.
-- Active: three read-only P2-A freeze tasks at exact I1 product head `7ee65c3`:
-  `/root/p2a_freeze_draft`, `/root/r2a_topology`, and `/root/r2b_ownership`.
-  The three R1-A tasks are complete GO and I1 is frozen. No source writer or
-  watchdog is active. I0 retains integration and ledger ownership. The two Kimi
+- Active: one sole P2-A source writer `/root/p2a_mixed_blocks_writer` at exact
+  parent `7ee65c3`; the freeze, topology, ownership, reconciliation, and scope
+  tasks are complete and read-only. The three R1-A tasks are complete GO and I1 is
+  frozen. No parallel Phase 2 writer or watchdog is active. I0 retains integration
+  and ledger ownership. The two Kimi
   attempts, the twice-routed
   `/root/p1c_source_review`, and the Sol-capacity
   `/root/p1c_public_flow_redo` are explicitly incomplete and provide no evidence;
@@ -3273,3 +3487,19 @@ integration decision; do not bridge it with a compatibility carrier.
   `/root/r2a_topology`, and `/root/r2b_ownership`. They must reconcile the literal
   disconnected 15-node Q8/Q4/T3 oracle, final topology/schema deltas, and exact
   ownership boundary into one frozen P2-A card. No Phase 2 source writer is active.
+- 2026-07-19: the three planning reports and a fresh Sol/max reconciliation froze
+  the P2-A constants: new-family v1 neutral schemas, T3 key
+  `gauss-tria3-order1`, transient Q4 corner audits from descriptor metadata, one
+  persisted full raw block-offset carrier, native-width ownership, and exact
+  15-node/30-full/21-reduced, 356-full/203-reduced, 14-point arithmetic. A proposed
+  compiler-only cut with a temporary Q8 analysis guard was not adopted: three
+  independent call-graph adjudications showed the final consumers are already
+  block-generic, the guard would violate the recorded public mixed-solve exit, and
+  it would create later removal work. The frozen 13-path card therefore requires
+  reusable and one-shot mixed public proof with no solver topology branch.
+- 2026-07-19: I0 created isolated branch/worktree
+  `agnet/p2a-mixed-blocks` at `/private/tmp/pyfem-p2a-7ee65c3` from exact product
+  parent `7ee65c3` and dispatched fresh Sol/max sole writer
+  `/root/p2a_mixed_blocks_writer`. It owns exactly the frozen 13 paths, must return
+  one focused commit and every normal/640-digit, reference, public-flow, Ruff, v3,
+  repository, static, ancestry, and clean gate. No parallel Phase 2 writer is active.
