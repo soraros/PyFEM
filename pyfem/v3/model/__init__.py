@@ -53,6 +53,15 @@ from pyfem.v3.model.registry import (
   RegistryKey,
   RegistrySnapshot,
 )
+from pyfem.v3.model.state import (
+  EVOLUTION_STATE_SCHEMA,
+  PHYSICAL_STATE_SCHEMA,
+  PROGRAM_HISTORY_SCHEMA,
+  CommittedAnalysisState,
+  EvolutionState,
+  PhysicalState,
+  ProgramHistory,
+)
 
 __all__ = [
   "CANONICAL_MANIFEST_FORMAT",
@@ -60,6 +69,7 @@ __all__ = [
   "ArrayOrder",
   "AffineConstraintPlan",
   "CanonicalManifest",
+  "CommittedAnalysisState",
   "CompiledCellBlock",
   "CompiledMesh",
   "CompiledModel",
@@ -73,6 +83,8 @@ __all__ = [
   "EntityIndex",
   "EntityRecord",
   "EntitySemanticId",
+  "EVOLUTION_STATE_SCHEMA",
+  "EvolutionState",
   "FinalizedArray",
   "GenerationMismatchError",
   "IdentityMismatchError",
@@ -82,10 +94,14 @@ __all__ = [
   "ModelCapabilities",
   "ModelProvenance",
   "NodalLoadPlan",
+  "PHYSICAL_STATE_SCHEMA",
   "PhysicalStateLayout",
+  "PhysicalState",
   "PrimaryFieldLayout",
   "ProgramCapabilities",
   "ProgramEvaluation",
+  "PROGRAM_HISTORY_SCHEMA",
+  "ProgramHistory",
   "ProgramProvenance",
   "RegistryDescriptor",
   "RegistryKey",
