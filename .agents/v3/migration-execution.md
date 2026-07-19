@@ -20,15 +20,16 @@
 - P1-B initial source: `ab02297c052912cb027ac6963b37667bf61f3e97` (I0-reviewed NO-GO; not integrated)
 - Integrated P1-B assembly plan: repaired source `8e94454c63a76fdc1505d8ec3ec6341128448aab`, integrated `daad22796a6b178ba9fdb33d0e444b5be0f830e7`
 - P1-B independent proof: exact base `e11a07c0cc5c00e956c3d537ac94272f120621c0`; the sidebar R1-B task is visibly incomplete after a temporary-file approval stall, while the exact-base internal Sol/max replacement returned GO with zero findings
+- P1-C frozen Horizon and planned common dispatch base: `02cff1ca76b02969b91eac6e889de78c7a4ef9e2`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
 - Active milestone: P1-C selected and Horizon-frozen; next large pass is planned through the Phase 2 exit
 
 ## Exact next safe action
 
 Remain paused until the delegator starts the planned wave. No writer, reviewer, or
-watchdog is active. On resume, record the exact 40-character frozen-card commit as
-the common base and dispatch exactly three Sol/max tasks while I0 retains the fourth
-slot:
+watchdog is active. On resume, dispatch exactly three Sol/max tasks from common
+exact clean base `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` while I0 retains the
+fourth slot:
 
 1. `P1-C · linear flow — public solution verified` is the only writer and owns the
    frozen state/analysis/result/API cut below;
@@ -176,11 +177,11 @@ is real even though this Phase 1 material and formulation have zero-width histor
 No path-dependent Phase 3 behavior enters this packet.
 
 **Selection base and dispatch parent:** the read-only design was checked at clean
-base `1957902109ab6df6d6050d255b8bbf305d694a61`. The writer must start from the
-single clean documentation commit that freezes this card; I0 records and supplies
-that exact 40-character hash at dispatch. P0-D, P1-A, P1-B, and their independent
-proofs are required and complete. No concurrent state, request, result, reaction,
-or public-API writer is permitted.
+base `1957902109ab6df6d6050d255b8bbf305d694a61`. The exact E1 proof commit and
+common writer/research dispatch base is the single clean documentation commit
+`02cff1ca76b02969b91eac6e889de78c7a4ef9e2`. P0-D, P1-A, P1-B, and their
+independent proofs are required and complete. No concurrent state, request, result,
+reaction, or public-API writer is permitted.
 
 **Exact request and preparation contract:**
 
@@ -619,7 +620,7 @@ dated E0 evidence.
 | P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
 | P1-A immediate dependency cut | 3 | `provisional`, `E2` at `b7316be`; final repair, I0 integration proof, and independent carrier GO complete | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Consumer proof continues through P1-B/P1-C; E3 requires the verified public slice |
 | P1-B immediate dependency cut | 5 | `provisional`, `E2` at `daad227`; repair, I0 combined proof, and exact-base independent GO complete | 5 change; component slices of `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, `ASM-TANGENT` | Consumer proof continues through P1-C; E3 requires the verified public slice |
-| P1-C immediate dependency cut | 10 | `contracted`, component-qualified `E1`; frozen state/analysis/result/API Horizon, no code or owner active | 1 preserve, 9 change; exact bounded slices listed below | Implement once, review independently as R1-A, then I1 alone may assign E3 |
+| P1-C immediate dependency cut | 10 | `contracted`, component-qualified `E1` at proof `02cff1c`; frozen state/analysis/result/API Horizon, no code or owner active | 1 preserve, 9 change; exact bounded slices listed below | Implement once, review independently as R1-A, then I1 alone may assign E3 |
 | Later preserve/change portfolio | 105 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
@@ -2201,9 +2202,9 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P1-E · assembly plan — correspondence repaired` | `019f7736-ec41-7560-9d65-472551b4a6fe` | source `ab02297c052912cb027ac6963b37667bf61f3e97`, parent `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Close exact Q8 reference-recipe correspondence and metadata-free binding output in the same six paths | Complete with both terminal signals; replacement `8e94454`, integrated `daad227`; 34 focused twice, 152 combined twice, 392 v3, 581 full |
 | `INCOMPLETE R1-B · assembly plan — temp-file approval stalled` | `019f7750-8745-7e23-aaf2-35f50ec79fc8` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Original independent read-only P1-B reviewer | Incomplete; preflight and repository gates were green, but an unnecessary temporary-file change waited on approval; archived without final/callback or repository change |
 | `I0/R1-B · assembly plan — bounded replacement GO` | internal agent `/root/r1b_inline_review` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Exact-base read-only Sol/max replacement | Complete GO; zero findings, 34 focused twice, 152 combined twice, 27 references, both Ruff configurations, format/static/diff/final-clean gates green |
-| `P1-C · linear flow — public solution verified` | not dispatched | exact frozen-card commit to be recorded at dispatch | Sole state/analysis/result/API writer | Planned and Horizon-frozen; component-qualified E1; no task or worktree exists |
-| `R2-A · topology — Q4/T3 contracts extracted` | not dispatched | same exact frozen-card commit as P1-C | Read-only Phase 2 topology research | Planned; no task, edit, or evidence grade |
-| `R2-B · ownership — Phase 2 leaves separated` | not dispatched | same exact frozen-card commit as P1-C | Read-only Phase 2 ownership/backend research | Planned; no task, edit, or evidence grade |
+| `P1-C · linear flow — public solution verified` | not dispatched | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Sole state/analysis/result/API writer | Planned and Horizon-frozen; component-qualified E1; no task or worktree exists |
+| `R2-A · topology — Q4/T3 contracts extracted` | not dispatched | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Read-only Phase 2 topology research | Planned; no task, edit, or evidence grade |
+| `R2-B · ownership — Phase 2 leaves separated` | not dispatched | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Read-only Phase 2 ownership/backend research | Planned; no task, edit, or evidence grade |
 
 ## Task completion audit
 
@@ -3068,3 +3069,8 @@ integration decision; do not bridge it with a compatibility carrier.
   disjoint Phase 2 writer waves, and recorded an I2 pause boundary. No migration
   implementation task was dispatched. The next activation uses one P1-C writer,
   two read-only Phase 2 researchers, and reserves the fourth slot for I0.
+- 2026-07-19: the frozen P1-C Horizon, exact rational oracle, eleven-stage worker
+  path, serial I0 gates, and safe Phase 2 parallel lanes were committed as
+  `02cff1ca76b02969b91eac6e889de78c7a4ef9e2`. That exact commit is the E1 proof
+  anchor and common planned base for P1-C, R2-A, and R2-B. This follow-up records
+  the hash only; no implementation or research task has been dispatched.
