@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: paused; P1-B is integrated and independently green at provisional E2, with P1-C still closed
+- Status: planned and paused; P1-C is Horizon-frozen at component-qualified E1, with no implementation task active
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -21,14 +21,27 @@
 - Integrated P1-B assembly plan: repaired source `8e94454c63a76fdc1505d8ec3ec6341128448aab`, integrated `daad22796a6b178ba9fdb33d0e444b5be0f830e7`
 - P1-B independent proof: exact base `e11a07c0cc5c00e956c3d537ac94272f120621c0`; the sidebar R1-B task is visibly incomplete after a temporary-file approval stall, while the exact-base internal Sol/max replacement returned GO with zero findings
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: paused after P1-B provisional E2
+- Active milestone: P1-C selected and Horizon-frozen; next large pass is planned through the Phase 2 exit
 
 ## Exact next safe action
 
-Remain paused. On resume, freeze the P1-C Horizon before dispatching any owner. Its
-exact semantic cut must compose the provisional-E2 model, program, and assembly
-components without silently adding solver, state-transaction, reaction, result,
-adapter, or root-public ownership. No P1-C writer or reviewer is active.
+Remain paused until the delegator starts the planned wave. No writer, reviewer, or
+watchdog is active. On resume, record the exact 40-character frozen-card commit as
+the common base and dispatch exactly three Sol/max tasks while I0 retains the fourth
+slot:
+
+1. `P1-C · linear flow — public solution verified` is the only writer and owns the
+   frozen state/analysis/result/API cut below;
+2. `R2-A · topology — Q4/T3 contracts extracted` is read-only Phase 2 research;
+3. `R2-B · ownership — Phase 2 leaves separated` is read-only Phase 2 research.
+
+The research tasks may inspect P1-C's frozen contract but do not depend on its code,
+change evidence grades, create writers, or edit the repository. P1-C integrates
+serially, then `R1-A` independently reviews the integrated public flow and I1 alone
+adjudicates Phase 1. Do not start a second P1-C owner or split state, solve,
+reactions, results, and API across nominally parallel writers.
+
+### Basis for the selection
 
 The original P1-B writer returned a valid terminal source and callback, but I0's
 independent carrier review found two P1 gaps while the numerical and architecture
@@ -57,6 +70,478 @@ configurations, focused format, a zero-hit forbidden-import scan, 358 v3 tests, 
 547 full-repository tests. Independent carrier review returned GO with zero
 P0/P1/P2 findings. The integrated commit is `b7316be`; P1-B may now consume its
 private validation seam without copying that validation logic.
+
+## Next large chunk plan — Phase 1 exit through Phase 2 exit
+
+This is the adopted acceleration plan, not authority to bypass a Horizon or merge
+gate. It targets one long execution pass and pauses after I2's combined Phase 2
+proof. An accepted correctness finding, a required shared forbidden path, or a
+failed exact-base/clean-state gate stops only the affected wave and returns the
+smallest repair or prerequisite.
+
+Three read-only Sol/max planning lanes independently checked the clean selection
+base `1957902109ab6df6d6050d255b8bbf305d694a61`: one froze the P1-C state/public
+boundary, one derived an exact rational Q8 solve and verification matrix, and one
+constructed the Phase 2 dependency DAG. They edited no repository file. I0
+adjudicated their recommendations into the plan and P1-C Horizon below.
+
+### Critical path and parallel lanes
+
+```text
+P1-B provisional E2
+  -> P1-C writer ───────────────> serial integration -> R1-A -> I1
+       || R2-A Q4/T3 research                         |
+       || R2-B ownership/backend research             v
+                                             P2-A mixed blocks
+                                               -> R2-C common-API review
+                                               -> I0 leaf-Horizon freeze
+                                               -> [P2-B material slots
+                                                   || P2-C active fields/DOFs]
+                                               -> serial integration/Horizon freeze
+                                               -> [P2-D model boundary
+                                                   || P2-E program boundary]
+                                               -> serial integration
+                                               -> P2-F complete recipe union
+                                               -> P2-G sparse-slot backend
+                                               -> R2-D -> I2 -> pause
+```
+
+Best case is eleven worker/reviewer dependency-depth stages: `P1-C -> R1-A -> I1`, then
+`P2-A -> R2-C -> P2-B/P2-C -> P2-D/P2-E -> P2-F -> P2-G -> R2-D -> I2`.
+Parallel brackets consume one stage, not two. Serial I0 adjudication, integration,
+and Horizon-freeze gates occur between those stages. Every accepted repair adds one
+bounded worker stage. I0 always retains one of the four available slots for
+exact-base checks, adjudication, integration, the live ledger, and combined proof.
+
+| Coordinate and exact title | Prerequisite and owner | Output and merge rule | Exit evidence |
+|---|---|---|---|
+| `P1-C · linear flow — public solution verified` | Frozen card below; sole state/analysis/result/API writer | One focused source commit; integrates first and serially | Authored Q8 to immutable verified solution through reusable and one-shot flows; exact rational and analytical oracles; full Phase 1 gates |
+| `R2-A · topology — Q4/T3 contracts extracted` | P1-C dispatched; read-only topology research | Literal Q4/T3 interpolation, quadrature, element oracles; mixed-partition failure cases; smallest common block API; no merge | Terminal report and callback only; no grade advance |
+| `R2-B · ownership — Phase 2 leaves separated` | P1-C dispatched; read-only ownership/backend research | Disjoint material-slot, field-layout, boundary-recipe and sparse-backend seams; recipe-union and memory measurement design; no merge | Terminal report and callback only; no grade advance |
+| `R1-A · linear slice — physics and state verified` | P1-C integrated and I0-focused gates green; independent read-only owner | Fresh finite-element correctness review; no edits | GO required on identities, generations, balance/reactions, storage isolation, failed acceptance, and fresh strong verification |
+| `I1 · linear slice — public proof complete` | R1-A terminal and accepted findings repaired | Serial adjudication, combined proof, contract freeze, and ledger update | Exact Phase 1 component slices reach E3 only here; schedules, nonlinear history, adapters, prototype retirement, and root compatibility remain outside the claim |
+| `P2-A · mixed blocks — Q4/T3 composition explicit` | I1 frozen plus R2-A/R2-B reports; sole compiler/block owner | Shared mixed-block carrier/compiler/assembly interfaces; serial integration | One genuine Q8/Q4/T3 mixed solve; heterogeneous local sizes; no padding, node-count dispatch, solver branch, or new whole-model optional field |
+| `R2-C · mixed blocks — common API verified` | P2-A integrated; independent read-only owner | Review the proposed leaf-builder/recipe interfaces required by later writers; no edits or authority change | GO on topology meaning, partitions, ordering, attribution, identities, and source mapping |
+| Serial I0 Horizon gate (no new task ID) | R2-C terminal and every finding adjudicated | Existing integration owner freezes exact interfaces, paths, bases, merge order, and separate P2-B/P2-C cards | Required before either parallel leaf writer is dispatched |
+| `P2-B · material slots — region meaning stable` | R2-C GO plus I0-frozen card; material-region/slot owner | Disjoint new leaf modules and focused test; parallel with P2-C, merged first | Two regions differ as expected; layered semantic slots survive block/chunk/thread reorder; missing/overlap fails |
+| `P2-C · field layout — active DOFs exact` | R2-C GO plus I0-frozen card; field-layout owner | Disjoint new leaf modules and focused test; parallel with P2-B, merged second | Nonstandard component order and mechanical/thermal/coupled structural fixtures allocate only active entity-field pairs; no thermal-physics claim |
+| `P2-D · model boundary — fixed physics explicit` | P2-B/P2-C integrated plus a serial I0 Horizon freeze; model-boundary owner | Disjoint model-owned boundary recipe; parallel with P2-E, merged first | Explicit entity, orientation, measure, additive force/operator recipe, provenance, and no state mutation |
+| `P2-E · program boundary — dead loads explicit` | P2-B/P2-C integrated plus a serial I0 Horizon freeze; program-boundary owner | Disjoint program-owned boundary recipe; parallel with P2-D, merged second | Repeated boundary and nodal contributions add; parameter derivative literal; field/orientation/measure errors fail; no follower/schedule claim |
+| `P2-F · assembly plan — recipe union complete` | P2-B through P2-E integrated; sole assembly/prepared-analysis owner | Serial wiring of shared compiler exports, assembly preparation, and Phase 1 API | Final plan is the exact union of domain, model-boundary, program-boundary, affine reduction, request channels, and backend policy; mixed model solves publicly |
+| `P2-G · sparse backend — slots equal COO` | Complete P2-F recipe union; sole backend owner | Frozen backend hook plus reusable sparse-slot implementation; serial | Slot values equal the COO oracle, topology is reused, duplicates/zero-free cases work, and retained/peak memory is reported; backend defines no physics |
+| `R2-D · block generality — Phase 2 independently verified` | P2-G integrated; independent read-only owner | Whole Phase 2 finite-element correctness review | GO required before I2 |
+| `I2 · block generality — combined proof complete` | R2-D terminal and accepted findings repaired | Serial combined gates, ledger adjudication, and pause | Phase 2 exit: second/third formulations required no solver branch or whole-model padding; exact capability slices only are advanced |
+
+Phase 2 coordinates after P2-A remain proposed until R2-C reports and I0 serially
+adjudicates its evidence and freezes exact interfaces, path ownership, bases, and
+Horizon cards. The 154-row inventory has no dedicated row for
+general fixed model-boundary physics, exact active-layout proof, layered slots, or
+the sparse-slot backend. Track them as explicit component slices of existing rows;
+if I1 splits a row, preserve its original capability ID as lineage. Structural
+thermal fixtures do not advance `FORM-THERMAL`, `FORM-THERMOMECH`, or
+`FORM-THERMAL-BC`; fixed boundary recipes do not advance the later interaction
+meaning of `ASM-MODEL-ACTIONS`; and no Phase 2 packet advances
+`V3-PROTOTYPE-ASSEMBLY` by implication.
+
+### Four-slot and false-parallelism policy
+
+- P1-C is one writer because the first state lifetime, transaction authority,
+  reaction convention, result snapshot, verification boundary, and public API are
+  one semantic cut. Splitting them would create mutually invented interfaces.
+- P2-A is one writer because Q4 and T3 share partition, block, entity-map, compiler,
+  and assembly-iteration owners even though their leaf kernels differ.
+- P2-B and P2-C may run together only after R2-C reports and I0 freezes the leaf
+  interfaces and exact paths; neither writer may touch `model/compiled.py`,
+  `compile/model.py`, a shared export, the live ledger, or the same test file.
+- P2-D and P2-E may run together only as new leaf recipes. Neither may wire itself
+  into `assembly/prepare.py`; P2-F owns that serial union.
+- P2-G cannot start against a partial recipe set. Backend optimization after P2-F
+  preserves semantics; starting earlier would silently select them.
+- Every `__init__.py`, shared test aggregation, integration, repair adjudication,
+  execution-ledger edit, and phase-grade change has one serial owner.
+- During P1-C the other two slots are read-only Phase 2 research. During a Phase 2
+  writer wave use at most two disjoint writers and one read-only task. Shared-owner
+  stages run one writer only.
+
+## P1-C Horizon card — `HORIZON_FROZEN`
+
+**ID/title:** `P1-C · linear flow — public solution verified`
+
+**Outcome and ownership invariant:** compose the exact P0-D model, P1-A program,
+and P1-B assembly plan into the first typed, verified Q8 linear-static flow.
+`PreparedAnalysis` is the sole live owner of workspace reuse and one-accept
+authority. Physical, evolution, trial, committed, ledger, and solution values are
+immutable detached snapshots and never workspace views. The transaction boundary
+is real even though this Phase 1 material and formulation have zero-width history.
+No path-dependent Phase 3 behavior enters this packet.
+
+**Selection base and dispatch parent:** the read-only design was checked at clean
+base `1957902109ab6df6d6050d255b8bbf305d694a61`. The writer must start from the
+single clean documentation commit that freezes this card; I0 records and supplies
+that exact 40-character hash at dispatch. P0-D, P1-A, P1-B, and their independent
+proofs are required and complete. No concurrent state, request, result, reaction,
+or public-API writer is permitted.
+
+**Exact request and preparation contract:**
+
+- `LinearStatic()` is one exact frozen/slotted zero-field request. Subclasses and
+  foreign carriers fail. Its versioned manifest fixes the Phase 1 numeric,
+  verification, and workspace policies; tolerances are not premature public knobs.
+- `prepare_analysis(model, program, LinearStatic())` validates the complete exact
+  compiled carriers, translates to P1-B's internal contribution request, calls the
+  public P1-B preparation boundary exactly once, derives conservative capabilities,
+  and creates a fresh `PreparedAnalysis.instance_id`.
+- The prepared owner records exact model/program/plan content and live identities,
+  the exact versioned request manifest, one algebraic `EvolutionLayout`, and a
+  private serialized workspace.
+  Two prepared analyses over content-equal inputs have distinct identities and
+  cannot share transactions, state, solutions, caches, or factorization storage.
+- The Phase 1 backend is a private correctness-first dense symmetric Cholesky of
+  the P1-B canonical reduced COO operator. It is not a semantic carrier or public
+  backend promise. Finiteness is required. The original canonical `K_q` remains
+  the audit operator. P1-C's backend admission check, matching P1-B's `64 eps`
+  local symmetry policy, is exactly
+  `||K_q - K_q.T||_max <= 64 eps ||K_q||_max`, with an exactly zero right side
+  requiring exact symmetry; otherwise preparation fails. Only after that check,
+  the private solver projection is exactly
+  `K_solve = 0.5 * (K_q + K_q.T)`. This projection is recorded as backend policy,
+  never overwrites the audit ledger, and cannot hide a larger inconsistency.
+  Cholesky must succeed; with `s = ||K_solve||_infinity`, `s > 0` and every
+  unscaled Schur-complement pivot `d_i = L_ii**2` must satisfy `d_i > 1e-12 s`;
+  and the fresh post-solve reduced residual against original `K_q` must pass the
+  frozen verification normalization. Nonsymmetric beyond the frozen bound,
+  indefinite, singular, near-singular, malformed, or nonfinite systems fail before
+  acceptance.
+- Before allocating, checked integer arithmetic must prove that the dense operator,
+  factor, and required scratch fit a versioned `256 MiB` Phase 1 workspace budget.
+  Larger reduced systems fail deterministically with a backend-capacity diagnostic
+  and no state acceptance; they never rely on `MemoryError` as policy. P2-G removes
+  this reference-backend ceiling rather than silently raising it.
+- A bitwise-identical freshly evaluated canonical reduced operator may reuse the
+  private factorization. This compiled slice declares a constant tangent, so any
+  changed operator under the same exact model/program/plan identities and request
+  manifest is a capability or implementation-identity failure and fails closed; it
+  never replaces the cache. An empty reduced system bypasses factorization. P2-G
+  replaces this reference backend with measured sparse slots; P1-C makes no scale
+  or production-backend claim.
+- Workspace may own reduced numeric buffers, a factorization, scratch arrays, and
+  counters. It never owns authoritative fields, histories, reactions, convergence
+  truth, accepted state, or result arrays.
+
+**State and transaction spine:**
+
+```text
+PhysicalState
+  model identity/fingerprint + schema + StateGeneration
+  detached read-only full primary vector
+  exact per-block material histories shaped (..., 0)
+  exact per-block formulation histories shaped (..., 0)
+
+EvolutionState
+  prepared identity + exact request manifest/schema + same generation
+  exact bound ProgramEvaluation
+  algebraic field classification, accepted step index
+  detached predictor and actual full increment
+
+ProgramHistory
+  exact program identity/schema; empty in P1-C
+
+CommittedAnalysisState
+  prepared identity + accepted generation
+  PhysicalState + EvolutionState + empty ProgramHistory
+
+StepTransaction
+  unique transaction ID and exact prepared/model/program/plan identities
+  exact request manifest
+  exact base state/generation, bound target ProgramEvaluation
+  retry=0, cutback=0, typed linear predictor
+
+TrialAnalysisState
+  unique trial ID and exact transaction/base identity
+  prospective base.next_accepted() generation
+  detached candidate physical/evolution/history snapshots
+  candidate-specific linear balance ledger
+
+LinearBalanceLedger
+  unique ledger ID
+  exact prepared/model/program/plan identities and fingerprints
+  exact request manifest
+  exact transaction and trial IDs
+  exact base and candidate StateGeneration values
+  exact bound ProgramEvaluation and detached candidate-specific arrays
+```
+
+`initialize(point=...)` requires an explicit `ProgramPoint`, creates one fresh
+generation-0 lineage, evaluates that point's affine offset, initializes the full
+primary vector to `u_bar`, and allocates the exact zero-width history arrays.
+P1-C invents neither a schedule nor an implicit initial coordinate.
+
+`PreparedAnalysis` keeps a locked private registry of transactions and consumed
+base generations. Multiple trials or transactions may reference one base, but
+only the first fully valid accept can consume it. Trials have distinct IDs even
+when they share one prospective successor generation. Discarding a trial or
+abandoning a transaction is byte-for-byte inert. Acceptance validates the entire
+trial first, atomically consumes the exact base, copies trial arrays into distinct
+committed storage, and closes the transaction. Double accept, a stale sibling,
+foreign prepared analysis, wrong transaction, wrong trial, non-successor or forged
+generation, and any trial/committed alias fail without partial state change.
+
+The explicit reusable flow accepts an initialized base. A convenience prepared
+solve may accept both explicit `initial_point` and target `point`, internally create
+a fresh lineage, and reuse only workspace/factorization. Repeated independent
+prepared solves therefore do not consume one another's generation-0 base. Every
+successful direct solve—including zero-load and zero-free-DOF cases—accepts exactly
+one transition `0 -> 1`; every failed solve accepts none.
+
+**Frozen equilibrium, reaction, and work conventions:**
+
+```text
+K_q q = b_q
+u = P q + u_bar
+f_int = K u
+r_full = f_ext - f_int
+r_q = P.T r_full
+c_constraint = f_int - f_ext = -r_full
+balance = f_ext + c_constraint - f_int
+```
+
+The solution records full and reduced residuals, internal and external forces, the
+full constraint-force vector, direct reactions, constraint violation, reduced
+coordinates, constraint work, normalizations, and tolerances. Direct reactions are
+`c_constraint` entries only for authored direct prescribed-DOF targets. P1-C does
+not reinterpret one as a generalized force conjugate to a prescribed root that
+also drives an MPC chain. P1-C does not report MPC multipliers because it has not
+selected an independent dual basis; constrained residual entries are never
+mislabeled as unique multipliers. Computing `K u` is the constant-linear audit
+slice of `ASM-INTERNAL`, not a claim that the general nonlinear internal-force
+ledger is implemented.
+
+Every retained and recomputed balance ledger carries the exact prepared,
+transaction, trial, base-generation, and candidate-generation provenance above.
+`verify_record()` rejects a numerically identical ledger from a sibling trial or
+generation before examining its values.
+
+Use scale-relative verification with infinity norms and no unit floor:
+
+```text
+F_full = max(
+  ||f_ext||,
+  ||f_int||,
+  ||c_constraint||,
+  ||K|| * ||u||,
+)
+F_reduced = max(
+  ||b_q||,
+  ||K_q q||,
+  ||P.T|| * F_full,
+)
+U_reconstruction = max(||u||, ||P q||, ||u_bar||)
+W = max(
+  |f_ext.T @ u|,
+  |f_int.T @ u|,
+  |c_constraint.T @ u|,
+  F_full * max(||u||, ||u_bar||),
+)
+```
+
+For any error/scale pair, a zero scale requires an exactly zero error; otherwise
+compare the normalized ratio to `1e-12` using overflow/underflow-safe binary64
+scaling rather than multiplying a possibly subnormal scale by the tolerance.
+Reduced equilibrium and `P.T @ c_constraint` use `F_reduced`; full balance and
+force-ledger comparisons use `F_full`; field reconstruction uses
+`U_reconstruction`; and work uses `W`. Each authored prescribed or affine-tie
+constraint uses its own algebraic row scale: the maximum magnitude of the target
+value and every evaluated term in that row, with the same exact-zero rule. This
+policy rejects an order-one wrong displacement even when valid stiffness and load
+scales are far below one. P1-B's frozen operator/RHS tolerances remain unchanged.
+
+**Immutable solution and verification:**
+
+- `Solution` retains immutable model/program/request references, prepared
+  provenance but no mutable workspace, the final committed state, the accepted
+  transition record, convergence record, and detached balance/reaction ledger.
+  It retains no factorization or cached solver residual as proof.
+- `verify_record()` validates exact carriers, live/content identities, schemas,
+  generation succession, accepted-transaction provenance, finite read-only
+  detached arrays, convergence record, and internal algebraic consistency. It does
+  not claim freshly recomputed equilibrium.
+- `verify()` first verifies the record, then creates a fresh P1-B plan/evaluation
+  and fresh verification workspace. It independently reconstructs `P`, `u_bar`,
+  `K`, `f_ext`, constraint violation, reduced residual, full constraint force,
+  direct reactions, work, and balance. It never reads the solve factorization,
+  cached operator, stored norm, or mutable prepared workspace.
+- The solve performs the same fresh candidate verification before atomic accept.
+  Later `verify()` repeats it independently.
+- Malformed carriers raise one structured verification error. A well-formed record
+  whose recomputed numerical checks fail returns an immutable report with
+  `passed=False`, named checks, tolerances, scales, and measured norms.
+
+**Public flows and namespace decision:**
+
+```python
+from pyfem.v3.api import LinearStatic, prepare_analysis, solve
+
+analysis = prepare_analysis(model, program, LinearStatic())
+initial = analysis.initialize(point=base_point)
+solution = analysis.solve(initial=initial, point=target_point)
+report = solution.verify()
+```
+
+```python
+solution = solve(
+    model_spec,
+    program_spec,
+    LinearStatic(),
+    registry=q8_reference_registry(),
+    initial_point=base_point,
+    point=target_point,
+)
+```
+
+The one-shot path uses the same normalize, compile, prepare, initialize,
+transaction, solve, accept, and verify path and requires explicit registry
+injection. The approved Phase 1 public surface is `pyfem.v3.api`; neither
+`pyfem/__init__.py` nor the current prototype-heavy `pyfem/v3/__init__.py` changes.
+Consequently importing a `pyfem.v3` submodule still executes that existing package
+initializer and may load prototype modules; P1-C makes no semantic call to them and
+does not falsely claim their import-time retirement. Root exposure, initializer
+cleanup/lazy compatibility, adapters, and prototype deletion remain later explicit
+decisions.
+
+**Coverage contracted at component-qualified E1:** `STATE-LAYOUT` for exact
+stateless zero-width material/formulation layouts only; `STATE-GLOBAL` for the Q8
+primary/evolution/workspace/result ownership split; `STATE-TRIAL` for detached
+stateless candidate evaluation; `STATE-TRANSACTION` for one atomic algebraic
+accept/discard; `STATE-EVOLUTION` for one explicit program-point transition;
+`V3-GENERATION` for successor and sibling-accept enforcement; `ANAL-DISPATCH` for
+exact `LinearStatic`; `ANAL-LINEAR` for the constrained Q8 solve; `RES-SOLUTION`
+for the in-memory verified Q8 result; and `ASM-INTERNAL` for the constant-linear
+`K u` audit derivation only. Successful code/integration/review may reach
+provisional E2; only I1's complete public-flow proof may assign E3 to these exact
+slices and the existing P0-D/P1-A/P1-B consumer paths.
+
+All nonzero/path-dependent portions of the state rows remain E0, as do
+`STATE-RESTORE`, `STATE-NODAL-ACCUM`, `PROG-SCHEDULE`, general
+`ASM-INTERNAL`, nonlinear/follower/geometric contributions, all other
+analysis/result families, adapters/ecosystem rows, and every
+`V3-PROTOTYPE-*` retirement row.
+
+**Owned paths:** new `pyfem/v3/api.py`; new `pyfem/v3/analysis/**`; new
+`pyfem/v3/model/state.py`; minimal state exports in
+`pyfem/v3/model/__init__.py`; new `pyfem/v3/results/**`; and new
+`test/v3/test_v3_linear_analysis.py`. Splitting source files inside the two new
+packages is allowed. One writer owns every path and returns one focused commit.
+
+**Forbidden paths and non-goals:** `.agents/v3/**`, root configuration and lock
+files, `pyfem/__init__.py`, `pyfem/v3/__init__.py`, existing `spec/**`,
+`compile/**`, and `assembly/**`, existing model carriers except the single export
+edit, prototype `types.py`, `pack.py`, `_prototype_assembly.py`, `registry.py`,
+prototype `solver/**` and `io/**`, numeric kernels, and existing tests. Do not add
+schedule stepping, authored initial conditions, checkpoint/rebind, path-dependent
+history, nonlinear solve, line search/cutback, distributed/follower loads, general
+constraints, output projectors, root compatibility, CLI/GUI, RVE/FE2, ROM, sparse
+slots, or a wall-clock acceptance threshold.
+
+**Independent exact Q8 oracle:** one unit-square Q8 uses the frozen P1-B node order,
+`E=1`, `nu=0`, unit thickness, direct conditions `u_1x=u_1y=0`, affine MPC
+`u_3y=u_3x+lambda`, and nodal load `f_5y=1`. At `lambda=1`, the exact rational
+solution derived independently from literal `K=M/360` is:
+
+```text
+[0, 0, 29/12, 67/24, 29/6, 35/6, -23/24, 33/4,
+ -7, 32/3, -77/12, 27/8, -35/6, -7/6, -37/24, -7/12]
+```
+
+The test pastes those fractions as literals and never calls production assembly or
+solve to manufacture them. Its exact ledgers are:
+
+```text
+f_int = [-1,0,0,0, 1,-1,0,0,0,1, 0,0,0,0,0,0]
+r_full = [1,0,0,0, -1,1,0,0,0,0, 0,0,0,0,0,0]
+c_constraint = [-1,0,0,0, 1,-1,0,0,0,0, 0,0,0,0,0,0]
+direct reactions = [-1, 0]
+c_constraint.T @ u = -1
+f_ext.T @ u = 32/3
+f_int.T @ u = 29/3
+f_ext.T @ u + c_constraint.T @ u = f_int.T @ u
+P.T @ r_full = 0
+c_constraint.T @ (du/dlambda) = -1
+```
+
+The affine derivative is the exact rigid-rotation field `du/dlambda=(-y,x)`, lies
+in the nullspace of `K`, and leaves the constraint force unchanged. The independent
+analytical oracle is the rational calculation itself. A calibration using current
+P1-B reference assembly and a NumPy dense solve—not an independent assembly oracle
+or the future P1-C solve—differed from the rational displacement by at most
+`3.9e-14` and reduced equilibrium by at most `6.3e-15`.
+
+**Required correctness matrix:**
+
+1. the rational one-cell solve, reactions, work, rigid affine derivative, and
+   global force/moment balance;
+2. zero load with nonzero rigid offset, displacement-only, direct prescriptions,
+   and a fully prescribed zero-free system that performs no factorization;
+3. additive and constrained-DOF loads, affine MPC chains and nonzero offsets;
+4. no-constraint identity reduction prepares successfully but solving rejects the
+   exact rank-13 Q8 operator even for zero RHS; other near-singular, indefinite,
+   nonsymmetric, nonfinite, malformed, unsupported, and capability-incompatible
+   inputs also fail without commit;
+5. content-equal but live-distinct model/program/prepared owners, altered or foreign
+   request carriers, mismatched plan/request, and foreign state/transaction/trial
+   carriers fail before workspace use or acceptance;
+6. repeated prepared solves reuse only eligible factorization storage, while prior
+   state, trial, ledger, and solution arrays remain detached, read-only, unchanged,
+   and memory-disjoint;
+7. same trial twice, sibling transactions, stale base, forged generation, discard,
+   and failed solve prove exactly-once acceptance and byte-for-byte inert failure;
+8. `verify_record()` catches identity, generation, provenance, convergence, ledger,
+   and storage corruption;
+9. for a coherent copied record with `u[2] += 1e-6`, fresh `verify()` recomputes
+   `||P.T @ r_full||_infinity = 23/11250000`, approximately `2.04444e-6`, and
+   fails the `1e-12 F_reduced` threshold; it likewise catches a broken affine constraint,
+   changed force/reaction balance, and false convergence even when record-only
+   checks are coherent, while poisoned solve caches do not affect it;
+10. the book PatchTest8 analytical field
+    `u_x = 1e-3 x + 5e-4 y`, `u_y = 5e-4 x + 1e-3 y` is a primary independent
+    new-flow oracle at `rtol=0`, `atol=1e-12`; legacy/prototype agreement remains
+    secondary disagreement evidence at `rtol=1e-10`, `atol=1e-12`; and
+11. exact IDs and source locations remain total and bounded under
+    `PYTHONINTMAXSTRDIGITS=640`.
+
+**Required gates:** focused P1-C tests and combined P0-D/P1-A/P1-B/P1-C tests in
+normal and 640-digit modes; P1-B's 27 named references plus the independent solve
+cases; selected reusable and one-shot public flows; both Ruff configurations and
+focused format; all `test/v3` and the full repository suite; source-dependency
+scans proving no direct P1-C prototype/solver/I/O/legacy/root dependency; storage
+alias and determinant-absolute-value scans; `git diff --check`; exact one-commit
+ancestry and path ownership; final clean status. Record cold prepare, first solve,
+twenty alternating-point warm solves, verification, factorization reuse, and
+retained/peak memory for one-cell, five-cell, and bounded 8x8 Q8 cases. Report the
+P1-A full-DOF witness cost separately. These are measurements, not timing gates.
+
+**Strongest competing design and rejection:** a purely functional immutable solver
+could return a successor state without a live accept owner. It is attractive but
+cannot prevent sibling transactions from accepting the same base and supplies no
+exact owner for cache/factorization identity. Adding a separate public run/session
+owner would introduce another lifetime before evidence requires it. P1-C therefore
+assigns both one-accept authority and private cache identity to the already-required
+`PreparedAnalysis`.
+
+**Causal prototype consequence:** the P1-C source and algorithm must have zero
+direct production dependency on `ProblemDefinition`, `LoadedProblem`, `pack.py`,
+the global string registry, prototype assembly, prototype solver/context/state, or
+adapters. The new path replaces the Q8 direct-linear meaning but deletes nothing:
+prototype carrier/registry/assembly/analysis rows remain E0 because Q4/T3/3D,
+nonlinear/path references, import compatibility, and existing consumers still
+depend on them.
+
+**Blocked condition:** stop and return the smallest counterexample if P1-B cannot
+supply fresh exact contributions without changing its carriers; if the one-accept
+authority requires changing identity primitives; if correct full reactions require
+pretending MPC multipliers are unique; if strong verification must reuse solver
+caches; if an owned public flow cannot exist without a forbidden root/adapter path;
+or if the frozen Q8 operator cannot satisfy the private Cholesky policy. Create a
+separate prerequisite or design decision rather than widening P1-C informally.
 
 ## Semantic decisions and open questions
 
@@ -115,8 +600,8 @@ Open and not implicitly decided:
   `RES-PICKLE`;
 - exact RVE/FE2 nesting, state, restart, cost, and result semantics, plus exact ROM
   snapshot/basis/reduced-solve contracts; and
-- the later-phase registry-callable trust and accepted-generation transaction
-  obligations recorded below.
+- the later-phase registry-callable trust, restore/rebind, and path-dependent
+  transaction obligations recorded below.
 
 ## Capability coverage ledger
 
@@ -134,7 +619,8 @@ dated E0 evidence.
 | P0-D immediate dependency cut | 18 | `provisional`, `E2` at `79060abb`; repaired source, I0 integration proof, and R0-N independent GO complete | 11 preserve, 7 change; component proof only, no public flow | Consumer proof continues through Phase 1; E3 requires the verified public slice |
 | P1-A immediate dependency cut | 3 | `provisional`, `E2` at `b7316be`; final repair, I0 integration proof, and independent carrier GO complete | 3 change; `PROG-DIRICHLET`, `PROG-MPC`, `PROG-NODAL-LOAD` | Consumer proof continues through P1-B/P1-C; E3 requires the verified public slice |
 | P1-B immediate dependency cut | 5 | `provisional`, `E2` at `daad227`; repair, I0 combined proof, and exact-base independent GO complete | 5 change; component slices of `ASM-COO`, `ASM-PREPARE`, `ASM-EXTERNAL`, `ASM-GATHER`, `ASM-TANGENT` | Consumer proof continues through P1-C; E3 requires the verified public slice |
-| Later preserve/change portfolio | 115 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
+| P1-C immediate dependency cut | 10 | `contracted`, component-qualified `E1`; frozen state/analysis/result/API Horizon, no code or owner active | 1 preserve, 9 change; exact bounded slices listed below | Implement once, review independently as R1-A, then I1 alone may assign E3 |
+| Later preserve/change portfolio | 105 | `inventoried`, `E0` | Working dispositions accepted; slice-specific E1 extraction and semantic adjudication still required | Select only when dependencies pass |
 | Internal/duplicate retirement candidates | 7 | `inventoried`, `E0` | Working `retire`; no deletion before replacement or unique-behavior proof | Dedicated causal-retirement proof |
 | Public retirement candidates | 6 | `blocked`, `E0` | Working `retire`; explicit approval and compatibility/loss statement absent | Delegator/public decision packet |
 | **Total** | **154** | all rows accounted for | 52 preserve, 89 change, 13 retire | no hidden or undecided row |
@@ -163,7 +649,21 @@ ASM-COO               ASM-PREPARE           ASM-EXTERNAL
 ASM-GATHER            ASM-TANGENT
 ```
 
-Their E1 contract is deliberately component-bounded. `ASM-COO` covers canonical
+The ten P1-C rows are component-qualified rather than row-wide breadth claims:
+
+```text
+STATE-LAYOUT          STATE-GLOBAL           STATE-TRIAL
+STATE-TRANSACTION     STATE-EVOLUTION        V3-GENERATION
+ANAL-DISPATCH         ANAL-LINEAR            RES-SOLUTION
+ASM-INTERNAL
+```
+
+Their exact E1 boundaries are frozen in the P1-C Horizon above. Nonzero local
+history, schedules, restore/rebind, general nonlinear internal force, other
+analysis families, exporters, compatibility, and prototype retirement remain E0.
+
+The five P1-B rows' E1 contract is deliberately component-bounded. `ASM-COO`
+covers canonical
 raw Q8 element contributions and an explicitly coalesced reference operator;
 `ASM-PREPARE` covers immutable request-specific topology and compatibility;
 `ASM-EXTERNAL` covers P1-A nodal force and affine derivative channels only;
@@ -1701,6 +2201,9 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P1-E · assembly plan — correspondence repaired` | `019f7736-ec41-7560-9d65-472551b4a6fe` | source `ab02297c052912cb027ac6963b37667bf61f3e97`, parent `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Close exact Q8 reference-recipe correspondence and metadata-free binding output in the same six paths | Complete with both terminal signals; replacement `8e94454`, integrated `daad227`; 34 focused twice, 152 combined twice, 392 v3, 581 full |
 | `INCOMPLETE R1-B · assembly plan — temp-file approval stalled` | `019f7750-8745-7e23-aaf2-35f50ec79fc8` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Original independent read-only P1-B reviewer | Incomplete; preflight and repository gates were green, but an unnecessary temporary-file change waited on approval; archived without final/callback or repository change |
 | `I0/R1-B · assembly plan — bounded replacement GO` | internal agent `/root/r1b_inline_review` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Exact-base read-only Sol/max replacement | Complete GO; zero findings, 34 focused twice, 152 combined twice, 27 references, both Ruff configurations, format/static/diff/final-clean gates green |
+| `P1-C · linear flow — public solution verified` | not dispatched | exact frozen-card commit to be recorded at dispatch | Sole state/analysis/result/API writer | Planned and Horizon-frozen; component-qualified E1; no task or worktree exists |
+| `R2-A · topology — Q4/T3 contracts extracted` | not dispatched | same exact frozen-card commit as P1-C | Read-only Phase 2 topology research | Planned; no task, edit, or evidence grade |
+| `R2-B · ownership — Phase 2 leaves separated` | not dispatched | same exact frozen-card commit as P1-C | Read-only Phase 2 ownership/backend research | Planned; no task, edit, or evidence grade |
 
 ## Task completion audit
 
@@ -2557,3 +3060,11 @@ integration decision; do not bridge it with a compatibility carrier.
   source inspection. I0 adjudicated the five P1-B rows to provisional E2. The
   migration is paused with no active owner; the exact next action on resume is to
   freeze P1-C before dispatch.
+- 2026-07-19: at the user's request, I0 planned the next large pass with three
+  parallel read-only Sol/max analyses at exact clean `1957902`: P1-C state/public
+  ownership, an independent exact rational Q8 solve/verification matrix, and the
+  Phase 2 dependency DAG. I0 adjudicated the remaining choices, froze P1-C at
+  component-qualified E1, adopted the eleven-stage Phase 1/2 critical path and two
+  disjoint Phase 2 writer waves, and recorded an I2 pause boundary. No migration
+  implementation task was dispatched. The next activation uses one P1-C writer,
+  two read-only Phase 2 researchers, and reserves the fourth slot for I0.
