@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; I1 is complete and the bounded Phase 1 slices are component-qualified E3; the P2-A Horizon is frozen and one sole mixed-block writer is active
+- Status: active; I1 is complete and the bounded Phase 1 slices are component-qualified E3; the frozen P2-A writer is paused after an erroneous local-edit classification and awaits explicit user approval to resume
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -25,7 +25,7 @@
 - Integrated P1-C chain: `c9b9480` -> `bfc1d80` -> `d78201d` -> `7ee65c3ea5c50278b17dce63f2569e22412e0ebd`
 - P1-C integrated proof: 86 focused and 348 combined tests in both normal and 640-digit modes; 478 v3; 667 repository; both Ruff configurations, focused format, ancestry, ownership, and static gates green
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: P2-A mixed Q8/Q4/T3 public slice implementation by one sole writer
+- Active milestone: P2-A mixed Q8/Q4/T3 public slice; preserved six-path partial worktree paused before coherent tests
 
 ## Exact next safe action
 
@@ -73,12 +73,21 @@ topology branch. The frozen card below therefore keeps the genuine public mixed
 slice, uses new neutral v1 schema families, persists only full raw block offsets,
 uses `gauss-tria3-order1`, and grants exactly 13 paths.
 
-Fresh Sol/max task `/root/p2a_mixed_blocks_writer` is the sole source owner in
+Fresh Sol/max task `/root/p2a_mixed_blocks_writer` remains the sole source owner in
 `/private/tmp/pyfem-p2a-7ee65c3`, branch `agnet/p2a-mixed-blocks`, from exact parent
-`7ee65c3ea5c50278b17dce63f2569e22412e0ebd`. It must return exactly one focused
-commit and every frozen gate. No parallel Phase 2 writer is permitted. After I0
-review and serial integration, one fresh read-only R2-C must return GO before the
-P2-B/P2-C leaf cards freeze.
+`7ee65c3ea5c50278b17dce63f2569e22412e0ebd`, but is paused. After six authorized
+paths were edited, a further local `apply_patch` to `compile/model.py` was rejected
+because the ordinary coordinator heartbeat was misclassified as unrelated content.
+The rejected hunk did not apply. No tests, commit, unowned path, revert, copy,
+restart, or workaround occurred. The preserved modified paths are
+`assembly/contracts.py`, `compile/__init__.py`, `compile/contracts.py`,
+`compile/model.py`, `model/compiled.py`, and `model/state.py`.
+
+The writer may resume only after explicit post-disclosure user approval is relayed
+by I0. It must then finish the same frozen 13-path card, one commit, and all gates;
+no replacement writer or manual root edit may bypass this pause. R2-C's read-only
+acceptance card is complete, and the P2-B/P2-C conditional leaf drafts are complete
+but remain unfrozen until P2-A integrates and R2-C returns GO.
 
 Two public-flow completion attempts are explicitly unfinished and are not evidence:
 `p1c_source_review` was stopped twice by erroneous output routing, and
@@ -2468,7 +2477,9 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
 | `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
 | `P2-A · contract reconciliation` | internal Sol/max agent `/root/p2a_contract_reconcile` | product `7ee65c3` | Read-only schema/key/offset/audit/path decision comparison | Complete; froze new-family v1 schemas, `gauss-tria3-order1`, one persisted full-offset carrier, transient Q4 corner audit, and element-qualified literals; compiler-only scope recommendation was separately rejected |
-| `P2-A · mixed blocks writer` | internal Sol/max agent `/root/p2a_mixed_blocks_writer`; `/private/tmp/pyfem-p2a-7ee65c3`; branch `agnet/p2a-mixed-blocks` | exact parent `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Sole 13-path Q8/Q4/T3 public mixed-slice writer | Active; exactly one focused commit required; no parallel Phase 2 writer |
+| `PAUSED P2-A · mixed blocks writer — local edit classification` | internal Sol/max agent `/root/p2a_mixed_blocks_writer`; `/private/tmp/pyfem-p2a-7ee65c3`; branch `agnet/p2a-mixed-blocks` | exact parent `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Sole 13-path Q8/Q4/T3 public mixed-slice writer | Paused before tests/commit after an unapplied `compile/model.py` patch was rejected; six authorized paths preserved; explicit post-disclosure user approval required; no workaround |
+| `R2-C · acceptance matrix` | internal Sol/max agent `/root/r2c_acceptance_matrix` | planning base `7ee65c3` | Read-only independent post-integration review card | Complete; includes exact Fraction operators, disconnected and 13-node shared-interface oracles, all-block mutation matrix, public fresh verification, full gates, and no grade authority |
+| `P2-B/P2-C · conditional leaf drafts` | internal Terra/max agent `/root/p2bc_leaf_drafts` | planning base `7ee65c3` | Read-only disjoint material-slot and active-field-layout drafts | Complete but unfrozen; two new paths per leaf; require R2-C confirmation of one immutable partition seed before parallel dispatch |
 | `I0/P1-C · numeric repair card` | internal Sol/max agent `/root/p1c_numeric_repair_card` | repair parent `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only exact-ratio, explicit factor/solve, and workspace acceptance design | Complete and clean; exact cross-products and deterministic 4-matrix/6-vector private-backend proposal; no edit or grade authority |
 | `I0/P1-C · scalar repair card` | internal Sol/max agent `/root/p1c_scalar_repair_card` | repair parent `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only complete result scalar/tuple preflight inventory | Complete and clean; canonical UUID/identity/generation and scalar/tuple matrix; no edit, grade, or integration authority |
 | `I0/P1-C · repair gate matrix` | internal Sol/max agent `/root/p1c_repair_gate` | initial source `c263d95830df8284ab55c82dbd771f4690301283` | Read-only exact post-repair correctness-matrix design | Complete and clean; seven-area matrix plus cross-fix interactions and bounded command set; no edit, grade, or integration authority |
@@ -2491,11 +2502,13 @@ are recorded separately because they are not part of that user-visible audit set
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
   stalled on an unnecessary temporary-file approval.
-- Active: one sole P2-A source writer `/root/p2a_mixed_blocks_writer` at exact
-  parent `7ee65c3`; the freeze, topology, ownership, reconciliation, and scope
-  tasks are complete and read-only. The three R1-A tasks are complete GO and I1 is
-  frozen. No parallel Phase 2 writer or watchdog is active. I0 retains integration
-  and ledger ownership. The two Kimi
+- Active: no task is currently editing source. Sole P2-A writer
+  `/root/p2a_mixed_blocks_writer` is explicitly paused at exact parent `7ee65c3`
+  with six authorized modified paths preserved; it awaits explicit user approval
+  after an erroneous local-edit classification. The freeze, topology, ownership,
+  reconciliation, scope, R2-C-card, and leaf-draft tasks are complete and read-only.
+  The three R1-A tasks are complete GO and I1 is frozen. No parallel Phase 2 writer
+  or watchdog is active. I0 retains integration and ledger ownership. The two Kimi
   attempts, the twice-routed
   `/root/p1c_source_review`, and the Sol-capacity
   `/root/p1c_public_flow_redo` are explicitly incomplete and provide no evidence;
@@ -3503,3 +3516,20 @@ integration decision; do not bridge it with a compatibility carrier.
   `/root/p2a_mixed_blocks_writer`. It owns exactly the frozen 13 paths, must return
   one focused commit and every normal/640-digit, reference, public-flow, Ruff, v3,
   repository, static, ancestry, and clean gate. No parallel Phase 2 writer is active.
+- 2026-07-19: the P2-A writer passed exact clean preflight and began the frozen
+  compiler/carrier work. After six authorized paths were modified, its next local
+  `apply_patch` to `compile/model.py` was rejected because an ordinary heartbeat
+  reply was erroneously classified as unrelated content. The rejected hunk did not
+  apply. I0 paused the task without a workaround; no test, commit, unowned path,
+  revert, copy, or restart occurred. The preserved worktree remains at parent
+  `7ee65c3` with changes only in `assembly/contracts.py`, `compile/__init__.py`,
+  `compile/contracts.py`, `compile/model.py`, `model/compiled.py`, and
+  `model/state.py`. Explicit post-disclosure user approval is required before the
+  same bounded writer may resume.
+- 2026-07-19: while the sole writer was active, two other tasks remained read-only.
+  `/root/r2c_acceptance_matrix` completed the independent post-integration card,
+  including exact Fraction-derived operators and a non-duplicative 13-node
+  shared-Q4/T3 oracle with 356/340 full and 219/210 reduced raw/canonical counts.
+  `/root/p2bc_leaf_drafts` completed disjoint two-path material-slot and active-field
+  drafts. Both leaves remain unfrozen; R2-C must first confirm one immutable common
+  partition seed, otherwise a serial prerequisite owns that seam.
