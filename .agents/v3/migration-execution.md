@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; P1-C repair 1/2 is withheld after independent NO-GO and repair 2/2 is the sole writer; all review and Phase 2 proposal tasks are complete and read-only
+- Status: active; P1-C repair 1/2 is withheld after independent NO-GO, repair 2/2 is the sole writer, and one scalar-preflight support card is read-only
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -48,6 +48,9 @@ subclasses reaching overloaded comparisons before exact preflight.
 The original Sol/max owner is the sole repair 2/2 writer in
 `/private/tmp/pyfem-p1c-02cff1c`, producing at most one direct child of `8524c233`.
 No parallel state, analysis, result, API, compiler, or assembly writer is permitted.
+`/root/p1c_numeric_repair_card` completed a read-only exact-ratio and bounded
+factor/solve acceptance card. `/root/p1c_scalar_repair_card` is the only active
+read-only support task and owns no path or evidence grade.
 The independent Sol/max task `/root/p1c_repair_gate` completed a read-only exact
 post-repair correctness matrix for the seven accepted areas; it advances no
 evidence grade and owns no path. `/root/p2a_freeze_draft` also completed a
@@ -2227,6 +2230,8 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P1-C · linear flow — public solution verified` | internal Sol/max agent `/root/p1c_writer`; `/private/tmp/pyfem-p1c-02cff1c`; branch `agnet/p1c-linear-flow` | base `02cff1ca76b02969b91eac6e889de78c7a4ef9e2`; initial `c263d958`; repair 1/2 `8524c233` | Sole state/analysis/result/API writer and bounded repair owner | Initial source and repair 1/2 complete but independently withheld; repair 2/2 active on five accepted roots; nothing integrated |
 | `R0/P1-C · repair 1 solver/state check` | internal Sol/max agent `/root/p1c_repair_solver_review` | `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only transaction, solver, convergence, and workspace check | Complete NO-GO; P0/P1/P2 `0/3/0`; opposite discard race, exact-ratio false negatives, and unverifiable cache history |
 | `R0/P1-C · repair 1 result check` | internal Sol/max agent `/root/p1c_repair_result_review` | `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only result, storage, scalar-preflight, and evaluation check | Complete NO-GO; P0/P1/P2 `0/2/0`; convergence evidence and exact/total scalar preflight |
+| `I0/P1-C · numeric repair card` | internal Sol/max agent `/root/p1c_numeric_repair_card` | repair parent `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only exact-ratio, explicit factor/solve, and workspace acceptance design | Complete and clean; exact cross-products and deterministic 4-matrix/6-vector private-backend proposal; no edit or grade authority |
+| `I0/P1-C · scalar repair card` | internal Sol/max agent `/root/p1c_scalar_repair_card` | repair parent `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only complete result scalar/tuple preflight inventory | Active; no edit, grade, or integration authority |
 | `I0/P1-C · repair gate matrix` | internal Sol/max agent `/root/p1c_repair_gate` | initial source `c263d95830df8284ab55c82dbd771f4690301283` | Read-only exact post-repair correctness-matrix design | Complete and clean; seven-area matrix plus cross-fix interactions and bounded command set; no edit, grade, or integration authority |
 | `P2-A · mixed blocks — proposed freeze draft` | internal Sol/max agent `/root/p2a_freeze_draft`; main `d18800f7df2dcd8ceafb00254316d05cf94714f9` | post-I1 proposal only | Read-only packet design for descriptor-driven Q8/Q4/T3 composition | Complete and clean; proposed 15-node exact oracle and bounded ownership; not frozen, no edit or grade advance |
 | `R2-A · topology — Q4/T3 contracts extracted` | internal Sol/max agent `/root/r2a_topology`; `/private/tmp/pyfem-r2a-02cff1c`; detached | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Read-only Phase 2 topology research | Complete and clean; Q4 corner audit, descriptor-local ordering, native-width homogeneous blocks, and literal Q4/T3 oracles proposed; no edit or grade advance |
@@ -2247,7 +2252,8 @@ is recorded separately because it is not a user-visible sidebar task.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
   stalled on an unnecessary temporary-file approval.
-- Active: one internal Sol/max task, P1-C repair 2/2, as the sole source writer.
+- Active: two internal Sol/max tasks: P1-C repair 2/2 as the sole source writer,
+  and `/root/p1c_scalar_repair_card` as a read-only support task.
   `/root/p1c_repair_gate`, `/root/p2a_freeze_draft`, R2-A/R2-B, and the other
   downstream proposal tasks are complete and read-only. No
   user-visible task or watchdog is active. I0 retains integration and ledger
@@ -3176,3 +3182,10 @@ integration decision; do not bridge it with a compatibility carrier.
   meaning; bounded solve scratch; and exact scalar/tuple preflight. Repair 2/2 was
   dispatched to the original sole writer as one child of `8524c233`; P1-C remains
   E1 and R1-A/P2-A remain closed.
+- 2026-07-19: repair-2 numeric support completed read-only. It selected one shared
+  exact `float.as_integer_ratio()` cross-product comparator, explicit bounded
+  Cholesky factorization and two-vector forward/back substitution, scalar private
+  matrix checks, and the exact private-backend formula
+  `8 * (4*n*n + 6*n)`: 2,895 reduced DOFs admit 268,331,760 bytes and 2,896 reject
+  268,517,120 bytes. A separate read-only scalar-preflight inventory remains active;
+  neither support task edits source or advances evidence.
