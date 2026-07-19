@@ -1,6 +1,6 @@
 # PyFEM v3 migration execution ledger
 
-- Status: planned and paused; P1-C is Horizon-frozen at component-qualified E1, with no implementation task active
+- Status: active; P1-C is implementing while R2-A and R2-B run read-only Phase 2 research from the same frozen base
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md)
@@ -22,23 +22,26 @@
 - P1-B independent proof: exact base `e11a07c0cc5c00e956c3d537ac94272f120621c0`; the sidebar R1-B task is visibly incomplete after a temporary-file approval stall, while the exact-base internal Sol/max replacement returned GO with zero findings
 - P1-C frozen Horizon and planned common dispatch base: `02cff1ca76b02969b91eac6e889de78c7a4ef9e2`
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: P1-C selected and Horizon-frozen; next large pass is planned through the Phase 2 exit
+- Active milestone: first large-pass wave active — P1-C writer plus R2-A/R2-B research
 
 ## Exact next safe action
 
-Remain paused until the delegator starts the planned wave. No writer, reviewer, or
-watchdog is active. On resume, dispatch exactly three Sol/max tasks from common
-exact clean base `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` while I0 retains the
-fourth slot:
+The first wave is active from common exact clean base
+`02cff1ca76b02969b91eac6e889de78c7a4ef9e2` while I0 retains the fourth slot:
 
 1. `P1-C · linear flow — public solution verified` is the only writer and owns the
    frozen state/analysis/result/API cut below;
 2. `R2-A · topology — Q4/T3 contracts extracted` is read-only Phase 2 research;
 3. `R2-B · ownership — Phase 2 leaves separated` is read-only Phase 2 research.
 
-The research tasks may inspect P1-C's frozen contract but do not depend on its code,
-change evidence grades, create writers, or edit the repository. P1-C integrates
-serially, then `R1-A` independently reviews the integrated public flow and I1 alone
+P1-C runs on branch `agnet/p1c-linear-flow` in isolated worktree
+`/private/tmp/pyfem-p1c-02cff1c`. R2-A and R2-B use detached, read-only worktrees
+`/private/tmp/pyfem-r2a-02cff1c` and `/private/tmp/pyfem-r2b-02cff1c`. All three
+passed exact-head, clean-status, and clean-diff preflight. The research tasks may
+inspect P1-C's frozen contract but do not depend on its code, change evidence
+grades, create writers, or edit either repository. P1-C integrates serially only
+after I0 source review, independent local proof, and a fresh Kimi challenge pass;
+then `R1-A` independently reviews the integrated public flow and I1 alone
 adjudicates Phase 1. Do not start a second P1-C owner or split state, solve,
 reactions, results, and API across nominally parallel writers.
 
@@ -2202,9 +2205,9 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `P1-E · assembly plan — correspondence repaired` | `019f7736-ec41-7560-9d65-472551b4a6fe` | source `ab02297c052912cb027ac6963b37667bf61f3e97`, parent `4ed975795a4917fe40ed0203c981980ac5bea9cc` | Close exact Q8 reference-recipe correspondence and metadata-free binding output in the same six paths | Complete with both terminal signals; replacement `8e94454`, integrated `daad227`; 34 focused twice, 152 combined twice, 392 v3, 581 full |
 | `INCOMPLETE R1-B · assembly plan — temp-file approval stalled` | `019f7750-8745-7e23-aaf2-35f50ec79fc8` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Original independent read-only P1-B reviewer | Incomplete; preflight and repository gates were green, but an unnecessary temporary-file change waited on approval; archived without final/callback or repository change |
 | `I0/R1-B · assembly plan — bounded replacement GO` | internal agent `/root/r1b_inline_review` | `e11a07c0cc5c00e956c3d537ac94272f120621c0` | Exact-base read-only Sol/max replacement | Complete GO; zero findings, 34 focused twice, 152 combined twice, 27 references, both Ruff configurations, format/static/diff/final-clean gates green |
-| `P1-C · linear flow — public solution verified` | not dispatched | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Sole state/analysis/result/API writer | Planned and Horizon-frozen; component-qualified E1; no task or worktree exists |
-| `R2-A · topology — Q4/T3 contracts extracted` | not dispatched | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Read-only Phase 2 topology research | Planned; no task, edit, or evidence grade |
-| `R2-B · ownership — Phase 2 leaves separated` | not dispatched | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Read-only Phase 2 ownership/backend research | Planned; no task, edit, or evidence grade |
+| `P1-C · linear flow — public solution verified` | internal Sol/max agent `/root/p1c_writer`; `/private/tmp/pyfem-p1c-02cff1c`; branch `agnet/p1c-linear-flow` | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Sole state/analysis/result/API writer | Active after exact clean preflight; component-qualified E1; no result or integration yet |
+| `R2-A · topology — Q4/T3 contracts extracted` | internal Sol/max agent `/root/r2a_topology`; `/private/tmp/pyfem-r2a-02cff1c`; detached | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Read-only Phase 2 topology research | Active after exact clean preflight; no edit, result, or evidence grade yet |
+| `R2-B · ownership — Phase 2 leaves separated` | internal Sol/max agent `/root/r2b_ownership`; `/private/tmp/pyfem-r2b-02cff1c`; detached | `02cff1ca76b02969b91eac6e889de78c7a4ef9e2` | Read-only Phase 2 ownership/backend research | Active after exact clean preflight; no edit, result, or evidence grade yet |
 
 ## Task completion audit
 
@@ -2221,7 +2224,9 @@ is recorded separately because it is not a user-visible sidebar task.
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
   stalled on an unnecessary temporary-file approval.
-- Active: none. No writer, reviewer, watchdog, or P1-C owner is active.
+- Active: three internal Sol/max tasks: P1-C sole writer and read-only R2-A/R2-B.
+  No user-visible task or watchdog is active. I0 retains integration and ledger
+  ownership; Kimi is reserved for a fresh read-only challenge after P1-C returns.
 - Completed replacements provide valid evidence for their own task IDs; they do not
   change the recorded status of the tasks they replaced.
 - No incomplete writer commit was integrated. The exact-base internal replacement
@@ -3074,3 +3079,11 @@ integration decision; do not bridge it with a compatibility carrier.
   `02cff1ca76b02969b91eac6e889de78c7a4ef9e2`. That exact commit is the E1 proof
   anchor and common planned base for P1-C, R2-A, and R2-B. This follow-up records
   the hash only; no implementation or research task has been dispatched.
+- 2026-07-19: the user resumed execution and authorized isolated branches,
+  worktrees, Sol/max, and optional Kimi review. I0 created exact-base worktrees for
+  one sole P1-C writer and two detached read-only Phase 2 researchers, verified all
+  three clean at `02cff1c`, and dispatched internal Sol/max agents
+  `/root/p1c_writer`, `/root/r2a_topology`, and `/root/r2b_ownership`. P1-C alone
+  may edit its frozen paths. R2-A/R2-B may edit nothing. I0 remains the fourth-slot
+  integration owner; Kimi will challenge the returned P1-C diff, not become a
+  second writer.
