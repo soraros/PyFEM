@@ -6,8 +6,10 @@ an architecture to reproduce.
 
 ## Read first
 
-Read [design.md](design.md) before planning or editing v3. It is authoritative for
-the architecture, invariants, acceptance suite, and migration order.
+Read [design.md](design.md) and then
+[generic_core.md](generic_core.md) before planning or editing v3. The first owns
+the durable ownership/state/result invariants; the second is the authoritative
+post-Phase-1 semantic-IR amendment and next proof portfolio.
 
 For the full legacy-to-v3 migration, also read
 [migration_workflow.md](migration_workflow.md) and resume from the sole live ledger,
@@ -37,9 +39,10 @@ types are explicitly not architectural constraints:
 - fixed-width `group_props`
 - current solver and result APIs
 
-Do not continue the old P0-P8 checklist. Begin with Phase 0/1 in
-[design.md](design.md#13-migration-plan), and prefer a complete, testable vertical
-slice over feature breadth.
+Do not continue the old P0-P8 checklist or the superseded P2-A through P2-G plan.
+Phase 0/1 is a frozen reference. Resume only from the R2-E/P2-H/R2-F portfolio in
+[generic_core.md](generic_core.md#11-next-bounded-batch), and prefer a complete,
+testable generic instance over feature-by-feature class ports.
 
 ## Task vocabulary and routing
 
@@ -79,6 +82,10 @@ Run the full suite when code changes cross the legacy/v3 boundary:
 
 - Separate authored specification, compiled model, compiled program, physical
   state, solver workspace, and result by meaning and lifetime.
+- Treat entity blocks, discrete spaces, bound operator blocks, typed contribution
+  channels, coordinate maps, and observations as the stable semantic IR. Legacy
+  element/material/section/model/load categories are authoring or evaluator
+  composition choices, not mandatory core registries.
 - Compiler output owns read-only arrays and never aliases caller-owned inputs.
 - Formulation, topology, field layout, material kernel, quadrature, and state
   schema are explicit; never infer physics from array shape.
@@ -92,12 +99,17 @@ Run the full suite when code changes cross the legacy/v3 boundary:
 - Require edge-case tests and an independent reference before optimizing.
 - Preserve source/entity identity and result provenance through compilation,
   batching, state evolution, and output projection.
+- Validate external/authored/restore representations once at their authority
+  boundary. Internal consumers check live identity, generation, capabilities, and
+  numerical preconditions; they do not recursively rebuild compiler-owned meaning
+  at every layer.
 
 ## Documentation map
 
 | Status | Files | Use |
 |---|---|---|
-| Authoritative | [design.md](design.md) | Architecture and migration contract |
+| Authoritative invariants | [design.md](design.md) | Ownership, identity, state, contributions, results, and retained acceptance laws |
+| Authoritative semantic core | [generic_core.md](generic_core.md) | Generic IR, extension laws, trust boundary, proof portfolio, and current next batch |
 | Proofline field guide | [proofline.md](proofline.md) | Reusable semi-automatic coordination loop, task integrity, callbacks, automation boundary, and dashboard projection |
 | Migration method | [migration_workflow.md](migration_workflow.md) | Capability conveyor, packet lifecycle, integration, proof, and completion |
 | Execution state | [migration-execution.md](migration-execution.md) | Sole live migration ledger: commits, packets, evidence, blockers, and next action |

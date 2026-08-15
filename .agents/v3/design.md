@@ -1,6 +1,7 @@
 # PyFEM v3 ground-up design
 
-- Status: **authoritative for new v3 work**
+- Status: **authoritative invariants; amended by
+  [generic_core.md](generic_core.md) for the semantic IR and post-Phase-1 path**
 - Decision date: 2026-07-17
 - Scope: architecture, invariants, proof strategy, and migration order
 
@@ -12,6 +13,12 @@ may be replaced without compatibility shims.
 
 The packaging and tooling modernization on this branch remains the platform
 baseline. It is independent of the library architecture described here.
+
+The 2026-08-16 [generic semantic-core amendment](generic_core.md) retains this
+document's ownership, identity, state, contribution, and result invariants but
+supersedes the fixed topology/formulation/material/section decomposition in
+sections 6.1-6.6 and the old Phase 2 packet plan. Read the amendment before
+planning any work after the proven Phase 1 reference slice.
 
 ## 1. North star
 
@@ -335,6 +342,14 @@ equality.
   assumption.
 
 ## 6. Canonical architecture
+
+> **Amended 2026-08-16.** The lifecycle boundaries and invariants in this section
+> remain authoritative. [generic_core.md](generic_core.md) supersedes the exact
+> `DomainBlock` and multi-kind registry decomposition with entity blocks,
+> discrete spaces, bound operator blocks, typed channels, coordinate maps, and
+> observations. The structures below are retained as the reasoning that produced
+> the proven Phase 1 reference path, not as fields every future capability must
+> extend.
 
 ```mermaid
 flowchart LR
@@ -1173,6 +1188,12 @@ hardware-specific constant embedded in architecture.
 
 ## 13. Migration plan
 
+> **Post-Phase-1 amendment.** Phase 0 and Phase 1 are complete reference evidence.
+> The old Phase 2-6 sequence below is retained to show the intended semantic
+> coverage, but its P2-A through P2-G execution decomposition is superseded by the
+> proof portfolio and R2-E/P2-H/R2-F batch in
+> [generic_core.md](generic_core.md#11-next-bounded-batch).
+
 Branch history is the archive; do not duplicate the entire prototype under a
 second permanent namespace. Migrate by complete vertical slices and delete each
 superseded path once its reference value is exhausted.
@@ -1295,20 +1316,15 @@ representative public-flow evidence above.
 
 ## 15. Immediate next implementation task
 
-Do not continue P5 of the historical roadmap. Begin Phase 0/1 with the smallest
-vertical slice that establishes the new boundaries:
+The Q8 Phase 1 slice described by the former version of this section is complete
+and remains a frozen reference oracle. Do not resume the old P2-A mixed-Q8/Q4/T3
+writer or add another legacy-shaped descriptor kind.
 
-1. define minimal authored and compiled carriers with identity/read-only helpers;
-2. compile one explicit Q8 plane-stress block and one affine constraint program;
-3. compose a reference `PreparedAssemblyPlan` from model/program recipes;
-4. initialize and commit through the minimal analysis-state transaction spine;
-5. solve through a typed `LinearStatic` request;
-6. return a solution that independently re-evaluates constraints and equilibrium;
-   and
-7. drive it with the edge cases before optimizing or adding more elements.
-
-That slice is intentionally narrow. Its job is to prove that the representation can
-survive the rest of FEM, not to recover the prototype's checkbox count quickly.
+The exact next batch is defined in
+[generic_core.md](generic_core.md#11-next-bounded-batch): independently map the
+154-row inventory onto the generic IR, build an isolated executable
+continuum/link/load operator prototype, and derive the bounded migration/deletion
+cut. I0 must adjudicate those three results before a production Horizon is frozen.
 
 ## 16. Design amendment log
 
@@ -1329,3 +1345,19 @@ explicit physical/evolution state transaction, typed analysis, and independently
 verified result contracts in this document. The edge cases in section 11 are
 the testable consequences; the historical docs are explicitly demoted to
 evidence.
+
+### 2026-08-16 — Generic semantic core
+
+The proven Phase 1 slice retained the intended ownership, state-transaction,
+balance, and verification behavior, but the path from `c50ca70` to `7ee65c3`
+added 14,572 production lines for one stateless Q8 flow and repeated compiler-owned
+meaning checks across program, assembly, and results. The frozen topology-only
+P2-A expansion would preserve that extension seam.
+
+[generic_core.md](generic_core.md) therefore makes bound operator blocks over
+explicit discrete spaces and typed contribution channels the generic runtime
+unit. Legacy elements, materials, sections, models, loads, solvers, and writers
+become authored builders, evaluator components, analysis policies, or observation
+sinks rather than mandatory core kinds. The old path stays frozen as an oracle;
+R2-E, P2-H, and R2-F must falsify or prove the replacement and its causal deletion
+cut before production migration.

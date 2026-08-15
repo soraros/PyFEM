@@ -4,9 +4,11 @@ PyFEM v3 is being redesigned as a compiled, data-oriented finite-element library
 The current code is a runnable prototype and numerical-reference source, not the
 target architecture.
 
-**Start with [design.md](design.md).** It records the authoritative first-principles
-design, invariants, edge-case proof suite, and phased migration. Then read
-[AGENTS.md](AGENTS.md) for the working rules and commands.
+**Start with [design.md](design.md), then read
+[generic_core.md](generic_core.md).** The first records the authoritative
+ownership/state/result invariants and the second is the authoritative post-Phase-1
+semantic-IR amendment. Then read [AGENTS.md](AGENTS.md) for the working rules and
+commands.
 
 The full legacy-to-v3 migration follows
 [Proofline](proofline.md), specialized in
@@ -32,7 +34,8 @@ uv sync
 
 | File | Status and purpose |
 |---|---|
-| [design.md](design.md) | **Authoritative:** target architecture, invariants, proof, migration |
+| [design.md](design.md) | **Authoritative:** ownership, identity, state, contribution, and result invariants |
+| [generic_core.md](generic_core.md) | **Authoritative amendment:** generic semantic IR, trust boundary, legacy-instance model, and next proof portfolio |
 | [AGENTS.md](AGENTS.md) | **Active:** session routing and working rules |
 | [proofline.md](proofline.md) | **Reusable field guide:** semi-automatic coordination, task integrity, callbacks, automation boundary, and dashboard projection |
 | [migration_workflow.md](migration_workflow.md) | **Active:** legacy-to-v3 capability workflow, packet lifecycle, and completion contract |
@@ -49,10 +52,12 @@ uv sync
 
 ## Current implementation direction
 
-The next slice is deliberately narrow: authored and compiled carriers, one explicit
-Q8 plane-stress contribution block, one compiled affine constraint/load program,
-one composed prepared assembly plan, the minimal physical/evolution state
-transaction, a typed linear-static request, and a result that independently
-re-verifies constraints and equilibrium. The edge cases in
-[design.md](design.md#11-testable-acceptance-suite) must drive it before more
-element or solver breadth is added.
+The explicit Q8 linear slice is complete and frozen as a correctness oracle. It is
+not the carrier stack to extend. The former P2-A mixed-Q8/Q4/T3 writer is
+superseded and its temporary worktree no longer exists.
+
+The frontier is the bounded R2-E/P2-H/R2-F portfolio in
+[generic_core.md](generic_core.md#11-next-bounded-batch): map every legacy
+capability onto entity blocks, discrete spaces, operator blocks, coordinate maps,
+state/execution, and observations; prototype three unlike operators; and prove a
+bounded deletion/migration cut before changing the production path.

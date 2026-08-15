@@ -1,9 +1,12 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; I1 is complete and the bounded Phase 1 slices are component-qualified E3; the frozen P2-A writer is paused after an erroneous local-edit classification and awaits explicit user approval to resume
+- Status: active; I1 and the bounded Phase 1 reference slices remain
+  component-qualified E3; the old P2-A through P2-G plan is superseded and the
+  live frontier is the generic-core R2-E/P2-H/R2-F proof portfolio
 - Owner: delegating/integration thread
 - Target branch: `v3`
-- Design authority: [design.md](design.md)
+- Design authority: [design.md](design.md) plus the post-Phase-1
+  [generic semantic-core amendment](generic_core.md)
 - Migration method: [migration_workflow.md](migration_workflow.md)
 - Supporting structural method: [refactor_playbook.md](refactor_playbook.md)
 - Original dispatch base: `c75cbf3523349deb40bd2b07de7959e7606c3b1f`
@@ -25,76 +28,56 @@
 - Integrated P1-C chain: `c9b9480` -> `bfc1d80` -> `d78201d` -> `7ee65c3ea5c50278b17dce63f2569e22412e0ebd`
 - P1-C integrated proof: 86 focused and 348 combined tests in both normal and 640-digit modes; 478 v3; 667 repository; both Ruff configurations, focused format, ancestry, ownership, and static gates green
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: P2-A mixed Q8/Q4/T3 public slice; preserved six-path partial worktree paused before coherent tests
+- Active milestone: D2-A generic-core realignment; sidebar gardening is active,
+  and no product writer owns the main tree
 
 ## Exact next safe action
 
-P1-C is integrated at exact code head
-`7ee65c3ea5c50278b17dce63f2569e22412e0ebd`. The four source commits were
-reviewed and cherry-picked serially as `c9b9480`, `bfc1d80`, `d78201d`, and
-`7ee65c3`. Repair 2/2 closed the transaction, exact-ratio, convergence-record,
-bounded explicit-factorization, storage, and scalar-preflight findings. Two fresh
-reviews then found one remaining P1: a coherently changed retained residual and
-matching convergence norm was not bound exactly to the independently rebuilt
-residual. The one-issue closure `3ee920a` added that exact fresh correspondence
-without changing tolerance-based equilibrium acceptance; three post-closure
-checks returned GO with zero findings.
+The main tree is clean at documentation head `48fa0d1`; the last product-code head
+is the independently green Phase 1 reference `7ee65c3`. That product path passed
+86 focused and 348 combined tests in both normal and 640-digit modes, 478 v3 tests,
+667 repository tests, both Ruff configurations, focused format, and independent
+physics, state-lifecycle, and public-contract reviews with zero accepted findings.
+Those results are retained evidence; they were not rerun during this documentation
+realignment.
 
-The integrated tree passed 86 focused tests and 348 exact Phase 1 tests in both
-normal and `PYTHONINTMAXSTRDIGITS=640` modes, 478 v3 tests, 667 repository tests,
-both Ruff configurations, focused format, ancestry, path ownership, dependency,
-and explicit-solver scans. Broad runs emitted only the existing 40 SciPy sparse
-conversion notices and four cold-cache Numba transformation notices. A broad
-format-only check still names nine pre-existing non-P1-C files; the focused P1-C
-format gate is green.
+The former P2-A worktree `/private/tmp/pyfem-p2a-7ee65c3` no longer exists. Git
+records its worktree metadata as prunable, and branch `agnet/p2a-mixed-blocks`
+still points exactly to `7ee65c3` with zero child commits. The six partial edits
+recorded in `48fa0d1` were temporary uncommitted state and are gone. No product
+commit or test evidence was lost from the main branch.
 
-R1-A completed unanimously GO at frozen detached worktree
-`/private/tmp/pyfem-r1a-7ee65c3`. Physics/balance passed 214 independent checks
-in each digit mode plus exact rational Q8 and hand-coded five-cell PatchTest8
-oracles. State lifecycle passed 2,020 normal and 1,628 restricted independent
-checks covering identity, generation, transaction ordering, storage, cache, and
-capacity. Public contracts passed 348 Phase 1 tests in each mode, nine named flows,
-32 carrier-boundary cases, and exact reusable/one-shot equality. All three returned
-P0/P1/P2 `0/0/0` at exact clean `7ee65c3`.
+More importantly, [generic_core.md](generic_core.md) supersedes the old frozen
+P2-A through P2-G plan. The Phase 1 implementation demonstrated the intended
+ownership, state, balance, and result invariants, but the path from the closed
+foundation `c50ca70` to `7ee65c3` added 14,572 production lines and 6,323 focused
+slice-test lines for one stateless Q8 flow. The program, assembly, and result
+layers also reconstruct compiler-owned meaning through shared private validators.
+Native-width Q8/Q4/T3 blocks would not by themselves correct that extension seam.
 
-I1 accepts those three verdicts together with the already-complete integration
-proof. The exact P0-D, P1-A, P1-B, and P1-C component slices therefore advance to
-E3 at `7ee65c3`; this is not a row-wide parity claim for deferred schedules,
-nonlinear/history behavior, adapters, mixed elements, outputs, root compatibility,
-or prototype retirement. The measured eager import chain through
-`pyfem/v3/__init__.py` remains explicitly deferred to the root-package/CLI
-compatibility wave because the P1-C Horizon forbade changing that initializer.
+The active D2-A decision makes entity blocks, discrete spaces, bound operator
+blocks, typed contribution channels, coordinate maps, and observations the generic
+semantic IR. Legacy element/material/section/model/load categories become authored
+builders or evaluator composition choices. Validation is concentrated where data
+changes authority or representation; downstream internal code checks identity,
+generation, capabilities, and numerical preconditions without recursively
+recompiling trusted carriers.
 
-`p2a_freeze_draft`, `r2a_topology`, `r2b_ownership`, and a fresh contract
-reconciliation task completed read-only final-schema review. I0 rejected the
-compiler-only alternative after three independent scope adjudications confirmed it
-would violate the recorded mixed public-solve exit and add a temporary solver
-topology branch. The frozen card below therefore keeps the genuine public mixed
-slice, uses new neutral v1 schema families, persists only full raw block offsets,
-uses `gauss-tria3-order1`, and grants exactly 13 paths.
+The exact next batch is deliberately falsifiable and uses new coordinates:
 
-Fresh Sol/max task `/root/p2a_mixed_blocks_writer` remains the sole source owner in
-`/private/tmp/pyfem-p2a-7ee65c3`, branch `agnet/p2a-mixed-blocks`, from exact parent
-`7ee65c3ea5c50278b17dce63f2569e22412e0ebd`, but is paused. After six authorized
-paths were edited, a further local `apply_patch` to `compile/model.py` was rejected
-because the ordinary coordinator heartbeat was misclassified as unrelated content.
-The rejected hunk did not apply. No tests, commit, unowned path, revert, copy,
-restart, or workaround occurred. The preserved modified paths are
-`assembly/contracts.py`, `compile/__init__.py`, `compile/contracts.py`,
-`compile/model.py`, `model/compiled.py`, and `model/state.py`.
+1. R2-E maps every one of the 154 E0 rows onto the generic concepts and reports
+   any unrepresentable or questionable legacy case.
+2. P2-H builds an isolated, new-path-only executable prototype for a continuum
+   operator, a structurally different link/spring operator, and a program-owned
+   load operator sharing one space and assembly boundary. It has no integration
+   authority.
+3. R2-F derives the exact migration/deletion cut, retained Phase 1 proof surface,
+   and structural budget needed to replace rather than duplicate the frozen path.
 
-The writer may resume only after explicit post-disclosure user approval is relayed
-by I0. It must then finish the same frozen 13-path card, one commit, and all gates;
-no replacement writer or manual root edit may bypass this pause. R2-C's read-only
-acceptance card is complete, and the P2-B/P2-C conditional leaf drafts are complete
-but remain unfrozen until P2-A integrates and R2-C returns GO.
-
-Two public-flow completion attempts are explicitly unfinished and are not evidence:
-`p1c_source_review` was stopped twice by erroneous output routing, and
-`p1c_public_flow_redo` did not start because Sol/max was at capacity. Fresh
-replacement `p1c_public_flow_redo2` completed the same local FEM matrix on
-Terra/max. The earlier bounded Kimi attempts likewise produced no review result or
-repository change and are not counted.
+I0 will adjudicate all three results before freezing any production writer. The
+prototype is discarded if it needs an untyped universal payload, if a legacy case
+forces a seventh core concept without a principled amendment, or if no bounded
+causal deletion path exists. No old P2-A writer should be resumed.
 
 ### Basis for the selection
 
@@ -126,7 +109,13 @@ configurations, focused format, a zero-hit forbidden-import scan, 358 v3 tests, 
 P0/P1/P2 findings. The integrated commit is `b7316be`; P1-B may now consume its
 private validation seam without copying that validation logic.
 
-## Next large chunk plan — Phase 1 exit through Phase 2 exit
+## Superseded large-chunk plan — historical Phase 1/2 decomposition
+
+> **Superseded 2026-08-16.** This section records how Phase 1 was completed and
+> how the old P2-A through P2-G plan was reasoned about. It is not executable
+> authority. The live batch is in
+> [generic_core.md](generic_core.md#11-next-bounded-batch) and the exact next
+> action above.
 
 This is the adopted acceleration plan, not authority to bypass a Horizon or merge
 gate. It targets one long execution pass and pauses after I2's combined Phase 2
@@ -598,7 +587,13 @@ caches; if an owned public flow cannot exist without a forbidden root/adapter pa
 or if the frozen Q8 operator cannot satisfy the private Cholesky policy. Create a
 separate prerequisite or design decision rather than widening P1-C informally.
 
-## P2-A Horizon card — `HORIZON_FROZEN`
+## P2-A Horizon card — `SUPERSEDED`
+
+> **Historical only as of 2026-08-16.** The card below was coherent for the
+> topology-generalization design, but [generic_core.md](generic_core.md)
+> supersedes that design before any P2-A product commit. Do not dispatch or resume
+> it. Its constants remain useful topology/oracle evidence for later operator
+> instances.
 
 **ID/title:** `P2-A · mixed blocks — Q4/T3 composition explicit`
 
@@ -2477,7 +2472,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
 | `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
 | `P2-A · contract reconciliation` | internal Sol/max agent `/root/p2a_contract_reconcile` | product `7ee65c3` | Read-only schema/key/offset/audit/path decision comparison | Complete; froze new-family v1 schemas, `gauss-tria3-order1`, one persisted full-offset carrier, transient Q4 corner audit, and element-qualified literals; compiler-only scope recommendation was separately rejected |
-| `PAUSED P2-A · mixed blocks writer — local edit classification` | internal Sol/max agent `/root/p2a_mixed_blocks_writer`; `/private/tmp/pyfem-p2a-7ee65c3`; branch `agnet/p2a-mixed-blocks` | exact parent `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Sole 13-path Q8/Q4/T3 public mixed-slice writer | Paused before tests/commit after an unapplied `compile/model.py` patch was rejected; six authorized paths preserved; explicit post-disclosure user approval required; no workaround |
+| `INCOMPLETE P2-A · mixed blocks — superseded with no commit` | former internal Sol/max agent `/root/p2a_mixed_blocks_writer`; vanished `/private/tmp/pyfem-p2a-7ee65c3`; branch `agnet/p2a-mixed-blocks` | exact parent `7ee65c3ea5c50278b17dce63f2569e22412e0ebd`; zero child commits | Former 13-path Q8/Q4/T3 public mixed-slice writer | Incomplete and superseded; temporary six-path edits disappeared with the worktree, branch still equals the parent, no tests or commit existed, and no recovery/resume is required |
 | `R2-C · acceptance matrix` | internal Sol/max agent `/root/r2c_acceptance_matrix` | planning base `7ee65c3` | Read-only independent post-integration review card | Complete; includes exact Fraction operators, disconnected and 13-node shared-interface oracles, all-block mutation matrix, public fresh verification, full gates, and no grade authority |
 | `P2-B/P2-C · conditional leaf drafts` | internal Terra/max agent `/root/p2bc_leaf_drafts` | planning base `7ee65c3` | Read-only disjoint material-slot and active-field-layout drafts | Complete but unfrozen; two new paths per leaf; require R2-C confirmation of one immutable partition seed before parallel dispatch |
 | `I0/P1-C · numeric repair card` | internal Sol/max agent `/root/p1c_numeric_repair_card` | repair parent `8524c2337a408e69be215a78044d54d6af968a6b` | Read-only exact-ratio, explicit factor/solve, and workspace acceptance design | Complete and clean; exact cross-products and deterministic 4-matrix/6-vector private-backend proposal; no edit or grade authority |
@@ -2502,14 +2497,13 @@ are recorded separately because they are not part of that user-visible audit set
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
   stalled on an unnecessary temporary-file approval.
-- Active: no task is currently editing source. Sole P2-A writer
-  `/root/p2a_mixed_blocks_writer` is explicitly paused at exact parent `7ee65c3`
-  with six authorized modified paths preserved; it awaits explicit user approval
-  after an erroneous local-edit classification. The freeze, topology, ownership,
-  reconciliation, scope, R2-C-card, and leaf-draft tasks are complete and read-only.
-  The three R1-A tasks are complete GO and I1 is frozen. No parallel Phase 2 writer
-  or watchdog is active. I0 retains integration and ledger ownership. The two Kimi
-  attempts, the twice-routed
+- Active: no task is currently editing product source. P2-A is incomplete and
+  superseded; its temporary worktree is gone and its branch has zero child commits.
+  The topology, ownership, reconciliation, R2-C-card, and leaf-draft tasks are
+  historical planning evidence rather than executable authority. The three R1-A
+  tasks are complete GO and I1 remains frozen. A Luna gardening task is cleaning
+  sidebar metadata only; I0 owns the D2-A design amendment and the upcoming
+  R2-E/P2-H/R2-F portfolio. The two Kimi attempts, the twice-routed
   `/root/p1c_source_review`, and the Sol-capacity
   `/root/p1c_public_flow_redo` are explicitly incomplete and provide no evidence;
   replacement `/root/p1c_public_flow_redo2` completed cleanly.
@@ -3533,3 +3527,20 @@ integration decision; do not bridge it with a compatibility carrier.
   `/root/p2bc_leaf_drafts` completed disjoint two-path material-slot and active-field
   drafts. Both leaves remain unfrozen; R2-C must first confirm one immutable common
   partition seed, otherwise a serial prerequisite owns that seam.
+- 2026-08-16: repository preflight found main `v3` clean at `48fa0d1`, while
+  `/private/tmp/pyfem-p2a-7ee65c3` had disappeared and Git marked its worktree
+  record prunable. Branch `agnet/p2a-mixed-blocks` still equals `7ee65c3` with zero
+  child commits. The six uncommitted edits recorded in July are therefore gone;
+  no product commit or test evidence was lost.
+- 2026-08-16: D2-A re-evaluated the whole extension seam against the 154-row v1
+  inventory, the integrated Phase 1 code, and `absim_fvm`'s normalize-once,
+  concrete-array ownership model. The path from `c50ca70` to `7ee65c3` contains
+  14,572 production insertions for one stateless Q8 flow and repeats
+  compiler-owned meaning validation across program, assembly, and results.
+  [generic_core.md](generic_core.md) now supersedes the legacy-shaped P2-A through
+  P2-G plan with entity blocks, discrete spaces, bound operator blocks, typed
+  channels, coordinate maps, and observations. The proven Phase 1 path is frozen
+  as an oracle rather than extended.
+- 2026-08-16: the next portfolio is R2-E legacy-to-instance mapping, P2-H isolated
+  three-operator executable prototype, and R2-F trust/deletion-cut research. I0
+  must adjudicate all three before any production migration writer is frozen.

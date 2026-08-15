@@ -11,8 +11,9 @@
 This document is the full PyFEM specialization of
 [Proofline](proofline.md), the repository's ledger-driven semi-automatic
 coordination method. It defines the operating system for gradually replacing
-legacy PyFEM with the architecture in [design.md](design.md). It does not authorize
-a feature port or change any design invariant. Live state is owned only by
+legacy PyFEM with the invariants in [design.md](design.md) and the post-Phase-1
+semantic IR in [generic_core.md](generic_core.md). It does not authorize a feature
+port or change any design invariant. Live state is owned only by
 [migration-execution.md](migration-execution.md); the Proofline field guide is not
 a second plan or ledger.
 
@@ -30,8 +31,8 @@ Navigation: [authority](#authority-and-adoption-status),
 
 The authority order is unchanged:
 
-1. the user's overall v3 goal and [design.md](design.md), including its amendment
-   discipline;
+1. the user's overall v3 goal, [design.md](design.md), and its authoritative
+   [generic-core amendment](generic_core.md);
 2. edge-case tests and independent numerical or physical evidence;
 3. the new v3 implementation;
 4. legacy PyFEM as requirements, behavior evidence, and numerical reference;
@@ -400,7 +401,12 @@ would freeze mutually invented APIs before the architecture is executable.
 The Phase 1 exit includes the existing Q8 book oracle, but the success bar is the
 full edge-case surface in [design section 11](design.md#11-testable-acceptance-suite).
 
-### Wave 2: prove heterogeneous block generality
+### Wave 2: historical heterogeneous-block decomposition
+
+> **Execution order superseded 2026-08-16.** The coverage pressures below remain
+> valid, but [generic_core.md](generic_core.md) replaces topology-first P2-A
+> through P2-G with an operator-IR portfolio. Use the live ledger and
+> R2-E/P2-H/R2-F batch; do not dispatch from this historical order.
 
 Once Phase 1 contracts are frozen, compare these candidates as one dependency
 portfolio:
@@ -1203,6 +1209,17 @@ documentation-only changes:
 
 There is no second live status file and no watchdog. Existing direct callbacks and
 bounded native waits remain sufficient.
+
+### Generic-core amendment after the Phase 1 trial
+
+The completed Phase 1 trial exposed an architectural rather than procedural
+problem: one correct Q8 slice accumulated a large Q8-specific carrier and repeated
+compiler-owned meaning checks, so the topology-first Wave 2 would entrench the
+wrong extension seam. The 2026-08-16
+[generic-core amendment](generic_core.md) changes the semantic IR and batch order;
+this workflow's bounded packets, evidence grades, terminal callbacks, serial
+integration, and sole-ledger rules remain unchanged. Exact state and task IDs live
+only in [migration-execution.md](migration-execution.md).
 
 ### Foundation re-review at adoption
 
