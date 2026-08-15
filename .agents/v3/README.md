@@ -59,6 +59,7 @@ superseded and its temporary worktree no longer exists.
 The R2-E/P2-H/R2-F portfolio and bounded S2-A polish pass are complete. The
 unexported three-operator proof is integrated, simplified to 649 production and
 360 focused-test nonblank lines, and independently reviewed GO with no findings.
-The migration is paused at the boundary recorded in
-[generic_core.md](generic_core.md#11-current-bounded-simplification). The future
-direct vertical cut is recorded but remains undispatched until explicit resume.
+The polished pass stopped at the boundary recorded in
+[generic_core.md](generic_core.md#11-current-bounded-simplification). Work has now
+resumed with an implementation-parity audit and a refresh of the direct production
+cut; no adapter or permanent second backend is authorized.

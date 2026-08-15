@@ -492,8 +492,10 @@ An independent Sol/max review returned GO with no P0/P1/P2 findings after fresh
 Fraction-derived Q4/T3/global-solution checks, split-versus-vectorized assembly,
 focused tests in both digit modes, 485 v3 tests, 674 repository tests, and all
 Ruff, format, path, ancestry, branch, exact-head, and clean-tree gates. The
-migration is paused here. No subsequent implementation packet is dispatched in
-this pass; the future direct vertical cut must be freshly frozen on resume.
+2026-08-16's polish pass paused here. Work has since resumed explicitly. The next
+implementation packet remains the direct production cut, but it must first be
+refrozen against this simplified proof and reconciled with actual v1 behavior
+coverage; no adapter or permanent second backend is introduced in the meantime.
 
 ## 12. Decision record
 

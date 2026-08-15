@@ -1,9 +1,9 @@
 # PyFEM v3 migration execution ledger
 
-- Status: paused at a polished proof boundary; I1 and the bounded Phase 1
-  reference slices remain component-qualified E3; the old P2-A through P2-G plan
-  is superseded; the R2-E/P2-H/R2-F portfolio and S2-A simplification are complete
-  and independently green
+- Status: active after explicit user resumption; I1 and the bounded Phase 1
+  reference slices remain component-qualified E3; the R2-E/P2-H/R2-F portfolio
+  and S2-A simplification are complete and independently green; the current batch
+  measures behavioral parity and refreshes the direct production replacement cut
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md) plus the post-Phase-1
@@ -35,8 +35,9 @@
   `f140b9eba0147c54993f35eaaea1e11d7f8204f4`
 - S2-A simplified proof: `099b51f88022f70ad11c4cecfca35c4a84ecf41e`
 - Workflow routing closure: `c5f83b791252f72afa7cc8271e2c51f491c22f1c`
-- Active milestone: none; the 33-path production vertical cut is accepted in
-  principle but remains undispatched pending explicit resume
+- Active milestone: refresh and freeze the direct production vertical cut against
+  the simplified generic proof at `099b51f`; no production writer starts before
+  the parity, architecture, and feature-dependency reports are jointly adjudicated
 
 ## Exact next safe action
 
@@ -99,8 +100,10 @@ independent oracles, or the normalize-once trust boundary. The independent final
 review returned GO with P0/P1/P2 `0/0/0`; focused tests passed in both digit modes,
 the v3 and repository suites passed 485 and 674 tests, and both Ruff, format,
 ancestry, path, semantic-branch, exact-head, and clean-tree gates passed. The
-migration is now paused. No old P2-A writer and no 33-path production writer may
-be resumed or dispatched without explicit resumption and a newly frozen card.
+polished work stopped here as requested. The user explicitly resumed work on
+2026-08-16. The old P2-A writer remains superseded; the next production writer may
+start only after the direct vertical cut is refreshed against `099b51f`, frozen at
+the current clean head, and reconciled with an implementation-parity audit.
 
 ### Basis for the selection
 
@@ -3605,3 +3608,9 @@ integration decision; do not bridge it with a compatibility carrier.
   ancestry, semantic-branch, exact-head, and clean-tree gates. The migration is
   paused at this polished boundary; the accepted 33-path vertical cut remains
   undispatched.
+- 2026-08-16: the user explicitly resumed the library migration and authorized
+  either structural replacement or broader feature work. I0 opened one bounded
+  read-only decision batch: a Luna capability-parity audit, a Sol/max refresh of
+  the direct production cut against simplified proof `099b51f`, and a Sol/high
+  dependency analysis of the fastest principled route toward v1 behavior. No
+  production writer is authorized until those three reports are adjudicated.
