@@ -30,8 +30,8 @@
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
 - Generic-core decision and common dispatch base: `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9`
 - Active milestone: R2-E/P2-H/R2-F falsification portfolio; sidebar gardening is
-  active, P2-H is isolated to new experimental paths, and no product writer owns
-  the main tree
+  complete, P2-H is isolated to new experimental paths, and no product writer
+  owns the main tree
 
 ## Exact next safe action
 
@@ -2474,7 +2474,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `R1-A · state lifecycle` | internal Sol/max agent `/root/r1a_state_lifecycle`; frozen `/private/tmp/pyfem-r1a-7ee65c3` | `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Read-only identity, generation, transaction, storage, cache, and capacity review | Complete GO; P0/P1/P2 `0/0/0`; 2,020 normal and 1,628 restricted independent checks plus focused identity/linear suites |
 | `R1-A · public contracts` | internal Terra/max agent `/root/r1a_public_contracts`; frozen `/private/tmp/pyfem-r1a-7ee65c3` | `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Read-only public compile/assemble/solve/verify flow and diagnostics review | Complete GO; P0/P1/P2 `0/0/0`; 348 combined twice, nine named flows, 32 carrier-boundary cases, exact reusable/one-shot equality |
 | `I1 · linear slice — public proof complete` | delegating/integration owner | product `7ee65c3`; ledger checkpoint follows | Reconcile P1-C integrated proof and three R1-A verdicts; freeze component-qualified Phase 1 contract | Complete; P0-D/P1-A/P1-B/P1-C bounded slices advance to E3; all deferred breadth remains explicit |
-| `ACTIVE · G1 · PyFEM Thread Garden` | Luna/max `01a0061e-7c27-7d93-b994-878bf8c16a01` | app metadata only; repository remains at `f32e7e5` | Rename and archive old migration threads; retain only the active coordinator, current portfolio, and intentional pause points | Active; metadata-only cleanup, no engineering evidence or repository authority |
+| `DONE · G1 · PyFEM sidebar normalized` | Luna/max `01a0061e-7c27-7d93-b994-878bf8c16a01` | app metadata only; common engineering base remains `f32e7e5` | Rename and archive old migration threads; retain only the active coordinator, current portfolio, and intentional pause points | Complete and archived; 30 threads renamed and 29 historical threads archived; no repository or engineering authority |
 | `ACTIVE · R2-E · Legacy Instance Map` | Sol/max `01a0062b-5deb-79b3-8a73-e768a9ca5fe4` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only mapping of all 154 E0 capabilities to the six generic concepts and seven variation axes | Active; must report every questionable or unrepresentable capability and a durable `/private/tmp` report; no integration authority |
 | `ACTIVE · P2-H · Three-Operator IR` | Sol/max `01a0062b-6e84-7e22-bf8a-4fbb8f42db09` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | New-path-only experimental core for continuum, link/spring, and program-owned load operators sharing one space | Active isolated writer; owns only new `pyfem/v3/core/**` and `test/v3/test_v3_generic_core.py`; one source commit has no integration authority |
 | `ACTIVE · R2-F · Migration Deletion Cut` | Sol/max `01a0062e-c999-7740-89c3-4815948cb99a` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only retain/migrate/delete/defer map for replacing the Phase 1 Q8 spine without a permanent second backend | Active; must freeze exact path groups, deletion target, proof retention, merge order, and rollback point; no integration authority |
@@ -2513,8 +2513,8 @@ are recorded separately because they are not part of that user-visible audit set
   superseded; its temporary worktree is gone and its branch has zero child commits.
   The topology, ownership, reconciliation, R2-C-card, and leaf-draft tasks are
   historical planning evidence rather than executable authority. The three R1-A
-  tasks are complete GO and I1 remains frozen. A Luna gardening task is cleaning
-  sidebar metadata only; I0 owns the D2-A design amendment and the upcoming
+  tasks are complete GO and I1 remains frozen. Luna G1 completed the sidebar
+  cleanup and is archived; the unarchived PyFEM set is now I0 plus the active
   R2-E/P2-H/R2-F portfolio. The two Kimi attempts, the twice-routed
   `/root/p1c_source_review`, and the Sol-capacity
   `/root/p1c_public_flow_redo` are explicitly incomplete and provide no evidence;
@@ -3560,7 +3560,8 @@ integration decision; do not bridge it with a compatibility carrier.
   `01a0062b-5deb-79b3-8a73-e768a9ca5fe4`, P2-H
   `01a0062b-6e84-7e22-bf8a-4fbb8f42db09`, and R2-F
   `01a0062e-c999-7740-89c3-4815948cb99a` were dispatched from that exact clean
-  base. Luna/max G1 `01a0061e-7c27-7d93-b994-878bf8c16a01` is separately
-  normalizing sidebar metadata. I0's next action is to adjudicate the three
+  base. Luna/max G1 `01a0061e-7c27-7d93-b994-878bf8c16a01` then completed: 30
+  titles were normalized, 29 historical threads were archived, and G1 itself was
+  renamed `DONE` and archived. I0's next action is to adjudicate the three
   engineering results together; no result may independently authorize production
   integration.
