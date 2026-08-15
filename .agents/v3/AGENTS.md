@@ -79,6 +79,23 @@ bounded delivery attempt and do not remain alive waiting for acknowledgement. Th
 coordinator relies on callbacks; if one is unavailable, it may take one terminal
 status snapshot, never start a polling loop.
 
+## Delegated intelligence routing
+
+Choose reasoning capacity by consequence, not by habit:
+
+- use Luna for thread gardening, inventories, formatting, mechanical evidence
+  collection, and ledger maintenance;
+- use Sol at high reasoning for bounded implementation and ordinary design or
+  correctness review;
+- reserve Sol at max reasoning for architecture freezes, numerical-semantics
+  decisions, integration adjudication, and the final independent review of a
+  migration boundary.
+
+Raise or lower a packet deliberately when its actual risk differs from these
+defaults. Do not assign max reasoning merely because a packet belongs to the v3
+migration. Record the exceptional choice in the frozen packet when it materially
+affects cost or confidence.
+
 ## Platform baseline
 
 V3 requires Python 3.13+ and uses 2-space Ruff. This branch's packaging,
