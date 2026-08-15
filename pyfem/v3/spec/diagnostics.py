@@ -44,20 +44,25 @@ def _render_exact_integer(value: int) -> str:
   )
 
 
-def _render_diagnostic_value(value: object) -> str:
+def render_diagnostic_value(value: object) -> str:
   """Render trusted exact diagnostic values without polymorphic conversion."""
   if type(value) is int:
     return _render_exact_integer(value)
   if type(value) is str:
     return repr(value)
   if type(value) is tuple:
-    rendered = ", ".join(_render_diagnostic_value(item) for item in value)
+    rendered = ", ".join(render_diagnostic_value(item) for item in value)
     if len(value) == 1:
       rendered += ","
     return f"({rendered})"
   if value is None:
     return "None"
   return "<unrenderable value>"
+
+
+def _render_diagnostic_value(value: object) -> str:
+  """Compatibility spelling for retained normalization/compiler callers."""
+  return render_diagnostic_value(value)
 
 
 @dataclass(frozen=True, slots=True)
