@@ -2555,7 +2555,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `DONE · R3-A · behavioral parity graded` | Luna/high `/root/r3a_behavior_parity_audit` | exact clean `04baa4a` | Grade all 154 capabilities by current public, bounded, experimental, design-only, deferred, or retired evidence | Complete; strict 4/154, bounded executable 57/154, design-backed 139/154; report SHA `f3223fb` |
 | `DONE · D3-A · generic spine cut frozen` | Sol/max `/root/d3a_generic_spine_cut_freeze` | exact clean `04baa4a` | Refresh R2-F against simplified proof and freeze terminal ownership, sequence, budgets, reviewers, and first writer | Complete; four linear commits on one exclusive branch; G1 is the six-path unexported direct Q8 system compiler; report SHA `06ba6d7` |
 | `DONE · R3-B · state-first frontier selected` | Sol/high `/root/r3b_feature_frontier` | exact clean `04baa4a` | Rank post-cut feature axes and dependencies without recreating v1 class boundaries | Complete; state transaction -> nonlinear/J2 -> thermal coupling -> evolution; no feature writer may overlap the cut; report SHA `f9bd194` |
-| `G1 · direct Q8 generic system compiler` | sole Sol/high writer `/root/g1_q8_system_compiler`; branch `agnet/g1-generic-system`, worktree `/private/tmp/pyfem-g1-04baa4a` | exact parent `04baa4a` | Six paths frozen above; one direct-child commit; unexported compiler only | Active; explicit terminal callback required; two independent reviewers required before G2 |
+| `G1 · direct Q8 generic system compiler` | sole Sol/high writer `/root/g1_q8_system_compiler`; branch `agnet/g1-generic-system`, worktree `/private/tmp/pyfem-g1-04baa4a` | exact parent `04baa4a`; initial source `f342b40` | Six paths frozen above; one direct-child commit plus bounded repair; unexported compiler only | Initial source NO-GO; G1-N `0/1/0`, G1-A `0/4/1`; repair 1/2 active; G2 closed |
 | `P2-A · final freeze refresh` | internal Sol/max agent `/root/p2a_freeze_draft` | product `7ee65c3`; current main ledger | Read-only final writer-card refresh and public-scope adjudication | Complete; retained genuine public mixed solve, removed optional helpers, froze exact oracle and full gates |
 | `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
 | `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
@@ -3683,3 +3683,12 @@ integration decision; do not bridge it with a compatibility carrier.
   Sol/high writer `/root/g1_q8_system_compiler`. Its prompt owns only the six G1
   paths, repeats every stop condition and named gate, and requires an explicit
   terminal callback. No other source or feature writer is active.
+- 2026-08-16: G1 initial source `f342b40` returned within all six paths and line
+  caps with 8 new, 156 retained, 493 v3, and 682 repository tests green in the
+  required modes. Independent numerical review returned NO-GO `0/1/0`: callable
+  outputs could contradict captured Q8 registry identity. Independent architecture
+  review returned NO-GO `0/4/1`: the evaluator lacked typed program/request input;
+  extra fields produced ghost/mislocated spaces; trusted carriers were ordinarily
+  fabricable; source/fingerprint lookup was incomplete and non-exact; and normalized
+  geometry was published as physical. I0 accepted all six roots and returned one
+  same-path direct-child repair to the original writer. G2 remains closed.
