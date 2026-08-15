@@ -44,6 +44,9 @@ uv sync
 | [conventions.md](conventions.md) | **Active where compatible with the design:** style, typing, tooling |
 | [parity.md](parity.md) | Numerical-reference workflow; parity is evidence, not architecture proof |
 | [evidence/2026-07-18-r0e-capability-inventory.md](evidence/2026-07-18-r0e-capability-inventory.md) | Immutable 154-row E0 capability inventory and 606-path coverage proof |
+| [evidence/2026-08-16-r3a-behavior-parity-audit.md](evidence/2026-08-16-r3a-behavior-parity-audit.md) | Current 154-row implementation grades: strict, bounded executable, representable, deferred, and retired |
+| [evidence/2026-08-16-d3a-generic-spine-cut-freeze.md](evidence/2026-08-16-d3a-generic-spine-cut-freeze.md) | Authoritative four-commit production replacement and exact G1 writer card |
+| [evidence/2026-08-16-r3b-feature-frontier.md](evidence/2026-08-16-r3b-feature-frontier.md) | Post-cut dependency graph and state-first feature sequence |
 | [feature-parity.md](feature-parity.md) | Historical source list absorbed by R0-E; old statuses have no live authority |
 | [architecture.md](architecture.md) | Historical snapshot of the prototype carrier |
 | [roadmap.md](roadmap.md) | Superseded P0-P8 checklist |

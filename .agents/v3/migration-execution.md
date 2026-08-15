@@ -35,9 +35,9 @@
   `f140b9eba0147c54993f35eaaea1e11d7f8204f4`
 - S2-A simplified proof: `099b51f88022f70ad11c4cecfca35c4a84ecf41e`
 - Workflow routing closure: `c5f83b791252f72afa7cc8271e2c51f491c22f1c`
-- Active milestone: refresh and freeze the direct production vertical cut against
-  the simplified generic proof at `099b51f`; no production writer starts before
-  the parity, architecture, and feature-dependency reports are jointly adjudicated
+- Active milestone: G1 direct unexported Q8 `ModelSpec -> CompiledSystem` compiler
+  on the exclusive four-commit generic-spine branch rooted at `04baa4a`; no feature
+  writer and no G2 work starts before G1's two independent reviews return GO
 
 ## Exact next safe action
 
@@ -104,6 +104,59 @@ polished work stopped here as requested. The user explicitly resumed work on
 2026-08-16. The old P2-A writer remains superseded; the next production writer may
 start only after the direct vertical cut is refreshed against `099b51f`, frozen at
 the current clean head, and reconciled with an implementation-parity audit.
+
+R3-A grades only 4 of 154 capabilities as strict public behavioral parity, 57 as
+bounded executable coverage, and 139 as implemented-or-design-representable. The
+complete row ledger is preserved in
+[the R3-A evidence](evidence/2026-08-16-r3a-behavior-parity-audit.md). D3-A and
+R3-B agree that feature writers must not compete with replacement of the current
+Q8 production authority. R3-A's proposed immediate mixed-width public slice is
+therefore deferred until the generic spine is the sole public path.
+
+D3-A's [four-commit cut](evidence/2026-08-16-d3a-generic-spine-cut-freeze.md)
+is authoritative. One exclusive branch rooted at exact `04baa4a` owns G1 through
+G4. G1-G3 are unexported semantic cuts and are never integrated independently; G4
+atomically switches the public authority and deletes both predecessor and proof
+implementations. The accepted post-cut feature order is the state-first sequence in
+[R3-B](evidence/2026-08-16-r3b-feature-frontier.md): real operator-local state,
+typed nonlinear static with an incompatible second history schema, thermal/
+thermoelastic multiple spaces, then mass/capacity evolution.
+
+### D3-A frozen G1 writer card
+
+G1 is the sole authorized implementation packet. Its exact parent is
+`04baa4a79cbcddff888c57b239df5202e2b41424`; it returns exactly one direct-child
+commit and owns only:
+
+- new `pyfem/v3/model/operator.py`;
+- new `pyfem/v3/model/system.py`;
+- new `pyfem/v3/compile/system.py`;
+- new `pyfem/v3/compile/continuum.py`;
+- `pyfem/v3/spec/diagnostics.py`; and
+- new `test/v3/test_v3_q8_generic_flow.py`.
+
+It directly compiles normalized `ModelSpec` into an unexported `CompiledSystem`
+with ordered multiple spaces, an open non-enumerating operator header, typed ports
+and channels, a real zero-width operator-state schema, captured registry identity,
+bounded diagnostics, owned arrays, attribution, and the qualified Q8 geometry and
+convention oracles. It accepts no `CompiledModel`, changes no public export, and
+performs no assembly or solve. Production is capped at 1,800 physical lines across
+the five production paths; the focused test is capped at 650 physical lines.
+
+The exact six required tests and all stop conditions are frozen in D3-A section 7.
+At minimum they prove direct generic Q8 compilation, hard-coded shape/gradient/
+quadrature conventions, disjoint native maps for mechanical-only, thermal-only,
+coupled, and nonstandard-order spaces, detached metadata-free ownership and
+attribution, scale/translation-stable geometry, and compile-boundary rejection of
+invalid orientation and relative singularity. G1 stops before commit if it needs a
+closed payload union, a singular system space, a predecessor input or adapter, a
+downstream Q8 branch, a private cross-layer diagnostic import, an unowned path, or
+a weakened Phase-1 oracle.
+
+After G1 returns, one independent finite-element numerical reviewer and one
+independent architecture/trust reviewer inspect the exact source commit. Accepted
+findings return to the same writer; only a joint GO authorizes G2 on the same
+exclusive branch. No feature writer is active.
 
 ### Basis for the selection
 
@@ -2499,6 +2552,10 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `DONE · P2-H · Three-operator boundary proved` | Sol/max `01a0062b-6e84-7e22-bf8a-4fbb8f42db09` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9`; source `b1789d1` | New-path-only experimental core for continuum, link/spring, and program-owned load operators sharing one space | Complete and archived; 7 focused twice, 485 v3 twice, exact balance/oracles, one clean commit; callback unavailable; no integration by implication |
 | `DONE · R2-F · Vertical deletion cut derived` | Sol/max `01a0062e-c999-7740-89c3-4815948cb99a` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only retain/migrate/delete/defer map for replacing the Phase 1 Q8 spine without a permanent second backend | Complete and archived; strategy B, 33 owned paths, 5,500 gross/1,500 net production deletion floor, report SHA `df8a813`; prompt lacked the now-mandatory literal callback instruction |
 | `DONE · S2-A · generic proof simplified and reviewed` | Sol/high writer `/root/s2a_proof_simplifier`; Sol/max reviewer `/root/s2a_final_review` | source `099b51f` on integrated proof `f140b9e`; review base `c5f83b7` | Simplify only `pyfem/v3/core/{__init__.py,generic.py}` and `test/v3/test_v3_generic_core.py`; no feature expansion or public export | Complete GO; P0/P1/P2 `0/0/0`; 649 production and 360 test nonblank lines; 7 focused twice, 485 v3, 674 repository; independent Fraction and split/vectorized oracles plus Ruff, format, path, ancestry, branch, exact-head, and clean gates green |
+| `DONE · R3-A · behavioral parity graded` | Luna/high `/root/r3a_behavior_parity_audit` | exact clean `04baa4a` | Grade all 154 capabilities by current public, bounded, experimental, design-only, deferred, or retired evidence | Complete; strict 4/154, bounded executable 57/154, design-backed 139/154; report SHA `f3223fb` |
+| `DONE · D3-A · generic spine cut frozen` | Sol/max `/root/d3a_generic_spine_cut_freeze` | exact clean `04baa4a` | Refresh R2-F against simplified proof and freeze terminal ownership, sequence, budgets, reviewers, and first writer | Complete; four linear commits on one exclusive branch; G1 is the six-path unexported direct Q8 system compiler; report SHA `06ba6d7` |
+| `DONE · R3-B · state-first frontier selected` | Sol/high `/root/r3b_feature_frontier` | exact clean `04baa4a` | Rank post-cut feature axes and dependencies without recreating v1 class boundaries | Complete; state transaction -> nonlinear/J2 -> thermal coupling -> evolution; no feature writer may overlap the cut; report SHA `f9bd194` |
+| `G1 · direct Q8 generic system compiler` | sole Sol/high writer on one exclusive branch; task recorded at dispatch | exact parent `04baa4a` | Six paths frozen above; one direct-child commit; unexported compiler only | Frozen and authorized; two independent reviewers required before G2 |
 | `P2-A · final freeze refresh` | internal Sol/max agent `/root/p2a_freeze_draft` | product `7ee65c3`; current main ledger | Read-only final writer-card refresh and public-scope adjudication | Complete; retained genuine public mixed solve, removed optional helpers, froze exact oracle and full gates |
 | `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
 | `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
@@ -3614,3 +3671,10 @@ integration decision; do not bridge it with a compatibility carrier.
   the direct production cut against simplified proof `099b51f`, and a Sol/high
   dependency analysis of the fastest principled route toward v1 behavior. No
   production writer is authorized until those three reports are adjudicated.
+- 2026-08-16: R3-A measured strict public parity at 4/154 capabilities, bounded
+  executable coverage at 57/154, and design-backed coverage at 139/154. I0 accepted
+  D3-A's four-commit direct replacement over R3-A's immediate mixed-width feature
+  suggestion because feature breadth must not extend the predecessor authority.
+  R3-B's state-first post-cut sequence is accepted. G1 is frozen as the sole next
+  writer: six paths, direct unexported Q8 system compilation, exact parent
+  `04baa4a`, then independent numerical and architecture reviews before G2.
