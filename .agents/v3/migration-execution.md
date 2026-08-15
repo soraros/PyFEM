@@ -2,7 +2,8 @@
 
 - Status: active; I1 and the bounded Phase 1 reference slices remain
   component-qualified E3; the old P2-A through P2-G plan is superseded and the
-  live frontier is the generic-core R2-E/P2-H/R2-F proof portfolio
+  R2-E/P2-H/R2-F portfolio is adjudicated; the live frontier is the bounded S2-A
+  simplification and polished pause
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md) plus the post-Phase-1
@@ -29,13 +30,12 @@
 - P1-C integrated proof: 86 focused and 348 combined tests in both normal and 640-digit modes; 478 v3; 667 repository; both Ruff configurations, focused format, ancestry, ownership, and static gates green
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
 - Generic-core decision and common dispatch base: `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9`
-- Active milestone: R2-E/P2-H/R2-F falsification portfolio; sidebar gardening is
-  complete, P2-H is isolated to new experimental paths, and no product writer
-  owns the main tree
+- Active milestone: S2-A simplifies the accepted, still-unexported P2-H proof;
+  the 33-path production vertical cut is accepted in principle but not dispatched
 
 ## Exact next safe action
 
-The main tree is clean at documentation head `f32e7e5`; the last product-code head
+The main tree remains documentation-only after the `f32e7e5` common proof base; the last product-code head
 is the independently green Phase 1 reference `7ee65c3`. That product path passed
 86 focused and 348 combined tests in both normal and 640-digit modes, 478 v3 tests,
 667 repository tests, both Ruff configurations, focused format, and independent
@@ -65,32 +65,35 @@ changes authority or representation; downstream internal code checks identity,
 generation, capabilities, and numerical preconditions without recursively
 recompiling trusted carriers.
 
-The exact next batch was dispatched from common clean base `f32e7e5` and is
-deliberately falsifiable:
+The R2-E/P2-H/R2-F portfolio completed from exact clean base `f32e7e5`:
 
-1. R2-E maps every one of the 154 E0 rows onto the generic concepts and reports
-   any unrepresentable or questionable legacy case.
-2. P2-H builds an isolated, new-path-only executable prototype for a continuum
-   operator, a structurally different link/spring operator, and a program-owned
-   load operator sharing one space and assembly boundary. It has no integration
-   authority.
-3. R2-F derives the exact migration/deletion cut, retained Phase 1 proof surface,
-   and structural budget needed to replace rather than duplicate the frozen path.
+1. R2-E mapped all 154 rows: 95 direct, 56 composed, two questionable
+   (`MODEL-RVE-HOMOG`, `ROM-POD`), and one deliberately not representable
+   (`V3-PROTOTYPE-CARRIER`). It found no seventh finite-element concept. The
+   design is amended so observations are solve-free, auxiliary RVE tangent solves
+   are explicit execution producing derivative channels, ROM maps are versioned
+   artifacts, and ecosystem/adaptor rows remain outside the numerical IR.
+2. P2-H source `b1789d186a85be3505e359a020cb203888f3ea76` proved Q4/T3
+   continuum, directional spring, and program-owned point loads through one typed
+   space/operator/channel boundary. Seven focused tests passed in both digit modes
+   and 485 v3 tests passed in both modes. Its 812 nonblank production and 453
+   nonblank test lines are accepted as evidence, not yet as the polished form.
+3. R2-F selected one compiler/assembly vertical cut over an adapter or permanent
+   second backend. Its future card owns 27 production and six test paths, deletes
+   four predecessor files, and requires at least 5,500 gross/1,500 net production
+   lines plus 900 trust-only test lines removed while retaining fresh numerical
+   verification.
 
-The three live threads are `R2-E` `01a0062b-5deb-79b3-8a73-e768a9ca5fe4`,
-`P2-H` `01a0062b-6e84-7e22-bf8a-4fbb8f42db09`, and `R2-F`
-`01a0062e-c999-7740-89c3-4815948cb99a`. I0 will adjudicate all three results
-without polling their worktrees; each task returns through its delegation callback.
-Before freezing any production writer, I0 must run one bounded S2-A simplification
-pass over the accepted portfolio outcome. That pass removes accidental concepts,
-duplicate carriers, excess validation, redundant tests, and naming drift without
-adding capability. If P2-H is rejected, S2-A instead simplifies the corrected
-design and migration cut and records why the prototype was discarded. The
-prototype is discarded if it needs an untyped universal payload, if a legacy case
-forces a seventh core concept without a principled amendment, or if no bounded
-causal deletion path exists. The migration pauses after S2-A with a clean tree,
-focused evidence, and a concise handoff; no further porting wave is dispatched in
-this pass. No old P2-A writer should be resumed.
+I0 accepts the numerical representation with the recorded amendments and accepts
+R2-F strategy B in principle. It does **not** dispatch the production vertical cut
+in this pass. S2-A first removes accidental owner/role duplication, mirrored IDs,
+repeated factory ceremony, redundant proof scaffolding, and naming drift from the
+unexported P2-H proof without weakening typed ports/channels, native-width blocks,
+attribution, independent oracles, or the normalize-once trust boundary. The target
+is at most 650 nonblank production and 360 nonblank test lines. A justified miss is
+a finding, not permission to delete meaning. After one independent final review,
+the migration pauses with a clean tree and concise handoff. No old P2-A writer and
+no 33-path production writer should be resumed or dispatched.
 
 ### Basis for the selection
 
@@ -126,8 +129,8 @@ private validation seam without copying that validation logic.
 
 > **Superseded 2026-08-16.** This section records how Phase 1 was completed and
 > how the old P2-A through P2-G plan was reasoned about. It is not executable
-> authority. The live batch is in
-> [generic_core.md](generic_core.md#11-next-bounded-batch) and the exact next
+> authority. The live bounded action is in
+> [generic_core.md](generic_core.md#11-current-bounded-simplification) and the exact next
 > action above.
 
 This is the adopted acceleration plan, not authority to bypass a Horizon or merge
@@ -2482,10 +2485,10 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `R1-A · public contracts` | internal Terra/max agent `/root/r1a_public_contracts`; frozen `/private/tmp/pyfem-r1a-7ee65c3` | `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Read-only public compile/assemble/solve/verify flow and diagnostics review | Complete GO; P0/P1/P2 `0/0/0`; 348 combined twice, nine named flows, 32 carrier-boundary cases, exact reusable/one-shot equality |
 | `I1 · linear slice — public proof complete` | delegating/integration owner | product `7ee65c3`; ledger checkpoint follows | Reconcile P1-C integrated proof and three R1-A verdicts; freeze component-qualified Phase 1 contract | Complete; P0-D/P1-A/P1-B/P1-C bounded slices advance to E3; all deferred breadth remains explicit |
 | `DONE · G1 · PyFEM sidebar normalized` | Luna/max `01a0061e-7c27-7d93-b994-878bf8c16a01` | app metadata only; common engineering base remains `f32e7e5` | Rename and archive old migration threads; retain only the active coordinator, current portfolio, and intentional pause points | Complete and archived; 30 threads renamed and 29 historical threads archived; no repository or engineering authority |
-| `ACTIVE · R2-E · Legacy Instance Map` | Sol/max `01a0062b-5deb-79b3-8a73-e768a9ca5fe4` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only mapping of all 154 E0 capabilities to the six generic concepts and seven variation axes | Active; must report every questionable or unrepresentable capability and a durable `/private/tmp` report; no integration authority |
-| `ACTIVE · P2-H · Three-Operator IR` | Sol/max `01a0062b-6e84-7e22-bf8a-4fbb8f42db09` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | New-path-only experimental core for continuum, link/spring, and program-owned load operators sharing one space | Active isolated writer; owns only new `pyfem/v3/core/**` and `test/v3/test_v3_generic_core.py`; one source commit has no integration authority |
-| `ACTIVE · R2-F · Migration Deletion Cut` | Sol/max `01a0062e-c999-7740-89c3-4815948cb99a` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only retain/migrate/delete/defer map for replacing the Phase 1 Q8 spine without a permanent second backend | Active; must freeze exact path groups, deletion target, proof retention, merge order, and rollback point; no integration authority |
-| `S2-A · portfolio simplification — polished pause` | not dispatched; I0 freezes owner only after R2-E/P2-H/R2-F return | accepted portfolio result; never an independently chosen base | Remove accidental abstraction, duplicated code/evidence, naming drift, and unnecessary compatibility before the next production decision | Mandatory next packet; no feature expansion; stop and report after its clean proof rather than dispatching another porting wave |
+| `DONE · R2-E · Legacy coverage mapped` | Sol/max `01a0062b-5deb-79b3-8a73-e768a9ca5fe4` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only mapping of all 154 E0 capabilities to the six generic concepts and seven variation axes | Complete and archived; 95 direct, 56 composed, two questionable, one rejected carrier; report SHA `480332f`; callback delivery was attempted but not acknowledged |
+| `DONE · P2-H · Three-operator boundary proved` | Sol/max `01a0062b-6e84-7e22-bf8a-4fbb8f42db09` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9`; source `b1789d1` | New-path-only experimental core for continuum, link/spring, and program-owned load operators sharing one space | Complete and archived; 7 focused twice, 485 v3 twice, exact balance/oracles, one clean commit; callback unavailable; no integration by implication |
+| `DONE · R2-F · Vertical deletion cut derived` | Sol/max `01a0062e-c999-7740-89c3-4815948cb99a` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only retain/migrate/delete/defer map for replacing the Phase 1 Q8 spine without a permanent second backend | Complete and archived; strategy B, 33 owned paths, 5,500 gross/1,500 net production deletion floor, report SHA `df8a813`; prompt lacked the now-mandatory literal callback instruction |
+| `S2-A · portfolio simplification — polished pause` | sole Sol/high writer, then one Sol/max read-only final reviewer; exact task IDs recorded at dispatch | adjudicated docs head plus isolated P2-H source `b1789d1` | Simplify only `pyfem/v3/core/{__init__.py,generic.py}` and `test/v3/test_v3_generic_core.py`; no feature expansion or public export | Frozen; preserve all seven proofs and gates; target <=650 nonblank production and <=360 nonblank test lines; explicit callback required; stop after independent GO and ledger closure |
 | `P2-A · final freeze refresh` | internal Sol/max agent `/root/p2a_freeze_draft` | product `7ee65c3`; current main ledger | Read-only final writer-card refresh and public-scope adjudication | Complete; retained genuine public mixed solve, removed optional helpers, froze exact oracle and full gates |
 | `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
 | `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
@@ -2515,15 +2518,14 @@ are recorded separately because they are not part of that user-visible audit set
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
   stalled on an unnecessary temporary-file approval.
-- Active: no task is editing existing product source. P2-H is an isolated
-  new-path-only experiment with no integration authority; R2-E and R2-F are
-  read-only. P2-A is incomplete and
+- Active: R2-E/P2-H/R2-F are complete and archived. S2-A is the sole permitted
+  new-path proof simplifier; no task may edit the Phase 1 production path. P2-A is incomplete and
   superseded; its temporary worktree is gone and its branch has zero child commits.
   The topology, ownership, reconciliation, R2-C-card, and leaf-draft tasks are
   historical planning evidence rather than executable authority. The three R1-A
   tasks are complete GO and I1 remains frozen. Luna G1 completed the sidebar
-  cleanup and is archived; the unarchived PyFEM set is now I0 plus the active
-  R2-E/P2-H/R2-F portfolio. The two Kimi attempts, the twice-routed
+  cleanup and is archived; the unarchived PyFEM set is I0 plus any exact S2-A
+  writer/reviewer recorded at dispatch. The two Kimi attempts, the twice-routed
   `/root/p1c_source_review`, and the Sol-capacity
   `/root/p1c_public_flow_redo` are explicitly incomplete and provide no evidence;
   replacement `/root/p1c_public_flow_redo2` completed cleanly.
@@ -3578,3 +3580,11 @@ integration decision; do not bridge it with a compatibility carrier.
   I0 will not actively poll or inspect their worktrees. S2-A adds no capability;
   it squeezes the accepted outcome, updates the authoritative docs and evidence,
   proves a clean state, and is the terminal pause point for this long pass.
+- 2026-08-16: R2-E/P2-H/R2-F all completed. I0 accepted the six-concept numerical
+  IR with solve-free observation, explicit auxiliary-execution modality, and
+  versioned coordinate-map artifact amendments; accepted P2-H as Proof-A evidence;
+  and accepted R2-F's direct vertical-cut strategy without dispatching it. The
+  missing literal callback clause in two original prompts and unacknowledged
+  delivery in the third exposed a coordination defect; AGENTS.md now makes the
+  callback target and literal prompt stanza a dispatch precondition. S2-A is the
+  sole remaining implementation/refinement packet before the requested pause.

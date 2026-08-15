@@ -40,9 +40,10 @@ types are explicitly not architectural constraints:
 - current solver and result APIs
 
 Do not continue the old P0-P8 checklist or the superseded P2-A through P2-G plan.
-Phase 0/1 is a frozen reference. Resume only from the R2-E/P2-H/R2-F portfolio in
-[generic_core.md](generic_core.md#11-next-bounded-batch), and prefer a complete,
-testable generic instance over feature-by-feature class ports.
+Phase 0/1 is a frozen reference. R2-E/P2-H/R2-F are complete; resume only from the
+current bounded action in
+[generic_core.md](generic_core.md#11-current-bounded-simplification), and prefer a
+complete, testable generic instance over feature-by-feature class ports.
 
 ## Task vocabulary and routing
 
@@ -53,6 +54,30 @@ such as **finite-element correctness review**, **local edge-case matrix**,
 import labels, metaphors, skills, or review frames from unrelated domains, and do
 not reuse historical packet wording as prompt text. This routing rule changes no
 technical acceptance criterion.
+
+## Delegated packet return contract
+
+Do not dispatch a delegated packet unless its prompt itself names the exact source
+integration thread and requires one terminal callback immediately before the
+worker's final response. Do not assume that thread ancestry, a delegation wrapper,
+an idle state, or a final visible only inside the child will return the result.
+
+Every delegated prompt ends with this explicit instruction:
+
+```text
+Immediately before your final response, send source thread <thread-id> exactly one
+terminal callback:
+<packet-id> COMPLETE|BLOCKED · <commit or none> · paths=<...> · proof=<...>
+· warning/blocker=<...> · next=<...>
+If callback delivery is unavailable after one bounded attempt, put
+CALLBACK UNAVAILABLE immediately after the RESULT line and close normally.
+```
+
+The coordinator records the callback target while freezing the packet and verifies
+that the literal callback instruction is present before creation. Workers make one
+bounded delivery attempt and do not remain alive waiting for acknowledgement. The
+coordinator relies on callbacks; if one is unavailable, it may take one terminal
+status snapshot, never start a polling loop.
 
 ## Platform baseline
 

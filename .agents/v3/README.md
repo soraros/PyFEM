@@ -56,8 +56,9 @@ The explicit Q8 linear slice is complete and frozen as a correctness oracle. It 
 not the carrier stack to extend. The former P2-A mixed-Q8/Q4/T3 writer is
 superseded and its temporary worktree no longer exists.
 
-The frontier is the bounded R2-E/P2-H/R2-F portfolio in
-[generic_core.md](generic_core.md#11-next-bounded-batch): map every legacy
-capability onto entity blocks, discrete spaces, operator blocks, coordinate maps,
-state/execution, and observations; prototype three unlike operators; and prove a
-bounded deletion/migration cut before changing the production path.
+The R2-E/P2-H/R2-F portfolio is complete and adjudicated. The frontier is the
+bounded S2-A polish pass in
+[generic_core.md](generic_core.md#11-current-bounded-simplification): simplify the
+unexported three-operator proof without adding capability, independently review it,
+record the future direct vertical-cut card, and pause before changing the production
+path.

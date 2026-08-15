@@ -115,7 +115,10 @@ CompiledSystem                                      CompiledProgram
                   accepted result + verification
 ```
 
-Six concepts form the stable semantic IR.
+Six concepts form the stable **numerical** semantic IR. Input adapters, application
+frontends, artifact encoders/decoders, logging, documentation, and output sinks are
+typed producers or consumers around it; they are not forced to masquerade as
+finite-element operators or spaces.
 
 ### 3.1 Entity blocks
 
@@ -192,6 +195,17 @@ The descriptor owns three boundaries:
 Python orchestration dispatches once per block. Hot evaluators receive arrays and
 scalars, never the registry, model, program, or dictionaries.
 
+An evaluator also declares its execution modality:
+
+- a direct array kernel;
+- a local recomputation such as condensation or recovery; or
+- an explicit auxiliary/nested execution rooted at a declared accepted state.
+
+The modality changes scheduling, state, and verification obligations without
+creating another operator kind. In particular, an RVE tangent obtained by auxiliary
+unit-strain micro solves is a derivative channel from explicit auxiliary execution;
+it is not hidden inside a passive observation or commit hook.
+
 Topology, quadrature, kinematics, response law, and section may remain reusable
 implementation components and public authoring helpers. They are not mandatory
 core registry kinds. A standard continuum builder may compose them into one
@@ -222,7 +236,10 @@ already provides those channels requires no analysis edit.
 
 Fixed Dirichlet conditions, affine MPCs, prescribed values, and reduced bases are
 coordinate transformations, not element variants. The canonical full-to-free map
-remains separate from residual-producing operators.
+remains separate from residual-producing operators. Coordinate maps that cross
+process or run boundaries, including ROM bases, are versioned artifacts with schema,
+content identity, source/target-space identity, implementation compatibility, and
+restore validation; they are not anonymous arrays.
 
 A compiled program owns:
 
@@ -248,10 +265,12 @@ couplings, and backend policy. It owns the execution schedule, sparse/action pla
 gather/scatter slots, caches, and mutable scratch. It owns no authoritative
 accepted physical history.
 
-Observations are typed projections or reductions from accepted spaces, operator
-state, and attributed ledgers. Stress recovery, failure criteria, homogenized RVE
-response, reactions, contour fields, histories, and export payloads use this
-boundary. File writers are sinks over observations; they are not solver actions.
+Observations are solve-free typed projections or reductions from accepted spaces,
+operator state, and attributed ledgers. Stress recovery, failure criteria,
+homogenized RVE stress, reactions, contour fields, histories, and export payloads
+use this boundary. A quantity requiring an auxiliary solve is produced by an
+explicit execution/channel request and may then be observed. File writers are sinks
+over observations; they are not solver actions.
 
 ## 4. The variation axes behind the legacy portfolio
 
@@ -450,28 +469,28 @@ Temporary coexistence is allowed only for a bounded proof wave. The new path mus
 either demonstrate a credible one-wave migration/deletion cut or remain an
 unintegrated experiment. We do not permanently maintain two semantic cores.
 
-## 11. Next bounded batch
+## 11. Current bounded simplification
 
 No existing P2-A writer is resumable. Its temporary worktree is gone, its branch
 contains no child commit, and the frozen card is superseded by this amendment.
 
-The next batch uses new, never-reused coordinates:
+R2-E, P2-H, and R2-F are complete and adjudicated. They found no seventh numerical
+concept, proved one generic continuum/link/load boundary, and selected a bounded
+direct vertical replacement with causal deletion. The production cut is not part
+of the current pass.
 
-1. **R2-E — legacy coverage / generic instance map.** Map all 154 capability rows
-   onto the six IR concepts and seven variation axes. Report every row requiring a
-   new concept or a questionable fit. Read-only.
-2. **P2-H — semantic IR / executable three-operator prototype.** In an isolated
-   worktree and new paths only, build the smallest typed IR and compile/assemble
-   Proof A. This is an experiment with no integration authority and no edits to
-   the frozen Phase 1 path.
-3. **R2-F — migration cut / trust and deletion map.** Derive the smallest
-   owner-plus-consumer replacement cut, exact duplicated validators/witnesses that
-   can be deleted, retained public proofs, and a structural budget. Read-only.
+The only live packet is **S2-A — proof-core simplification**. It removes accidental
+owner/role duplication, mirrored identifiers, repeated factory ceremony, redundant
+test scaffolding, and naming drift from the unexported P2-H proof. It adds no
+capability and touches no Phase 1 file or public export. It must preserve all seven
+focused proof cases, exact Q4/T3/spring/load/global-balance oracles, typed
+ports/channels, native-width entity blocks, provenance attribution, immutable
+ownership, normal and restricted-digit gates, and the normalize-once trust
+boundary. The target is at most 650 nonblank production and 360 nonblank test lines.
 
-I0 adjudicates all three outputs. Only then may it freeze a production migration
-Horizon. The prototype is discarded if R2-E finds a core counterexample, if it
-requires an untyped universal payload, or if R2-F cannot show a bounded replacement
-and causal deletion path.
+After one independent correctness review and any bounded repair, I0 records the
+future vertical-cut card and pauses. No subsequent implementation packet is
+dispatched in this pass.
 
 ## 12. Decision record
 
@@ -492,3 +511,18 @@ and causal deletion path.
   bounded causal deletion cut before production integration.
 - **Acceptance surface:** the extension laws, Proof A-D, structural success bar,
   and R2-E/P2-H/R2-F batch above.
+
+### 2026-08-16 — Qualify the core boundary after the 154-row instance audit
+
+- **Evidence:** R2-E classified 95 rows as direct, 56 as composed, two as
+  questionable, and the rejected prototype carrier itself as not representable.
+- **Counterexample:** the legacy RVE tangent performs auxiliary constrained micro
+  solves and therefore cannot truthfully inhabit a passive observation contract.
+- **Decision:** the six concepts describe numerical semantics, not ecosystem or
+  adapter surfaces; observations are solve-free; evaluator modality makes
+  auxiliary/nested execution explicit; persisted ROM coordinate maps are versioned
+  artifacts.
+- **Consequence:** no seventh finite-element concept or restoration of v1
+  Element/Material/Section/Model boundaries is required. Proof-A code proceeds only
+  to a bounded simplification pass; the production vertical cut remains a later,
+  separately frozen decision.

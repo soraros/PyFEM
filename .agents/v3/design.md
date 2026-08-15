@@ -1191,8 +1191,8 @@ hardware-specific constant embedded in architecture.
 > **Post-Phase-1 amendment.** Phase 0 and Phase 1 are complete reference evidence.
 > The old Phase 2-6 sequence below is retained to show the intended semantic
 > coverage, but its P2-A through P2-G execution decomposition is superseded by the
-> proof portfolio and R2-E/P2-H/R2-F batch in
-> [generic_core.md](generic_core.md#11-next-bounded-batch).
+> completed proof portfolio and current polish action in
+> [generic_core.md](generic_core.md#11-current-bounded-simplification).
 
 Branch history is the archive; do not duplicate the entire prototype under a
 second permanent namespace. Migrate by complete vertical slices and delete each
@@ -1320,11 +1320,11 @@ The Q8 Phase 1 slice described by the former version of this section is complete
 and remains a frozen reference oracle. Do not resume the old P2-A mixed-Q8/Q4/T3
 writer or add another legacy-shaped descriptor kind.
 
-The exact next batch is defined in
-[generic_core.md](generic_core.md#11-next-bounded-batch): independently map the
-154-row inventory onto the generic IR, build an isolated executable
-continuum/link/load operator prototype, and derive the bounded migration/deletion
-cut. I0 must adjudicate those three results before a production Horizon is frozen.
+The generic-core portfolio is complete and adjudicated. The exact remaining task is
+the no-feature S2-A polish pass in
+[generic_core.md](generic_core.md#11-current-bounded-simplification). After its
+independent review, I0 records the future direct vertical-cut Horizon and pauses;
+no production migration writer is dispatched in this pass.
 
 ## 16. Design amendment log
 
