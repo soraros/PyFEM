@@ -89,6 +89,8 @@ class CompiledSystem(CompilerConstructed):
     return self.spaces[-1].coefficient_range[1]
 
   def source_for(self, kind: str, semantic_id: SemanticId) -> CompiledSource:
+    if type(kind) is not str:
+      raise TypeError("compiled source kind must be an exact str")
     for record in self.source_attribution:
       if record.kind == kind and _same_semantic_id(record.semantic_id, semantic_id):
         return record.source

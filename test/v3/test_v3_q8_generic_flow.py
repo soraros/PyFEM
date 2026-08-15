@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import copy
+import pickle
 import sys
 from dataclasses import replace
 from fractions import Fraction
@@ -224,6 +226,10 @@ def _zero_constitutive(youngs_modulus: float, poisson_ratio: float) -> np.ndarra
   return np.zeros((3, 3), dtype=np.float64)
 
 
+def _pickle_round_trip(value: object) -> object:
+  return pickle.loads(pickle.dumps(value))
+
+
 def test_direct_q8_system_compilation_uses_generic_spaces_ports_and_channels(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -394,6 +400,17 @@ def test_same_identity_spoofed_registry_bindings_fail_at_compile_boundary(
   )
   with pytest.raises(ModelCompilationError, match=code):
     compile_system(_model(), registry)
+  if key == Q8_MATERIAL_KEY:
+    tiny = _model()
+    material = tiny.materials[0]
+    parameter = replace(material.parameters[0], value=1.0e-300)
+    tiny = replace(
+      tiny,
+      materials=(replace(material, parameters=(parameter, *material.parameters[1:])),),
+    )
+    assert compile_system(tiny, q8_reference_registry()).operators
+    with pytest.raises(ModelCompilationError, match=code):
+      compile_system(tiny, registry)
 
 
 def test_multiple_spaces_have_disjoint_native_coefficient_maps() -> None:
@@ -485,6 +502,14 @@ def test_compiled_system_owns_metadata_free_arrays_identity_and_attribution() ->
   with pytest.raises(KeyError, match="exact semantic identity"):
     first.source_for("node", True)
 
+  class HostileKind(str):
+    def __eq__(self, other: object) -> bool:
+      del other
+      raise AssertionError("foreign equality must not run")
+
+  with pytest.raises(TypeError, match="exact str"):
+    first.source_for(HostileKind("node"), 1)
+
   material = authored.materials[0]
   changed_parameter = replace(
     material.parameters[0],
@@ -507,14 +532,37 @@ def test_compiled_system_owns_metadata_free_arrays_identity_and_attribution() ->
   ):
     with pytest.raises(TypeError, match="constructed only by their compiler"):
       carrier()
+  evaluation = first_operator.evaluate(_inputs(first_operator))
+  trusted = (
+    first,
+    first.provenance,
+    first.point_blocks[0],
+    first.entity_blocks[0],
+    first.spaces[0],
+    first.source_attribution[0],
+    first.source_attribution[0].source,
+    first_operator,
+    first_operator.payload,
+    first_operator.header,
+    first_operator.header.implementations[0],
+    first_operator.header.ports[0],
+    first_operator.header.residual_channels[0],
+    first_operator.header.jacobian_channels[0],
+    first_operator.header.state_layout,
+    evaluation,
+  )
+  for value in trusted:
+    for reconstruct in (copy.copy, copy.deepcopy, _pickle_round_trip):
+      with pytest.raises(TypeError, match="cannot be reconstructed"):
+        reconstruct(value)
 
 
 def test_q8_geometry_classification_is_scale_and_translation_stable() -> None:
   models = (
     _model(scale=1.0),
     _model(scale=2.0),
-    _model(scale=1.0e-200),
-    _model(scale=1.0e200),
+    _model(scale=1.0e-150),
+    _model(scale=1.0e150),
     _model(scale=1.0e90, offset=(1.0e100, -1.0e100)),
   )
   operators = tuple(_operator(model) for model in models)
@@ -527,6 +575,14 @@ def test_q8_geometry_classification_is_scale_and_translation_stable() -> None:
       rtol=0.0,
       atol=3.0e-15,
     )
+  for operator in operators:
+    recovered = (
+      operator.payload.physical_gradients().values,
+      operator.payload.physical_strain_displacement().values,
+      operator.payload.physical_integration_weights().values,
+    )
+    assert all(np.isfinite(array).all() for array in recovered)
+    assert np.all(recovered[-1] > 0.0)
   unit, doubled = operators[:2]
   np.testing.assert_allclose(
     doubled.payload.physical_gradients().values,
@@ -574,6 +630,9 @@ def test_q8_geometry_classification_is_scale_and_translation_stable() -> None:
       ),
       "near-singular-reference-geometry",
     ),
+    (_model(scale=1.0e-200), "unrepresentable-physical-geometry"),
+    (_model(scale=1.0e200), "unrepresentable-physical-geometry"),
+    (_model(scale=1.0e-310), "unrepresentable-physical-geometry"),
   ],
 )
 def test_q8_invalid_orientation_and_relative_singularity_fail_at_compile_boundary(

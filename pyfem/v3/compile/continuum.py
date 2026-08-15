@@ -477,9 +477,12 @@ def _binding_array(
 
 
 def _corresponds(actual: np.ndarray, expected: np.ndarray) -> bool:
-  scale = max(1.0, float(np.max(np.abs(expected))))
-  tolerance = 8.0 * float(np.finfo(np.float64).eps) * scale
-  return bool(np.allclose(actual, expected, rtol=0.0, atol=tolerance))
+  absolute = np.abs(expected)
+  scale = float(np.max(absolute))
+  zero_tolerance = 8.0 * float(np.finfo(np.float64).eps) * scale
+  ulps = 16.0 * np.abs(np.spacing(expected))
+  tolerance = np.where(expected == 0.0, zero_tolerance, ulps)
+  return bool(np.all(np.abs(actual - expected) <= tolerance))
 
 
 def _qualified_shapes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -786,6 +789,32 @@ def _geometry(
   return gradients, determinants, scales
 
 
+def _validate_physical_recovery(
+  gradients: np.ndarray,
+  b_matrix: np.ndarray,
+  integration_weights: np.ndarray,
+  scales: np.ndarray,
+  cells: tuple[CellSpec, ...],
+) -> None:
+  with np.errstate(divide="ignore", invalid="ignore", over="ignore", under="ignore"):
+    physical_gradients = gradients / scales[:, None, None, None]
+    physical_b = b_matrix / scales[:, None, None, None]
+    physical_weights = integration_weights * scales[:, None] * scales[:, None]
+  for index, cell in enumerate(cells):
+    if (
+      not bool(np.isfinite(physical_gradients[index]).all())
+      or not bool(np.isfinite(physical_b[index]).all())
+      or not bool(np.isfinite(physical_weights[index]).all())
+      or bool(np.any(physical_weights[index] <= 0.0))
+    ):
+      _fail(
+        "unrepresentable-physical-geometry",
+        f"Q8 cell {render_diagnostic_value(cell.id)} physical gradients or "
+        "integration measure cannot be represented as float64",
+        cell.source,
+      )
+
+
 def _identities(snapshot: RegistrySnapshot) -> tuple[ImplementationIdentity, ...]:
   return tuple(
     _new(
@@ -894,6 +923,13 @@ def compile_operator(
       selection.material.source,
     )
   integration_weights = determinants * weights[None, :]
+  _validate_physical_recovery(
+    gradients,
+    b_matrix,
+    integration_weights,
+    geometry_scales,
+    selection.cells,
+  )
   tangent = np.einsum(
     "ep,epai,ab,epbj->eij",
     integration_weights,

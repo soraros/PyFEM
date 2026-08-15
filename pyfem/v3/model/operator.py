@@ -21,9 +21,22 @@ def _exact_tuple(value: object, item_type: type[object], label: str) -> None:
 class CompilerConstructed:
   __slots__ = ()
 
-  def __init__(self, *args: object, **kwargs: object) -> None:
-    del args, kwargs
+  def __init__(self, *_args: object, **_kwargs: object) -> None:
     msg = "trusted compiled carriers are constructed only by their compiler"
+    raise TypeError(msg)
+
+  def __copy__(self) -> None:
+    self._deny_reconstruction()
+
+  def __deepcopy__(self, _memo: object) -> None:
+    self._deny_reconstruction()
+
+  def __reduce_ex__(self, _protocol: int) -> None:
+    self._deny_reconstruction()
+
+  @staticmethod
+  def _deny_reconstruction() -> None:
+    msg = "trusted compiled carriers cannot be reconstructed"
     raise TypeError(msg)
 
 
