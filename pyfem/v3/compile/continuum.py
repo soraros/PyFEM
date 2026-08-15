@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass
+from decimal import Decimal, localcontext
 from typing import NoReturn
 
 import numpy as np
@@ -477,12 +479,74 @@ def _binding_array(
 
 
 def _corresponds(actual: np.ndarray, expected: np.ndarray) -> bool:
-  absolute = np.abs(expected)
-  scale = float(np.max(absolute))
+  scale = float(np.max(np.abs(expected)))
   zero_tolerance = 8.0 * float(np.finfo(np.float64).eps) * scale
   ulps = 16.0 * np.abs(np.spacing(expected))
   tolerance = np.where(expected == 0.0, zero_tolerance, ulps)
   return bool(np.all(np.abs(actual - expected) <= tolerance))
+
+
+def _qualified_constitutive(
+  youngs_modulus: float,
+  poisson_ratio: float,
+  source: SourceContext,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+  with localcontext() as context:
+    context.prec = 120
+    modulus = Decimal.from_float(youngs_modulus)
+    ratio = Decimal.from_float(poisson_ratio)
+    normal = modulus / ((Decimal(1) - ratio) * (Decimal(1) + ratio))
+    coupling = normal * ratio
+    shear = modulus / (Decimal(2) * (Decimal(1) + ratio))
+    try:
+      expected = np.array(
+        [
+          [float(normal), float(coupling), 0.0],
+          [float(coupling), float(normal), 0.0],
+          [0.0, 0.0, float(shear)],
+        ],
+        dtype=np.float64,
+      )
+      if not bool(np.isfinite(expected).all()):
+        raise OverflowError
+    except (ArithmeticError, OverflowError, ValueError):
+      _fail(
+        "unrepresentable-material-law",
+        "Q8 plane-stress matrix cannot be represented as finite float64",
+        source,
+      )
+  route_normal = youngs_modulus / (1.0 - poisson_ratio * poisson_ratio)
+  route = np.array(
+    [
+      [route_normal, route_normal * poisson_ratio, 0.0],
+      [route_normal * poisson_ratio, route_normal, 0.0],
+      [0.0, 0.0, youngs_modulus / (2.0 * (1.0 + poisson_ratio))],
+    ],
+    dtype=np.float64,
+  )
+  route = np.where(np.isfinite(route), route, expected)
+  structural_zero = np.zeros((3, 3), dtype=np.bool_)
+  structural_zero[:2, 2] = structural_zero[2, :2] = True
+  return expected, route, structural_zero, (expected == 0.0) & ~structural_zero
+
+
+def _constitutive_corresponds(
+  actual: np.ndarray,
+  expected: np.ndarray,
+  route: np.ndarray,
+  structural_zero: np.ndarray,
+  rounded_zero: np.ndarray,
+) -> bool:
+  nonzero = ~(structural_zero | rounded_zero)
+  if bool(np.any(actual[~nonzero] != 0.0)) or bool(np.any(actual[nonzero] == 0.0)):
+    return False
+  if bool(np.any(np.signbit(actual[nonzero]) != np.signbit(expected[nonzero]))):
+    return False
+  expected_ulps = np.abs(expected - np.nextafter(expected, np.zeros_like(expected)))
+  route_ulps = np.abs(route - np.nextafter(route, np.zeros_like(route)))
+  ulps = 16.0 * np.maximum(expected_ulps, route_ulps)
+  tolerance = np.abs(route - expected) + ulps
+  return bool(np.all(np.abs(actual[nonzero] - expected[nonzero]) <= tolerance[nonzero]))
 
 
 def _qualified_shapes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -887,9 +951,18 @@ def compile_operator(
       selection.region.source,
     )
   youngs_modulus, poisson_ratio = _parameters(selection)
+  expected_constitutive, finite_route, structural_zero, rounded_zero = (
+    _qualified_constitutive(
+      youngs_modulus,
+      poisson_ratio,
+      selection.material.source,
+    )
+  )
   material = snapshot.resolve(*Q8_MATERIAL_KEY).binding
   try:
-    raw_constitutive = material(youngs_modulus, poisson_ratio)
+    with warnings.catch_warnings():
+      warnings.simplefilter("error", RuntimeWarning)
+      raw_constitutive = material(youngs_modulus, poisson_ratio)
   except Exception:
     _fail(
       "material-binding-failed", "Q8 material binding failed", selection.material.source
@@ -901,22 +974,19 @@ def compile_operator(
     label="Q8 material binding",
     source=selection.material.source,
   )
-  modulus = youngs_modulus / (1.0 - poisson_ratio * poisson_ratio)
-  expected_constitutive = np.array(
-    [
-      [modulus, modulus * poisson_ratio, 0.0],
-      [modulus * poisson_ratio, modulus, 0.0],
-      [0.0, 0.0, youngs_modulus / (2.0 * (1.0 + poisson_ratio))],
-    ],
-    dtype=np.float64,
-  )
   if not bool(np.array_equal(constitutive, constitutive.T)):
     _fail(
       "nonsymmetric-material-binding",
       "Q8 material tangent must be symmetric",
       selection.material.source,
     )
-  if not _corresponds(constitutive, expected_constitutive):
+  if not _constitutive_corresponds(
+    constitutive,
+    expected_constitutive,
+    finite_route,
+    structural_zero,
+    rounded_zero,
+  ):
     _fail(
       "incompatible-material-binding-output",
       "Q8 material output contradicts the qualified plane-stress law",
@@ -930,14 +1000,15 @@ def compile_operator(
     geometry_scales,
     selection.cells,
   )
-  tangent = np.einsum(
-    "ep,epai,ab,epbj->eij",
-    integration_weights,
-    b_matrix,
-    constitutive,
-    b_matrix,
-    optimize=True,
-  )
+  with np.errstate(invalid="ignore", over="ignore", under="ignore"):
+    tangent = np.einsum(
+      "ep,epai,ab,epbj->eij",
+      integration_weights,
+      b_matrix,
+      constitutive,
+      b_matrix,
+      optimize=True,
+    )
   if not bool(np.isfinite(tangent).all()):
     _fail(
       "non-finite-element-operator",
@@ -945,7 +1016,10 @@ def compile_operator(
       selection.region.source,
     )
   tangent_scale = float(np.max(np.abs(tangent)))
-  symmetry_tolerance = 64.0 * float(np.finfo(np.float64).eps) * tangent_scale
+  symmetry_tolerance = 64.0 * max(
+    float(np.finfo(np.float64).eps) * tangent_scale,
+    abs(tangent_scale - math.nextafter(tangent_scale, 0.0)),
+  )
   if not bool(
     np.allclose(
       tangent,

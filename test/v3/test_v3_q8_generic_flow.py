@@ -7,7 +7,9 @@ from __future__ import annotations
 import copy
 import pickle
 import sys
+import warnings
 from dataclasses import replace
+from decimal import Decimal, localcontext
 from fractions import Fraction
 
 import numpy as np
@@ -226,6 +228,24 @@ def _zero_constitutive(youngs_modulus: float, poisson_ratio: float) -> np.ndarra
   return np.zeros((3, 3), dtype=np.float64)
 
 
+def _high_precision_constitutive(e: float, nu: float) -> np.ndarray:
+  with localcontext() as context:
+    context.prec = 120
+    modulus = Decimal.from_float(e)
+    ratio = Decimal.from_float(nu)
+    normal = modulus / ((Decimal(1) - ratio) * (Decimal(1) + ratio))
+    coupling = normal * ratio
+    shear = modulus / (Decimal(2) * (Decimal(1) + ratio))
+  return np.array(
+    [
+      [float(normal), float(coupling), 0.0],
+      [float(coupling), float(normal), 0.0],
+      [0.0, 0.0, float(shear)],
+    ],
+    dtype=np.float64,
+  )
+
+
 def _pickle_round_trip(value: object) -> object:
   return pickle.loads(pickle.dumps(value))
 
@@ -403,14 +423,48 @@ def test_same_identity_spoofed_registry_bindings_fail_at_compile_boundary(
   if key == Q8_MATERIAL_KEY:
     tiny = _model()
     material = tiny.materials[0]
-    parameter = replace(material.parameters[0], value=1.0e-300)
-    tiny = replace(
+    for value in (1.0e-300, 5.0e-324, 5.0e-323):
+      parameter = replace(material.parameters[0], value=value)
+      tiny = replace(
+        tiny,
+        materials=(
+          replace(material, parameters=(parameter, *material.parameters[1:])),
+        ),
+      )
+      assert compile_system(tiny, q8_reference_registry()).operators
+      with pytest.raises(ModelCompilationError, match=code):
+        compile_system(tiny, registry)
+    ratio = replace(material.parameters[1], value=-0.999999999999)
+    edge = replace(
       tiny,
-      materials=(replace(material, parameters=(parameter, *material.parameters[1:])),),
+      materials=(replace(material, parameters=(material.parameters[0], ratio)),),
     )
-    assert compile_system(tiny, q8_reference_registry()).operators
-    with pytest.raises(ModelCompilationError, match=code):
-      compile_system(tiny, registry)
+    assert compile_system(edge, q8_reference_registry()).operators
+    precise = q8_reference_registry()
+    descriptor = precise[Q8_MATERIAL_KEY]
+    precise[Q8_MATERIAL_KEY] = RegistryDescriptor(
+      kind=descriptor.kind,
+      name=descriptor.name,
+      version=descriptor.version,
+      implementation_id=descriptor.implementation_id,
+      metadata=q8_descriptor_metadata(*Q8_MATERIAL_KEY),
+      binding=_high_precision_constitutive,
+    )
+    assert compile_system(edge, precise).operators
+    extreme = replace(material.parameters[0], value=sys.float_info.max)
+    for value, diagnostic in (
+      (0.0, "non-finite-element-operator"),
+      (0.25, "unrepresentable-material-law"),
+    ):
+      ratio = replace(material.parameters[1], value=value)
+      overflow = replace(
+        tiny,
+        materials=(replace(material, parameters=(extreme, ratio)),),
+      )
+      with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        with pytest.raises(ModelCompilationError, match=diagnostic):
+          compile_system(overflow, q8_reference_registry())
 
 
 def test_multiple_spaces_have_disjoint_native_coefficient_maps() -> None:
