@@ -28,12 +28,14 @@
 - Integrated P1-C chain: `c9b9480` -> `bfc1d80` -> `d78201d` -> `7ee65c3ea5c50278b17dce63f2569e22412e0ebd`
 - P1-C integrated proof: 86 focused and 348 combined tests in both normal and 640-digit modes; 478 v3; 667 repository; both Ruff configurations, focused format, ancestry, ownership, and static gates green
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
-- Active milestone: D2-A generic-core realignment; sidebar gardening is active,
-  and no product writer owns the main tree
+- Generic-core decision and common dispatch base: `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9`
+- Active milestone: R2-E/P2-H/R2-F falsification portfolio; sidebar gardening is
+  active, P2-H is isolated to new experimental paths, and no product writer owns
+  the main tree
 
 ## Exact next safe action
 
-The main tree is clean at documentation head `48fa0d1`; the last product-code head
+The main tree is clean at documentation head `f32e7e5`; the last product-code head
 is the independently green Phase 1 reference `7ee65c3`. That product path passed
 86 focused and 348 combined tests in both normal and 640-digit modes, 478 v3 tests,
 667 repository tests, both Ruff configurations, focused format, and independent
@@ -63,7 +65,8 @@ changes authority or representation; downstream internal code checks identity,
 generation, capabilities, and numerical preconditions without recursively
 recompiling trusted carriers.
 
-The exact next batch is deliberately falsifiable and uses new coordinates:
+The exact next batch was dispatched from common clean base `f32e7e5` and is
+deliberately falsifiable:
 
 1. R2-E maps every one of the 154 E0 rows onto the generic concepts and reports
    any unrepresentable or questionable legacy case.
@@ -74,7 +77,10 @@ The exact next batch is deliberately falsifiable and uses new coordinates:
 3. R2-F derives the exact migration/deletion cut, retained Phase 1 proof surface,
    and structural budget needed to replace rather than duplicate the frozen path.
 
-I0 will adjudicate all three results before freezing any production writer. The
+The three live threads are `R2-E` `01a0062b-5deb-79b3-8a73-e768a9ca5fe4`,
+`P2-H` `01a0062b-6e84-7e22-bf8a-4fbb8f42db09`, and `R2-F`
+`01a0062e-c999-7740-89c3-4815948cb99a`. I0 will adjudicate all three results
+before freezing any production writer. The
 prototype is discarded if it needs an untyped universal payload, if a legacy case
 forces a seventh core concept without a principled amendment, or if no bounded
 causal deletion path exists. No old P2-A writer should be resumed.
@@ -2421,7 +2427,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 
 | Exact title | Thread | Exact base | Owner/output | State and evidence |
 |---|---|---|---|---|
-| `I0 · foundations — combined proof` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | Integration, shared docs, combined proof | Complete GO through integrated repair `fb358fc`; coordinator continues to next milestone |
+| `ACTIVE · I0 · v3 integration coordinator` | `019f6f49-0b72-7d73-86da-c6b85519eeaf` | current main `f32e7e5`; original dispatch `c75cbf3` | Integration, shared docs, portfolio adjudication, and combined proof | Active; foundation and Phase 1 proofs complete, generic-core portfolio in flight |
 | `P0-A · assembly — prototype quarantined` | `019f7060-0bb3-7a72-bb6b-47697f1c5747` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | Assembly quarantine | Integrated as `92bc87d` from `db486f5`; repair 0 |
 | `P0-B · model spec — explicit immutable intent` | `019f7060-0bb9-7b40-8cfb-f056155afe37` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | `pyfem/v3/spec/**` | Integrated through `f2a0cd2`; two integration repairs plus one reviewer repair |
 | `P0-C · identity/storage — owned and frozen` | `019f7060-0bb1-7a72-b438-5c2274f3d5e8` | `c75cbf3523349deb40bd2b07de7959e7606c3b1f` | `pyfem/v3/model/**` | Integrated through `e1d7fe7`; one integration repair plus one reviewer repair |
@@ -2468,6 +2474,10 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `R1-A · state lifecycle` | internal Sol/max agent `/root/r1a_state_lifecycle`; frozen `/private/tmp/pyfem-r1a-7ee65c3` | `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Read-only identity, generation, transaction, storage, cache, and capacity review | Complete GO; P0/P1/P2 `0/0/0`; 2,020 normal and 1,628 restricted independent checks plus focused identity/linear suites |
 | `R1-A · public contracts` | internal Terra/max agent `/root/r1a_public_contracts`; frozen `/private/tmp/pyfem-r1a-7ee65c3` | `7ee65c3ea5c50278b17dce63f2569e22412e0ebd` | Read-only public compile/assemble/solve/verify flow and diagnostics review | Complete GO; P0/P1/P2 `0/0/0`; 348 combined twice, nine named flows, 32 carrier-boundary cases, exact reusable/one-shot equality |
 | `I1 · linear slice — public proof complete` | delegating/integration owner | product `7ee65c3`; ledger checkpoint follows | Reconcile P1-C integrated proof and three R1-A verdicts; freeze component-qualified Phase 1 contract | Complete; P0-D/P1-A/P1-B/P1-C bounded slices advance to E3; all deferred breadth remains explicit |
+| `ACTIVE · G1 · PyFEM Thread Garden` | Luna/max `01a0061e-7c27-7d93-b994-878bf8c16a01` | app metadata only; repository remains at `f32e7e5` | Rename and archive old migration threads; retain only the active coordinator, current portfolio, and intentional pause points | Active; metadata-only cleanup, no engineering evidence or repository authority |
+| `ACTIVE · R2-E · Legacy Instance Map` | Sol/max `01a0062b-5deb-79b3-8a73-e768a9ca5fe4` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only mapping of all 154 E0 capabilities to the six generic concepts and seven variation axes | Active; must report every questionable or unrepresentable capability and a durable `/private/tmp` report; no integration authority |
+| `ACTIVE · P2-H · Three-Operator IR` | Sol/max `01a0062b-6e84-7e22-bf8a-4fbb8f42db09` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | New-path-only experimental core for continuum, link/spring, and program-owned load operators sharing one space | Active isolated writer; owns only new `pyfem/v3/core/**` and `test/v3/test_v3_generic_core.py`; one source commit has no integration authority |
+| `ACTIVE · R2-F · Migration Deletion Cut` | Sol/max `01a0062e-c999-7740-89c3-4815948cb99a` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only retain/migrate/delete/defer map for replacing the Phase 1 Q8 spine without a permanent second backend | Active; must freeze exact path groups, deletion target, proof retention, merge order, and rollback point; no integration authority |
 | `P2-A · final freeze refresh` | internal Sol/max agent `/root/p2a_freeze_draft` | product `7ee65c3`; current main ledger | Read-only final writer-card refresh and public-scope adjudication | Complete; retained genuine public mixed solve, removed optional helpers, froze exact oracle and full gates |
 | `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
 | `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
@@ -2497,7 +2507,9 @@ are recorded separately because they are not part of that user-visible audit set
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
   stalled on an unnecessary temporary-file approval.
-- Active: no task is currently editing product source. P2-A is incomplete and
+- Active: no task is editing existing product source. P2-H is an isolated
+  new-path-only experiment with no integration authority; R2-E and R2-F are
+  read-only. P2-A is incomplete and
   superseded; its temporary worktree is gone and its branch has zero child commits.
   The topology, ownership, reconciliation, R2-C-card, and leaf-draft tasks are
   historical planning evidence rather than executable authority. The three R1-A
@@ -3544,3 +3556,11 @@ integration decision; do not bridge it with a compatibility carrier.
 - 2026-08-16: the next portfolio is R2-E legacy-to-instance mapping, P2-H isolated
   three-operator executable prototype, and R2-F trust/deletion-cut research. I0
   must adjudicate all three before any production migration writer is frozen.
+- 2026-08-16: D2-A was committed as `f32e7e5`; R2-E
+  `01a0062b-5deb-79b3-8a73-e768a9ca5fe4`, P2-H
+  `01a0062b-6e84-7e22-bf8a-4fbb8f42db09`, and R2-F
+  `01a0062e-c999-7740-89c3-4815948cb99a` were dispatched from that exact clean
+  base. Luna/max G1 `01a0061e-7c27-7d93-b994-878bf8c16a01` is separately
+  normalizing sidebar metadata. I0's next action is to adjudicate the three
+  engineering results together; no result may independently authorize production
+  integration.
