@@ -1,9 +1,4 @@
-"""Typed executable semantic-IR prototype for three unlike operators.
-
-This module is intentionally isolated from the frozen Phase-1 carrier.  Factory
-functions validate and detach inputs once; assembly trusts their immutable output
-and dispatches only through evaluator bindings captured on homogeneous blocks.
-"""
+"""Isolated executable proof of three unlike typed finite-element operators."""
 
 from __future__ import annotations
 
@@ -20,36 +15,15 @@ from pyfem.v3.model.arrays import FinalizedArray
 
 type FloatArray = NDArray[np.float64]
 type IndexArray = NDArray[np.int64]
-type ShapeBinding = Callable[[FloatArray], tuple[FloatArray, FloatArray]]
-
-
-class EntityRole(Enum):
-  """Geometric role of one native-width entity block."""
-
-  CELL = "cell"
-  LINK = "link"
-  POINT_LOAD = "point-load"
-
-
-class OperatorOwner(Enum):
-  """Lifetime owner of a compiled operator block."""
-
-  MODEL = "model"
-  PROGRAM = "program"
 
 
 class BalanceRole(Enum):
-  """Attribution role of a residual contribution."""
-
   INTERNAL = "internal"
   EXTERNAL = "external"
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class PointEntityBlock:
-  """Compiler-owned points and reference coordinates."""
-
-  block_id: str
   entity_ids: tuple[str, ...]
   source_ids: tuple[str, ...]
   reference_coordinates: FinalizedArray
@@ -57,10 +31,6 @@ class PointEntityBlock:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class IncidenceEntityBlock:
-  """Compiler-owned homogeneous entities with their native incidence width."""
-
-  block_id: str
-  role: EntityRole
   entity_ids: tuple[str, ...]
   source_ids: tuple[str, ...]
   incidence: FinalizedArray
@@ -68,19 +38,14 @@ class IncidenceEntityBlock:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class DiscreteSpace:
-  """One explicit coefficient space over a point support."""
-
   space_id: str
   support: PointEntityBlock
   components: tuple[str, ...]
   coefficient_ids: tuple[str, ...]
-  coefficient_count: int
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class PortBinding:
-  """A named operator port and its block-local gather map."""
-
   port_id: str
   space: DiscreteSpace
   gather: FinalizedArray
@@ -88,8 +53,6 @@ class PortBinding:
 
 @dataclass(frozen=True, slots=True)
 class ResidualChannel:
-  """Typed attributed residual-vector channel."""
-
   channel_id: str
   target_port: int
   balance_role: BalanceRole
@@ -98,8 +61,6 @@ class ResidualChannel:
 
 @dataclass(frozen=True, slots=True)
 class JacobianChannel:
-  """Typed derivative channel between explicit ports."""
-
   channel_id: str
   target_port: int
   source_port: int
@@ -108,34 +69,8 @@ class JacobianChannel:
   symmetric: bool
 
 
-@dataclass(frozen=True, slots=True)
-class LocalStateLayout:
-  """Block-local accepted/trial row metadata; width is zero in this proof."""
-
-  schema_id: str
-  entity_count: int
-  width: int
-
-
-@dataclass(frozen=True, slots=True, eq=False)
-class OperatorHeader:
-  """Small common header shared by every specialized operator payload."""
-
-  block_id: str
-  entity_block: IncidenceEntityBlock
-  descriptor_id: str
-  implementation_id: str
-  owner: OperatorOwner
-  ports: tuple[PortBinding, ...]
-  residual_channels: tuple[ResidualChannel, ...]
-  jacobian_channels: tuple[JacobianChannel, ...]
-  state_layout: LocalStateLayout
-
-
 @dataclass(frozen=True, slots=True, eq=False)
 class ContinuumPayload:
-  """Compiled plane-stress integration data for a homogeneous cell block."""
-
   strain_displacement: FinalizedArray
   integration_weights: FinalizedArray
   constitutive: FinalizedArray
@@ -143,44 +78,27 @@ class ContinuumPayload:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class DirectionalSpringPayload:
-  """One scalar directional stiffness per link entity."""
-
   stiffness: FinalizedArray
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class PointLoadPayload:
-  """One program-owned scalar load magnitude per point entity."""
-
   magnitudes: FinalizedArray
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class LocalEvaluation:
-  """Channel-ordered local values returned through the generic boundary."""
-
-  residual_batches: tuple[FinalizedArray, ...]
-  jacobian_batches: tuple[FinalizedArray, ...]
-
-
-@dataclass(frozen=True, slots=True, eq=False)
-class EvaluatorBinding[PayloadT]:
-  """Exact evaluator implementation captured by the compiler."""
-
-  implementation_id: str
-  evaluate: Callable[
-    [PayloadT, tuple[FloatArray, ...]],
-    LocalEvaluation,
-  ]
+type LocalEvaluation = tuple[tuple[FloatArray, ...], tuple[FloatArray, ...]]
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class OperatorBlock[PayloadT]:
-  """One homogeneous header, specialized payload, and captured evaluator."""
-
-  header: OperatorHeader
+  block_id: str
+  entity_block: IncidenceEntityBlock
+  ports: tuple[PortBinding, ...]
+  residual_channels: tuple[ResidualChannel, ...]
+  jacobian_channels: tuple[JacobianChannel, ...]
+  local_state_width: int
   payload: PayloadT
-  evaluator: EvaluatorBinding[PayloadT]
+  evaluator: Callable[[PayloadT, tuple[FloatArray, ...]], LocalEvaluation]
 
 
 type AnyOperatorBlock = (
@@ -192,74 +110,44 @@ type AnyOperatorBlock = (
 
 @dataclass(frozen=True, slots=True, eq=False)
 class ContinuumDescriptor:
-  """Compiler input selecting one explicit interpolation/quadrature recipe."""
-
-  descriptor_id: str
-  implementation_id: str
-  node_count: int
-  quadrature_points: FinalizedArray
+  parent_gradients: FinalizedArray
   quadrature_weights: FinalizedArray
-  shape_binding: ShapeBinding
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class CompiledSystem:
-  """Model-owned points, one space, and model operator blocks."""
-
   space: DiscreteSpace
   operators: tuple[AnyOperatorBlock, ...]
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class CompiledProgram:
-  """Program-owned operators bound to the exact model space."""
-
   compatible_space: DiscreteSpace
   operators: tuple[OperatorBlock[PointLoadPayload], ...]
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class PreparedExecution:
-  """Canonical generic schedule over model- and program-owned blocks."""
-
   space: DiscreteSpace
   operators: tuple[AnyOperatorBlock, ...]
 
 
 @dataclass(frozen=True, slots=True, eq=False)
-class AttributedResidual:
-  """One signed residual contribution with exact compiled provenance."""
-
+class AttributedTerm[ChannelT]:
   operator_id: str
-  channel: ResidualChannel
+  channel: ChannelT
   entity_id: str
   source_id: str
-  target_dofs: FinalizedArray
-  values: FinalizedArray
-
-
-@dataclass(frozen=True, slots=True, eq=False)
-class AttributedJacobian:
-  """One signed operator contribution with exact compiled provenance."""
-
-  operator_id: str
-  channel: JacobianChannel
-  entity_id: str
-  source_id: str
-  target_dofs: FinalizedArray
-  source_dofs: FinalizedArray
+  port_dofs: tuple[FinalizedArray, ...]
   values: FinalizedArray
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class AssemblyResult:
-  """Additive dense proof result plus its complete attribution ledger."""
-
   residual: FinalizedArray
   jacobian: FinalizedArray
-  residual_terms: tuple[AttributedResidual, ...]
-  jacobian_terms: tuple[AttributedJacobian, ...]
-  evaluated_block_ids: tuple[str, ...]
+  residual_terms: tuple[AttributedTerm[ResidualChannel], ...]
+  jacobian_terms: tuple[AttributedTerm[JacobianChannel], ...]
 
 
 def _text(value: str, label: str) -> str:
@@ -280,41 +168,36 @@ def _texts(values: tuple[str, ...], count: int, label: str) -> tuple[str, ...]:
   return checked
 
 
-def _owned_float(
-  source: FloatArray,
+def _owned_array(
+  source: FloatArray | IndexArray,
   *,
+  dtype: np.dtype[np.float64] | np.dtype[np.int64],
   ndim: int,
   label: str,
+  finite: bool = False,
 ) -> FinalizedArray:
   if (
     type(source) is not np.ndarray
-    or source.dtype != np.dtype(np.float64)
+    or source.dtype != dtype
     or source.dtype.metadata is not None
     or source.ndim != ndim
   ):
-    msg = f"{label} must be an exact metadata-free float64 array of rank {ndim}"
+    msg = f"{label} must be an exact metadata-free {dtype.name} array of rank {ndim}"
     raise TypeError(msg)
-  if not np.all(np.isfinite(source)):
+  if finite and not np.all(np.isfinite(source)):
     msg = f"{label} must contain finite values"
     raise ValueError(msg)
-  return FinalizedArray(source, dtype=np.float64)
+  return FinalizedArray(source, dtype=dtype)
 
 
-def _owned_indices(
-  source: IndexArray,
-  *,
-  ndim: int,
-  label: str,
-) -> FinalizedArray:
-  if (
-    type(source) is not np.ndarray
-    or source.dtype != np.dtype(np.int64)
-    or source.dtype.metadata is not None
-    or source.ndim != ndim
-  ):
-    msg = f"{label} must be an exact metadata-free int64 array of rank {ndim}"
-    raise TypeError(msg)
-  return FinalizedArray(source, dtype=np.int64)
+def _owned_float(source: FloatArray, *, ndim: int, label: str) -> FinalizedArray:
+  return _owned_array(
+    source,
+    dtype=np.dtype(np.float64),
+    ndim=ndim,
+    label=label,
+    finite=True,
+  )
 
 
 def _finite_scalar(value: float, label: str) -> float:
@@ -326,12 +209,10 @@ def _finite_scalar(value: float, label: str) -> float:
 
 def compile_point_entities(
   *,
-  block_id: str,
   entity_ids: tuple[str, ...],
   source_ids: tuple[str, ...],
   reference_coordinates: FloatArray,
 ) -> PointEntityBlock:
-  """Detach one point geometry block at the compiler boundary."""
   coordinates = _owned_float(
     reference_coordinates,
     ndim=2,
@@ -342,7 +223,6 @@ def compile_point_entities(
     raise ValueError(msg)
   count = int(coordinates.values.shape[0])
   return PointEntityBlock(
-    block_id=_text(block_id, "point block ID"),
     entity_ids=_texts(entity_ids, count, "point entity IDs"),
     source_ids=_texts(source_ids, count, "point source IDs"),
     reference_coordinates=coordinates,
@@ -355,7 +235,6 @@ def compile_displacement_space(
   support: PointEntityBlock,
   components: tuple[str, ...] = ("ux", "uy"),
 ) -> DiscreteSpace:
-  """Compile one explicit displacement coefficient space."""
   component_ids = _texts(components, 2, "displacement components")
   coefficient_ids = tuple(
     f"{space_id}:{point_id}:{component}"
@@ -367,12 +246,10 @@ def compile_displacement_space(
     support=support,
     components=component_ids,
     coefficient_ids=coefficient_ids,
-    coefficient_count=len(coefficient_ids),
   )
 
 
 def quad4_continuum_descriptor() -> ContinuumDescriptor:
-  """Create the explicit bilinear-Q4, two-by-two Gauss recipe."""
   abscissa = 1.0 / np.sqrt(3.0)
   points = np.array(
     [
@@ -384,41 +261,45 @@ def quad4_continuum_descriptor() -> ContinuumDescriptor:
     dtype=np.float64,
   )
   weights = np.ones(4, dtype=np.float64)
+  _, parent_gradients = bilinear_quad4(points)
   return ContinuumDescriptor(
-    descriptor_id="plane-stress-q4-gauss2x2-v1",
-    implementation_id="continuum-small-strain-plane-stress-v1",
-    node_count=4,
-    quadrature_points=_owned_float(points, ndim=2, label="Q4 quadrature points"),
+    parent_gradients=_owned_float(
+      parent_gradients,
+      ndim=3,
+      label="Q4 parent gradients",
+    ),
     quadrature_weights=_owned_float(weights, ndim=1, label="Q4 quadrature weights"),
-    shape_binding=bilinear_quad4,
   )
 
 
 def tria3_continuum_descriptor() -> ContinuumDescriptor:
-  """Create the explicit linear-T3, centroid quadrature recipe."""
   points = np.array([[1.0 / 3.0, 1.0 / 3.0]], dtype=np.float64)
   weights = np.array([0.5], dtype=np.float64)
+  _, parent_gradients = linear_tria3(points)
   return ContinuumDescriptor(
-    descriptor_id="plane-stress-t3-centroid-v1",
-    implementation_id="continuum-small-strain-plane-stress-v1",
-    node_count=3,
-    quadrature_points=_owned_float(points, ndim=2, label="T3 quadrature points"),
+    parent_gradients=_owned_float(
+      parent_gradients,
+      ndim=3,
+      label="T3 parent gradients",
+    ),
     quadrature_weights=_owned_float(weights, ndim=1, label="T3 quadrature weights"),
-    shape_binding=linear_tria3,
   )
 
 
 def _compile_entity_block(
   *,
-  block_id: str,
-  role: EntityRole,
   entity_ids: tuple[str, ...],
   source_ids: tuple[str, ...],
   incidence: IndexArray,
   width: int,
   point_count: int,
 ) -> IncidenceEntityBlock:
-  owned_incidence = _owned_indices(incidence, ndim=2, label="entity incidence")
+  owned_incidence = _owned_array(
+    incidence,
+    dtype=np.dtype(np.int64),
+    ndim=2,
+    label="entity incidence",
+  )
   if owned_incidence.values.shape[1] != width:
     msg = f"entity incidence width must be exactly {width}"
     raise ValueError(msg)
@@ -429,8 +310,6 @@ def _compile_entity_block(
     msg = "entity incidence contains an out-of-range point index"
     raise ValueError(msg)
   return IncidenceEntityBlock(
-    block_id=_text(block_id, "entity block ID"),
-    role=role,
     entity_ids=_texts(entity_ids, count, "entity IDs"),
     source_ids=_texts(source_ids, count, "entity source IDs"),
     incidence=owned_incidence,
@@ -462,14 +341,6 @@ def _one_component_gather(
   return FinalizedArray(gather, dtype=np.int64)
 
 
-def _state_layout(block_id: str, entity_count: int) -> LocalStateLayout:
-  return LocalStateLayout(
-    schema_id=f"{block_id}:stateless-v1",
-    entity_count=entity_count,
-    width=0,
-  )
-
-
 def _evaluate_continuum(
   payload: ContinuumPayload,
   ports: tuple[FloatArray, ...],
@@ -486,10 +357,7 @@ def _evaluate_continuum(
     optimize=True,
   )
   residual = np.einsum("eij,ej->ei", stiffness, ports[0], optimize=True)
-  return LocalEvaluation(
-    residual_batches=(_owned_float(residual, ndim=2, label="continuum residual"),),
-    jacobian_batches=(_owned_float(stiffness, ndim=3, label="continuum Jacobian"),),
-  )
+  return (residual,), (stiffness,)
 
 
 def _evaluate_directional_spring(
@@ -503,15 +371,9 @@ def _evaluate_directional_spring(
     (-stiffness_values * extension, stiffness_values * extension),
     axis=1,
   )
-  jacobian = np.zeros((stiffness_values.size, 2, 2), dtype=np.float64)
-  jacobian[:, 0, 0] = stiffness_values
-  jacobian[:, 0, 1] = -stiffness_values
-  jacobian[:, 1, 0] = -stiffness_values
-  jacobian[:, 1, 1] = stiffness_values
-  return LocalEvaluation(
-    residual_batches=(_owned_float(residual, ndim=2, label="spring residual"),),
-    jacobian_batches=(_owned_float(jacobian, ndim=3, label="spring Jacobian"),),
-  )
+  spring_matrix = np.array([[1.0, -1.0], [-1.0, 1.0]], dtype=np.float64)
+  jacobian = stiffness_values[:, None, None] * spring_matrix
+  return (residual,), (jacobian,)
 
 
 def _evaluate_point_load(
@@ -520,24 +382,45 @@ def _evaluate_point_load(
 ) -> LocalEvaluation:
   del ports
   residual = payload.magnitudes.values[:, None]
-  return LocalEvaluation(
-    residual_batches=(_owned_float(residual, ndim=2, label="point-load residual"),),
-    jacobian_batches=(),
+  return (residual,), ()
+
+
+def _operator_block[PayloadT](
+  *,
+  block_id: str,
+  entities: IncidenceEntityBlock,
+  port: PortBinding,
+  balance_role: BalanceRole,
+  payload: PayloadT,
+  evaluator: Callable[[PayloadT, tuple[FloatArray, ...]], LocalEvaluation],
+  with_jacobian: bool,
+) -> OperatorBlock[PayloadT]:
+  channel_id = f"{balance_role.value}-force"
+  multiplier = 1.0 if balance_role is BalanceRole.INTERNAL else -1.0
+  jacobian_channels = (
+    (
+      JacobianChannel(
+        channel_id=f"{channel_id}/d-{port.port_id}",
+        target_port=0,
+        source_port=0,
+        balance_role=balance_role,
+        multiplier=multiplier,
+        symmetric=True,
+      ),
+    )
+    if with_jacobian
+    else ()
   )
-
-
-_CONTINUUM_EVALUATOR = EvaluatorBinding(
-  implementation_id="continuum-small-strain-plane-stress-v1",
-  evaluate=_evaluate_continuum,
-)
-_SPRING_EVALUATOR = EvaluatorBinding(
-  implementation_id="directional-spring-linear-v1",
-  evaluate=_evaluate_directional_spring,
-)
-_POINT_LOAD_EVALUATOR = EvaluatorBinding(
-  implementation_id="point-load-dead-v1",
-  evaluate=_evaluate_point_load,
-)
+  return OperatorBlock(
+    block_id=_text(block_id, "operator ID"),
+    entity_block=entities,
+    ports=(port,),
+    residual_channels=(ResidualChannel(channel_id, 0, balance_role, multiplier),),
+    jacobian_channels=jacobian_channels,
+    local_state_width=0,
+    payload=payload,
+    evaluator=evaluator,
+  )
 
 
 def compile_continuum_operator(
@@ -551,14 +434,12 @@ def compile_continuum_operator(
   youngs_modulus: float,
   poisson_ratio: float,
 ) -> OperatorBlock[ContinuumPayload]:
-  """Compile a real signed-Jacobian 2D continuum operator block."""
+  node_count = int(descriptor.parent_gradients.values.shape[1])
   entity_block = _compile_entity_block(
-    block_id=f"{block_id}:entities",
-    role=EntityRole.CELL,
     entity_ids=entity_ids,
     source_ids=source_ids,
     incidence=connectivity,
-    width=descriptor.node_count,
+    width=node_count,
     point_count=len(space.support.entity_ids),
   )
   modulus = _finite_scalar(youngs_modulus, "Young's modulus")
@@ -567,65 +448,47 @@ def compile_continuum_operator(
     msg = "plane-stress parameters require E > 0 and -1 < nu < 0.5"
     raise ValueError(msg)
 
-  shapes, parent_gradients = descriptor.shape_binding(
-    descriptor.quadrature_points.values
-  )
-  if (
-    type(shapes) is not np.ndarray
-    or type(parent_gradients) is not np.ndarray
-    or shapes.dtype != np.dtype(np.float64)
-    or parent_gradients.dtype != np.dtype(np.float64)
-    or shapes.dtype.metadata is not None
-    or parent_gradients.dtype.metadata is not None
-    or shapes.shape
-    != (descriptor.quadrature_weights.values.size, descriptor.node_count)
-    or parent_gradients.shape
-    != (descriptor.quadrature_weights.values.size, descriptor.node_count, 2)
-    or not np.all(np.isfinite(shapes))
-    or not np.all(np.isfinite(parent_gradients))
-  ):
-    msg = "continuum descriptor returned an invalid shape table"
-    raise ValueError(msg)
-
   incidence = entity_block.incidence.values
   coordinates = space.support.reference_coordinates.values[incidence]
   entity_count = int(incidence.shape[0])
   point_count = int(descriptor.quadrature_weights.values.size)
-  local_width = 2 * descriptor.node_count
+  jacobians = np.einsum(
+    "eni,pnj->epij",
+    coordinates,
+    descriptor.parent_gradients.values,
+    optimize=True,
+  )
+  determinants = np.linalg.det(jacobians)
+  scales = np.sum(jacobians * jacobians, axis=(2, 3))
+  invalid = (
+    ~np.isfinite(determinants)
+    | ~np.isfinite(scales)
+    | (determinants <= 0.0)
+    | (scales <= 0.0)
+    | (determinants / scales <= 64.0 * np.finfo(np.float64).eps)
+  )
+  if np.any(invalid):
+    entity_index = int(np.argwhere(invalid)[0, 0])
+    entity = entity_block.entity_ids[entity_index]
+    source = entity_block.source_ids[entity_index]
+    msg = f"invalid positive continuum geometry for {entity}@{source}"
+    raise ValueError(msg)
+
+  gradients = np.einsum(
+    "pnj,epjk->epnk",
+    descriptor.parent_gradients.values,
+    np.linalg.inv(jacobians),
+    optimize=True,
+  )
   strain_displacement = np.zeros(
-    (entity_count, point_count, 3, local_width),
+    (entity_count, point_count, 3, 2 * node_count),
     dtype=np.float64,
   )
-  integration_weights = np.empty(
-    (entity_count, point_count),
-    dtype=np.float64,
-  )
-  relative_tolerance = 64.0 * np.finfo(np.float64).eps
-  for entity_index in range(entity_count):
-    for point_index in range(point_count):
-      jacobian = coordinates[entity_index].T @ parent_gradients[point_index]
-      determinant = float(np.linalg.det(jacobian))
-      scale = float(np.sum(jacobian * jacobian))
-      if (
-        not np.isfinite(determinant)
-        or not np.isfinite(scale)
-        or determinant <= 0.0
-        or scale <= 0.0
-        or determinant / scale <= relative_tolerance
-      ):
-        entity = entity_block.entity_ids[entity_index]
-        source = entity_block.source_ids[entity_index]
-        msg = f"invalid positive continuum geometry for {entity}@{source}"
-        raise ValueError(msg)
-      gradients = parent_gradients[point_index] @ np.linalg.inv(jacobian)
-      b = strain_displacement[entity_index, point_index]
-      b[0, 0::2] = gradients[:, 0]
-      b[1, 1::2] = gradients[:, 1]
-      b[2, 0::2] = gradients[:, 1]
-      b[2, 1::2] = gradients[:, 0]
-      integration_weights[entity_index, point_index] = (
-        descriptor.quadrature_weights.values[point_index] * determinant
-      )
+  strain_displacement[:, :, 0, 0::2] = gradients[:, :, :, 0]
+  strain_displacement[:, :, 1, 1::2] = gradients[:, :, :, 1]
+  strain_displacement[:, :, 2, 0::2] = gradients[:, :, :, 1]
+  strain_displacement[:, :, 2, 1::2] = gradients[:, :, :, 0]
+  integration_weights = determinants * descriptor.quadrature_weights.values
 
   constitutive = plane_stress_matrix(modulus, ratio)
   payload = ContinuumPayload(
@@ -646,34 +509,15 @@ def compile_continuum_operator(
     ),
   )
   gather = _all_component_gather(space, incidence)
-  header = OperatorHeader(
-    block_id=_text(block_id, "continuum operator ID"),
-    entity_block=entity_block,
-    descriptor_id=descriptor.descriptor_id,
-    implementation_id=descriptor.implementation_id,
-    owner=OperatorOwner.MODEL,
-    ports=(PortBinding("displacement", space, gather),),
-    residual_channels=(
-      ResidualChannel(
-        channel_id="internal-force",
-        target_port=0,
-        balance_role=BalanceRole.INTERNAL,
-        multiplier=1.0,
-      ),
-    ),
-    jacobian_channels=(
-      JacobianChannel(
-        channel_id="internal-force/d-displacement",
-        target_port=0,
-        source_port=0,
-        balance_role=BalanceRole.INTERNAL,
-        multiplier=1.0,
-        symmetric=True,
-      ),
-    ),
-    state_layout=_state_layout(block_id, entity_count),
+  return _operator_block(
+    block_id=block_id,
+    entities=entity_block,
+    port=PortBinding("displacement", space, gather),
+    balance_role=BalanceRole.INTERNAL,
+    payload=payload,
+    evaluator=_evaluate_continuum,
+    with_jacobian=True,
   )
-  return OperatorBlock(header, payload, _CONTINUUM_EVALUATOR)
 
 
 def compile_directional_spring_operator(
@@ -686,10 +530,7 @@ def compile_directional_spring_operator(
   component: str,
   stiffness: FloatArray,
 ) -> OperatorBlock[DirectionalSpringPayload]:
-  """Compile a two-scalar directional spring block."""
   entity_block = _compile_entity_block(
-    block_id=f"{block_id}:entities",
-    role=EntityRole.LINK,
     entity_ids=entity_ids,
     source_ids=source_ids,
     incidence=connectivity,
@@ -697,42 +538,22 @@ def compile_directional_spring_operator(
     point_count=len(space.support.entity_ids),
   )
   stiffness_values = _owned_float(stiffness, ndim=1, label="spring stiffness")
-  entity_count = len(entity_block.entity_ids)
-  if stiffness_values.values.shape != (entity_count,) or np.any(
+  if stiffness_values.values.shape != (len(entity_block.entity_ids),) or np.any(
     stiffness_values.values <= 0.0
   ):
     msg = "spring stiffness must contain one positive value per link"
     raise ValueError(msg)
   gather = _one_component_gather(space, entity_block.incidence.values, component)
   payload = DirectionalSpringPayload(stiffness=stiffness_values)
-  header = OperatorHeader(
-    block_id=_text(block_id, "spring operator ID"),
-    entity_block=entity_block,
-    descriptor_id=f"directional-spring:{component}:v1",
-    implementation_id=_SPRING_EVALUATOR.implementation_id,
-    owner=OperatorOwner.MODEL,
-    ports=(PortBinding("extension", space, gather),),
-    residual_channels=(
-      ResidualChannel(
-        channel_id="internal-force",
-        target_port=0,
-        balance_role=BalanceRole.INTERNAL,
-        multiplier=1.0,
-      ),
-    ),
-    jacobian_channels=(
-      JacobianChannel(
-        channel_id="internal-force/d-extension",
-        target_port=0,
-        source_port=0,
-        balance_role=BalanceRole.INTERNAL,
-        multiplier=1.0,
-        symmetric=True,
-      ),
-    ),
-    state_layout=_state_layout(block_id, entity_count),
+  return _operator_block(
+    block_id=block_id,
+    entities=entity_block,
+    port=PortBinding("extension", space, gather),
+    balance_role=BalanceRole.INTERNAL,
+    payload=payload,
+    evaluator=_evaluate_directional_spring,
+    with_jacobian=True,
   )
-  return OperatorBlock(header, payload, _SPRING_EVALUATOR)
 
 
 def compile_point_load_operator(
@@ -745,10 +566,7 @@ def compile_point_load_operator(
   component: str,
   magnitudes: FloatArray,
 ) -> OperatorBlock[PointLoadPayload]:
-  """Compile a program-owned additive point-load block."""
   entity_block = _compile_entity_block(
-    block_id=f"{block_id}:entities",
-    role=EntityRole.POINT_LOAD,
     entity_ids=entity_ids,
     source_ids=source_ids,
     incidence=point_incidence,
@@ -756,8 +574,7 @@ def compile_point_load_operator(
     point_count=len(space.support.entity_ids),
   )
   magnitude_values = _owned_float(magnitudes, ndim=1, label="load magnitudes")
-  entity_count = len(entity_block.entity_ids)
-  if magnitude_values.values.shape != (entity_count,):
+  if magnitude_values.values.shape != (len(entity_block.entity_ids),):
     msg = "load magnitudes must contain one value per point-load entity"
     raise ValueError(msg)
   gather = _one_component_gather(
@@ -766,25 +583,15 @@ def compile_point_load_operator(
     component,
   )
   payload = PointLoadPayload(magnitudes=magnitude_values)
-  header = OperatorHeader(
-    block_id=_text(block_id, "point-load operator ID"),
-    entity_block=entity_block,
-    descriptor_id=f"dead-point-load:{component}:v1",
-    implementation_id=_POINT_LOAD_EVALUATOR.implementation_id,
-    owner=OperatorOwner.PROGRAM,
-    ports=(PortBinding("loaded-coefficient", space, gather),),
-    residual_channels=(
-      ResidualChannel(
-        channel_id="external-force",
-        target_port=0,
-        balance_role=BalanceRole.EXTERNAL,
-        multiplier=-1.0,
-      ),
-    ),
-    jacobian_channels=(),
-    state_layout=_state_layout(block_id, entity_count),
+  return _operator_block(
+    block_id=block_id,
+    entities=entity_block,
+    port=PortBinding("loaded-coefficient", space, gather),
+    balance_role=BalanceRole.EXTERNAL,
+    payload=payload,
+    evaluator=_evaluate_point_load,
+    with_jacobian=False,
   )
-  return OperatorBlock(header, payload, _POINT_LOAD_EVALUATOR)
 
 
 def _canonical_operators(
@@ -795,11 +602,11 @@ def _canonical_operators(
     msg = "operator blocks must be supplied as an exact tuple"
     raise TypeError(msg)
   for block in operators:
-    if any(port.space is not space for port in block.header.ports):
+    if any(port.space is not space for port in block.ports):
       msg = "every operator port must bind the exact compiled space"
       raise ValueError(msg)
-  ordered = tuple(sorted(operators, key=lambda block: block.header.block_id))
-  ids = tuple(block.header.block_id for block in ordered)
+  ordered = tuple(sorted(operators, key=lambda block: block.block_id))
+  ids = tuple(block.block_id for block in ordered)
   if len(set(ids)) != len(ids):
     msg = "operator block IDs must be unique"
     raise ValueError(msg)
@@ -814,12 +621,7 @@ def compile_system(
     ...,
   ],
 ) -> CompiledSystem:
-  """Compile the model-owned half of the proof system."""
-  canonical = _canonical_operators(operators, space)
-  if any(block.header.owner is not OperatorOwner.MODEL for block in canonical):
-    msg = "compiled-system operators must be model-owned"
-    raise ValueError(msg)
-  return CompiledSystem(space=space, operators=canonical)
+  return CompiledSystem(space=space, operators=_canonical_operators(operators, space))
 
 
 def compile_program(
@@ -827,19 +629,16 @@ def compile_program(
   space: DiscreteSpace,
   operators: tuple[OperatorBlock[PointLoadPayload], ...],
 ) -> CompiledProgram:
-  """Compile the separately owned program half of the proof system."""
-  canonical = _canonical_operators(operators, space)
-  if any(block.header.owner is not OperatorOwner.PROGRAM for block in canonical):
-    msg = "compiled-program operators must be program-owned"
-    raise ValueError(msg)
-  return CompiledProgram(compatible_space=space, operators=canonical)
+  return CompiledProgram(
+    compatible_space=space,
+    operators=_canonical_operators(operators, space),
+  )
 
 
 def prepare_execution(
   system: CompiledSystem,
   program: CompiledProgram,
 ) -> PreparedExecution:
-  """Join owners once and canonicalize one generic execution schedule."""
   if program.compatible_space is not system.space:
     msg = "compiled program is bound to a different live discrete space"
     raise ValueError(msg)
@@ -854,88 +653,87 @@ def assemble(
   prepared: PreparedExecution,
   coefficients: FloatArray,
 ) -> AssemblyResult:
-  """Assemble all typed channels without inspecting operator kind or owner."""
   owned_coefficients = _owned_float(coefficients, ndim=1, label="coefficients")
-  if owned_coefficients.values.shape != (prepared.space.coefficient_count,):
+  coefficient_count = len(prepared.space.coefficient_ids)
+  if owned_coefficients.values.shape != (coefficient_count,):
     msg = "coefficient vector does not match the prepared discrete space"
     raise ValueError(msg)
 
-  residual = np.zeros(prepared.space.coefficient_count, dtype=np.float64)
+  residual = np.zeros(coefficient_count, dtype=np.float64)
   jacobian = np.zeros(
-    (prepared.space.coefficient_count, prepared.space.coefficient_count),
+    (coefficient_count, coefficient_count),
     dtype=np.float64,
   )
-  residual_terms: list[AttributedResidual] = []
-  jacobian_terms: list[AttributedJacobian] = []
-  evaluated_block_ids: list[str] = []
+  residual_terms: list[AttributedTerm[ResidualChannel]] = []
+  jacobian_terms: list[AttributedTerm[JacobianChannel]] = []
 
   for block in prepared.operators:
-    header = block.header
     gathered = tuple(
-      owned_coefficients.values[port.gather.values] for port in header.ports
+      owned_coefficients.values[port.gather.values] for port in block.ports
     )
-    evaluated = block.evaluator.evaluate(block.payload, gathered)
-    evaluated_block_ids.append(header.block_id)
-
+    residual_batches, jacobian_batches = block.evaluator(
+      block.payload,
+      gathered,
+    )
     for channel, batch in zip(
-      header.residual_channels,
-      evaluated.residual_batches,
+      block.residual_channels,
+      residual_batches,
       strict=True,
     ):
-      target_gather = header.ports[channel.target_port].gather.values
+      target_gather = block.ports[channel.target_port].gather.values
       for entity_index, (entity_id, source_id) in enumerate(
         zip(
-          header.entity_block.entity_ids,
-          header.entity_block.source_ids,
+          block.entity_block.entity_ids,
+          block.entity_block.source_ids,
           strict=True,
         )
       ):
         target_dofs = target_gather[entity_index]
-        values = channel.multiplier * batch.values[entity_index]
-        for local_index, target_dof in enumerate(target_dofs):
-          residual[target_dof] += values[local_index]
+        values = channel.multiplier * batch[entity_index]
+        np.add.at(residual, target_dofs, values)
         residual_terms.append(
-          AttributedResidual(
-            operator_id=header.block_id,
+          AttributedTerm(
+            operator_id=block.block_id,
             channel=channel,
             entity_id=entity_id,
             source_id=source_id,
-            target_dofs=FinalizedArray(target_dofs, dtype=np.int64),
+            port_dofs=(FinalizedArray(target_dofs, dtype=np.int64),),
             values=FinalizedArray(values, dtype=np.float64),
           )
         )
 
     for channel, batch in zip(
-      header.jacobian_channels,
-      evaluated.jacobian_batches,
+      block.jacobian_channels,
+      jacobian_batches,
       strict=True,
     ):
-      target_gather = header.ports[channel.target_port].gather.values
-      source_gather = header.ports[channel.source_port].gather.values
+      target_gather = block.ports[channel.target_port].gather.values
+      source_gather = block.ports[channel.source_port].gather.values
       for entity_index, (entity_id, source_id) in enumerate(
         zip(
-          header.entity_block.entity_ids,
-          header.entity_block.source_ids,
+          block.entity_block.entity_ids,
+          block.entity_block.source_ids,
           strict=True,
         )
       ):
         target_dofs = target_gather[entity_index]
         source_dofs = source_gather[entity_index]
-        values = channel.multiplier * batch.values[entity_index]
-        for local_row, target_dof in enumerate(target_dofs):
-          for local_column, source_dof in enumerate(source_dofs):
-            jacobian[target_dof, source_dof] += values[
-              local_row,
-              local_column,
-            ]
+        values = channel.multiplier * batch[entity_index]
+        np.add.at(
+          jacobian,
+          (target_dofs[:, None], source_dofs[None, :]),
+          values,
+        )
         jacobian_terms.append(
-          AttributedJacobian(
-            operator_id=header.block_id,
+          AttributedTerm(
+            operator_id=block.block_id,
             channel=channel,
             entity_id=entity_id,
             source_id=source_id,
-            target_dofs=FinalizedArray(target_dofs, dtype=np.int64),
-            source_dofs=FinalizedArray(source_dofs, dtype=np.int64),
+            port_dofs=(
+              FinalizedArray(target_dofs, dtype=np.int64),
+              FinalizedArray(source_dofs, dtype=np.int64),
+            ),
             values=FinalizedArray(values, dtype=np.float64),
           )
         )
@@ -945,5 +743,4 @@ def assemble(
     jacobian=_owned_float(jacobian, ndim=2, label="assembled Jacobian"),
     residual_terms=tuple(residual_terms),
     jacobian_terms=tuple(jacobian_terms),
-    evaluated_block_ids=tuple(evaluated_block_ids),
   )
