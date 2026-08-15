@@ -16,15 +16,28 @@ if sys.version_info < (3, 13):
 
 import pyfem.v3.compile.system as system_compiler
 from pyfem.v3.compile.continuum import (
+  Q8_FORMULATION_KEY,
+  Q8_MATERIAL_KEY,
+  Q8_QUADRATURE_KEY,
   Q8_TOPOLOGY_KEY,
   Q8ContinuumOperator,
+  q8_descriptor_metadata,
   q8_reference_registry,
 )
 from pyfem.v3.compile.diagnostics import ModelCompilationError
 from pyfem.v3.compile.system import compile_discrete_spaces, compile_system
 from pyfem.v3.model.arrays import FinalizedArray
-from pyfem.v3.model.operator import BalanceRole, StateLifetime
-from pyfem.v3.model.system import CompiledSource, PointEntityBlock
+from pyfem.v3.model.operator import (
+  BalanceRole,
+  ChannelRequest,
+  OperatorEvaluationInput,
+  OperatorHeader,
+  ProgramSignalInput,
+  SignalDerivativeInput,
+  StateLifetime,
+)
+from pyfem.v3.model.registry import RegistryDescriptor
+from pyfem.v3.model.system import CompiledSystem, PointEntityBlock
 from pyfem.v3.spec import (
   CellBlockSpec,
   CellRef,
@@ -129,6 +142,23 @@ def _operator(model: ModelSpec | None = None) -> Q8ContinuumOperator:
   return operator
 
 
+def _inputs(
+  operator: Q8ContinuumOperator,
+  values: np.ndarray | None = None,
+) -> OperatorEvaluationInput:
+  if values is None:
+    values = np.zeros((1, 16), dtype=np.float64)
+  return OperatorEvaluationInput(
+    port_values=(FinalizedArray(values, dtype=np.float64),),
+    accepted_state=FinalizedArray(np.empty((1, 0)), dtype=np.float64),
+    signals=(),
+    request=ChannelRequest(
+      tuple(item.channel_id for item in operator.header.residual_channels),
+      tuple(item.channel_id for item in operator.header.jacobian_channels),
+    ),
+  )
+
+
 def _independent_shapes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
   xi = points[:, 0]
   eta = points[:, 1]
@@ -174,6 +204,26 @@ def _independent_shapes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
   return values, np.stack((dxi, deta), axis=2)
 
 
+def _center_quadrature(order: int) -> tuple[np.ndarray, np.ndarray]:
+  del order
+  return np.zeros((9, 2), dtype=np.float64), np.full(9, 4.0 / 9.0)
+
+
+def _padded_interpolation(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+  values = np.zeros((len(points), 8), dtype=np.float64)
+  values[:, :4] = 0.25
+  return values, np.zeros((len(points), 8, 2), dtype=np.float64)
+
+
+def _zero_kinematics(gradients: np.ndarray) -> np.ndarray:
+  return np.zeros((*gradients.shape[:2], 3, 2 * gradients.shape[2]))
+
+
+def _zero_constitutive(youngs_modulus: float, poisson_ratio: float) -> np.ndarray:
+  del youngs_modulus, poisson_ratio
+  return np.zeros((3, 3), dtype=np.float64)
+
+
 def test_direct_q8_system_compilation_uses_generic_spaces_ports_and_channels(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -197,6 +247,7 @@ def test_direct_q8_system_compilation_uses_generic_spaces_ports_and_channels(
   operator = system.operators[0]
   header = operator.header
   assert header.ports[0].space_id == system.spaces[0].space_id
+  assert header.signal_ports == ()
   np.testing.assert_array_equal(
     header.ports[0].coefficient_map.values,
     np.arange(16, dtype=np.int64).reshape(1, 16),
@@ -207,10 +258,18 @@ def test_direct_q8_system_compilation_uses_generic_spaces_ports_and_channels(
   assert header.state_layout.row_shape == (1, 0)
   assert header.state_layout.lifetime is StateLifetime.ACCEPTED_TRIAL
   np.testing.assert_array_equal(header.state_layout.entity_offsets.values, [0, 0])
-  result = operator.evaluate(
-    (np.zeros((1, 16), dtype=np.float64),),
-    np.empty((1, 0), dtype=np.float64),
+  signal = ProgramSignalInput(
+    port_id="amplitude",
+    values=FinalizedArray([2.0], dtype=np.float64),
+    derivatives=(
+      SignalDerivativeInput(
+        "time",
+        FinalizedArray([3.0], dtype=np.float64),
+      ),
+    ),
   )
+  assert signal.derivatives[0].coordinate_id == "time"
+  result = operator.evaluate(_inputs(operator))
   assert result.residual_values[0].values.shape == (1, 16)
   assert result.jacobian_values[0].values.shape == (1, 16, 16)
   assert result.trial_state.values.shape == (1, 0)
@@ -301,21 +360,52 @@ def test_q8_compiler_matches_hard_coded_shape_gradient_and_quadrature_oracle() -
   )
 
 
-def test_multiple_spaces_have_disjoint_native_coefficient_maps() -> None:
-  points = PointEntityBlock(
-    block_id="points",
-    entity_ids=("p1", "p2"),
-    sources=(CompiledSource("p1", None, None), CompiledSource("p2", None, None)),
-    reference_coordinates=FinalizedArray([[0.0, 0.0], [1.0, 0.0]], dtype=np.float64),
+@pytest.mark.parametrize(
+  ("key", "binding", "code"),
+  [
+    (Q8_QUADRATURE_KEY, _center_quadrature, "invalid-quadrature-binding-output"),
+    (Q8_TOPOLOGY_KEY, _padded_interpolation, "invalid-topology-binding-output"),
+    (
+      Q8_FORMULATION_KEY,
+      _zero_kinematics,
+      "incompatible-formulation-binding-output",
+    ),
+    (
+      Q8_MATERIAL_KEY,
+      _zero_constitutive,
+      "incompatible-material-binding-output",
+    ),
+  ],
+)
+def test_same_identity_spoofed_registry_bindings_fail_at_compile_boundary(
+  key: tuple[str, str],
+  binding: object,
+  code: str,
+) -> None:
+  registry = q8_reference_registry()
+  reference = registry[key]
+  registry[key] = RegistryDescriptor(
+    kind=reference.kind,
+    name=reference.name,
+    version=reference.version,
+    implementation_id=reference.implementation_id,
+    metadata=q8_descriptor_metadata(*key),
+    binding=binding,
   )
+  with pytest.raises(ModelCompilationError, match=code):
+    compile_system(_model(), registry)
+
+
+def test_multiple_spaces_have_disjoint_native_coefficient_maps() -> None:
+  points = compile_system(_model(), q8_reference_registry()).point_blocks[0]
   mechanical = FieldSpec("mechanical", ("x", "y"), "node")
   thermal = FieldSpec("thermal", ("temperature",), "node")
   nonstandard = FieldSpec("ordered", ("y", "x", "rotation"), "node")
   cases = (
-    ((mechanical,), ((0, 4),)),
-    ((thermal,), ((0, 2),)),
-    ((mechanical, thermal), ((0, 4), (4, 6))),
-    ((nonstandard,), ((0, 6),)),
+    ((mechanical,), ((0, 16),)),
+    ((thermal,), ((0, 8),)),
+    ((mechanical, thermal), ((0, 16), (16, 24))),
+    ((nonstandard,), ((0, 24),)),
   )
   for fields, expected_ranges in cases:
     spaces = compile_discrete_spaces(points, fields)
@@ -331,10 +421,25 @@ def test_multiple_spaces_have_disjoint_native_coefficient_maps() -> None:
   ordered = compile_discrete_spaces(points, (nonstandard,))[0]
   assert ordered.components == ("y", "x", "rotation")
   assert ordered.coefficient_ids[:3] == (
-    ("ordered", "p1", "y"),
-    ("ordered", "p1", "x"),
-    ("ordered", "p1", "rotation"),
+    ("ordered", 1, "y"),
+    ("ordered", 1, "x"),
+    ("ordered", 1, "rotation"),
   )
+  unsupported = FieldSpec(
+    "cell-temperature",
+    ("temperature",),
+    "cell",
+    source=_source("cell-field-source"),
+  )
+  with pytest.raises(ModelCompilationError, match="unsupported-space-support") as error:
+    compile_discrete_spaces(points, (unsupported,))
+  assert "cell-field-source" in str(error.value)
+  authored = _model()
+  with pytest.raises(ModelCompilationError, match="unsupported-space-support"):
+    compile_system(
+      replace(authored, fields=(*authored.fields, unsupported)),
+      q8_reference_registry(),
+    )
 
 
 def test_compiled_system_owns_metadata_free_arrays_identity_and_attribution() -> None:
@@ -362,7 +467,7 @@ def test_compiled_system_owns_metadata_free_arrays_identity_and_attribution() ->
     first.spaces[0].coefficient_map.values,
     first_operator.header.ports[0].coefficient_map.values,
     first_operator.payload.shape_values.values,
-    first_operator.payload.strain_displacement.values,
+    first_operator.payload.normalized_strain_displacement.values,
   )
   for array in arrays:
     assert array.flags.owndata and not array.flags.writeable
@@ -373,36 +478,82 @@ def test_compiled_system_owns_metadata_free_arrays_identity_and_attribution() ->
   )
   assert first.source_for("cell", ("cells", "cell-1")).source == "cell-source"
   assert first.source_for("operator", ("cells", "domain")).source == "region-source"
+  assert (
+    first.source_for("material_parameter", ("elastic", "youngs_modulus")).source
+    == "material:E"
+  )
+  with pytest.raises(KeyError, match="exact semantic identity"):
+    first.source_for("node", True)
+
+  material = authored.materials[0]
+  changed_parameter = replace(
+    material.parameters[0],
+    source=_source("changed-material:E"),
+  )
+  changed_material = replace(
+    material,
+    parameters=(changed_parameter, material.parameters[1]),
+  )
+  changed_source = compile_system(
+    replace(authored, materials=(changed_material,)),
+    q8_reference_registry(),
+  )
+  assert changed_source.content_fingerprint != first.content_fingerprint
+  for carrier in (
+    CompiledSystem,
+    PointEntityBlock,
+    OperatorHeader,
+    Q8ContinuumOperator,
+  ):
+    with pytest.raises(TypeError, match="constructed only by their compiler"):
+      carrier()
 
 
 def test_q8_geometry_classification_is_scale_and_translation_stable() -> None:
   models = (
     _model(scale=1.0),
+    _model(scale=2.0),
     _model(scale=1.0e-200),
     _model(scale=1.0e200),
     _model(scale=1.0e90, offset=(1.0e100, -1.0e100)),
   )
   operators = tuple(_operator(model) for model in models)
-  baseline = (
-    operators[0]
-    .evaluate(
-      (np.zeros((1, 16), dtype=np.float64),),
-      np.empty((1, 0), dtype=np.float64),
-    )
-    .jacobian_values[0]
-    .values
-  )
+  baseline = operators[0].evaluate(_inputs(operators[0])).jacobian_values[0].values
   for operator in operators[1:]:
-    result = operator.evaluate(
-      (np.zeros((1, 16), dtype=np.float64),),
-      np.empty((1, 0), dtype=np.float64),
-    )
+    result = operator.evaluate(_inputs(operator))
     np.testing.assert_allclose(
       result.jacobian_values[0].values,
       baseline,
       rtol=0.0,
       atol=3.0e-15,
     )
+  unit, doubled = operators[:2]
+  np.testing.assert_allclose(
+    doubled.payload.physical_gradients().values,
+    0.5 * unit.payload.physical_gradients().values,
+    rtol=0.0,
+    atol=2.0e-15,
+  )
+  np.testing.assert_allclose(
+    doubled.payload.physical_integration_weights().values,
+    4.0 * unit.payload.physical_integration_weights().values,
+    rtol=0.0,
+    atol=2.0e-15,
+  )
+  affine_values = np.array(
+    [[x, 0.0] for x, _ in _UNIT_COORDINATES], dtype=np.float64
+  ).reshape(16)
+  strains = np.einsum(
+    "pai,i->pa",
+    unit.payload.physical_strain_displacement().values[0],
+    affine_values,
+  )
+  np.testing.assert_allclose(
+    strains,
+    np.tile([1.0, 0.0, 0.0], (9, 1)),
+    rtol=0.0,
+    atol=8.0e-16,
+  )
 
 
 @pytest.mark.parametrize(

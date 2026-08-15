@@ -32,6 +32,13 @@ COMPILED_SYSTEM_MANIFEST_SCHEMA = "pyfem-v3-compiled-system-v1"
 _SUPPORTED_INDEX_DTYPES = ("int8", "int16", "int32", "int64")
 
 
+def _new[ValueT](cls: type[ValueT], /, **fields: object) -> ValueT:
+  value = object.__new__(cls)
+  for name, field in fields.items():
+    object.__setattr__(value, name, field)
+  return value
+
+
 @dataclass(frozen=True, slots=True)
 class SystemCompilationPolicy:
   """Numeric conventions entering compiled-system content identity."""
@@ -63,7 +70,12 @@ def _sort_key(value: SpecId) -> tuple[int, object]:
 
 
 def _source(value: SourceContext) -> CompiledSource:
-  return CompiledSource(value.source, value.line, value.column)
+  return _new(
+    CompiledSource,
+    source=value.source,
+    line=value.line,
+    column=value.column,
+  )
 
 
 def _source_manifest(source: CompiledSource) -> dict[str, object]:
@@ -133,6 +145,12 @@ def compile_discrete_spaces(
   spaces: list[DiscreteSpace] = []
   point_count = len(point_block.entity_ids)
   for field in ordered:
+    if field.location != "node":
+      _fail(
+        "unsupported-space-support",
+        "this G1 compiler allocates only truthful node-supported spaces",
+        field.source,
+      )
     component_count = len(field.components)
     count = point_count * component_count
     coefficient_map = np.arange(offset, offset + count, dtype=index_dtype).reshape(
@@ -145,7 +163,8 @@ def compile_discrete_spaces(
       for component in field.components
     )
     spaces.append(
-      DiscreteSpace(
+      _new(
+        DiscreteSpace,
         space_id=field.id,
         support_block_id=point_block.block_id,
         basis_id="nodal-lagrange",
@@ -164,41 +183,41 @@ def _attribution(
   *,
   operator_block_id: tuple[SpecId, SpecId],
 ) -> tuple[SourceAttribution, ...]:
-  records = [
-    SourceAttribution("model", "model", _source(spec.source)),
-    SourceAttribution("mesh", "mesh", _source(spec.mesh.source)),
-  ]
-  records.extend(
-    SourceAttribution("node", node.id, _source(node.source))
-    for node in sorted(spec.mesh.nodes, key=lambda item: _sort_key(item.id))
-  )
-  for field in sorted(spec.fields, key=lambda item: _sort_key(item.id)):
-    records.append(SourceAttribution("space", field.id, _source(field.source)))
-    records.extend(
-      SourceAttribution(
-        "space_component",
-        (field.id, component),
-        _source(field.source),
+  records: list[SourceAttribution] = []
+
+  def add(kind: str, semantic_id: object, source: SourceContext) -> None:
+    records.append(
+      _new(
+        SourceAttribution,
+        kind=kind,
+        semantic_id=semantic_id,
+        source=_source(source),
       )
-      for component in field.components
     )
+
+  add("model", "model", spec.source)
+  add("mesh", "mesh", spec.mesh.source)
+  for node in sorted(spec.mesh.nodes, key=lambda item: _sort_key(item.id)):
+    add("node", node.id, node.source)
+  for field in sorted(spec.fields, key=lambda item: _sort_key(item.id)):
+    add("space", field.id, field.source)
+    for component in field.components:
+      add("space_component", (field.id, component), field.source)
   for block in sorted(spec.mesh.cell_blocks, key=lambda item: _sort_key(item.id)):
-    records.append(SourceAttribution("entity_block", block.id, _source(block.source)))
-    records.extend(
-      SourceAttribution("cell", (block.id, cell.id), _source(cell.source))
-      for cell in sorted(block.cells, key=lambda item: _sort_key(item.id))
-    )
+    add("entity_block", block.id, block.source)
+    for cell in sorted(block.cells, key=lambda item: _sort_key(item.id)):
+      add("cell", (block.id, cell.id), cell.source)
   for material in sorted(spec.materials, key=lambda item: _sort_key(item.id)):
-    records.append(SourceAttribution("material", material.id, _source(material.source)))
+    add("material", material.id, material.source)
+    for parameter in sorted(material.parameters, key=lambda item: item.name):
+      add(
+        "material_parameter",
+        (material.id, parameter.name),
+        parameter.source,
+      )
   for region in sorted(spec.regions, key=lambda item: _sort_key(item.id)):
-    records.append(SourceAttribution("region", region.id, _source(region.source)))
-  records.append(
-    SourceAttribution(
-      "operator",
-      operator_block_id,
-      _source(spec.regions[0].source),
-    )
-  )
+    add("region", region.id, region.source)
+  add("operator", operator_block_id, spec.regions[0].source)
   return tuple(records)
 
 
@@ -229,7 +248,8 @@ def compile_system(
     [node.coordinates for node in nodes],
     dtype=np.float64,
   )
-  point_block = PointEntityBlock(
+  point_block = _new(
+    PointEntityBlock,
     block_id="nodes",
     entity_ids=tuple(node.id for node in nodes),
     sources=tuple(_source(node.source) for node in nodes),
@@ -301,7 +321,8 @@ def compile_system(
       ],
     }
   )
-  provenance = SystemProvenance(
+  provenance = _new(
+    SystemProvenance,
     schema=COMPILED_SYSTEM_MANIFEST_SCHEMA,
     manifest=manifest,
     registry_fingerprint=snapshot.fingerprint,
@@ -309,7 +330,8 @@ def compile_system(
     dense_index_dtype=index_dtype.str,
     geometry_relative_tolerance=selected_policy.geometry_relative_tolerance,
   )
-  return CompiledSystem(
+  return _new(
+    CompiledSystem,
     instance_id=InstanceId(),
     content_fingerprint=ContentFingerprint.from_manifest(manifest),
     provenance=provenance,

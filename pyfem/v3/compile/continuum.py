@@ -19,10 +19,13 @@ from pyfem.v3.materials.plane_stress import plane_stress_matrix
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
   BalanceRole,
+  ChannelRequest,
+  CompilerConstructed,
   CouplingPolicy,
   ImplementationIdentity,
   JacobianChannel,
   OperatorEvaluation,
+  OperatorEvaluationInput,
   OperatorHeader,
   OperatorStateLayout,
   PortBinding,
@@ -64,6 +67,13 @@ _NODE_COUNT = 8
 _LOCAL_COEFFICIENT_COUNT = 16
 
 
+def _new[ValueT](cls: type[ValueT], /, **fields: object) -> ValueT:
+  value = object.__new__(cls)
+  for name, field in fields.items():
+    object.__setattr__(value, name, field)
+  return value
+
+
 def _fail(code: str, message: str, source: SourceContext) -> NoReturn:
   raise ModelCompilationError(
     (ModelCompilationDiagnostic(code=code, message=message, source=source),)
@@ -79,13 +89,16 @@ def _sort_key(value: SpecId | tuple[SpecId, ...]) -> tuple[int, object]:
 
 
 def _source(value: SourceContext) -> CompiledSource:
-  return CompiledSource(value.source, value.line, value.column)
+  return _new(
+    CompiledSource,
+    source=value.source,
+    line=value.line,
+    column=value.column,
+  )
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class ContinuumSelection:
-  """Validated authored declarations consumed only by this concrete builder."""
-
   block: CellBlockSpec
   field: FieldSpec
   material: MaterialSpec
@@ -93,25 +106,41 @@ class ContinuumSelection:
   cells: tuple[CellSpec, ...]
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class Q8ContinuumPayload:
-  """Builder-owned immutable numerical recipe for the concrete evaluator."""
-
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Q8ContinuumPayload(CompilerConstructed):
   quadrature_points: FinalizedArray
   quadrature_weights: FinalizedArray
   shape_values: FinalizedArray
   parent_gradients: FinalizedArray
-  physical_gradients: FinalizedArray
-  strain_displacement: FinalizedArray
-  integration_weights: FinalizedArray
+  geometry_scales: FinalizedArray
+  normalized_gradients: FinalizedArray
+  normalized_strain_displacement: FinalizedArray
+  normalized_integration_weights: FinalizedArray
   constitutive: FinalizedArray
   material_parameters: FinalizedArray
 
+  def physical_gradients(self) -> FinalizedArray:
+    values = (
+      self.normalized_gradients.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
 
-@dataclass(frozen=True, slots=True, eq=False)
-class Q8ContinuumOperator:
-  """Concrete payload/evaluator satisfying the open compiled-operator protocol."""
+  def physical_strain_displacement(self) -> FinalizedArray:
+    values = (
+      self.normalized_strain_displacement.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
 
+  def physical_integration_weights(self) -> FinalizedArray:
+    scales = self.geometry_scales.values[:, None]
+    values = self.normalized_integration_weights.values * scales * scales
+    return FinalizedArray(values, dtype=np.float64)
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Q8ContinuumOperator(CompilerConstructed):
   header: OperatorHeader
   entity_block: IncidenceEntityBlock
   payload: Q8ContinuumPayload
@@ -119,18 +148,19 @@ class Q8ContinuumOperator:
 
   def evaluate(
     self,
-    port_values: tuple[np.ndarray, ...],
-    accepted_state: np.ndarray,
+    inputs: OperatorEvaluationInput,
   ) -> OperatorEvaluation:
     """Evaluate local internal force and material tangent from compiled meaning."""
-    if type(port_values) is not tuple or len(port_values) != 1:
+    if type(inputs) is not OperatorEvaluationInput:
+      msg = "Q8 evaluation requires an exact immutable evaluation input"
+      raise TypeError(msg)
+    if type(inputs.port_values) is not tuple or len(inputs.port_values) != 1:
       msg = "Q8 evaluation requires exactly one displacement port batch"
       raise TypeError(msg)
-    values = port_values[0]
+    values = inputs.port_values[0].values
     expected = self.header.ports[0].coefficient_map.values.shape
     if (
-      type(values) is not np.ndarray
-      or values.dtype != np.dtype(np.float64)
+      values.dtype != np.dtype(np.float64)
       or values.dtype.metadata is not None
       or values.shape != expected
       or not bool(np.isfinite(values).all())
@@ -138,18 +168,33 @@ class Q8ContinuumOperator:
       msg = "Q8 displacement port values must be a finite metadata-free float64 batch"
       raise TypeError(msg)
     layout = self.header.state_layout
+    accepted_state = inputs.accepted_state.values
     if (
-      type(accepted_state) is not np.ndarray
-      or accepted_state.dtype != np.dtype(np.float64)
+      accepted_state.dtype != np.dtype(np.float64)
       or accepted_state.dtype.metadata is not None
       or accepted_state.shape != layout.row_shape
       or not bool(np.isfinite(accepted_state).all())
     ):
       msg = "Q8 accepted state must match the compiled zero-width state layout"
       raise TypeError(msg)
+    if inputs.signals or self.header.signal_ports:
+      msg = "Q8 model operator does not accept program signal inputs"
+      raise ValueError(msg)
+    residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
+    jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    request = inputs.request
+    if (
+      type(request) is not ChannelRequest
+      or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
+      or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or not set(request.residual_channel_ids).issubset(residual_ids)
+      or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+    ):
+      msg = "Q8 evaluation request contains an unavailable or duplicate channel"
+      raise ValueError(msg)
 
-    b_matrix = self.payload.strain_displacement.values
-    weights = self.payload.integration_weights.values
+    b_matrix = self.payload.normalized_strain_displacement.values
+    weights = self.payload.normalized_integration_weights.values
     constitutive = self.payload.constitutive.values
     tangent = np.einsum(
       "ep,epai,ab,epbj->eij",
@@ -159,10 +204,19 @@ class Q8ContinuumOperator:
       b_matrix,
       optimize=True,
     )
-    residual = np.einsum("eij,ej->ei", tangent, values, optimize=True)
-    return OperatorEvaluation(
-      residual_values=(FinalizedArray(residual, dtype=np.float64),),
-      jacobian_values=(FinalizedArray(tangent, dtype=np.float64),),
+    residual_values = ()
+    if request.residual_channel_ids:
+      residual = np.einsum("eij,ej->ei", tangent, values, optimize=True)
+      residual_values = (FinalizedArray(residual, dtype=np.float64),)
+    jacobian_values = (
+      (FinalizedArray(tangent, dtype=np.float64),)
+      if request.jacobian_channel_ids
+      else ()
+    )
+    return _new(
+      OperatorEvaluation,
+      residual_values=residual_values,
+      jacobian_values=jacobian_values,
       trial_state=FinalizedArray(accepted_state, dtype=np.float64),
     )
 
@@ -264,6 +318,13 @@ def q8_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
 
 def select_model(spec: ModelSpec) -> ContinuumSelection:
   """Validate the concrete authored slice after the sole normalization pass."""
+  for field in spec.fields:
+    if field.location != "node":
+      _fail(
+        "unsupported-space-support",
+        "the direct Q8 slice cannot allocate a non-node field",
+        field.source,
+      )
   cells_by_key = {
     (block.id, cell.id): cell for block in spec.mesh.cell_blocks for cell in block.cells
   }
@@ -291,12 +352,13 @@ def select_model(spec: ModelSpec) -> ContinuumSelection:
       )
   if (
     len(spec.mesh.cell_blocks) != 1
+    or len(spec.fields) != 1
     or len(spec.materials) != 1
     or len(spec.regions) != 1
   ):
     _fail(
       "unsupported-continuum-declaration-count",
-      "the direct Q8 slice requires one cell block, material, and region",
+      "the direct Q8 slice requires one active field, cell block, material, and region",
       spec.source,
     )
   block = spec.mesh.cell_blocks[0]
@@ -414,6 +476,56 @@ def _binding_array(
   return captured
 
 
+def _corresponds(actual: np.ndarray, expected: np.ndarray) -> bool:
+  scale = max(1.0, float(np.max(np.abs(expected))))
+  tolerance = 8.0 * float(np.finfo(np.float64).eps) * scale
+  return bool(np.allclose(actual, expected, rtol=0.0, atol=tolerance))
+
+
+def _qualified_shapes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+  xi, eta = points[:, 0], points[:, 1]
+  values = np.stack(
+    (
+      -0.25 * (1 - xi) * (1 - eta) * (1 + xi + eta),
+      0.5 * (1 - xi) * (1 + xi) * (1 - eta),
+      -0.25 * (1 + xi) * (1 - eta) * (1 - xi + eta),
+      0.5 * (1 + xi) * (1 + eta) * (1 - eta),
+      -0.25 * (1 + xi) * (1 + eta) * (1 - xi - eta),
+      0.5 * (1 - xi) * (1 + xi) * (1 + eta),
+      -0.25 * (1 - xi) * (1 + eta) * (1 + xi - eta),
+      0.5 * (1 - xi) * (1 + eta) * (1 - eta),
+    ),
+    axis=1,
+  )
+  dxi = np.stack(
+    (
+      -0.25 * (-1 + eta) * (2 * xi + eta),
+      xi * (-1 + eta),
+      0.25 * (-1 + eta) * (-2 * xi + eta),
+      -0.5 * (1 + eta) * (-1 + eta),
+      0.25 * (1 + eta) * (2 * xi + eta),
+      -xi * (1 + eta),
+      -0.25 * (1 + eta) * (-2 * xi + eta),
+      0.5 * (1 + eta) * (-1 + eta),
+    ),
+    axis=1,
+  )
+  deta = np.stack(
+    (
+      -0.25 * (-1 + xi) * (xi + 2 * eta),
+      0.5 * (1 + xi) * (-1 + xi),
+      0.25 * (1 + xi) * (-xi + 2 * eta),
+      -eta * (1 + xi),
+      0.25 * (1 + xi) * (xi + 2 * eta),
+      -0.5 * (1 + xi) * (-1 + xi),
+      -0.25 * (-1 + xi) * (-xi + 2 * eta),
+      eta * (-1 + xi),
+    ),
+    axis=1,
+  )
+  return values, np.stack((dxi, deta), axis=2)
+
+
 def _recipes(
   snapshot: RegistrySnapshot,
   selection: ContinuumSelection,
@@ -447,10 +559,25 @@ def _recipes(
     label="Q8 quadrature weights",
     source=selection.region.source,
   )
+  abscissa = math.sqrt(3.0 / 5.0)
+  expected_points = np.array(
+    [(x, y) for x in (-abscissa, 0.0, abscissa) for y in (-abscissa, 0.0, abscissa)],
+    dtype=np.float64,
+  )
+  expected_weights = np.array(
+    [
+      x * y
+      for x in (5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0)
+      for y in (5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0)
+    ],
+    dtype=np.float64,
+  )
   if (
     bool(np.any(weights <= 0.0))
     or bool(np.any(np.abs(points) > 1.0))
     or not math.isclose(float(weights.sum()), 4.0, rel_tol=1.0e-14, abs_tol=1.0e-14)
+    or not _corresponds(points, expected_points)
+    or not _corresponds(weights, expected_weights)
   ):
     _fail(
       "invalid-quadrature-binding-output",
@@ -484,9 +611,13 @@ def _recipes(
     label="Q8 parent gradients",
     source=selection.block.source,
   )
-  if not bool(
-    np.allclose(shape_values.sum(1), 1.0, rtol=0.0, atol=1.0e-12)
-  ) or not bool(np.allclose(parent_gradients.sum(1), 0.0, rtol=0.0, atol=1.0e-12)):
+  expected_values, expected_gradients = _qualified_shapes(points)
+  if (
+    not bool(np.allclose(shape_values.sum(1), 1.0, rtol=0.0, atol=1.0e-12))
+    or not bool(np.allclose(parent_gradients.sum(1), 0.0, rtol=0.0, atol=1.0e-12))
+    or not _corresponds(shape_values, expected_values)
+    or not _corresponds(parent_gradients, expected_gradients)
+  ):
     _fail(
       "invalid-topology-binding-output",
       "Q8 topology violates partition or gradient completeness",
@@ -543,19 +674,22 @@ def _parameters(selection: ContinuumSelection) -> tuple[float, float]:
   return youngs_modulus, poisson_ratio
 
 
-def _normalized_coordinates(coordinates: np.ndarray, cell: CellSpec) -> np.ndarray:
+def _normalized_coordinates(
+  coordinates: np.ndarray, cell: CellSpec
+) -> tuple[np.ndarray, float]:
+  coordinate_scale = 1.0
   with np.errstate(over="ignore", invalid="ignore", under="ignore"):
     relative = coordinates - coordinates[0]
   if not bool(np.isfinite(relative).all()):
-    scale = float(np.max(np.abs(coordinates)))
-    if not math.isfinite(scale) or scale == 0.0:
+    coordinate_scale = float(np.max(np.abs(coordinates)))
+    if not math.isfinite(coordinate_scale) or coordinate_scale == 0.0:
       _fail(
         "non-finite-reference-geometry",
         "Q8 has non-finite or zero-scale geometry",
         cell.source,
       )
     with np.errstate(over="ignore", invalid="ignore", under="ignore"):
-      relative = coordinates / scale - coordinates[0] / scale
+      relative = coordinates / coordinate_scale - coordinates[0] / coordinate_scale
   cell_scale = float(np.max(np.abs(relative)))
   if not math.isfinite(cell_scale) or cell_scale == 0.0:
     _fail(
@@ -570,7 +704,12 @@ def _normalized_coordinates(coordinates: np.ndarray, cell: CellSpec) -> np.ndarr
       "Q8 normalized geometry is non-finite",
       cell.source,
     )
-  return normalized
+  physical_scale = coordinate_scale * cell_scale
+  if not math.isfinite(physical_scale) or physical_scale == 0.0:
+    _fail(
+      "non-finite-reference-geometry", "Q8 physical scale is not finite", cell.source
+    )
+  return normalized, physical_scale
 
 
 def _geometry(
@@ -579,11 +718,14 @@ def _geometry(
   parent_gradients: np.ndarray,
   cells: tuple[CellSpec, ...],
   tolerance: float,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
   gradients = np.empty((len(cells), _POINT_COUNT, _NODE_COUNT, 2), dtype=np.float64)
   determinants = np.empty((len(cells), _POINT_COUNT), dtype=np.float64)
+  scales = np.empty(len(cells), dtype=np.float64)
   for cell_index, cell in enumerate(cells):
-    normalized = _normalized_coordinates(coordinates[connectivity[cell_index]], cell)
+    normalized, scales[cell_index] = _normalized_coordinates(
+      coordinates[connectivity[cell_index]], cell
+    )
     norm_squares = np.empty(_POINT_COUNT, dtype=np.float64)
     for point_index in range(_POINT_COUNT):
       jacobian = normalized.T @ parent_gradients[point_index]
@@ -641,16 +783,17 @@ def _geometry(
           "Q8 physical gradients are non-finite",
           cell.source,
         )
-  return gradients, determinants
+  return gradients, determinants, scales
 
 
 def _identities(snapshot: RegistrySnapshot) -> tuple[ImplementationIdentity, ...]:
   return tuple(
-    ImplementationIdentity(
-      descriptor.kind,
-      descriptor.name,
-      descriptor.version,
-      descriptor.implementation_id,
+    _new(
+      ImplementationIdentity,
+      kind=descriptor.kind,
+      name=descriptor.name,
+      version=descriptor.version,
+      implementation_id=descriptor.implementation_id,
     )
     for descriptor in snapshot.descriptors
   )
@@ -672,14 +815,15 @@ def compile_operator(
   ]
   connectivity = FinalizedArray(connectivity_values, dtype=index_dtype)
   entity_block_id = selection.block.id
-  entity_block = IncidenceEntityBlock(
+  entity_block = _new(
+    IncidenceEntityBlock,
     block_id=entity_block_id,
     entity_ids=tuple(cell.id for cell in selection.cells),
     sources=tuple(_source(cell.source) for cell in selection.cells),
     incidence=connectivity,
   )
   points, weights, shape_values, parent_gradients = _recipes(snapshot, selection)
-  gradients, determinants = _geometry(
+  gradients, determinants, geometry_scales = _geometry(
     coordinates.values,
     connectivity.values,
     parent_gradients,
@@ -702,6 +846,17 @@ def compile_operator(
     label="Q8 strain-displacement binding",
     source=selection.region.source,
   )
+  expected_b = np.zeros_like(b_matrix)
+  expected_b[..., 0, 0::2] = gradients[..., :, 0]
+  expected_b[..., 1, 1::2] = gradients[..., :, 1]
+  expected_b[..., 2, 0::2] = gradients[..., :, 1]
+  expected_b[..., 2, 1::2] = gradients[..., :, 0]
+  if not _corresponds(b_matrix, expected_b):
+    _fail(
+      "incompatible-formulation-binding-output",
+      "Q8 formulation output contradicts the qualified engineering-shear map",
+      selection.region.source,
+    )
   youngs_modulus, poisson_ratio = _parameters(selection)
   material = snapshot.resolve(*Q8_MATERIAL_KEY).binding
   try:
@@ -717,10 +872,25 @@ def compile_operator(
     label="Q8 material binding",
     source=selection.material.source,
   )
+  modulus = youngs_modulus / (1.0 - poisson_ratio * poisson_ratio)
+  expected_constitutive = np.array(
+    [
+      [modulus, modulus * poisson_ratio, 0.0],
+      [modulus * poisson_ratio, modulus, 0.0],
+      [0.0, 0.0, youngs_modulus / (2.0 * (1.0 + poisson_ratio))],
+    ],
+    dtype=np.float64,
+  )
   if not bool(np.array_equal(constitutive, constitutive.T)):
     _fail(
       "nonsymmetric-material-binding",
       "Q8 material tangent must be symmetric",
+      selection.material.source,
+    )
+  if not _corresponds(constitutive, expected_constitutive):
+    _fail(
+      "incompatible-material-binding-output",
+      "Q8 material output contradicts the qualified plane-stress law",
       selection.material.source,
     )
   integration_weights = determinants * weights[None, :]
@@ -759,7 +929,8 @@ def compile_operator(
     dtype=index_dtype,
   )
   block_id = selection.block.id, selection.region.id
-  state_layout = OperatorStateLayout(
+  state_layout = _new(
+    OperatorStateLayout,
     schema="pyfem-v3-operator-state-layout-v1",
     block_id=block_id,
     entity_count=len(selection.cells),
@@ -771,37 +942,54 @@ def compile_operator(
     dtype=np.dtype(np.float64).str,
     lifetime=StateLifetime.ACCEPTED_TRIAL,
   )
-  port = PortBinding("displacement", space.space_id, PortMode.COEFFICIENTS, gather)
-  header = OperatorHeader(
+  port = _new(
+    PortBinding,
+    port_id="displacement",
+    space_id=space.space_id,
+    mode=PortMode.COEFFICIENTS,
+    coefficient_map=gather,
+  )
+  residual_channel = _new(
+    ResidualChannel,
+    channel_id="internal-force",
+    target_port_id=port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+  )
+  jacobian_channel = _new(
+    JacobianChannel,
+    channel_id="material-tangent",
+    residual_channel_id="internal-force",
+    target_port_id=port.port_id,
+    source_port_id=port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+    symmetric=True,
+  )
+  header = _new(
+    OperatorHeader,
     block_id=block_id,
     entity_block_id=entity_block_id,
     implementations=_identities(snapshot),
     ports=(port,),
-    residual_channels=(
-      ResidualChannel("internal-force", port.port_id, BalanceRole.INTERNAL, True),
-    ),
-    jacobian_channels=(
-      JacobianChannel(
-        "material-tangent",
-        "internal-force",
-        port.port_id,
-        port.port_id,
-        BalanceRole.INTERNAL,
-        True,
-        True,
-      ),
-    ),
+    signal_ports=(),
+    residual_channels=(residual_channel,),
+    jacobian_channels=(jacobian_channel,),
     state_layout=state_layout,
     coupling_policy=CouplingPolicy.FIXED,
   )
-  payload = Q8ContinuumPayload(
+  payload = _new(
+    Q8ContinuumPayload,
     quadrature_points=FinalizedArray(points, dtype=np.float64),
     quadrature_weights=FinalizedArray(weights, dtype=np.float64),
     shape_values=FinalizedArray(shape_values, dtype=np.float64),
     parent_gradients=FinalizedArray(parent_gradients, dtype=np.float64),
-    physical_gradients=FinalizedArray(gradients, dtype=np.float64),
-    strain_displacement=FinalizedArray(b_matrix, dtype=np.float64),
-    integration_weights=FinalizedArray(integration_weights, dtype=np.float64),
+    geometry_scales=FinalizedArray(geometry_scales, dtype=np.float64),
+    normalized_gradients=FinalizedArray(gradients, dtype=np.float64),
+    normalized_strain_displacement=FinalizedArray(b_matrix, dtype=np.float64),
+    normalized_integration_weights=FinalizedArray(
+      integration_weights, dtype=np.float64
+    ),
     constitutive=FinalizedArray(constitutive, dtype=np.float64),
     material_parameters=FinalizedArray(
       [[youngs_modulus, poisson_ratio]], dtype=np.float64
@@ -837,12 +1025,23 @@ def compile_operator(
         "quadrature_weights": payload.quadrature_weights.values,
         "shape_values": payload.shape_values.values,
         "parent_gradients": payload.parent_gradients.values,
-        "physical_gradients": payload.physical_gradients.values,
-        "strain_displacement": payload.strain_displacement.values,
-        "integration_weights": payload.integration_weights.values,
+        "geometry_scales": payload.geometry_scales.values,
+        "normalized_gradients": payload.normalized_gradients.values,
+        "normalized_strain_displacement": (
+          payload.normalized_strain_displacement.values
+        ),
+        "normalized_integration_weights": (
+          payload.normalized_integration_weights.values
+        ),
         "constitutive": payload.constitutive.values,
         "material_parameters": payload.material_parameters.values,
       },
     }
   )
-  return entity_block, Q8ContinuumOperator(header, entity_block, payload, manifest)
+  return entity_block, _new(
+    Q8ContinuumOperator,
+    header=header,
+    entity_block=entity_block,
+    payload=payload,
+    content_manifest=manifest,
+  )

@@ -6,44 +6,40 @@ from dataclasses import dataclass
 
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import InstanceId
-from pyfem.v3.model.operator import CompiledOperator, SemanticId
+from pyfem.v3.model.operator import (
+  CompiledOperator,
+  CompilerConstructed,
+  SemanticId,
+)
 from pyfem.v3.model.provenance import CanonicalManifest, ContentFingerprint
 from pyfem.v3.model.registry import RegistrySnapshot
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class CompiledSource:
-  """Detached authored source location."""
-
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class CompiledSource(CompilerConstructed):
   source: str
   line: int | None
   column: int | None
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class PointEntityBlock:
-  """Canonical point support and immutable reference geometry."""
-
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class PointEntityBlock(CompilerConstructed):
   block_id: SemanticId
   entity_ids: tuple[SemanticId, ...]
   sources: tuple[CompiledSource, ...]
   reference_coordinates: FinalizedArray
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class IncidenceEntityBlock:
-  """Homogeneous entities with one native incidence width."""
-
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class IncidenceEntityBlock(CompilerConstructed):
   block_id: SemanticId
   entity_ids: tuple[SemanticId, ...]
   sources: tuple[CompiledSource, ...]
   incidence: FinalizedArray
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class DiscreteSpace:
-  """One explicit field/basis space with its native coefficient allocation."""
-
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class DiscreteSpace(CompilerConstructed):
   space_id: SemanticId
   support_block_id: SemanticId
   basis_id: str
@@ -54,23 +50,18 @@ class DiscreteSpace:
 
   @property
   def coefficient_count(self) -> int:
-    """Return this space's exact active coefficient count."""
     return self.coefficient_range[1] - self.coefficient_range[0]
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class SourceAttribution:
-  """Stable semantic entity-to-source record."""
-
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class SourceAttribution(CompilerConstructed):
   kind: str
   semantic_id: SemanticId
   source: CompiledSource
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class SystemProvenance:
-  """Canonical system meaning and numeric convention."""
-
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class SystemProvenance(CompilerConstructed):
   schema: str
   manifest: CanonicalManifest
   registry_fingerprint: ContentFingerprint
@@ -79,10 +70,8 @@ class SystemProvenance:
   geometry_relative_tolerance: float
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class CompiledSystem:
-  """Direct generic compilation of reusable physical discretization."""
-
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class CompiledSystem(CompilerConstructed):
   instance_id: InstanceId
   content_fingerprint: ContentFingerprint
   provenance: SystemProvenance
@@ -95,15 +84,23 @@ class CompiledSystem:
 
   @property
   def coefficient_count(self) -> int:
-    """Return the total coefficient count across ordered disjoint spaces."""
     if not self.spaces:
       return 0
     return self.spaces[-1].coefficient_range[1]
 
   def source_for(self, kind: str, semantic_id: SemanticId) -> CompiledSource:
-    """Resolve one exact stable semantic source identity."""
     for record in self.source_attribution:
-      if record.kind == kind and record.semantic_id == semantic_id:
+      if record.kind == kind and _same_semantic_id(record.semantic_id, semantic_id):
         return record.source
     msg = "compiled system has no source for that exact semantic identity"
     raise KeyError(msg)
+
+
+def _same_semantic_id(left: object, right: object) -> bool:
+  if type(left) is not type(right):
+    return False
+  if type(left) is tuple:
+    return len(left) == len(right) and all(
+      _same_semantic_id(a, b) for a, b in zip(left, right, strict=True)
+    )
+  return bool(left == right)
