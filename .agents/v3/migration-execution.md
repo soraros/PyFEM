@@ -1,9 +1,9 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active after explicit user resumption; I1 and the bounded Phase 1
-  reference slices remain component-qualified E3; the R2-E/P2-H/R2-F portfolio
-  and S2-A simplification are complete and independently green; the current batch
-  measures behavioral parity and refreshes the direct production replacement cut
+- Status: paused overnight at an unintegrated G1 review boundary; I1 and the
+  bounded Phase 1 reference slices remain component-qualified E3 on `v3`; the G1
+  exclusive branch is NO-GO with two accepted material-correspondence findings;
+  no generic-spine source commit has been integrated into the main branch
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md) plus the post-Phase-1
@@ -35,9 +35,9 @@
   `f140b9eba0147c54993f35eaaea1e11d7f8204f4`
 - S2-A simplified proof: `099b51f88022f70ad11c4cecfca35c4a84ecf41e`
 - Workflow routing closure: `c5f83b791252f72afa7cc8271e2c51f491c22f1c`
-- Active milestone: G1 direct unexported Q8 `ModelSpec -> CompiledSystem` compiler
-  on the exclusive four-commit generic-spine branch rooted at `04baa4a`; no feature
-  writer and no G2 work starts before G1's two independent reviews return GO
+- Active milestone: none tonight. On resume, perform one fresh bounded G1 squeeze
+  and correspondence redesign on the exclusive branch, then repeat G1-N and G1-A;
+  no feature writer and no G2 work starts before both return GO
 
 ## Exact next safe action
 
@@ -2556,7 +2556,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `DONE · R3-A · behavioral parity graded` | Luna/high `/root/r3a_behavior_parity_audit` | exact clean `04baa4a` | Grade all 154 capabilities by current public, bounded, experimental, design-only, deferred, or retired evidence | Complete; strict 4/154, bounded executable 57/154, design-backed 139/154; report SHA `f3223fb` |
 | `DONE · D3-A · generic spine cut frozen` | Sol/max `/root/d3a_generic_spine_cut_freeze` | exact clean `04baa4a` | Refresh R2-F against simplified proof and freeze terminal ownership, sequence, budgets, reviewers, and first writer | Complete; four linear commits on one exclusive branch; G1 is the six-path unexported direct Q8 system compiler; report SHA `06ba6d7` |
 | `DONE · R3-B · state-first frontier selected` | Sol/high `/root/r3b_feature_frontier` | exact clean `04baa4a` | Rank post-cut feature axes and dependencies without recreating v1 class boundaries | Complete; state transaction -> nonlinear/J2 -> thermal coupling -> evolution; no feature writer may overlap the cut; report SHA `f9bd194` |
-| `G1 · direct Q8 generic system compiler` | sole Sol/high writer `/root/g1_q8_system_compiler`; branch `agnet/g1-generic-system`, worktree `/private/tmp/pyfem-g1-04baa4a` | exact parent `04baa4a`; source `f342b40`; repairs `182bb3e`, `7929252` | Six paths frozen above; direct-child repair chain; unexported compiler only | Final recheck shares one material-correspondence root plus bounded-overflow finding; closure 1/1 active; caps 1,925/700; G2 closed |
+| `PAUSED NO-GO · G1 · direct Q8 generic system compiler` | sole Sol/high writer `/root/g1_q8_system_compiler`; reviewers `/root/g1_q8_numeric_review`, `/root/g1_operator_boundary_review`; branch `agnet/g1-generic-system`, worktree `/private/tmp/pyfem-g1-04baa4a` | exact parent `04baa4a`; chain `f342b40 -> 182bb3e -> 7929252 -> 942a212` | Six paths only; unexported compiler; nothing integrated into `v3` | G1-N final GO `0/0/0`; G1-A final NO-GO `0/2/0`: caller Decimal context leaks raw traps and fixed subnormal ULP window accepts materially different stiffness; pause for fresh squeeze/redesign; G2 closed |
 | `P2-A · final freeze refresh` | internal Sol/max agent `/root/p2a_freeze_draft` | product `7ee65c3`; current main ledger | Read-only final writer-card refresh and public-scope adjudication | Complete; retained genuine public mixed solve, removed optional helpers, froze exact oracle and full gates |
 | `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
 | `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
@@ -3711,3 +3711,13 @@ integration decision; do not bridge it with a compatibility carrier.
   review's 1,800-line objection is superseded by the prior recorded refreeze. I0
   authorized one material closure, refreezing caps to 1,925/700 for stable analytic
   correspondence, bounded arithmetic, and regressions. G2 remains closed.
+- 2026-08-16: material closure `942a212` passed 15 focused, 370 eight-file, 500
+  v3, and 689 repository tests. G1-N returned final GO `0/0/0`. G1-A remained
+  NO-GO `0/2/0`: the Decimal oracle inherited caller trap/exponent policy and could
+  leak raw exceptions, while a fixed 16-ULP subnormal window admitted 2x-17x the
+  qualified stiffness at minimum positive E. The user requested a reasonable,
+  polished stop. I0 therefore did not issue another incremental repair, did not
+  integrate any G1 commit, and did not open G2. On resume, one fresh simplification
+  packet must isolate the numeric context and replace the subnormal comparison with
+  a simpler scale/sign policy, squeeze accumulated repair complexity, and rerun both
+  independent reviewers before any integration or next work.
