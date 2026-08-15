@@ -479,18 +479,21 @@ concept, proved one generic continuum/link/load boundary, and selected a bounded
 direct vertical replacement with causal deletion. The production cut is not part
 of the current pass.
 
-The only live packet is **S2-A — proof-core simplification**. It removes accidental
-owner/role duplication, mirrored identifiers, repeated factory ceremony, redundant
-test scaffolding, and naming drift from the unexported P2-H proof. It adds no
-capability and touches no Phase 1 file or public export. It must preserve all seven
-focused proof cases, exact Q4/T3/spring/load/global-balance oracles, typed
-ports/channels, native-width entity blocks, provenance attribution, immutable
-ownership, normal and restricted-digit gates, and the normalize-once trust
-boundary. The target is at most 650 nonblank production and 360 nonblank test lines.
+**S2-A — proof-core simplification** is complete in `099b51f`. It removed
+accidental owner/role duplication, mirrored identifiers, repeated factory ceremony,
+redundant test scaffolding, and naming drift from the unexported P2-H proof. It
+added no capability and touched no Phase 1 file or public export. All seven focused
+proof cases, exact Q4/T3/spring/load/global-balance oracles, typed ports/channels,
+native-width entity blocks, provenance attribution, immutable ownership, normal
+and restricted-digit gates, and the normalize-once trust boundary remain. The
+proof now contains 649 nonblank production and 360 nonblank focused-test lines.
 
-After one independent correctness review and any bounded repair, I0 records the
-future vertical-cut card and pauses. No subsequent implementation packet is
-dispatched in this pass.
+An independent Sol/max review returned GO with no P0/P1/P2 findings after fresh
+Fraction-derived Q4/T3/global-solution checks, split-versus-vectorized assembly,
+focused tests in both digit modes, 485 v3 tests, 674 repository tests, and all
+Ruff, format, path, ancestry, branch, exact-head, and clean-tree gates. The
+migration is paused here. No subsequent implementation packet is dispatched in
+this pass; the future direct vertical cut must be freshly frozen on resume.
 
 ## 12. Decision record
 

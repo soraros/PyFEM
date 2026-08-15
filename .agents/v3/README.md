@@ -56,9 +56,9 @@ The explicit Q8 linear slice is complete and frozen as a correctness oracle. It 
 not the carrier stack to extend. The former P2-A mixed-Q8/Q4/T3 writer is
 superseded and its temporary worktree no longer exists.
 
-The R2-E/P2-H/R2-F portfolio is complete and adjudicated. The frontier is the
-bounded S2-A polish pass in
-[generic_core.md](generic_core.md#11-current-bounded-simplification): simplify the
-unexported three-operator proof without adding capability, independently review it,
-record the future direct vertical-cut card, and pause before changing the production
-path.
+The R2-E/P2-H/R2-F portfolio and bounded S2-A polish pass are complete. The
+unexported three-operator proof is integrated, simplified to 649 production and
+360 focused-test nonblank lines, and independently reviewed GO with no findings.
+The migration is paused at the boundary recorded in
+[generic_core.md](generic_core.md#11-current-bounded-simplification). The future
+direct vertical cut is recorded but remains undispatched until explicit resume.

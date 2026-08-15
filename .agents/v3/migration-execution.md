@@ -1,9 +1,9 @@
 # PyFEM v3 migration execution ledger
 
-- Status: active; I1 and the bounded Phase 1 reference slices remain
-  component-qualified E3; the old P2-A through P2-G plan is superseded and the
-  R2-E/P2-H/R2-F portfolio is adjudicated; the live frontier is the bounded S2-A
-  simplification and polished pause
+- Status: paused at a polished proof boundary; I1 and the bounded Phase 1
+  reference slices remain component-qualified E3; the old P2-A through P2-G plan
+  is superseded; the R2-E/P2-H/R2-F portfolio and S2-A simplification are complete
+  and independently green
 - Owner: delegating/integration thread
 - Target branch: `v3`
 - Design authority: [design.md](design.md) plus the post-Phase-1
@@ -30,14 +30,18 @@
 - P1-C integrated proof: 86 focused and 348 combined tests in both normal and 640-digit modes; 478 v3; 667 repository; both Ruff configurations, focused format, ancestry, ownership, and static gates green
 - Workflow proposal integrated: `9b26574f52c39be756e2cdeb275dcfe7691e5bc4`
 - Generic-core decision and common dispatch base: `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9`
-- Active milestone: S2-A simplifies the accepted, still-unexported P2-H proof;
-  the 33-path production vertical cut is accepted in principle but not dispatched
+- Integrated P2-H generic proof: source
+  `b1789d186a85be3505e359a020cb203888f3ea76`, integrated
+  `f140b9eba0147c54993f35eaaea1e11d7f8204f4`
+- S2-A simplified proof: `099b51f88022f70ad11c4cecfca35c4a84ecf41e`
+- Workflow routing closure: `c5f83b791252f72afa7cc8271e2c51f491c22f1c`
+- Active milestone: none; the 33-path production vertical cut is accepted in
+  principle but remains undispatched pending explicit resume
 
 ## Exact next safe action
 
-The main tree remains documentation-only after the `f32e7e5` common proof base; the last product-code head
-is the independently green Phase 1 reference `7ee65c3`. That product path passed
-86 focused and 348 combined tests in both normal and 640-digit modes, 478 v3 tests,
+The independently green Phase 1 reference remains at `7ee65c3`. That product path
+passed 86 focused and 348 combined tests in both normal and 640-digit modes, 478 v3 tests,
 667 repository tests, both Ruff configurations, focused format, and independent
 physics, state-lifecycle, and public-contract reviews with zero accepted findings.
 Those results are retained evidence; they were not rerun during this documentation
@@ -76,8 +80,9 @@ The R2-E/P2-H/R2-F portfolio completed from exact clean base `f32e7e5`:
 2. P2-H source `b1789d186a85be3505e359a020cb203888f3ea76` proved Q4/T3
    continuum, directional spring, and program-owned point loads through one typed
    space/operator/channel boundary. Seven focused tests passed in both digit modes
-   and 485 v3 tests passed in both modes. Its 812 nonblank production and 453
-   nonblank test lines are accepted as evidence, not yet as the polished form.
+   and 485 v3 tests passed in both modes. Its initial 812 nonblank production and
+   453 nonblank test lines remain the pre-simplification evidence baseline; S2-A's
+   accepted successor is recorded below.
 3. R2-F selected one compiler/assembly vertical cut over an adapter or permanent
    second backend. Its future card owns 27 production and six test paths, deletes
    four predecessor files, and requires at least 5,500 gross/1,500 net production
@@ -85,15 +90,17 @@ The R2-E/P2-H/R2-F portfolio completed from exact clean base `f32e7e5`:
    verification.
 
 I0 accepts the numerical representation with the recorded amendments and accepts
-R2-F strategy B in principle. It does **not** dispatch the production vertical cut
-in this pass. S2-A first removes accidental owner/role duplication, mirrored IDs,
-repeated factory ceremony, redundant proof scaffolding, and naming drift from the
-unexported P2-H proof without weakening typed ports/channels, native-width blocks,
-attribution, independent oracles, or the normalize-once trust boundary. The target
-is at most 650 nonblank production and 360 nonblank test lines. A justified miss is
-a finding, not permission to delete meaning. After one independent final review,
-the migration pauses with a clean tree and concise handoff. No old P2-A writer and
-no 33-path production writer should be resumed or dispatched.
+R2-F strategy B in principle. S2-A integrated the unexported P2-H proof, then
+removed accidental owner/role duplication, mirrored IDs, repeated factory
+ceremony, redundant proof scaffolding, and naming drift. The result is 649
+nonblank production lines and 360 nonblank focused-test lines, down from 812 and
+453, without weakening typed ports/channels, native-width blocks, attribution,
+independent oracles, or the normalize-once trust boundary. The independent final
+review returned GO with P0/P1/P2 `0/0/0`; focused tests passed in both digit modes,
+the v3 and repository suites passed 485 and 674 tests, and both Ruff, format,
+ancestry, path, semantic-branch, exact-head, and clean-tree gates passed. The
+migration is now paused. No old P2-A writer and no 33-path production writer may
+be resumed or dispatched without explicit resumption and a newly frozen card.
 
 ### Basis for the selection
 
@@ -2488,7 +2495,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `DONE · R2-E · Legacy coverage mapped` | Sol/max `01a0062b-5deb-79b3-8a73-e768a9ca5fe4` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only mapping of all 154 E0 capabilities to the six generic concepts and seven variation axes | Complete and archived; 95 direct, 56 composed, two questionable, one rejected carrier; report SHA `480332f`; callback delivery was attempted but not acknowledged |
 | `DONE · P2-H · Three-operator boundary proved` | Sol/max `01a0062b-6e84-7e22-bf8a-4fbb8f42db09` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9`; source `b1789d1` | New-path-only experimental core for continuum, link/spring, and program-owned load operators sharing one space | Complete and archived; 7 focused twice, 485 v3 twice, exact balance/oracles, one clean commit; callback unavailable; no integration by implication |
 | `DONE · R2-F · Vertical deletion cut derived` | Sol/max `01a0062e-c999-7740-89c3-4815948cb99a` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only retain/migrate/delete/defer map for replacing the Phase 1 Q8 spine without a permanent second backend | Complete and archived; strategy B, 33 owned paths, 5,500 gross/1,500 net production deletion floor, report SHA `df8a813`; prompt lacked the now-mandatory literal callback instruction |
-| `S2-A · portfolio simplification — polished pause` | sole Sol/high writer, then one Sol/max read-only final reviewer; exact task IDs recorded at dispatch | adjudicated docs head plus isolated P2-H source `b1789d1` | Simplify only `pyfem/v3/core/{__init__.py,generic.py}` and `test/v3/test_v3_generic_core.py`; no feature expansion or public export | Frozen; preserve all seven proofs and gates; target <=650 nonblank production and <=360 nonblank test lines; explicit callback required; stop after independent GO and ledger closure |
+| `DONE · S2-A · generic proof simplified and reviewed` | Sol/high writer `/root/s2a_proof_simplifier`; Sol/max reviewer `/root/s2a_final_review` | source `099b51f` on integrated proof `f140b9e`; review base `c5f83b7` | Simplify only `pyfem/v3/core/{__init__.py,generic.py}` and `test/v3/test_v3_generic_core.py`; no feature expansion or public export | Complete GO; P0/P1/P2 `0/0/0`; 649 production and 360 test nonblank lines; 7 focused twice, 485 v3, 674 repository; independent Fraction and split/vectorized oracles plus Ruff, format, path, ancestry, branch, exact-head, and clean gates green |
 | `P2-A · final freeze refresh` | internal Sol/max agent `/root/p2a_freeze_draft` | product `7ee65c3`; current main ledger | Read-only final writer-card refresh and public-scope adjudication | Complete; retained genuine public mixed solve, removed optional helpers, froze exact oracle and full gates |
 | `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
 | `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
@@ -2518,14 +2525,15 @@ are recorded separately because they are not part of that user-visible audit set
 - Incomplete: initial R0-C, R0-D, R0-G, R0-J, R0-K, R0-F, P1-B's interrupted
   repair turn, the P1-D missing-worktree replacement, and the sidebar R1-B review
   stalled on an unnecessary temporary-file approval.
-- Active: R2-E/P2-H/R2-F are complete and archived. S2-A is the sole permitted
-  new-path proof simplifier; no task may edit the Phase 1 production path. P2-A is incomplete and
-  superseded; its temporary worktree is gone and its branch has zero child commits.
+- Paused: R2-E/P2-H/R2-F and S2-A are complete. The generic proof is integrated,
+  simplified, and independently reviewed; no task may edit the Phase 1 production
+  path. P2-A is incomplete and superseded; its temporary worktree is gone and its
+  branch has zero child commits.
   The topology, ownership, reconciliation, R2-C-card, and leaf-draft tasks are
   historical planning evidence rather than executable authority. The three R1-A
   tasks are complete GO and I1 remains frozen. Luna G1 completed the sidebar
-  cleanup and is archived; the unarchived PyFEM set is I0 plus any exact S2-A
-  writer/reviewer recorded at dispatch. The two Kimi attempts, the twice-routed
+  cleanup and is archived; no implementation or review packet remains active. The
+  two Kimi attempts, the twice-routed
   `/root/p1c_source_review`, and the Sol-capacity
   `/root/p1c_public_flow_redo` are explicitly incomplete and provide no evidence;
   replacement `/root/p1c_public_flow_redo2` completed cleanly.
@@ -3588,3 +3596,12 @@ integration decision; do not bridge it with a compatibility carrier.
   delivery in the third exposed a coordination defect; AGENTS.md now makes the
   callback target and literal prompt stanza a dispatch precondition. S2-A is the
   sole remaining implementation/refinement packet before the requested pause.
+- 2026-08-16: P2-H source `b1789d1` was integrated as `f140b9e`. Sol/high S2-A
+  simplified the proof in `099b51f`, reducing nonblank production/test lines from
+  812/453 to 649/360 while retaining all seven focused proofs. Sol/max final review
+  returned GO with P0/P1/P2 `0/0/0`, independently re-derived the exact Q4/T3 and
+  split/vectorized assembly oracles, and passed 7 focused tests in both digit modes,
+  485 v3 tests, 674 repository tests, both Ruff configurations, format, path,
+  ancestry, semantic-branch, exact-head, and clean-tree gates. The migration is
+  paused at this polished boundary; the accepted 33-path vertical cut remains
+  undispatched.
