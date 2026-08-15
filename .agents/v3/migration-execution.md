@@ -140,9 +140,9 @@ with ordered multiple spaces, an open non-enumerating operator header, typed por
 and channels, a real zero-width operator-state schema, captured registry identity,
 bounded diagnostics, owned arrays, attribution, and the qualified Q8 geometry and
 convention oracles. It accepts no `CompiledModel`, changes no public export, and
-performs no assembly or solve. The initial 1,800-line production cap is adjudicated
-to 1,850 for the accepted reconstruction and representability repairs; the focused
-test remains capped at 650 physical lines.
+performs no assembly or solve. The initial 1,800/650 production/test caps are
+adjudicated to 1,925/700 for the accepted reconstruction, representability, and
+full-domain material-correspondence repairs; the extra lines may not add capability.
 
 The exact six required tests and all stop conditions are frozen in D3-A section 7.
 At minimum they prove direct generic Q8 compilation, hard-coded shape/gradient/
@@ -2556,7 +2556,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `DONE · R3-A · behavioral parity graded` | Luna/high `/root/r3a_behavior_parity_audit` | exact clean `04baa4a` | Grade all 154 capabilities by current public, bounded, experimental, design-only, deferred, or retired evidence | Complete; strict 4/154, bounded executable 57/154, design-backed 139/154; report SHA `f3223fb` |
 | `DONE · D3-A · generic spine cut frozen` | Sol/max `/root/d3a_generic_spine_cut_freeze` | exact clean `04baa4a` | Refresh R2-F against simplified proof and freeze terminal ownership, sequence, budgets, reviewers, and first writer | Complete; four linear commits on one exclusive branch; G1 is the six-path unexported direct Q8 system compiler; report SHA `06ba6d7` |
 | `DONE · R3-B · state-first frontier selected` | Sol/high `/root/r3b_feature_frontier` | exact clean `04baa4a` | Rank post-cut feature axes and dependencies without recreating v1 class boundaries | Complete; state transaction -> nonlinear/J2 -> thermal coupling -> evolution; no feature writer may overlap the cut; report SHA `f9bd194` |
-| `G1 · direct Q8 generic system compiler` | sole Sol/high writer `/root/g1_q8_system_compiler`; branch `agnet/g1-generic-system`, worktree `/private/tmp/pyfem-g1-04baa4a` | exact parent `04baa4a`; source `f342b40`; repair 1 `182bb3e` | Six paths frozen above; direct-child repair chain; unexported compiler only | Recheck NO-GO: G1-N `0/1/0`, G1-A `0/1/2`; final repair 2/2 active; production cap adjudicated to 1,850; G2 closed |
+| `G1 · direct Q8 generic system compiler` | sole Sol/high writer `/root/g1_q8_system_compiler`; branch `agnet/g1-generic-system`, worktree `/private/tmp/pyfem-g1-04baa4a` | exact parent `04baa4a`; source `f342b40`; repairs `182bb3e`, `7929252` | Six paths frozen above; direct-child repair chain; unexported compiler only | Final recheck shares one material-correspondence root plus bounded-overflow finding; closure 1/1 active; caps 1,925/700; G2 closed |
 | `P2-A · final freeze refresh` | internal Sol/max agent `/root/p2a_freeze_draft` | product `7ee65c3`; current main ledger | Read-only final writer-card refresh and public-scope adjudication | Complete; retained genuine public mixed solve, removed optional helpers, froze exact oracle and full gates |
 | `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
 | `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
@@ -3702,3 +3702,12 @@ integration decision; do not bridge it with a compatibility carrier.
   subtype equality. I0 accepted all four roots, raised the production cap from
   1,800 to 1,850 to avoid line-golfing, and authorized final repair 2/2 on the same
   six paths. G2 remains closed pending two final GO rechecks.
+- 2026-08-16: G1 repair 2 `7929252` passed 15 focused, 370 eight-file, 500 v3,
+  and 689 repository tests, while reconstruction denial covered all trusted carrier
+  classes and ordinary copy/pickle protocols. Final rechecks found one shared
+  full-domain material-correspondence root: fixed ULP comparison accepted zero at
+  minimum subnormal E yet rejected a more accurate equivalent formula near
+  `nu=-1`; float64-max E also leaked a raw overflow warning. The architecture
+  review's 1,800-line objection is superseded by the prior recorded refreeze. I0
+  authorized one material closure, refreezing caps to 1,925/700 for stable analytic
+  correspondence, bounded arithmetic, and regressions. G2 remains closed.
