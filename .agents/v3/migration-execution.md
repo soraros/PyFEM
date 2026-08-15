@@ -80,10 +80,17 @@ deliberately falsifiable:
 The three live threads are `R2-E` `01a0062b-5deb-79b3-8a73-e768a9ca5fe4`,
 `P2-H` `01a0062b-6e84-7e22-bf8a-4fbb8f42db09`, and `R2-F`
 `01a0062e-c999-7740-89c3-4815948cb99a`. I0 will adjudicate all three results
-before freezing any production writer. The
+without polling their worktrees; each task returns through its delegation callback.
+Before freezing any production writer, I0 must run one bounded S2-A simplification
+pass over the accepted portfolio outcome. That pass removes accidental concepts,
+duplicate carriers, excess validation, redundant tests, and naming drift without
+adding capability. If P2-H is rejected, S2-A instead simplifies the corrected
+design and migration cut and records why the prototype was discarded. The
 prototype is discarded if it needs an untyped universal payload, if a legacy case
 forces a seventh core concept without a principled amendment, or if no bounded
-causal deletion path exists. No old P2-A writer should be resumed.
+causal deletion path exists. The migration pauses after S2-A with a clean tree,
+focused evidence, and a concise handoff; no further porting wave is dispatched in
+this pass. No old P2-A writer should be resumed.
 
 ### Basis for the selection
 
@@ -2478,6 +2485,7 @@ active; a watchdog is unnecessary while callbacks and native status are availabl
 | `ACTIVE · R2-E · Legacy Instance Map` | Sol/max `01a0062b-5deb-79b3-8a73-e768a9ca5fe4` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only mapping of all 154 E0 capabilities to the six generic concepts and seven variation axes | Active; must report every questionable or unrepresentable capability and a durable `/private/tmp` report; no integration authority |
 | `ACTIVE · P2-H · Three-Operator IR` | Sol/max `01a0062b-6e84-7e22-bf8a-4fbb8f42db09` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | New-path-only experimental core for continuum, link/spring, and program-owned load operators sharing one space | Active isolated writer; owns only new `pyfem/v3/core/**` and `test/v3/test_v3_generic_core.py`; one source commit has no integration authority |
 | `ACTIVE · R2-F · Migration Deletion Cut` | Sol/max `01a0062e-c999-7740-89c3-4815948cb99a` | exact clean `f32e7e5b8eb02f4e58a410871f929a4df22e5ca9` | Read-only retain/migrate/delete/defer map for replacing the Phase 1 Q8 spine without a permanent second backend | Active; must freeze exact path groups, deletion target, proof retention, merge order, and rollback point; no integration authority |
+| `S2-A · portfolio simplification — polished pause` | not dispatched; I0 freezes owner only after R2-E/P2-H/R2-F return | accepted portfolio result; never an independently chosen base | Remove accidental abstraction, duplicated code/evidence, naming drift, and unnecessary compatibility before the next production decision | Mandatory next packet; no feature expansion; stop and report after its clean proof rather than dispatching another porting wave |
 | `P2-A · final freeze refresh` | internal Sol/max agent `/root/p2a_freeze_draft` | product `7ee65c3`; current main ledger | Read-only final writer-card refresh and public-scope adjudication | Complete; retained genuine public mixed solve, removed optional helpers, froze exact oracle and full gates |
 | `R2-A · final topology delta` | internal Sol/max agent `/root/r2a_topology` | product `7ee65c3` | Read-only Q8/Q4/T3 oracle, schema, and public-scope check | Complete; confirmed 15/30/21 and 356/203/14 arithmetic, Q4 corner audit, native widths, and public mixed-slice design |
 | `R2-B · final ownership delta` | internal Sol/max agent `/root/r2b_ownership` | product `7ee65c3` | Read-only final P2-A ownership and later-leaf separation check | Complete; confirmed compiler/program/assembly/state ownership and rejected a temporary solver guard |
@@ -3565,3 +3573,8 @@ integration decision; do not bridge it with a compatibility carrier.
   renamed `DONE` and archived. I0's next action is to adjudicate the three
   engineering results together; no result may independently authorize production
   integration.
+- 2026-08-16: user required callback-only coordination for the live portfolio and
+  a mandatory S2-A simplification/refactor pass after all three results return.
+  I0 will not actively poll or inspect their worktrees. S2-A adds no capability;
+  it squeezes the accepted outcome, updates the authoritative docs and evidence,
+  proves a clean state, and is the terminal pause point for this long pass.
