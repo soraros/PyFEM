@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import warnings
 from dataclasses import dataclass
-from decimal import Decimal, localcontext
+from fractions import Fraction
 from typing import NoReturn
 
 import numpy as np
@@ -67,6 +67,7 @@ _PARAMETER_NAMES = ("youngs_modulus", "poisson_ratio")
 _POINT_COUNT = 9
 _NODE_COUNT = 8
 _LOCAL_COEFFICIENT_COUNT = 16
+_MATERIAL_RELATIVE_TOLERANCE = 16.0 * float(np.finfo(np.float64).eps)
 
 
 def _new[ValueT](cls: type[ValueT], /, **fields: object) -> ValueT:
@@ -490,63 +491,66 @@ def _qualified_constitutive(
   youngs_modulus: float,
   poisson_ratio: float,
   source: SourceContext,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-  with localcontext() as context:
-    context.prec = 120
-    modulus = Decimal.from_float(youngs_modulus)
-    ratio = Decimal.from_float(poisson_ratio)
-    normal = modulus / ((Decimal(1) - ratio) * (Decimal(1) + ratio))
-    coupling = normal * ratio
-    shear = modulus / (Decimal(2) * (Decimal(1) + ratio))
-    try:
-      expected = np.array(
-        [
-          [float(normal), float(coupling), 0.0],
-          [float(coupling), float(normal), 0.0],
-          [0.0, 0.0, float(shear)],
-        ],
-        dtype=np.float64,
+) -> tuple[np.ndarray, np.ndarray]:
+  modulus = Fraction.from_float(youngs_modulus)
+  ratio = Fraction.from_float(poisson_ratio)
+  normal = modulus / ((1 - ratio) * (1 + ratio))
+  coupling = normal * ratio
+  shear = modulus / (2 * (1 + ratio))
+  try:
+    exact = np.array(
+      [
+        [float(normal), float(coupling), 0.0],
+        [float(coupling), float(normal), 0.0],
+        [0.0, 0.0, float(shear)],
+      ],
+      dtype=np.float64,
+    )
+    if not bool(np.isfinite(exact).all()):
+      raise OverflowError
+  except (ArithmeticError, OverflowError, ValueError):
+    _fail(
+      "unrepresentable-material-law",
+      "Q8 plane-stress matrix cannot be represented as finite float64",
+      source,
+    )
+  with warnings.catch_warnings(action="ignore", category=RuntimeWarning):
+    binary64_route = plane_stress_matrix(youngs_modulus, poisson_ratio)
+  if not bool(np.isfinite(binary64_route).all()):
+    binary64_route = exact
+  return exact, binary64_route
+
+
+def _outside_relative_envelope(actual: float, first: float, second: float) -> bool:
+  lower, upper = sorted((first, second))
+  return not (
+    lower <= actual <= upper
+    or any(
+      math.isclose(
+        actual,
+        boundary,
+        rel_tol=_MATERIAL_RELATIVE_TOLERANCE,
+        abs_tol=0.0,
       )
-      if not bool(np.isfinite(expected).all()):
-        raise OverflowError
-    except (ArithmeticError, OverflowError, ValueError):
-      _fail(
-        "unrepresentable-material-law",
-        "Q8 plane-stress matrix cannot be represented as finite float64",
-        source,
-      )
-  route_normal = youngs_modulus / (1.0 - poisson_ratio * poisson_ratio)
-  route = np.array(
-    [
-      [route_normal, route_normal * poisson_ratio, 0.0],
-      [route_normal * poisson_ratio, route_normal, 0.0],
-      [0.0, 0.0, youngs_modulus / (2.0 * (1.0 + poisson_ratio))],
-    ],
-    dtype=np.float64,
+      for boundary in (lower, upper)
+    )
   )
-  route = np.where(np.isfinite(route), route, expected)
-  structural_zero = np.zeros((3, 3), dtype=np.bool_)
-  structural_zero[:2, 2] = structural_zero[2, :2] = True
-  return expected, route, structural_zero, (expected == 0.0) & ~structural_zero
 
 
 def _constitutive_corresponds(
   actual: np.ndarray,
-  expected: np.ndarray,
-  route: np.ndarray,
-  structural_zero: np.ndarray,
-  rounded_zero: np.ndarray,
+  exact: np.ndarray,
+  binary64_route: np.ndarray,
 ) -> bool:
-  nonzero = ~(structural_zero | rounded_zero)
-  if bool(np.any(actual[~nonzero] != 0.0)) or bool(np.any(actual[nonzero] == 0.0)):
-    return False
-  if bool(np.any(np.signbit(actual[nonzero]) != np.signbit(expected[nonzero]))):
-    return False
-  expected_ulps = np.abs(expected - np.nextafter(expected, np.zeros_like(expected)))
-  route_ulps = np.abs(route - np.nextafter(route, np.zeros_like(route)))
-  ulps = 16.0 * np.maximum(expected_ulps, route_ulps)
-  tolerance = np.abs(route - expected) + ulps
-  return bool(np.all(np.abs(actual[nonzero] - expected[nonzero]) <= tolerance[nonzero]))
+  return not any(
+    _outside_relative_envelope(float(value), float(qualified), float(route))
+    for value, qualified, route in zip(
+      actual.flat,
+      exact.flat,
+      binary64_route.flat,
+      strict=True,
+    )
+  )
 
 
 def _qualified_shapes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -951,12 +955,10 @@ def compile_operator(
       selection.region.source,
     )
   youngs_modulus, poisson_ratio = _parameters(selection)
-  expected_constitutive, finite_route, structural_zero, rounded_zero = (
-    _qualified_constitutive(
-      youngs_modulus,
-      poisson_ratio,
-      selection.material.source,
-    )
+  exact_constitutive, binary64_route = _qualified_constitutive(
+    youngs_modulus,
+    poisson_ratio,
+    selection.material.source,
   )
   material = snapshot.resolve(*Q8_MATERIAL_KEY).binding
   try:
@@ -982,10 +984,8 @@ def compile_operator(
     )
   if not _constitutive_corresponds(
     constitutive,
-    expected_constitutive,
-    finite_route,
-    structural_zero,
-    rounded_zero,
+    exact_constitutive,
+    binary64_route,
   ):
     _fail(
       "incompatible-material-binding-output",

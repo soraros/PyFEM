@@ -9,7 +9,7 @@ import pickle
 import sys
 import warnings
 from dataclasses import replace
-from decimal import Decimal, localcontext
+from decimal import Context, Inexact, localcontext
 from fractions import Fraction
 
 import numpy as np
@@ -25,7 +25,6 @@ from pyfem.v3.compile.continuum import (
   Q8_QUADRATURE_KEY,
   Q8_TOPOLOGY_KEY,
   Q8ContinuumOperator,
-  q8_descriptor_metadata,
   q8_reference_registry,
 )
 from pyfem.v3.compile.diagnostics import ModelCompilationError
@@ -40,7 +39,6 @@ from pyfem.v3.model.operator import (
   SignalDerivativeInput,
   StateLifetime,
 )
-from pyfem.v3.model.registry import RegistryDescriptor
 from pyfem.v3.model.system import CompiledSystem, PointEntityBlock
 from pyfem.v3.spec import (
   CellBlockSpec,
@@ -228,14 +226,12 @@ def _zero_constitutive(youngs_modulus: float, poisson_ratio: float) -> np.ndarra
   return np.zeros((3, 3), dtype=np.float64)
 
 
-def _high_precision_constitutive(e: float, nu: float) -> np.ndarray:
-  with localcontext() as context:
-    context.prec = 120
-    modulus = Decimal.from_float(e)
-    ratio = Decimal.from_float(nu)
-    normal = modulus / ((Decimal(1) - ratio) * (Decimal(1) + ratio))
-    coupling = normal * ratio
-    shear = modulus / (Decimal(2) * (Decimal(1) + ratio))
+def _exact_constitutive(e: float, nu: float) -> np.ndarray:
+  modulus = Fraction.from_float(e)
+  ratio = Fraction.from_float(nu)
+  normal = modulus / ((1 - ratio) * (1 + ratio))
+  coupling = normal * ratio
+  shear = modulus / (2 * (1 + ratio))
   return np.array(
     [
       [float(normal), float(coupling), 0.0],
@@ -410,14 +406,7 @@ def test_same_identity_spoofed_registry_bindings_fail_at_compile_boundary(
 ) -> None:
   registry = q8_reference_registry()
   reference = registry[key]
-  registry[key] = RegistryDescriptor(
-    kind=reference.kind,
-    name=reference.name,
-    version=reference.version,
-    implementation_id=reference.implementation_id,
-    metadata=q8_descriptor_metadata(*key),
-    binding=binding,
-  )
+  object.__setattr__(reference, "binding", binding)
   with pytest.raises(ModelCompilationError, match=code):
     compile_system(_model(), registry)
   if key == Q8_MATERIAL_KEY:
@@ -434,6 +423,24 @@ def test_same_identity_spoofed_registry_bindings_fail_at_compile_boundary(
       assert compile_system(tiny, q8_reference_registry()).operators
       with pytest.raises(ModelCompilationError, match=code):
         compile_system(tiny, registry)
+      if value == 5.0e-324:
+        hostile_context = Context(prec=2, Emax=9, Emin=-9)
+        hostile_context.traps[Inexact] = True
+        with localcontext(hostile_context), warnings.catch_warnings():
+          warnings.simplefilter("error", RuntimeWarning)
+          assert compile_system(tiny, q8_reference_registry()).operators
+        for factor in (2.0, 17.0):
+
+          def scaled(e: float, nu: float, *, factor: float = factor) -> np.ndarray:
+            values = _exact_constitutive(e, nu)
+            values[0, 0] *= factor
+            values[1, 1] *= factor
+            return values
+
+          altered = q8_reference_registry()
+          object.__setattr__(altered[key], "binding", scaled)
+          with pytest.raises(ModelCompilationError, match=code):
+            compile_system(tiny, altered)
     ratio = replace(material.parameters[1], value=-0.999999999999)
     edge = replace(
       tiny,
@@ -441,15 +448,7 @@ def test_same_identity_spoofed_registry_bindings_fail_at_compile_boundary(
     )
     assert compile_system(edge, q8_reference_registry()).operators
     precise = q8_reference_registry()
-    descriptor = precise[Q8_MATERIAL_KEY]
-    precise[Q8_MATERIAL_KEY] = RegistryDescriptor(
-      kind=descriptor.kind,
-      name=descriptor.name,
-      version=descriptor.version,
-      implementation_id=descriptor.implementation_id,
-      metadata=q8_descriptor_metadata(*Q8_MATERIAL_KEY),
-      binding=_high_precision_constitutive,
-    )
+    object.__setattr__(precise[Q8_MATERIAL_KEY], "binding", _exact_constitutive)
     assert compile_system(edge, precise).operators
     extreme = replace(material.parameters[0], value=sys.float_info.max)
     for value, diagnostic in (
