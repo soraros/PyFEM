@@ -17,6 +17,11 @@ port or change any design invariant. Live state is owned only by
 [migration-execution.md](migration-execution.md); the Proofline field guide is not
 a second plan or ledger.
 
+Fresh implementers and reviewers should start from [handoff.md](handoff.md) and
+read only the packet contract, proof, or role sections relevant to their work.
+Coordinators use this full document when changing workflow state. Historical
+adoption and wave sections explain decisions but never name the live frontier.
+
 Navigation: [authority](#authority-and-adoption-status),
 [state machine](#migration-state-machine),
 [coverage ledger](#legacy-to-v3-coverage-ledger),
@@ -183,11 +188,13 @@ The normal migration session should need exactly four durable inputs:
 [refactor_playbook.md](refactor_playbook.md) is the source from which the Horizon
 Gate and proof discipline were adapted. It remains the generic
 method for non-migration structural refactors; it is not a second live migration
-roadmap. [feature-parity.md](feature-parity.md) became historical after R0-E
-absorbed its useful breadth and the complete repository into
+roadmap. The former `feature-parity.md` was removed after R0-E absorbed its useful
+breadth and the complete repository into
 [the dated E0 evidence note](evidence/2026-07-18-r0e-capability-inventory.md).
-`WORKFLOW.md`, `roadmap.md`, `hardening.md`, and the Cursor-era artifacts remain
-history.
+The prototype `architecture.md`, P0-P8 `roadmap.md`, and redundant Cursor-era
+execution prompts `WORKFLOW.md` and `hardening.md` were also removed from the
+durable tree on 2026-09-01. Git history retains them; unique numerical failure
+evidence remains in the benchmark notes.
 
 The live ledger is updated only at a state transition, a material decision, a
 changed base, a new blocker, or a completed proof gate. Routine shell commands and
@@ -1046,10 +1053,9 @@ solve, peak and retained memory, and verification result.
 
 Use the ladder from [design section 12](design.md#12-performance-proof-policy):
 small correctness, medium representative public solve, scale/repeated solve, and a
-heterogeneous or stateful stress case. Historical prototype numbers in
-`scaling.md`, `plane_strain.md`, `tangent_assembly.md`, and `structural.md` are
-hypotheses and fixtures, not gates. No tolerance, state invariant, or public flow is
-weakened to recover a benchmark.
+heterogeneous or stateful stress case. Historical prototype numbers consolidated
+in `scaling.md` are hypotheses and fixtures, not gates. No tolerance, state
+invariant, or public flow is weakened to recover a benchmark.
 
 ### Test gates
 
@@ -1203,8 +1209,8 @@ documentation-only changes:
 3. `phase0-execution.md` became the sole live `migration-execution.md` ledger while
    retaining the foundation history;
 4. `README.md` routes new sessions to the same method and ledger;
-5. `feature-parity.md` is historical after R0-E absorption; its old statuses and
-   exclusions have no classification authority; and
+5. the former `feature-parity.md` was absorbed by R0-E and later removed; its old
+   statuses and exclusions have no classification authority; and
 6. `design.md` remains unchanged because no architectural invariant was amended.
 
 There is no second live status file and no watchdog. Existing direct callbacks and
@@ -1238,16 +1244,19 @@ accepted P0/P1 findings are repaired and re-proved.
 - Record friction as concrete transition failures, not another process roadmap.
 - Change this method only if the trial exposes a testable operating defect.
 
-### Retire overlapping guidance
+### Retired overlapping guidance
 
-After the first complete Phase 1 trial:
+The post-Phase-1 durability audit completed these actions:
 
-- verify that any unique legacy breadth from `feature-parity.md` remains represented
-  in the R0-E evidence and live ledger overlay;
-- mark old P0-P8/Cursor workflow artifacts historical in the document map;
-- retain numerical notes as evidence only; and
-- ensure the standard resume packet reads one design, this one migration method,
-  and one live ledger.
+- unique legacy breadth from the former `feature-parity.md` remains represented in
+  the R0-E evidence and live ledger overlay;
+- the superseded P0-P8 roadmap and prototype architecture snapshot were removed
+  after their useful context was absorbed by design/E0 evidence and Git history;
+- redundant Cursor workflow/hardening prompt files were deleted from the durable
+  tree while their history remains recoverable from Git;
+- numerical notes remain as evidence rather than performance contracts; and
+- the standard restart route is one handoff, one design plus amendment, this
+  migration method, and one live ledger.
 
 ## Coordinator loop
 

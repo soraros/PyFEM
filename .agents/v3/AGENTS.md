@@ -6,10 +6,10 @@ an architecture to reproduce.
 
 ## Read first
 
-Read [design.md](design.md) and then
-[generic_core.md](generic_core.md) before planning or editing v3. The first owns
-the durable ownership/state/result invariants; the second is the authoritative
-post-Phase-1 semantic-IR amendment and next proof portfolio.
+For a cold start without thread context, begin with [handoff.md](handoff.md). Then
+read [design.md](design.md) and [generic_core.md](generic_core.md) before planning
+or editing v3. The first owns the durable ownership/state/result invariants; the
+second is the authoritative post-Phase-1 semantic-IR amendment.
 
 For the full legacy-to-v3 migration, also read
 [migration_workflow.md](migration_workflow.md) and resume from the sole live ledger,
@@ -40,10 +40,11 @@ types are explicitly not architectural constraints:
 - current solver and result APIs
 
 Do not continue the old P0-P8 checklist or the superseded P2-A through P2-G plan.
-Phase 0/1 is a frozen reference. R2-E/P2-H/R2-F are complete; resume only from the
-current bounded action in
-[generic_core.md](generic_core.md#11-current-bounded-simplification), and prefer a
-complete, testable generic instance over feature-by-feature class ports.
+Phase 0/1 is a frozen reference and R2-E/P2-H/R2-F are complete. Resume only from
+the exact action in [handoff.md](handoff.md) and the live execution ledger; section
+11 of `generic_core.md` records completed simplification evidence, not a live
+dispatch. Prefer a complete, testable generic instance over feature-by-feature
+class ports.
 
 ## Task vocabulary and routing
 
@@ -148,19 +149,17 @@ Run the full suite when code changes cross the legacy/v3 boundary:
 
 ## Documentation map
 
-| Status | Files | Use |
-|---|---|---|
-| Authoritative invariants | [design.md](design.md) | Ownership, identity, state, contributions, results, and retained acceptance laws |
-| Authoritative semantic core | [generic_core.md](generic_core.md) | Generic IR, extension laws, trust boundary, proof portfolio, and current next batch |
-| Proofline field guide | [proofline.md](proofline.md) | Reusable semi-automatic coordination loop, task integrity, callbacks, automation boundary, and dashboard projection |
-| Migration method | [migration_workflow.md](migration_workflow.md) | Capability conveyor, packet lifecycle, integration, proof, and completion |
-| Execution state | [migration-execution.md](migration-execution.md) | Sole live migration ledger: commits, packets, evidence, blockers, and next action |
-| Refactor method | [refactor_playbook.md](refactor_playbook.md) | Generic Horizon Gate and proof loop for non-migration structural refactors |
-| Active tooling | [conventions.md](conventions.md) | Style, typing, Ruff, tests |
-| Numerical evidence | [parity.md](parity.md), [scaling.md](scaling.md), [plane_strain.md](plane_strain.md), [structural.md](structural.md), [tangent_assembly.md](tangent_assembly.md) | Oracles and historical measurements |
-| Capability discovery evidence | [evidence/2026-07-18-r0e-capability-inventory.md](evidence/2026-07-18-r0e-capability-inventory.md) | Immutable 154-row E0 inventory and zero-remnant coverage proof; query by capability ID |
-| Historical requirements inventory | [feature-parity.md](feature-parity.md) | Absorbed by R0-E; old statuses are not an implementation order or live state |
-| Historical/superseded | [architecture.md](architecture.md), [roadmap.md](roadmap.md), [WORKFLOW.md](WORKFLOW.md), [hardening.md](hardening.md) | Understand the prototype; do not execute as a plan |
+The complete durability classification for every retained file is in the
+[README document map](README.md#durable-document-map). Operational routing is:
+
+| Need | Read |
+|---|---|
+| Cold restart and exact current frontier | [handoff.md](handoff.md), then [migration-execution.md](migration-execution.md) |
+| Architecture and semantic authority | [design.md](design.md), [generic_core.md](generic_core.md) |
+| Migration method | [migration_workflow.md](migration_workflow.md), with [proofline.md](proofline.md) only as its reusable field guide |
+| Structural method outside the migration | [refactor_playbook.md](refactor_playbook.md) |
+| Tooling and local commands | [conventions.md](conventions.md) |
+| Capability or numerical evidence | Use the category-2 records linked from [README.md](README.md#durable-document-map); never infer live state from historical files |
 
 ## Decision discipline
 

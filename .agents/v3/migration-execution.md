@@ -1,5 +1,10 @@
 # PyFEM v3 migration execution ledger
 
+> **Consumption rule.** Start with [handoff.md](handoff.md), then read this header,
+> [Exact next safe action](#exact-next-safe-action), and the current D3-A/G1 card.
+> Query older Horizon cards, packet records, and the transition log by ID or commit
+> only when auditing them; do not read this append-only history as a second plan.
+
 - Status: active at a repaired but still unintegrated G1 review boundary; I1 and
   the bounded Phase 1 reference slices remain component-qualified E3 on `v3`;
   exact G1 candidate `2f6f972` closes both accepted material-correspondence
@@ -212,9 +217,9 @@ private validation seam without copying that validation logic.
 
 > **Superseded 2026-08-16.** This section records how Phase 1 was completed and
 > how the old P2-A through P2-G plan was reasoned about. It is not executable
-> authority. The live bounded action is in
-> [generic_core.md](generic_core.md#11-current-bounded-simplification) and the exact next
-> action above.
+> authority. Its completed simplification evidence is in
+> [generic_core.md](generic_core.md#11-completed-bounded-simplification); the exact
+> live action is above.
 
 This is the adopted acceleration plan, not authority to bypass a Horizon or merge
 gate. It targets one long execution pass and pauses after I2's combined Phase 2
@@ -1046,8 +1051,9 @@ The seven internal/duplicate retirement candidates are `ANAL-MODAL-DUP`,
 `ROM-LINEAR-MANIFOLD`, `ROM-QUADRATIC-MANIFOLD`, `V3-PROTOTYPE-CARRIER`,
 `V3-PROTOTYPE-REGISTRY`, `V3-PROTOTYPE-ASSEMBLY`, and
 `V3-PROTOTYPE-ANALYSIS`. The six public candidates are listed under open decisions
-above. [feature-parity.md](feature-parity.md) is now historical input: its old
-`done`, `deferred`, and `out of scope` labels have no live status authority.
+above. The former `feature-parity.md` was absorbed into R0-E and removed from the
+durable tree; its old `done`, `deferred`, and `out of scope` labels have no live
+status authority.
 
 ## P0-D Horizon card — `HORIZON_FROZEN`
 

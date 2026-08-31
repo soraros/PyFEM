@@ -25,8 +25,11 @@ Read and obey these in order:
    [AGENTS.md](AGENTS.md) — packet lifecycle, independent review, callbacks, and
    working rules.
 
-Historical roadmaps, Cursor-era workflow files, and old P2-A through P2-G plans
-are evidence only. They are not executable authority.
+The former prototype architecture snapshot, P0-P8 roadmap, old status matrix, and
+Cursor-era execution prompts were removed from the durable tree after their useful
+content was absorbed; they remain available through Git history. Old P2-A through
+P2-G plans remain historical evidence inside the live ledger. None is executable
+authority.
 
 ## 2. Authoritative overall goal
 

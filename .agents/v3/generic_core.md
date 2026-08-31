@@ -3,7 +3,7 @@
 - Status: **authoritative architecture amendment**
 - Decision date: 2026-08-16
 - Scope: the semantic intermediate representation, extension model, trust boundary,
-  and the next proof portfolio
+  and the completed proof portfolio that qualified the production cut
 - Supersedes: the fixed `topology + quadrature + formulation + material + section`
   decomposition as a core contract; the frozen P2-A through P2-G execution plan
 - Retains: the ownership, identity, state-transaction, contribution-ledger, and
@@ -469,15 +469,14 @@ Temporary coexistence is allowed only for a bounded proof wave. The new path mus
 either demonstrate a credible one-wave migration/deletion cut or remain an
 unintegrated experiment. We do not permanently maintain two semantic cores.
 
-## 11. Current bounded simplification
+## 11. Completed bounded simplification
 
 No existing P2-A writer is resumable. Its temporary worktree is gone, its branch
 contains no child commit, and the frozen card is superseded by this amendment.
 
 R2-E, P2-H, and R2-F are complete and adjudicated. They found no seventh numerical
 concept, proved one generic continuum/link/load boundary, and selected a bounded
-direct vertical replacement with causal deletion. The production cut is not part
-of the current pass.
+direct vertical replacement with causal deletion.
 
 **S2-A — proof-core simplification** is complete in `099b51f`. It removed
 accidental owner/role duplication, mirrored identifiers, repeated factory ceremony,
@@ -492,10 +491,12 @@ An independent Sol/max review returned GO with no P0/P1/P2 findings after fresh
 Fraction-derived Q4/T3/global-solution checks, split-versus-vectorized assembly,
 focused tests in both digit modes, 485 v3 tests, 674 repository tests, and all
 Ruff, format, path, ancestry, branch, exact-head, and clean-tree gates. The
-2026-08-16's polish pass paused here. Work has since resumed explicitly. The next
-implementation packet remains the direct production cut, but it must first be
-refrozen against this simplified proof and reconciled with actual v1 behavior
-coverage; no adapter or permanent second backend is introduced in the meantime.
+2026-08-16 polish pass paused here. D3-A subsequently froze the direct production
+cut against this proof, and G1 began on its isolated branch. This section is
+completed architectural evidence, not a live task pointer. The exact frontier
+belongs only in [handoff.md](handoff.md) and
+[migration-execution.md](migration-execution.md); no adapter or permanent second
+backend is authorized in the meantime.
 
 ## 12. Decision record
 
