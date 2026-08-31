@@ -16,6 +16,10 @@ The full legacy-to-v3 migration follows
 [migration-execution.md](migration-execution.md) ledger. Structural refactors
 outside that migration use [refactor_playbook.md](refactor_playbook.md).
 
+For a cold start without prior thread context, read the agent-neutral
+[handoff.md](handoff.md). It summarizes the verified state and restart procedure
+but never replaces the live execution ledger.
+
 V3 requires Python 3.13+ and uses 2-space Ruff. The branch's modernization and
 Intel-Mac dependency baseline are intentional. PySide6 is not in the current
 baseline, so the legacy `pyfem-gui` entrypoint requires a separate future optional-
@@ -40,6 +44,7 @@ uv sync
 | [proofline.md](proofline.md) | **Reusable field guide:** semi-automatic coordination, task integrity, callbacks, automation boundary, and dashboard projection |
 | [migration_workflow.md](migration_workflow.md) | **Active:** legacy-to-v3 capability workflow, packet lifecycle, and completion contract |
 | [migration-execution.md](migration-execution.md) | **Active:** sole restartable migration ledger and exact next action |
+| [handoff.md](handoff.md) | **Active snapshot:** agent-neutral current state, completed evidence, blockers, and cold restart procedure |
 | [refactor_playbook.md](refactor_playbook.md) | **Active outside the migration:** generic structural refactor proof method |
 | [conventions.md](conventions.md) | **Active where compatible with the design:** style, typing, tooling |
 | [parity.md](parity.md) | Numerical-reference workflow; parity is evidence, not architecture proof |
