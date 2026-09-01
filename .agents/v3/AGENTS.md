@@ -11,10 +11,12 @@ read [design.md](design.md) and [generic_core.md](generic_core.md) before planni
 or editing v3. The first owns the durable ownership/state/result invariants; the
 second is the authoritative post-Phase-1 semantic-IR amendment.
 
-For the full legacy-to-v3 migration, also read
-[migration_workflow.md](migration_workflow.md) and resume from the sole live ledger,
-[migration-execution.md](migration-execution.md). For structural work outside that
-migration which crosses ownership/state boundaries or multiple milestones, read
+Migration coordinators also read [migration_workflow.md](migration_workflow.md).
+Implementers and reviewers should read only their frozen card, the relevant
+architecture and evidence, and the header plus exact-next-action section of the
+sole live [migration-execution.md](migration-execution.md) ledger. Do not consume
+its append-only history sequentially. For structural work outside the migration
+which crosses ownership/state boundaries or multiple milestones, read
 [refactor_playbook.md](refactor_playbook.md).
 
 [Proofline](proofline.md) is the concise reusable field guide for the coordination
@@ -28,9 +30,10 @@ Read or query that large evidence note only when selecting, classifying, or audi
 a capability; mutable lifecycle and next-action state remains in the execution
 ledger.
 
-The current `pyfem/v3` code is an executable prototype. Its kernels, tests, and
-benchmarks may be reused when they satisfy the new contracts, but these current
-types are explicitly not architectural constraints:
+The branch contains a frozen executable reference path and prototype numerical
+sources. Their kernels, tests, and benchmarks may be reused when they satisfy the
+new contracts, but these retained predecessor/prototype types are explicitly not
+architectural constraints:
 
 - `ProblemDefinition`
 - `LoadedProblem`

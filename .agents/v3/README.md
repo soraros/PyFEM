@@ -1,8 +1,8 @@
 # PyFEM v3 (branch `v3`)
 
 PyFEM v3 is being redesigned as a compiled, data-oriented finite-element library.
-The current code is a runnable prototype and numerical-reference source, not the
-target architecture.
+The branch contains a frozen executable reference path and prototype numerical
+sources. Neither defines the target architecture.
 
 **For a cold start, begin with the agent-neutral
 [handoff.md](handoff.md).** It records the verified repository state, active
@@ -14,11 +14,10 @@ Architecture authority remains [design.md](design.md), amended by
 [generic_core.md](generic_core.md). Read [AGENTS.md](AGENTS.md) for working rules
 and commands.
 
-The full legacy-to-v3 migration follows
-[Proofline](proofline.md), specialized in
-[migration_workflow.md](migration_workflow.md), with current state in the sole live
-[migration-execution.md](migration-execution.md) ledger. Structural refactors
-outside that migration use [refactor_playbook.md](refactor_playbook.md).
+The full legacy-to-v3 migration follows [Proofline](proofline.md), specialized in
+[migration_workflow.md](migration_workflow.md). Mutable execution state belongs
+only in the live ledger. Structural refactors outside that migration use
+[refactor_playbook.md](refactor_playbook.md).
 
 V3 requires Python 3.13+ and uses 2-space Ruff. The branch's modernization and
 Intel-Mac dependency baseline are intentional. PySide6 is not in the current
@@ -36,11 +35,10 @@ uv sync
 
 ## Durable document map
 
-The categories below cover every audited `.agents/v3` surface. Category 1 is
-current durable state, authority, or method; category 2 is evidence required for
-scientific or decision audit; category 3 is superseded material removed after its
-unique value was absorbed; category 4 is stale coordination debris removed from
-the durable tree. Removed files remain recoverable from Git history.
+The table covers every retained `.agents/v3` file. Category 1 is current durable
+state, authority, or method; category 2 is evidence required for scientific or
+decision audit. Historical files removed during consolidation are summarized
+below and remain recoverable from Git.
 
 | Category | File or group | Durable role |
 |---|---|---|
@@ -56,10 +54,15 @@ the durable tree. Removed files remain recoverable from Git history.
 | 2 — required evidence | [evidence/2026-08-16-r3b-feature-frontier.md](evidence/2026-08-16-r3b-feature-frontier.md) | Evidence-backed post-cut dependency graph and state-first feature sequence |
 | 2 — required evidence | [parity.md](parity.md) | Numerical-reference workflow and legacy skim oracles |
 | 2 — required evidence | [scaling.md](scaling.md) | Consolidated prototype benchmark methods, measurements, fixtures, and observed failure evidence |
-| 2 — consolidated | `plane_strain.md`, `structural.md`, `tangent_assembly.md` | Required evidence merged into `scaling.md`; original topic files remain in Git history |
-| 3 — superseded, removed | `feature-parity.md` | Old source/status matrix absorbed by the complete R0-E inventory and R3-A grades |
-| 3 — superseded, removed | `architecture.md`, `roadmap.md` | Prototype carrier snapshot and P0-P8 checklist absorbed by design/E0 evidence and commit history |
-| 4 — removed | `WORKFLOW.md`, `hardening.md` | Redundant Cursor-era prompts/process deleted; Git history retains the original files |
+
+Removed or consolidated history:
+
+- category 2: `plane_strain.md`, `structural.md`, and `tangent_assembly.md`
+  were consolidated into `scaling.md`;
+- category 3: `feature-parity.md`, `architecture.md`, and `roadmap.md` were
+  superseded by the complete evidence, design, and live-ledger records;
+- category 4: `WORKFLOW.md` and `hardening.md` were redundant coordination
+  debris and were removed.
 
 Current implementation state intentionally appears only in [handoff.md](handoff.md)
 and the live ledger, not in this index.

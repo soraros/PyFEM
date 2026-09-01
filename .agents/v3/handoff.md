@@ -72,9 +72,9 @@ Non-negotiable properties:
 
 State inspected locally and against `origin` on 2026-09-01. The exact
 product/source baseline is `5287d20f96536f88b744d5715b27c46913926d14`.
-This handoff is a documentation-only child of that baseline on `v3`; recover its
-containing commit with `git log -1 -- .agents/v3/handoff.md` rather than treating
-the baseline hash as the current local `v3` tip.
+This handoff and its documentation-only consolidation descend from that baseline
+on `v3`. Inspect `git rev-parse HEAD` and the file history rather than treating the
+baseline hash as the current local `v3` tip.
 
 | Ref | Exact commit | Confirmed meaning |
 |---|---|---|
@@ -403,16 +403,20 @@ clean final worktree.
 
 ## 12. Concise restart procedure
 
-1. Read this file, then `design.md`, `generic_core.md`, and the top plus tail of
-   `migration-execution.md`.
+1. Read this file, the relevant invariants in `design.md` and `generic_core.md`,
+   then the ledger header, [Exact next safe action](migration-execution.md#exact-next-safe-action),
+   and [current D3-A/G1 card](migration-execution.md#d3-a-frozen-g1-writer-card).
+   Query older ledger history only by packet ID or commit when auditing it.
 2. Inspect `git status`, `git branch -vv`, `git worktree list`, and the exact local
    and remote hashes. Do not assume this snapshot is still current.
 3. Confirm `v3` contains `7ee65c3` and does not contain `2f6f972`.
-4. Create a fresh isolated review worktree; do not rely on an old `/private/tmp`
-   path:
+4. Create a detached review worktree at the exact candidate using an unused path.
+   Detachment avoids branch-checkout collisions and makes the read-only base
+   explicit:
 
    ```bash
-   git worktree add /private/tmp/pyfem-g1-review agnet/g1-generic-system
+   git worktree add --detach /private/tmp/pyfem-g1-review-new \
+     2f6f972eef5a4c5f633478b1effecba834ca5fd4
    ```
 
 5. Dispatch or perform the two read-only independent G1 reviews at exact

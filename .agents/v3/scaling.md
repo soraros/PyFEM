@@ -11,27 +11,41 @@ Do not extrapolate from the small parity skims alone. Paths and APIs are recorde
 as measured at the historical prototype base; they may have moved and are not
 current interface authority.
 
-## Scale-first performance
+The original notes did not completely capture hardware identity, dependency
+versions, or CPU-thread settings. Treat every timing as directional evidence, not
+as a reproducible performance gate.
 
-Optimize for **mid-to-large meshes** (hundreds–thousands of elements; 10³–10⁴+ DOFs). That is where batched Numba, chunked COO, and factorization reuse matter.
+## Historical scale-first policy
 
-- **Small book skims** (e.g. 5 elements) are for parity correctness only—not perf targets.
-- **Do not add unmeasured fallbacks** (serial-versus-parallel thresholds or dual
-  paths for tiny `n_elems`) unless a large-scale regression is demonstrated.
-  Prefer one clear hot path.
-- **Bench at 16×16 and up** when judging assembly or solver changes; see tables below.
+The prototype pass targeted **mid-to-large meshes** (hundreds to thousands of
+elements; 10³ to 10⁴+ DOFs), where batched Numba, chunked COO, and factorization
+reuse mattered.
 
-### Numba discipline (production kernels)
+- Small book skims, such as the five-element cases, served parity correctness,
+  not performance claims.
+- The pass treated unmeasured serial/parallel thresholds and tiny-mesh dual paths
+  as unsupported unless a large-scale regression demonstrated their need.
+- Assembly and solver comparisons started at 16×16; the tables below preserve the
+  recorded observations.
 
-- One `prange` site per top-level stiffness call; Q8 uses a fused element loop (J, B, quadrature).
-- No `einsum` / `tensordot` in `@njit`; COO scatter stays serial.
-- `cache=True`; Gauss order via compile-time `@overload`.
+### Historical Numba policy
 
-### v1 vs v3 (qualitative)
+- Each top-level stiffness call used one `prange` site; Q8 used a fused element
+  loop for Jacobian, strain-displacement matrix, and quadrature.
+- The compiled kernels avoided `einsum` and `tensordot`; COO scatter stayed
+  serial.
+- Kernels used `cache=True`; Gauss order used compile-time `@overload`.
 
-- **Assembly:** v3 batched Numba is orders of magnitude faster than legacy Python element loops at scale (see `_bench_prange_investigation.py` Q6).
-- **Solve:** both use SciPy direct methods; wins come from `factorized` reuse (`LinearSolutionContext`, Newton with cached `K`).
-- **Newton (P3):** cached tangent → `f_int = K @ u`; factorize `K_red` once per load step when `K` is constant.
+### Observed qualitative comparison
+
+- **Assembly:** the prototype's batched Numba path was orders of magnitude faster
+  than the legacy Python element loops at scale; see
+  `_bench_prange_investigation.py` Q6.
+- **Solve:** both paths used SciPy direct methods; measured gains came from
+  `factorized` reuse through `LinearSolutionContext` and the cached Newton path.
+- **Newton (P3):** the prototype cached the tangent, evaluated
+  `f_int = K @ u`, and factorized `K_red` once per load step when `K` was
+  constant.
 
 ## Run scale benchmarks
 
