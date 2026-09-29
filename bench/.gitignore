@@ -1,0 +1,3 @@
+# Generated legacy .dat/.pro cases are reproducible from the committed
+# generator (bench/legacy_cases.py) and are not committed.
+generated/
