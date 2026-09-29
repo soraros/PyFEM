@@ -4,28 +4,36 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Protocol
 
 import numpy as np
 
 from pyfem.v3.compile import continuum as _continuum_builder
+from pyfem.v3.compile import truss as _truss_builder
 from pyfem.v3.compile.diagnostics import (
   ModelCompilationDiagnostic,
   ModelCompilationError,
 )
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import InstanceId
+from pyfem.v3.model.operator import CompiledOperator
 from pyfem.v3.model.provenance import CanonicalManifest, ContentFingerprint
-from pyfem.v3.model.registry import RegistryDescriptor, RegistryKey
+from pyfem.v3.model.registry import (
+  RegistryDescriptor,
+  RegistryKey,
+  RegistrySnapshot,
+)
 from pyfem.v3.model.system import (
   CompiledSource,
   CompiledSystem,
   DiscreteSpace,
+  IncidenceEntityBlock,
   PointEntityBlock,
   SourceAttribution,
   SystemProvenance,
 )
 from pyfem.v3.spec.diagnostics import SourceContext
-from pyfem.v3.spec.model import FieldSpec, ModelSpec, SpecId
+from pyfem.v3.spec.model import CellSpec, FieldSpec, ModelSpec, SpecId
 from pyfem.v3.spec.normalize import normalize_model_spec
 
 COMPILED_SYSTEM_MANIFEST_SCHEMA = "pyfem-v3-compiled-system-v1"
@@ -129,6 +137,63 @@ def _index_dtype(
   return dtype
 
 
+class OperatorFamilySelection(Protocol):
+  """Validated family-specific spec slice consumed by the generic compiler."""
+
+  cells: tuple[CellSpec, ...]
+  field: FieldSpec
+
+
+class OperatorFamilyBuilder(Protocol):
+  """Builder module contract behind the operator-family dispatch seam."""
+
+  @staticmethod
+  def select_model(spec: ModelSpec) -> OperatorFamilySelection:
+    """Validate the authored slice after the sole normalization pass."""
+    ...
+
+  @staticmethod
+  def capture_registry(
+    registry: dict[RegistryKey, RegistryDescriptor],
+    selection: OperatorFamilySelection,
+  ) -> RegistrySnapshot:
+    """Capture and validate exactly the implementations the family selected."""
+    ...
+
+  @staticmethod
+  def compile_operator(
+    selection: OperatorFamilySelection,
+    *,
+    coordinates: FinalizedArray,
+    node_dense: dict[SpecId, int],
+    space: DiscreteSpace,
+    snapshot: RegistrySnapshot,
+    index_dtype: np.dtype,
+    geometry_relative_tolerance: float,
+  ) -> tuple[IncidenceEntityBlock, CompiledOperator]:
+    """Compile the family payload behind the open operator header."""
+    ...
+
+
+_OPERATOR_FAMILY_BUILDERS: tuple[tuple[str, OperatorFamilyBuilder], ...] = (
+  (_continuum_builder.Q8_FORMULATION_KEY[1], _continuum_builder),
+  (_truss_builder.TRUSS_FORMULATION_KEY[1], _truss_builder),
+)
+
+
+def _operator_family_builder(spec: ModelSpec) -> OperatorFamilyBuilder:
+  """Route the normalized spec to the builder owning its region formulation.
+
+  Specs whose formulations no registered family claims fall back to the first
+  builder so its landed coded diagnostics describe the mismatch.
+  """
+  formulations = {region.formulation for region in spec.regions}
+  for name, builder in _OPERATOR_FAMILY_BUILDERS:
+    if name in formulations:
+      return builder
+  return _OPERATOR_FAMILY_BUILDERS[0][1]
+
+
 def compile_discrete_spaces(
   point_block: PointEntityBlock,
   fields: tuple[FieldSpec, ...],
@@ -230,8 +295,9 @@ def compile_system(
   """Normalize once and compile directly to the unexported generic system."""
   normalized = normalize_model_spec(spec)
   selected_policy = _validated_policy(policy, normalized.source)
-  selection = _continuum_builder.select_model(normalized)
-  snapshot = _continuum_builder.capture_registry(registry, selection)
+  builder = _operator_family_builder(normalized)
+  selection = builder.select_model(normalized)
+  snapshot = builder.capture_registry(registry, selection)
 
   nodes = tuple(sorted(normalized.mesh.nodes, key=lambda item: _sort_key(item.id)))
   total_coefficients = sum(
@@ -264,7 +330,7 @@ def compile_system(
     space for space in spaces if space.space_id == selection.field.id
   )
   node_dense = {node.id: index for index, node in enumerate(nodes)}
-  entity_block, operator = _continuum_builder.compile_operator(
+  entity_block, operator = builder.compile_operator(
     selection,
     coordinates=coordinates,
     node_dense=node_dense,
