@@ -100,8 +100,9 @@ ipython_config.py
 # Optional local pin for uv/pyenv (not required; CI uses DEFAULT_PYTHON in ci.yml)
 .python-version
 
-# Local agent notes (not shared in repo for now)
+# Share the repository router; other local agent notes remain ignored.
 AGENTS.md
+!/AGENTS.md
 
 # CI wheel smoke venv (build job)
 .wheel-check/

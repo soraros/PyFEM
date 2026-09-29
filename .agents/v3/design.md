@@ -3,7 +3,7 @@
 - Status: **authoritative invariants; amended by
   [generic_core.md](generic_core.md) for the semantic IR and post-Phase-1 path**
 - Decision date: 2026-07-17
-- Scope: architecture, invariants, proof strategy, and migration order
+- Scope: architecture, invariants and scientific proof
 
 This document resets the v3 design from first principles. The code already under
 `pyfem/v3/`, its tests, benchmarks, and the other documents in this directory are
@@ -17,8 +17,8 @@ baseline. It is independent of the library architecture described here.
 The 2026-08-16 [generic semantic-core amendment](generic_core.md) retains this
 document's ownership, identity, state, contribution, and result invariants but
 supersedes the fixed topology/formulation/material/section decomposition in
-sections 6.1-6.6 and the old Phase 2 packet plan. Read the amendment before
-planning any work after the proven Phase 1 reference slice.
+sections 6.1-6.6 and the old Phase 2 packet plan. Consult those sections for
+reference-path history, and the amendment for current representation choices.
 
 ## 1. North star
 
@@ -48,17 +48,11 @@ code cleverness third.
 
 ### 2.1 Authority order
 
-When sources disagree, use this order:
-
-1. the overall goal above and the invariants in this document;
-2. executable edge-case tests written for the new design;
-3. the new implementation;
-4. legacy PyFEM as a requirements and numerical-reference source;
-5. the current v3 prototype as a source of reusable kernels and lessons;
-6. historical v3 plans, benchmark thresholds, and compatibility claims.
-
-Changing an invariant requires a recorded design change and a testable reason.
-An old API, benchmark, or completed roadmap checkbox is not a reason by itself.
+This document defines scientific and architectural contracts. The scope map in
+[AGENTS.md](AGENTS.md#read-by-question) identifies amendments and current state.
+Tests and implementations provide evidence for or against a design; neither a
+passing legacy example nor an old API makes a design choice permanent.
+Record an invariant change and its testable reason in the amendment log.
 
 ### 2.2 Deliberate non-goals
 
@@ -943,12 +937,10 @@ pyfem/v3/
   io/                     adapters into spec/
 ```
 
-The current prototype file `pyfem/v3/assembly.py` collides with the target
-`assembly/` package. The first Phase 0 code change must rename it explicitly to
-`pyfem/v3/_prototype_assembly.py` and update only prototype/oracle imports. It is a
-temporary historical bridge, not a second architecture; delete it when the final
-prototype-only nonlinear/path reference has migrated (no later than Phase 4 exit).
-Do not create a permanent `core/` mirror merely to avoid this collision.
+The former `pyfem/v3/assembly.py` was renamed to `_prototype_assembly.py` to
+resolve the package collision. It supplies historical nonlinear/path references
+until their behavior is covered by the replacement. The old Phase-0 rename is
+completed work, not an instruction to repeat.
 
 Rules:
 
@@ -1186,118 +1178,13 @@ The benchmark ladder is:
 A faster kernel does not justify a worse public flow, invalid state semantics, or a
 hardware-specific constant embedded in architecture.
 
-## 13. Migration plan
+## 13. Migration scope
 
-> **Post-Phase-1 amendment.** Phase 0 and Phase 1 are complete reference evidence.
-> The old Phase 2-6 sequence below is retained to show the intended semantic
-> coverage, but its P2-A through P2-G execution decomposition is superseded by the
-> completed proof portfolio and simplification in
-> [generic_core.md](generic_core.md#11-completed-bounded-simplification). Exact
-> current work belongs only in [handoff.md](handoff.md) and the live ledger.
-
-Branch history is the archive; do not duplicate the entire prototype under a
-second permanent namespace. Migrate by complete vertical slices and delete each
-superseded path once its reference value is exhausted.
-
-Phases 1-3 together ratify the architecture: the linear carrier, heterogeneous
-execution, and nonlinear state transaction are all required. Do not resume the
-historical feature roadmap or serious performance specialization until Phase 3
-exits, even if the Phase 1 parity case is green.
-
-### Phase 0 — Ratify contracts and expose failures
-
-- Commit this design and route all v3 work through it.
-- Turn the observed counterexamples into replacement acceptance tests at the
-  boundary of the new compiler/state API.
-- Resolve the `assembly.py` package collision exactly as specified in section 8;
-  keep prototype paths visibly quarantined and temporary.
-- Establish live instance IDs, content fingerprints, frozen registry snapshots,
-  state generations, and explicit restore/rebind tests.
-- Build small reference assemblers/material kernels for proof, not speed.
-- Record current parity cases as numerical oracles, not API contracts.
-
-Exit: module skeleton and tests express ownership, identity, geometry, load,
-constraint, and state invariants before broad feature work resumes.
-
-### Phase 1 — One honest linear vertical slice
-
-- Implement authored specs, registry descriptors, compiled model/program, one
-  homogeneous Q8 plane-stress block, affine constraints, composed
-  `PreparedAssemblyPlan`, linear static request, and strongly verified solution.
-- Reuse mathematically sound Q8/shape/quadrature kernels after removing hidden
-  orientation repair and shape-based dispatch.
-- Drive even this linear slice through `PhysicalState`, `EvolutionState`,
-  `CommittedAnalysisState`, `StepTransaction`, and `TrialAnalysisState`, using
-  empty local-history layouts where appropriate. Phase 3 adds real history; it does
-  not invent the transaction boundary.
-- Support both reusable prepared and one-shot API paths.
-
-Exit: one legacy Q8 parity case plus all relevant compiler/identity/load/constraint/
-verification edge cases pass. No old `ProblemDefinition` is involved in this
-flow.
-
-### Phase 2 — Prove block generality
-
-- Add Q4 and T3 through descriptors and block compilation.
-- Solve a genuinely mixed-topology model.
-- Add multiple parameter/material regions, layered material slots, model-owned
-  boundary physics, and program-owned boundary load blocks.
-- Compile mechanical-only, thermal-only, and coupled field layouts and prove exact
-  active DOF mapping, even before full thermal analysis is implemented.
-- Prove that the prepared sparse/action plan unions model and program tangent
-  recipes, affine reduction, request channels, and backend policy.
-- Compare reusable sparse-slot assembly to the simple COO oracle and measure memory.
-
-Exit: adding the second and third formulation required no solver branch or new
-whole-model field.
-
-### Phase 3 — Make state real
-
-- Implement committed/trial material/IP and formulation/element state with a
-  path-dependent material beside an elastic block with an incompatible state
-  schema, plus one formulation-owned state example.
-- Add residual/tangent requests, Newton stepping, rejection, line search, cutback,
-  and explicit commit.
-- Force a rejected attempt and cutback, then checkpoint/rebind/resume and compare
-  against uninterrupted execution.
-- Prove that a fixed-connectivity cohesive/interface formulation is an ordinary
-  stateful `DomainBlock`, not contact interaction machinery.
-- Validate tangent consistency and history behavior before finite-strain breadth.
-
-Exit: every nonlinear state acceptance test passes, including failed-step rollback
-and nonzero affine MPC behavior.
-
-### Phase 4 — Nonlinear formulations and path following
-
-- Port finite-strain continuum, geometric tangent, truss/structural blocks, and arc
-  length through the same state and contribution contracts.
-- Add program-parameter derivatives, dead plus proportional loading, nonzero
-  parameter-dependent prescribed offsets, and scalar continuation functionals.
-- Preserve requestable material/geometric tangent attribution and finite-strain
-  output/configuration provenance.
-- Remove the last `_prototype_assembly.py` callers and delete that bridge.
-
-Exit: cantilever and limit-point references verify balance, continuation state, and
-history—not merely final displacement parity.
-
-### Phase 5 — Broaden by distinct semantics
-
-- **5A, evolution:** add first-order capacity/rate and second-order mass/damping,
-  implicit/explicit dynamics, mixed-order field evolution, and restart.
-- **5B, spectral:** add modal analysis and preloaded buckling as separate request/
-  result contracts.
-- **5C, multiphysics:** add phase-field/thermal blocks and monolithic/staggered
-  analysis with atomic irreversible-state commit.
-- **5D, dynamic interaction:** add contact only with explicit pair/active-set state
-  and declared fixed, over-allocated, dynamic, or matrix-free structure.
-
-Exit: each capability passes the distinct semantic slice in section 11.6.
-
-### Phase 6 — Compatibility and ecosystem
-
-- Expand legacy/TOML/mesh adapters, output formats, CLI, and optional GUI only after
-  the core contracts have survived the preceding slices.
-- Decide deprecation/replacement strategy for legacy PyFEM from evidence then.
+The old phase-by-phase implementation plan is retained in Git history at
+`128d51d496dcdba897904461ca0d25f9bf1f2b15`. Its scientific coverage is expressed by
+section 11 and the generic-core amendment; it is not a current execution plan.
+Current work is in [migration-execution.md](migration-execution.md), and coverage
+claims use [migration_workflow.md](migration_workflow.md).
 
 ## 14. Deferred implementation choices
 
@@ -1317,17 +1204,8 @@ representative public-flow evidence above.
 
 ## 15. Implementation-frontier routing
 
-The Q8 Phase 1 slice described by the former version of this section is complete
-and remains a frozen reference oracle. Do not resume the old P2-A mixed-Q8/Q4/T3
-writer or add another legacy-shaped descriptor kind.
-
-The generic-core portfolio and S2-A simplification are complete and adjudicated at
-`099b51f`. D3-A owns the frozen G1-G4 direct vertical-cut contract. This design
-document deliberately does not name a current packet or commit: use
-[handoff.md](handoff.md) for a cold restart and
-[migration-execution.md](migration-execution.md) for live state. No feature writer
-may compete with the direct cut, and no adapter or permanent second backend is
-authorized.
+See [migration-execution.md](migration-execution.md) for current work and refs.
+This design does not duplicate migration status or dispatch instructions.
 
 ## 16. Design amendment log
 

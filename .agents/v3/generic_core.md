@@ -315,8 +315,7 @@ The following mappings are architectural acceptance examples.
 
 This table is not a parity claim. It is a falsifiable representation claim: a
 legacy capability that cannot be expressed without changing the six core concepts
-is a counterexample to this design and must be recorded before implementation
-continues.
+is a counterexample requiring an evidence-backed revision of this design.
 
 ## 6. Trust and validation boundary
 
@@ -415,6 +414,9 @@ tests before causal deletion.
 
 ## 9. Decisive proof portfolio
 
+This section records the 2026-08-16 proof proposal. Its imperative wording is
+historical; current execution and completed coverage are recorded separately.
+
 The next work is not “port the next element.” It must test whether the generic IR
 survives unlike cases.
 
@@ -447,8 +449,8 @@ which state subfields are conventionally called material or formulation history.
 
 Before broad porting, read-only counterexamples must cover dynamic contact pairs,
 nested FE2 response, spectral operators, staggered coupled fields, and ROM
-coordinate transforms. An unrepresentable case stops the design and amends this
-document.
+coordinate transforms. An unrepresentable case is evidence for amending this
+design.
 
 ## 10. Structural success bar
 
@@ -465,9 +467,8 @@ The generic path is not accepted because its diagrams look cleaner. It must show
   and
 - at least two unlike legacy families added without changing the six IR concepts.
 
-Temporary coexistence is allowed only for a bounded proof wave. The new path must
-either demonstrate a credible one-wave migration/deletion cut or remain an
-unintegrated experiment. We do not permanently maintain two semantic cores.
+Reference implementations may coexist during development. Acceptance requires a
+public migration and deletion path that leaves one maintained semantic core.
 
 ## 11. Completed bounded simplification
 
@@ -494,9 +495,7 @@ Ruff, format, path, ancestry, branch, exact-head, and clean-tree gates. The
 2026-08-16 polish pass paused here. D3-A subsequently froze the direct production
 cut against this proof, and G1 began on its isolated branch. This section is
 completed architectural evidence, not a live task pointer. The exact frontier
-belongs only in [handoff.md](handoff.md) and
-[migration-execution.md](migration-execution.md); no adapter or permanent second
-backend is authorized in the meantime.
+belongs only in [migration-execution.md](migration-execution.md).
 
 ## 12. Decision record
 
