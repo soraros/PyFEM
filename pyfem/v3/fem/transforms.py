@@ -59,6 +59,6 @@ def local_to_global_4(k_bar: F64, f_bar: F64, el_coords: F64) -> tuple[F64, F64]
           s = 0.0
           for kk in range(2):
             for ll in range(2):
-              s += rot[ii, kk] * k_bar[ir0 + kk, jc0 + ll] * rot[jj, ll]
+              s += rot[kk, ii] * k_bar[ir0 + kk, jc0 + ll] * rot[ll, jj]
           k[ir0 + ii, jc0 + jj] = s
   return k, f
