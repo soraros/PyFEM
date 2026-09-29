@@ -50,6 +50,10 @@ class ComparisonReport:
     return [r for r in self.rows if r.status == "missing"]
 
   @property
+  def skipped(self) -> list[CellRow]:
+    return [r for r in self.rows if r.status == "skipped"]
+
+  @property
   def passed(self) -> bool:
     return not self.regressions and not self.missing and not self.correctness_failures
 
@@ -68,7 +72,8 @@ class ComparisonReport:
       lines.append(f"{row.status:>11} {ratio} {base} {cand}  {cell}")
     lines.append(
       f"cells: {len(self.rows)} | regressions: {len(self.regressions)} "
-      f"| missing: {len(self.missing)} "
+      f"| missing: {len(self.missing)} | skipped (partial coverage): "
+      f"{len(self.skipped)} "
       f"| correctness failures: {len(self.correctness_failures)} "
       f"| threshold: {self.threshold}"
     )
@@ -124,6 +129,13 @@ def compare(
   """Ratio-gate ``candidate`` against ``baseline`` (typically the M3 seed)."""
   base_cells = flatten(baseline)
   cand_cells = flatten(candidate)
+  # Runs that did not produce the complete workload matrix (quick/reduced,
+  # single-phase) cannot distinguish "workload disappeared" from "not run":
+  # their unproduced baseline cells are informational skips. Full-coverage
+  # runs keep missing-is-failure. Absent coverage metadata means full
+  # (conservative for pre-coverage artifacts).
+  coverage = candidate.get("coverage", "full")
+  missing_status = "missing" if coverage == "full" else "skipped"
   report = ComparisonReport(
     threshold=threshold,
     correctness_failures=correctness_failures(candidate),
@@ -132,7 +144,7 @@ def compare(
   for key, base in sorted(base_cells.items()):
     cand = cand_cells.get(key)
     if cand is None:
-      report.rows.append(CellRow(key, base["median_ms"], 0.0, 0.0, "missing"))
+      report.rows.append(CellRow(key, base["median_ms"], 0.0, 0.0, missing_status))
       continue
     ratio = cand["median_ms"] / base["median_ms"] if base["median_ms"] else 0.0
     delta_ms = cand["median_ms"] - base["median_ms"]

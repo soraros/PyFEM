@@ -157,11 +157,24 @@ def measure_fixed(
   )
 
 
-def write_run(path: Path, manifest: dict[str, Any], records: list[BenchRecord]) -> None:
-  """Write a benchmark run JSON (manifest + records)."""
+def write_run(
+  path: Path,
+  manifest: dict[str, Any],
+  records: list[BenchRecord],
+  *,
+  coverage: str = "full",
+) -> None:
+  """Write a benchmark run JSON (manifest + records).
+
+  ``coverage`` is ``"full"`` only when the run produced the complete workload
+  matrix (all default sizes/materials, skims, warm + cold); anything reduced
+  is ``"partial"`` and the regression gate treats unproduced baseline cells
+  as informational skips rather than failures.
+  """
   payload = {
     "schema": SCHEMA_VERSION,
     "kind": "benchmark-run",
+    "coverage": coverage,
     "manifest": manifest,
     "records": [r.to_json() for r in records],
   }

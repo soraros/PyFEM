@@ -479,6 +479,14 @@ def do_warm(args: argparse.Namespace) -> list[BenchRecord]:
   threads = _parse_ints(args.threads)
   records: list[BenchRecord] = []
 
+  try:
+    import threadpoolctl  # noqa: F401
+  except ImportError:
+    print(
+      "note: threadpoolctl not installed; warm-phase BLAS pinning degrades to "
+      "numba thread setting only (cold subprocesses still pin BLAS env vars)"
+    )
+
   selftest = check_fast_reference_selftest(materials)
   for check in selftest:
     print(
@@ -566,9 +574,20 @@ def _default_out_path() -> Path:
   return RESULTS_DIR / f"run_{stamp}.json"
 
 
+def _coverage(args: argparse.Namespace) -> str:
+  """A run is full-coverage only if it produced the complete workload matrix."""
+  if getattr(args, "command", "") != "all" or args.no_skims:
+    return "partial"
+  if tuple(_parse_ints(args.sizes)) != Q8_SIZES:
+    return "partial"
+  if set(_parse_strs(args.materials)) != set(Q8_MATERIALS):
+    return "partial"
+  return "full"
+
+
 def _write_and_maybe_check(records: list[BenchRecord], args: argparse.Namespace) -> int:
   out = Path(args.out) if args.out else _default_out_path()
-  write_run(out, collect_manifest(), records)
+  write_run(out, collect_manifest(), records, coverage=_coverage(args))
   print(f"wrote {out}")
   if args.no_check:
     failed = any(not r.correctness.get("passed", True) for r in records)

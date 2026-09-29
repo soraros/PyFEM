@@ -22,7 +22,9 @@ numpy, scipy are already in it; the harness adds no dependencies):
 
 ```bash
 .venv/bin/python -m bench.run all        # gates + warm + cold + write JSON + ratio check
-.venv/bin/python -m bench.run all --quick  # sizes<=16, threads 1,16 — fast iteration
+.venv/bin/python -m bench.run all --quick  # sizes<=16, threads 1,16 — fast iteration;
+                                           # partial coverage: unproduced baseline cells
+                                           # report as skipped, not failures
 .venv/bin/python -m bench.run warm       # stage-decomposed warm benchmarks only
 .venv/bin/python -m bench.run cold       # fresh-subprocess cold benchmarks only
 .venv/bin/python -m bench.run gates      # correctness gates only (no timing)
@@ -102,11 +104,18 @@ Stages scale differently (D2 §7.3); totals hide regressions. Legacy records
 
 **Thread sweep 1/2/4/8/16.** Stages with a threaded code path (`kernel`,
 `scatter`, `assemble_coo`, `assemble`, `e2e`) are measured at every sweep
-count via `numba.set_num_threads` + `threadpool_limits`; stages with no
-threaded code path (`meshgen`, `load`, `dedup`, `constrain`, `factor`,
-`backsolve`, `solve`) are measured once at the reference count (16), inside
-that record. Legacy is single-threaded (threads=1) — its per-element Python
-loop does not thread, and its solve is single-threaded SuperLU like v3's.
+count via `numba.set_num_threads`; stages with no threaded code path
+(`meshgen`, `load`, `dedup`, `constrain`, `factor`, `backsolve`, `solve`)
+are measured once at the reference count (16), inside that record. Legacy
+is single-threaded (threads=1) — its per-element Python loop does not
+thread, and its solve is single-threaded SuperLU like v3's. BLAS pinning in
+the warm phase uses `threadpoolctl`'s `threadpool_limits` **when installed**
+— it is optional and currently absent from the project venv, so the warm
+phase degrades to numba pinning alone (printed once per run and recorded in
+the manifest as `threadpoolctl_available`). Impact is nil today: the
+threaded stages are numba kernels, and the scipy/SuperLU stages are
+single-threaded on both sides. Cold subprocesses always pin the BLAS thread
+environment variables explicitly, independent of `threadpoolctl`.
 
 **Repetitions and statistics.** Warm timings use warmup + adaptive reps
 (minimum 5, up to 30, targeting `--budget-s` seconds of measured time per
@@ -153,12 +162,22 @@ provenance notes. `bench/results/run_*.json` are harness runs.
   people to ignore it). Fails the gate. Baseline cells in a declared
   high-variance class carry a per-cell `gate_threshold` that overrides the
   default for that cell only — currently all legacy scale assemble/solve
-  cells at 1.6 (M3 declares ±50% run-to-run variance at ≥32x32, and ±30%
-  same-day cross-process flap was observed at 16x16: legacy assembly is
-  interpreter-bookkeeping-bound and environment-sensitive, while the v3-side
-  cells that gate v3 work stay at 1.25).
+  cells and all legacy skim e2e cells at 1.6. These share one
+  interpreter-bookkeeping-bound variance class: M3 declares ±50% run-to-run
+  variance at ≥32x32, ±30% same-day cross-process flap was observed at
+  16x16, and the ~13 ms pure-Python LinearSolver skim cells ride ≥20%
+  same-session / 1.35x cross-day (independently reproduced in review r1 on
+  byte-identical code). The v3-side cells that gate v3 work stay at 1.25.
 - **missing** — a baseline cell the candidate does not produce (a workload
-  or metric silently disappeared). Fails the gate.
+  or metric silently disappeared). Fails the gate **in full-coverage runs
+  only**. Every run JSON is stamped `coverage: "full"` (complete workload
+  matrix: `all` with default sizes/materials and skims) or
+  `"partial"` (`--quick`, reduced `--sizes`/`--materials`/`--threads`,
+  `warm`- or `cold`-only); a partial run cannot distinguish "disappeared"
+  from "never run", so its unproduced baseline cells report as non-failing
+  `skipped` and the exit code stays meaningful for iteration. Runs without
+  coverage metadata (older artifacts) are treated as full, the conservative
+  default.
 - **correctness failure** — any candidate record whose gate did not pass.
   Fails the gate, independent of timings.
 - **improvement** (ratio < 0.8) and **new** cells are informational.

@@ -68,6 +68,13 @@ def collect_manifest(threads: int | None = None) -> dict[str, Any]:
   import numpy
   import scipy
 
+  try:
+    import threadpoolctl  # noqa: F401
+
+    threadpoolctl_available = True
+  except ImportError:
+    threadpoolctl_available = False
+
   manifest: dict[str, Any] = {
     "created_utc": __import__("datetime")
     .datetime.now(__import__("datetime").timezone.utc)
@@ -84,6 +91,7 @@ def collect_manifest(threads: int | None = None) -> dict[str, Any]:
     "linalg_backend": _numpy_linalg_backend(),
     "thread_env": {var: os.environ.get(var, "") for var in THREAD_ENV_VARS},
     "numba_threads_default": int(numba.config.NUMBA_NUM_THREADS),
+    "threadpoolctl_available": threadpoolctl_available,
   }
   if threads is not None:
     manifest["threads_requested"] = threads
