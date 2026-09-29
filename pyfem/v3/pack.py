@@ -25,13 +25,21 @@ from pyfem.v3.types import (
 )
 
 
-def _dof_node_type(dof_map: DofMap, dof_id: int) -> tuple[int, str]:
+def _inverse_dof_map(dof_map: DofMap) -> dict[int, tuple[int, str]]:
+  """Map global DOF index to ``(node_id, dof_type)``; first table entry wins."""
+  inverse: dict[int, tuple[int, str]] = {}
   for row, node_id in enumerate(dof_map.node_ids):
     for col, dof_type in enumerate(dof_map.dof_types):
-      if int(dof_map.global_dofs[row, col]) == dof_id:
-        return int(node_id), dof_type
-  msg = f"Unknown DOF index {dof_id}"
-  raise ValueError(msg)
+      inverse.setdefault(int(dof_map.global_dofs[row, col]), (int(node_id), dof_type))
+  return inverse
+
+
+def _dof_node_type(inverse: dict[int, tuple[int, str]], dof_id: int) -> tuple[int, str]:
+  try:
+    return inverse[dof_id]
+  except KeyError:
+    msg = f"Unknown DOF index {dof_id}"
+    raise ValueError(msg) from None
 
 
 def _resolve_mpc_ties(
@@ -75,19 +83,21 @@ def _resolve_mpc_ties(
         msg = f"MPC master DOF {master} is also a slave (unresolved chain)"
         raise ValueError(msg)
 
+  inverse = _inverse_dof_map(dof_map)
+
   resolved_constraints = tuple(
     PrescribedDof(node_id=node_id, dof_type=dof_type, value=value)
     for dof_id, value in prescribed.items()
-    for node_id, dof_type in [_dof_node_type(dof_map, dof_id)]
+    for node_id, dof_type in [_dof_node_type(inverse, dof_id)]
   )
 
   unresolved = tuple(
     MpcTie(
-      slave_node_id=_dof_node_type(dof_map, slave)[0],
-      slave_dof_type=_dof_node_type(dof_map, slave)[1],
+      slave_node_id=_dof_node_type(inverse, slave)[0],
+      slave_dof_type=_dof_node_type(inverse, slave)[1],
       offset=offset,
-      master_node_id=_dof_node_type(dof_map, master)[0],
-      master_dof_type=_dof_node_type(dof_map, master)[1],
+      master_node_id=_dof_node_type(inverse, master)[0],
+      master_dof_type=_dof_node_type(inverse, master)[1],
       factor=factor,
     )
     for slave, (offset, factor, master) in pending.items()
@@ -118,7 +128,6 @@ def _constitutive_matrix(
     raise ValueError(msg)
   msg = f"Unsupported spatial rank {spatial_rank}"
   raise ValueError(msg)
-
 
 
 def pack_problem(
