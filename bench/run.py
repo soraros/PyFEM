@@ -85,6 +85,8 @@ REFERENCE_STAGES = (
 )
 REFERENCE_THREADS = 16
 
+DEFAULT_THREADS = (1, 2, 4, 8, 16)
+
 COLD_V3_THREADS = (1, 16)
 COLD_LEGACY_THREADS = (1,)
 DEFAULT_COLD_Q8 = ((8, "PlaneStress"), (32, "PlaneStress"))
@@ -575,12 +577,23 @@ def _default_out_path() -> Path:
 
 
 def _coverage(args: argparse.Namespace) -> str:
-  """A run is full-coverage only if it produced the complete workload matrix."""
-  if getattr(args, "command", "") != "all" or args.no_skims:
+  """
+  Full-coverage iff the run produced at least the complete default workload
+  matrix: the ``all`` pipeline (warm + cold), skims included, sizes and
+  materials covering the defaults, the full default thread sweep, and the
+  true-cold case. Comparisons are set-containment, so reordered or superset
+  arguments on a genuinely complete run still stamp "full" (missing-cell
+  detection stays meaningful); anything reduced stamps "partial".
+  """
+  if getattr(args, "command", "") != "all":
     return "partial"
-  if tuple(_parse_ints(args.sizes)) != Q8_SIZES:
+  if args.no_skims or not getattr(args, "true_cold", False):
     return "partial"
-  if set(_parse_strs(args.materials)) != set(Q8_MATERIALS):
+  if not set(Q8_SIZES) <= set(_parse_ints(args.sizes)):
+    return "partial"
+  if not set(Q8_MATERIALS) <= set(_parse_strs(args.materials)):
+    return "partial"
+  if not set(DEFAULT_THREADS) <= set(_parse_ints(args.threads)):
     return "partial"
   return "full"
 
@@ -645,7 +658,7 @@ def build_parser() -> argparse.ArgumentParser:
   def add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--sizes", default=",".join(str(n) for n in Q8_SIZES))
     p.add_argument("--materials", default=",".join(Q8_MATERIALS))
-    p.add_argument("--threads", default="1,2,4,8,16")
+    p.add_argument("--threads", default=",".join(str(t) for t in DEFAULT_THREADS))
     p.add_argument("--budget-s", type=float, default=0.6)
     p.add_argument(
       "--quick",

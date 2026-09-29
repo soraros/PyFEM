@@ -170,14 +170,19 @@ provenance notes. `bench/results/run_*.json` are harness runs.
   byte-identical code). The v3-side cells that gate v3 work stay at 1.25.
 - **missing** — a baseline cell the candidate does not produce (a workload
   or metric silently disappeared). Fails the gate **in full-coverage runs
-  only**. Every run JSON is stamped `coverage: "full"` (complete workload
-  matrix: `all` with default sizes/materials and skims) or
-  `"partial"` (`--quick`, reduced `--sizes`/`--materials`/`--threads`,
-  `warm`- or `cold`-only); a partial run cannot distinguish "disappeared"
-  from "never run", so its unproduced baseline cells report as non-failing
-  `skipped` and the exit code stays meaningful for iteration. Runs without
-  coverage metadata (older artifacts) are treated as full, the conservative
-  default.
+  only**. Every run JSON is stamped `coverage: "full"` or `"partial"`. A run
+  is full exactly when it produced at least the complete default workload
+  matrix: the `all` pipeline (warm + cold), skims included, sizes ⊇
+  {2,4,8,16,32,64}, materials ⊇ {PlaneStress, PlaneStrain}, threads ⊇
+  {1,2,4,8,16}, and the true-cold case enabled. Comparisons are
+  set-containment, so reordered or superset arguments on a genuinely
+  complete run still stamp full; anything reduced — `--quick`, subset
+  `--sizes`/`--materials`/`--threads`, `--no-skims`, `--no-true-cold`,
+  `warm`- or `cold`-only — stamps `"partial"`. A partial run cannot
+  distinguish "disappeared" from "never run", so its unproduced baseline
+  cells report as non-failing `skipped` and the exit code stays meaningful
+  for iteration. Runs without coverage metadata (older artifacts) are
+  treated as full, the conservative default.
 - **correctness failure** — any candidate record whose gate did not pass.
   Fails the gate, independent of timings.
 - **improvement** (ratio < 0.8) and **new** cells are informational.
