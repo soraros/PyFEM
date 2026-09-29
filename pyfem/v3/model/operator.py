@@ -54,6 +54,25 @@ class StateLifetime(Enum):
   ACCEPTED_TRIAL = "accepted-trial"
 
 
+class EvaluationStatus(Enum):
+  """Typed classification of expected operator evaluation outcomes.
+
+  Expected numerical outcomes are reported through these status values, never
+  through exceptions. ``OK`` marks a usable evaluation. ``REJECT_ITERATION``
+  marks a trial the driver may retry from the same accepted state with a better
+  iterate (for example a local solve that exhausted its iteration budget).
+  ``REJECT_STEP`` marks a trial that cannot succeed at the current step size, so
+  the schedule must cut back and restart from the same accepted generation.
+  Whenever the status is not ``OK`` the returned trial state must be byte-equal
+  to the accepted state and the channel values may be empty. Contract violations
+  (wrong shapes, dtypes, or unknown channels) remain ``TypeError`` exceptions.
+  """
+
+  OK = "ok"
+  REJECT_ITERATION = "reject-iteration"
+  REJECT_STEP = "reject-step"
+
+
 class CouplingPolicy(Enum):
   FIXED = "fixed"
 
@@ -191,6 +210,42 @@ class OperatorEvaluation(CompilerConstructed):
   residual_values: tuple[FinalizedArray, ...]
   jacobian_values: tuple[FinalizedArray, ...]
   trial_state: FinalizedArray
+  status: EvaluationStatus
+
+
+def evaluation_status(evaluation: OperatorEvaluation) -> EvaluationStatus:
+  """Return the typed outcome classification of one operator evaluation.
+
+  Evaluators predating this contract (the landed zero-width Q8 slice) construct
+  evaluations without a status slot; those evaluations are ``OK`` by
+  construction. Any other foreign or malformed value fails closed.
+  """
+  if type(evaluation) is not OperatorEvaluation:
+    msg = "evaluation status requires an exact OperatorEvaluation"
+    raise TypeError(msg)
+  status = getattr(evaluation, "status", EvaluationStatus.OK)
+  if type(status) is not EvaluationStatus:
+    msg = "operator evaluation status must be an exact EvaluationStatus"
+    raise TypeError(msg)
+  return status
+
+
+class StateCodec(Protocol):
+  """Versioned per-block serialization contract for operator state rows.
+
+  The codec schema matches the content schema recorded in the block's
+  ``OperatorStateLayout.schema``. Encoding must be deterministic and decoding
+  must fail closed on foreign schemas, dtypes, shapes, or malformed payloads;
+  a decode of an encode must reproduce the state rows byte-exactly. This is the
+  restart seed: opaque state rows are un-restartable without a versioned codec.
+  """
+
+  @property
+  def schema(self) -> str: ...
+
+  def encode(self, layout: OperatorStateLayout, rows: FinalizedArray) -> bytes: ...
+
+  def decode(self, layout: OperatorStateLayout, payload: bytes) -> FinalizedArray: ...
 
 
 class CompiledOperator(Protocol):
