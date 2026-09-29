@@ -23,7 +23,7 @@ from pyfem.v3.compile.diagnostics import (
   ModelCompilationError,
 )
 from pyfem.v3.model.arrays import FinalizedArray
-from pyfem.v3.model.identity import InstanceId
+from pyfem.v3.model.identity import InstanceId, require_same_instance
 from pyfem.v3.model.operator import (
   BalanceRole,
   ChannelRequest,
@@ -311,6 +311,7 @@ class SpringOperator(CompilerConstructed):
   payload: SpringPayload
   content_manifest: CanonicalManifest
   kernel: SpringKernel
+  system_instance: InstanceId
 
   def evaluate(
     self,
@@ -442,12 +443,27 @@ def compile_spring_operator(
   entity_count = len(declaration.spring_ids)
   row_width = sum(slot.width for slot in declaration.state_slots)
   parameters = FinalizedArray(declaration.parameters, dtype=np.float64)
-  probe = _validated_kernel_arrays(
-    declaration.kernel(
-      np.zeros((entity_count, 2), dtype=np.float64),
-      np.zeros((entity_count, row_width), dtype=np.float64),
+  # The probe must mirror runtime input mutability exactly: evaluate hands the
+  # kernel read-only arrays, so the probe does too, or an input-mutating kernel
+  # would compile and fail untyped at first evaluation.
+  probe_displacements = np.zeros((entity_count, 2), dtype=np.float64)
+  probe_rows = np.zeros((entity_count, row_width), dtype=np.float64)
+  probe_displacements.setflags(write=False)
+  probe_rows.setflags(write=False)
+  try:
+    probe_result = declaration.kernel(
+      probe_displacements,
+      probe_rows,
       parameters.values,
-    ),
+    )
+  except Exception:
+    _fail(
+      "kernel-probe-failed",
+      "spring kernel failed its virgin-state compile probe",
+      source,
+    )
+  probe = _validated_kernel_arrays(
+    probe_result,
     entity_count=entity_count,
     row_width=row_width,
   )
@@ -578,6 +594,7 @@ def compile_spring_operator(
     payload=payload,
     content_manifest=manifest,
     kernel=declaration.kernel,
+    system_instance=system.instance_id,
   )
   return spring_block, operator
 
@@ -597,6 +614,11 @@ def compose_system(
   if type(spring_operator) is not SpringOperator:
     msg = "spring composition requires an exact SpringOperator"
     raise TypeError(msg)
+  require_same_instance(
+    spring_operator.system_instance,
+    base.instance_id,
+    context="spring system composition",
+  )
   if spring_operator.spring_block is not spring_block:
     msg = "spring operator must bind the exact composed spring block"
     raise ValueError(msg)

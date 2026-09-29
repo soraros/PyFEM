@@ -8,6 +8,7 @@ import copy
 import math
 import pickle
 import sys
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -28,7 +29,7 @@ from pyfem.v3.compile.spring import (
 )
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.model.arrays import FinalizedArray
-from pyfem.v3.model.identity import require_generation_successor
+from pyfem.v3.model.identity import IdentityMismatchError, require_generation_successor
 from pyfem.v3.model.operator import (
   ChannelRequest,
   EvaluationStatus,
@@ -468,6 +469,69 @@ def test_spring_compile_boundary_rejects_invalid_declarations() -> None:
       max_increment=0.5,
       source=_source("damage-spring-source"),
     )
+
+
+def test_compose_rejects_operator_compiled_against_a_foreign_system_instance() -> None:
+  base = _base_system()
+  block, operator = compile_spring_operator(base, _damage_declaration())
+
+  model = _q8_model()
+  shifted_model = replace(
+    model,
+    mesh=replace(
+      model.mesh,
+      nodes=(
+        NodeSpec(id=0, coordinates=(2.0, 2.0), source=_source("node-source-0")),
+        *model.mesh.nodes,
+      ),
+    ),
+  )
+  shifted = compile_system(shifted_model, q8_reference_registry())
+  assert shifted.coefficient_count == 18
+  assert shifted is not base
+  with pytest.raises(IdentityMismatchError, match="spring system composition"):
+    compose_system(shifted, block, operator)
+
+  identical_content_foreign = _base_system()
+  assert identical_content_foreign.content_fingerprint == base.content_fingerprint
+  with pytest.raises(IdentityMismatchError, match="spring system composition"):
+    compose_system(identical_content_foreign, block, operator)
+
+  composed = compose_system(base, block, operator)
+  assert composed.operators[1] is operator
+
+
+def test_input_mutating_kernel_is_rejected_at_the_compile_boundary() -> None:
+  def mutating_kernel(
+    displacements: np.ndarray,
+    accepted_rows: np.ndarray,
+    parameters: np.ndarray,
+  ) -> SpringKernelResult:
+    del parameters
+    accepted_rows[:] = 1.0
+    return SpringKernelResult(
+      force=np.zeros_like(displacements),
+      tangent=np.zeros((len(displacements), 2, 2)),
+      trial_rows=np.array(accepted_rows, copy=True),
+      status=EvaluationStatus.OK,
+    )
+
+  declaration = SpringDeclaration(
+    block_id="damage-springs",
+    space_id="displacement",
+    spring_ids=("spring-1",),
+    node_ids=(1,),
+    state_schema="mutating-kernel-v1",
+    state_slots=(SpringStateSlot("kappa", 1),),
+    kernel_name="input-mutating-kernel",
+    kernel_version="1",
+    implementation_id="mutating-kernel-v1",
+    parameters=(1.0,),
+    kernel=mutating_kernel,
+    source=_source("mutating-kernel-source"),
+  )
+  with pytest.raises(ModelCompilationError, match="kernel-probe-failed"):
+    compile_spring_operator(_base_system(), declaration)
 
 
 def test_transaction_repeat_reject_accept_leaves_committed_state_identical() -> None:
