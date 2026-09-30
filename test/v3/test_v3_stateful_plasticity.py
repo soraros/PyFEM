@@ -40,6 +40,7 @@ from pyfem.v3.materials.isotropic_hardening_plasticity import (
   ISOTROPIC_HARDENING_PLASTICITY_BINDING,
   isotropic_hardening_calibration,
   isotropic_hardening_plasticity_kernel,
+  isotropic_hardening_plasticity_kernel_reference,
 )
 from pyfem.v3.model.operator import EvaluationStatus
 from pyfem.v3.spec import (
@@ -571,3 +572,59 @@ def test_compiled_plasticity_system_fingerprint_is_deterministic() -> None:
   assert layout.row_width == 19
   assert layout.initial_rows is not None
   assert np.all(layout.initial_rows.values == 0.0)
+
+
+def test_optimized_kernel_matches_reference_bitwise() -> None:
+  """The M30 optimized kernel reproduces the M25 reference bit for bit.
+
+  Deterministic and seeded batches over virgin, stepped, and rejecting
+  states: statuses agree and stresses, tangents, and trial rows compare
+  equal as raw uint64 (signed-zero distinctions included).
+  """
+  calibration = isotropic_hardening_calibration(_E, _NU, _SYIELD, _HARD)
+
+  def assert_bitwise(strains: np.ndarray, rows: np.ndarray) -> None:
+    reference = isotropic_hardening_plasticity_kernel_reference(
+      strains, rows, calibration
+    )
+    optimized = isotropic_hardening_plasticity_kernel(strains, rows, calibration)
+    assert optimized.status is reference.status
+    np.testing.assert_array_equal(
+      optimized.stresses.view(np.uint64), reference.stresses.view(np.uint64)
+    )
+    np.testing.assert_array_equal(
+      optimized.tangents.view(np.uint64), reference.tangents.view(np.uint64)
+    )
+    np.testing.assert_array_equal(
+      optimized.trial_rows.view(np.uint64), reference.trial_rows.view(np.uint64)
+    )
+
+  # Deterministic documented ramp magnitudes, every third entity in mixed
+  # shear, so elastic, plastic-normal, and plastic-mixed branches all appear.
+  n = 1024
+  strains = np.zeros((n, 6))
+  strains[:, 0] = np.linspace(0.0002, 0.004, n)
+  strains[::3, 5] = 0.003
+  virgin = np.zeros((n, 19))
+  assert_bitwise(strains, virgin)
+  stepped = isotropic_hardening_plasticity_kernel_reference(
+    strains, virgin, calibration
+  ).trial_rows
+  assert_bitwise(strains * 1.5, stepped)
+
+  # Seeded random batches, virgin then stepped (nonzero state, mixed paths).
+  rng = np.random.default_rng(42)
+  random_strains = rng.normal(size=(512, 6)) * 1.5e-3
+  assert_bitwise(random_strains, np.zeros((512, 19)))
+  stepped_random = isotropic_hardening_plasticity_kernel_reference(
+    random_strains, np.zeros((512, 19)), calibration
+  ).trial_rows
+  assert_bitwise(rng.normal(size=(512, 6)) * 1.0e-3, stepped_random)
+
+  # Whole-batch rejects: beyond the hardening table, non-finite predictor.
+  extreme = np.zeros((8, 6))
+  extreme[3, 0] = 2.0
+  assert_bitwise(extreme, np.zeros((8, 19)))
+  nonfinite = np.zeros((8, 6))
+  nonfinite[5, 4] = np.inf
+  assert_bitwise(nonfinite, np.zeros((8, 19)))

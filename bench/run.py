@@ -46,8 +46,10 @@ from bench.gates import (
   CANONICAL_LEGACY_MAX_SIZE,
   GateResult,
   check_fast_reference_selftest,
+  gate_material,
   gate_q8,
   gate_skim,
+  material_kernel_batch,
 )
 from bench.legacy_cases import (
   legacy_assembly,
@@ -64,8 +66,10 @@ from bench.v3_pipeline import V3Q8Pipeline
 from bench.workloads import (
   Q8_MATERIALS,
   Q8_SIZES,
+  MaterialKernelCase,
   Q8Workload,
   SkimCase,
+  material_cases,
   q8_workloads,
   skim_cases,
 )
@@ -357,6 +361,79 @@ def run_skim_case(
   return records, gate
 
 
+def run_material_case(
+  case: MaterialKernelCase,
+  *,
+  threads: list[int],
+  budget_s: float,
+) -> tuple[list[BenchRecord], GateResult]:
+  """Gate one material-kernel batch, then time reference vs optimized sides."""
+  from pyfem.v3.materials.isotropic_hardening_plasticity import (
+    isotropic_hardening_plasticity_kernel,
+    isotropic_hardening_plasticity_kernel_reference,
+  )
+
+  records: list[BenchRecord] = []
+  gate = gate_material(case)
+  if not gate.passed:
+    for side in ("reference", "optimized"):
+      records.append(_failed_record("material", case.workload, side, "warm", gate))
+    return records, gate
+
+  strains, rows, calibration = material_kernel_batch(case)
+  logical = {
+    "strains": strains.nbytes,
+    "accepted_rows": rows.nbytes,
+    "stresses": strains.nbytes,
+    "tangents": 6 * strains.nbytes,
+    "trial_rows": rows.nbytes,
+  }
+  note = f"{case.n_entities} entities per call (documented batch, virgin rows)"
+  reference_stats = measure_fixed(
+    lambda: isotropic_hardening_plasticity_kernel_reference(strains, rows, calibration),
+    warmup=1,
+    reps=3,
+    note=note + "; reduced reps: pure-NumPy per-entity reference loop",
+  )
+  records.append(
+    BenchRecord(
+      category="material",
+      workload=case.workload,
+      side="reference",
+      mode="warm",
+      threads=1,
+      n_elems=0,
+      n_dofs=case.n_entities,
+      metrics={"kernel": reference_stats},
+      logical_bytes=logical,
+      correctness=gate.to_json(),
+    )
+  )
+  for thread_count in threads:
+    _set_numba_threads(thread_count)
+    optimized_stats = measure(
+      lambda: isotropic_hardening_plasticity_kernel(strains, rows, calibration),
+      warmup=1,
+      budget_s=budget_s,
+    )
+    optimized_stats.note = note
+    records.append(
+      BenchRecord(
+        category="material",
+        workload=case.workload,
+        side="optimized",
+        mode="warm",
+        threads=thread_count,
+        n_elems=0,
+        n_dofs=case.n_entities,
+        metrics={"kernel": optimized_stats},
+        logical_bytes=logical,
+        correctness=gate.to_json(),
+      )
+    )
+  return records, gate
+
+
 def _cold_workload_name(case: str) -> str:
   kind, _, rest = case.partition(":")
   if kind == "q8patch":
@@ -464,6 +541,14 @@ def do_gates(
       print(
         f"[{'PASS' if gate.passed else 'FAIL'}] {gate.workload} max_rel={worst:.3e}"
       )
+  for case in material_cases():
+    gate = gate_material(case)
+    failures += 0 if gate.passed else 1
+    if verbose:
+      worst = max(c.max_rel_diff for c in gate.checks)
+      print(
+        f"[{'PASS' if gate.passed else 'FAIL'}] {gate.workload} max_rel={worst:.3e}"
+      )
   return failures
 
 
@@ -507,6 +592,15 @@ def do_warm(args: argparse.Namespace) -> list[BenchRecord]:
         f"[{'PASS' if gate.passed else 'FAIL'}] {case.workload} "
         f"({time.perf_counter() - t0:.1f}s)"
       )
+
+  for case in material_cases():
+    t0 = time.perf_counter()
+    recs, gate = run_material_case(case, threads=threads, budget_s=args.budget_s)
+    records.extend(recs)
+    print(
+      f"[{'PASS' if gate.passed else 'FAIL'}] {case.workload} "
+      f"({time.perf_counter() - t0:.1f}s)"
+    )
 
   for workload in q8_workloads(sizes, materials):
     t0 = time.perf_counter()
