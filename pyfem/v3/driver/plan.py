@@ -13,6 +13,11 @@ re-derived per Newton iteration.
   a single ``np.bincount`` per evaluation.
 - Nodal loads compile to the same affine structure as the coordinate map's
   prescribed offsets: ``f_ext(p) = constant + coefficients @ p``.
+- Declared operator signal ports compile to coordinate-index slices: every
+  port's signal and derivative coordinates are validated against the
+  coordinate map at plan time, and each evaluation forwards the bound point as
+  ``ProgramSignalInput`` values (schedule-owned signals, identity-bound this
+  revision).
 
 The plan owns no mutable buffers and no factorization; those live in the
 driver workspace. Constraint algebra is never re-implemented here: reduced
@@ -39,7 +44,11 @@ from pyfem.v3.driver.diagnostics import (
 )
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import InstanceId
-from pyfem.v3.model.operator import SemanticId
+from pyfem.v3.model.operator import (
+  ProgramSignalInput,
+  SemanticId,
+  SignalDerivativeInput,
+)
 from pyfem.v3.model.provenance import CanonicalManifest, ContentFingerprint
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec.diagnostics import SourceContext, render_diagnostic_value
@@ -83,6 +92,22 @@ class OperatorAssemblySlice:
 
 
 @dataclass(frozen=True, slots=True, eq=False)
+class OperatorSignalPortSlice:
+  """One operator signal port resolved onto program coordinate indices.
+
+  This revision binds signals identically to program coordinates: the signal
+  value forwarded to the operator is the bound value of the coordinate at
+  ``signal_coordinate_index``, and each derivative channel carries
+  ``d(signal)/d(p)`` for one declared derivative coordinate — one for the
+  signal's own coordinate and zero for every other.
+  """
+
+  port_id: str
+  signal_coordinate_index: int
+  derivative_coordinate_indices: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True, eq=False)
 class DriverPlanProvenance:
   """Canonical plan meaning and the exact numeric policy behind it."""
 
@@ -121,6 +146,7 @@ class DriverAssemblyPlan:
   coordinate_names: tuple[str, ...]
   constant_tangent: bool
   operator_slices: tuple[OperatorAssemblySlice, ...]
+  signal_slices: tuple[tuple[OperatorSignalPortSlice, ...], ...]
   residual_scatter: FinalizedArray
   coo_row_indices: FinalizedArray
   coo_column_indices: FinalizedArray
@@ -338,6 +364,78 @@ def _compile_operator_slices(
   )
 
 
+def _compile_signal_slices(
+  system: CompiledSystem,
+  coordinate_names: tuple[str, ...],
+) -> tuple[tuple[OperatorSignalPortSlice, ...], ...]:
+  """Resolve every operator's declared signal ports onto coordinate indices.
+
+  Ports reference program coordinates by name; an operator whose port binds an
+  undeclared coordinate can never be driven honestly, so plan compilation
+  fails closed with coded diagnostics.
+  """
+  coordinate_indices = {name: index for index, name in enumerate(coordinate_names)}
+  slices: list[tuple[OperatorSignalPortSlice, ...]] = []
+  for operator in system.operators:
+    ports = operator.header.signal_ports
+    if len({port.port_id for port in ports}) != len(ports):
+      _preparation_fail(
+        "duplicate-signal-port",
+        "an operator header declares the same signal port twice",
+        SourceContext(),
+      )
+    resolved: list[OperatorSignalPortSlice] = []
+    for port in ports:
+      if type(port.port_id) is not str or not port.port_id:
+        _preparation_fail(
+          "invalid-signal-port",
+          "operator signal port ids must be non-empty exact strings",
+          SourceContext(),
+        )
+      signal_index = (
+        coordinate_indices.get(port.signal_id) if type(port.signal_id) is str else None
+      )
+      if signal_index is None:
+        _preparation_fail(
+          "unknown-signal-coordinate",
+          f"operator signal port {render_diagnostic_value(port.port_id)} binds "
+          "undeclared program coordinate "
+          f"{render_diagnostic_value(port.signal_id)}",
+          SourceContext(),
+        )
+      derivative_indices: list[int] = []
+      for coordinate in port.derivative_coordinate_ids:
+        derivative_index = (
+          coordinate_indices.get(coordinate) if type(coordinate) is str else None
+        )
+        if derivative_index is None:
+          _preparation_fail(
+            "unknown-signal-derivative-coordinate",
+            f"operator signal port {render_diagnostic_value(port.port_id)} "
+            "declares a derivative on undeclared program coordinate "
+            f"{render_diagnostic_value(coordinate)}",
+            SourceContext(),
+          )
+        if derivative_index in derivative_indices:
+          _preparation_fail(
+            "duplicate-signal-derivative-coordinate",
+            f"operator signal port {render_diagnostic_value(port.port_id)} "
+            "declares two derivative channels on program coordinate "
+            f"{render_diagnostic_value(coordinate)}",
+            SourceContext(),
+          )
+        derivative_indices.append(derivative_index)
+      resolved.append(
+        OperatorSignalPortSlice(
+          port_id=port.port_id,
+          signal_coordinate_index=signal_index,
+          derivative_coordinate_indices=tuple(derivative_indices),
+        )
+      )
+    slices.append(tuple(resolved))
+  return tuple(slices)
+
+
 def _compile_csr_pattern(
   rows: np.ndarray,
   columns: np.ndarray,
@@ -405,6 +503,7 @@ def compile_driver_plan(
       SourceContext(),
     )
   slices, scatter, coo_rows, coo_columns = _compile_operator_slices(system)
+  signal_slices = _compile_signal_slices(system, coordinate_map.coordinate_names)
   permutation, segment_offsets, csr_indptr, csr_indices = _compile_csr_pattern(
     coo_rows,
     coo_columns,
@@ -414,40 +513,60 @@ def compile_driver_plan(
     operator.header.jacobian_channels[0].linear for operator in system.operators
   )
   load_program = _compile_loads(system, loads, coordinate_map.coordinate_names)
-  manifest = CanonicalManifest(
-    {
-      "schema": DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA,
-      "numeric_policy": {
-        "floating_dtype": _FLOATING_DTYPE.str,
-        "index_dtype": _INDEX_DTYPE.str,
-      },
-      "compatible_system": str(system.content_fingerprint),
-      "compatible_map": str(coordinate_map.content_fingerprint),
-      "coordinates": list(coordinate_map.coordinate_names),
-      "constant_tangent": constant_tangent,
-      "operators": [
-        {
-          "block_id": slice_.block_id,
-          "entity_count": slice_.entity_count,
-          "element_dof_count": slice_.element_dof_count,
-          "gather": slice_.gather.values,
-        }
-        for slice_ in slices
-      ],
-      "residual_scatter": scatter,
-      "coo_row_indices": coo_rows,
-      "coo_column_indices": coo_columns,
-      "csr_sort_permutation": permutation,
-      "csr_segment_offsets": segment_offsets,
-      "csr_indptr": csr_indptr,
-      "csr_indices": csr_indices,
-      "loads": {
-        "constant": load_program.constant.values,
-        "coordinate_coefficients": load_program.coordinate_coefficients.values,
-        "load_count": load_program.load_count,
-      },
-    }
-  )
+  manifest_content: dict[str, object] = {
+    "schema": DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA,
+    "numeric_policy": {
+      "floating_dtype": _FLOATING_DTYPE.str,
+      "index_dtype": _INDEX_DTYPE.str,
+    },
+    "compatible_system": str(system.content_fingerprint),
+    "compatible_map": str(coordinate_map.content_fingerprint),
+    "coordinates": list(coordinate_map.coordinate_names),
+    "constant_tangent": constant_tangent,
+    "operators": [
+      {
+        "block_id": slice_.block_id,
+        "entity_count": slice_.entity_count,
+        "element_dof_count": slice_.element_dof_count,
+        "gather": slice_.gather.values,
+      }
+      for slice_ in slices
+    ],
+    "residual_scatter": scatter,
+    "coo_row_indices": coo_rows,
+    "coo_column_indices": coo_columns,
+    "csr_sort_permutation": permutation,
+    "csr_segment_offsets": segment_offsets,
+    "csr_indptr": csr_indptr,
+    "csr_indices": csr_indices,
+    "loads": {
+      "constant": load_program.constant.values,
+      "coordinate_coefficients": load_program.coordinate_coefficients.values,
+      "load_count": load_program.load_count,
+    },
+  }
+  if any(signal_slices):
+    manifest_content["signals"] = [
+      {
+        "block_id": slice_.block_id,
+        "ports": [
+          {
+            "port_id": port.port_id,
+            "signal_coordinate": (
+              coordinate_map.coordinate_names[port.signal_coordinate_index]
+            ),
+            "derivative_coordinates": [
+              coordinate_map.coordinate_names[index]
+              for index in port.derivative_coordinate_indices
+            ],
+          }
+          for port in ports
+        ],
+      }
+      for slice_, ports in zip(slices, signal_slices, strict=True)
+      if ports
+    ]
+  manifest = CanonicalManifest(manifest_content)
   provenance = DriverPlanProvenance(
     schema=DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA,
     manifest=manifest,
@@ -470,6 +589,7 @@ def compile_driver_plan(
     coordinate_names=coordinate_map.coordinate_names,
     constant_tangent=constant_tangent,
     operator_slices=slices,
+    signal_slices=signal_slices,
     residual_scatter=FinalizedArray(scatter, dtype=_INDEX_DTYPE),
     coo_row_indices=FinalizedArray(coo_rows, dtype=_INDEX_DTYPE),
     coo_column_indices=FinalizedArray(coo_columns, dtype=_INDEX_DTYPE),
@@ -545,6 +665,56 @@ def evaluate_loads(
       "external force evaluation overflowed the finite float64 range",
     )
   return FinalizedArray(result, dtype=_FLOATING_DTYPE)
+
+
+def evaluate_signals(
+  plan: DriverAssemblyPlan,
+  point: ProgramPoint,
+) -> tuple[tuple[ProgramSignalInput, ...], ...]:
+  """Forward one bound program point as per-operator program signal inputs.
+
+  This revision binds signals identically to program coordinates: the signal
+  value is the bound value of the port's signal coordinate, and every declared
+  derivative channel carries ``d(signal)/d(p)`` as the Kronecker delta (one
+  for the signal's own coordinate, zero otherwise). Operators without declared
+  signal ports receive an empty tuple, and a plan with no signal ports at all
+  never touches the point.
+  """
+  if type(plan) is not DriverAssemblyPlan:
+    msg = "signal evaluation requires an exact DriverAssemblyPlan"
+    raise TypeError(msg)
+  slices = plan.signal_slices
+  if not any(slices):
+    return tuple(() for _ in slices)
+  values = _bound_coordinate_values(plan.loads, point)
+  forwarded: list[tuple[ProgramSignalInput, ...]] = []
+  for ports in slices:
+    operator_signals: list[ProgramSignalInput] = []
+    for port in ports:
+      operator_signals.append(
+        ProgramSignalInput(
+          port_id=port.port_id,
+          values=FinalizedArray(
+            np.array([values[port.signal_coordinate_index]], dtype=_FLOATING_DTYPE),
+            dtype=_FLOATING_DTYPE,
+          ),
+          derivatives=tuple(
+            SignalDerivativeInput(
+              plan.coordinate_names[index],
+              FinalizedArray(
+                np.array(
+                  [1.0 if index == port.signal_coordinate_index else 0.0],
+                  dtype=_FLOATING_DTYPE,
+                ),
+                dtype=_FLOATING_DTYPE,
+              ),
+            )
+            for index in port.derivative_coordinate_indices
+          ),
+        )
+      )
+    forwarded.append(tuple(operator_signals))
+  return tuple(forwarded)
 
 
 def assemble_internal_force(

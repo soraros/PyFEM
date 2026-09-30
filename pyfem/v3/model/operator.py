@@ -95,6 +95,18 @@ class PortBinding(CompilerConstructed):
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class SignalPortBinding(CompilerConstructed):
+  """One declared program-signal port of a compiled operator.
+
+  ``port_id`` is the operator-local name evaluation inputs bind by;
+  ``signal_id`` names the program signal the driver binds to the port (the
+  landed driver revision binds declared program coordinates by name);
+  ``derivative_coordinate_ids`` names the program coordinates whose
+  ``d(signal)/d(coordinate)`` channels the driver forwards alongside the
+  value. Operators with no declared ports reject every signal input, and an
+  evaluation input naming an undeclared port is rejected fail-closed: schedule
+  values reach operators exclusively through declared ports.
+  """
+
   port_id: str
   signal_id: SemanticId
   derivative_coordinate_ids: tuple[SemanticId, ...]
@@ -175,6 +187,13 @@ class OperatorHeader(CompilerConstructed):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class SignalDerivativeInput:
+  """One ``d(signal)/d(coordinate_id)`` channel bound at the program point.
+
+  The landed ABI revision's signals are scalar: ``values`` carries exactly one
+  float64. A signal input's derivatives follow the declaring port's
+  ``derivative_coordinate_ids`` order exactly.
+  """
+
   coordinate_id: SemanticId
   values: FinalizedArray
 
@@ -185,6 +204,14 @@ class SignalDerivativeInput:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class ProgramSignalInput:
+  """One bound program signal forwarded to an operator evaluation.
+
+  ``port_id`` must name a declared ``SignalPortBinding`` of the operator;
+  ``values`` carries the bound signal value at the current program point (one
+  float64 in this scalar-signal ABI revision) and ``derivatives`` the declared
+  coordinate-derivative channels.
+  """
+
   port_id: str
   values: FinalizedArray
   derivatives: tuple[SignalDerivativeInput, ...]

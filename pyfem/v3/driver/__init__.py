@@ -22,9 +22,11 @@ from pyfem.v3.driver.plan import (
   DriverAssemblyPlan,
   DriverPlanProvenance,
   OperatorAssemblySlice,
+  OperatorSignalPortSlice,
   assemble_internal_force,
   compile_driver_plan,
   evaluate_loads,
+  evaluate_signals,
   refill_tangent,
 )
 
@@ -43,11 +45,13 @@ __all__ = [
   "NonlinearStaticResult",
   "NonlinearStaticSettings",
   "OperatorAssemblySlice",
+  "OperatorSignalPortSlice",
   "SubstepObservation",
   "SubstepRecord",
   "SubstepStatus",
   "assemble_internal_force",
   "compile_driver_plan",
   "evaluate_loads",
+  "evaluate_signals",
   "refill_tangent",
 ]
