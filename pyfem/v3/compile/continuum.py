@@ -3,34 +3,43 @@
 The continuum family compiles three formulations sharing two-dimensional
 serendipity-quad8 geometry and 3x3 Gauss quadrature:
 
-- ``small-strain-continuum``: one node displacement field with physical
-  components ``('x', 'y')`` and a plane-stress linear-elastic material. This
-  is the landed single-field slice; its compiled output is byte-identical to
-  the original direct compiler.
+- ``small-strain-continuum``: one node displacement field and a linear-elastic
+  or stateful material. This is the landed single-field slice; its compiled
+  output is byte-identical to the original direct compiler. The small-strain
+  mechanical formulation additionally covers the geometry-and-material breadth
+  wave: the ``linear-tria3`` and ``bilinear-quad4`` two-dimensional geometries
+  (pinned to the ``gauss-tria3-1`` and ``gauss-2x2`` rules), the
+  ``trilinear-hex8`` three-dimensional geometry (pinned to ``gauss-2x2x2``,
+  displacement components ``('x', 'y', 'z')``, six-component Voigt
+  kinematics), the ``plane-strain-linear-elastic`` law beside plane stress on
+  every two-dimensional geometry, and the ``isotropic-linear-elastic`` 3D law
+  on the hexahedral geometry. The region's authored formulation string names
+  the physics; the cell block's authored geometry selects the pinned
+  topology/quadrature recipe and the rank-specific kinematics descriptor.
 - ``small-strain-thermal-continuum``: one node temperature field carrying
-  exactly one component and an isotropic linear conductor.
+  exactly one component and an isotropic linear conductor (quad8 only).
 - ``small-strain-thermo-elastic-continuum``: one displacement field followed
   by one temperature field in the region field signature, with a coupled
-  linear thermo-elastic material. The operator binds both spaces with
-  per-port coefficient maps and carries exactly the nonzero static Jacobian
-  blocks: the mechanical tangent (displacement from displacement, symmetric),
-  the thermal-expansion tangent (displacement from temperature,
+  linear thermo-elastic material (quad8 only). The operator binds both spaces
+  with per-port coefficient maps and carries exactly the nonzero static
+  Jacobian blocks: the mechanical tangent (displacement from displacement,
+  symmetric), the thermal-expansion tangent (displacement from temperature,
   nonsymmetric), and the conduction tangent (temperature from temperature,
   symmetric). A stateless static thermo-elastic operator honestly has no
   mechanical-to-thermal block: that coupling is a rate effect owned by
   stateful formulations with accepted state and signals.
 
 The small-strain formulation is also the open stateful seam: a region whose
-material is not the pinned linear-elastic law compiles through the generic
-descriptor-driven stateful path whenever its registry descriptor carries
-valid v2 stateful metadata and a binding implementing the
+material is not one of the pinned linear-elastic laws compiles through the
+generic descriptor-driven stateful path whenever its registry descriptor
+carries valid v2 stateful metadata and a binding implementing the
 ``StatefulContinuumBinding`` protocol (calibration call, batched kernel,
-optional ``initial_state``). The path emits nonzero-width
-``OperatorStateLayout`` values from descriptor ``state_slots`` with the entity
-axis flattened (element x integration point x material slot), wires the
-descriptor's initial-state rows into the layout, and marks every channel
-nonlinear per the declared tangent class. The first such law is
-``isotropic-hardening-plasticity`` (J2, 19-float rows).
+optional ``initial_state``) — on the serendipity-quad8 geometry only. The path
+emits nonzero-width ``OperatorStateLayout`` values from descriptor
+``state_slots`` with the entity axis flattened (element x integration point x
+material slot), wires the descriptor's initial-state rows into the layout, and
+marks every channel nonlinear per the declared tangent class. The first such
+law is ``isotropic-hardening-plasticity`` (J2, 19-float rows).
 
 A stateful descriptor may additionally declare the optional ``signal_ports``
 field: typed program-signal ports emitted as ``SignalPortBinding`` values on
@@ -43,7 +52,10 @@ without the field compile byte-identical operators that reject every signal.
 Capability boundary: every cell belongs to exactly one region; each region
 draws its cells from exactly one cell block; each cell block feeds exactly
 one region; every declared field and material is referenced by at least one
-region. Violations fail with coded source-context diagnostics.
+region. Geometry/material/rank mismatches (a two-dimensional law on a
+three-dimensional block, a 3D law on a planar block, a stateful law on a
+non-quad8 block, a quadrature rule foreign to the block geometry) fail with
+coded source-context diagnostics, as do all other violations.
 """
 
 from __future__ import annotations
@@ -57,11 +69,21 @@ from typing import NoReturn
 import numpy as np
 
 from pyfem.v3.compile.contracts import (
+  CONTINUUM_3D_FORMULATION_KEY,
+  HEX8_QUADRATURE_KEY,
+  HEX8_TOPOLOGY_KEY,
+  ISOTROPIC_MATERIAL_KEY,
+  PLANE_STRAIN_MATERIAL_KEY,
+  QUAD4_QUADRATURE_KEY,
+  QUAD4_TOPOLOGY_KEY,
+  TRIA3_QUADRATURE_KEY,
+  TRIA3_TOPOLOGY_KEY,
   StatefulContinuumKernel,
   StatefulContinuumKernelResult,
   StatefulContinuumSignalDerivative,
   StatefulContinuumSignalInput,
   StatefulContinuumSignalKernel,
+  breadth_descriptor_metadata,
   build_material_state_layout,
   resolve_material_signal_ports,
   resolve_material_state_slots,
@@ -75,11 +97,18 @@ from pyfem.v3.compile.diagnostics import (
 )
 from pyfem.v3.fem.kinematics import strain_displacement
 from pyfem.v3.fem.quadrature import gauss_tensor_product_2d
-from pyfem.v3.fem.shapes import serendipity_quad8
+from pyfem.v3.fem.shapes import (
+  bilinear_quad4,
+  linear_tria3,
+  serendipity_quad8,
+  trilinear_hex8,
+)
+from pyfem.v3.materials.isotropic import isotropic_matrix
 from pyfem.v3.materials.isotropic_hardening_plasticity import (
   ISOTROPIC_HARDENING_PLASTICITY_BINDING,
   isotropic_hardening_plasticity_metadata,
 )
+from pyfem.v3.materials.plane_strain import plane_strain_matrix
 from pyfem.v3.materials.plane_stress import plane_stress_matrix
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
@@ -152,6 +181,7 @@ _LOCAL_COEFFICIENT_COUNT = 16
 _MATERIAL_RELATIVE_TOLERANCE = 16.0 * float(np.finfo(np.float64).eps)
 
 _DISPLACEMENT_ROLE = ("displacement", ("x", "y"))
+_DISPLACEMENT_3D_ROLE = ("displacement", ("x", "y", "z"))
 _TEMPERATURE_ROLE = ("temperature", "scalar")
 _FORMULATION_CONTRACTS = {
   Q8_FORMULATION_KEY[1]: (_DISPLACEMENT_ROLE,),
@@ -165,6 +195,137 @@ _FORMULATION_MATERIAL_MODELS = {
   THERMAL_FORMULATION_KEY[1]: THERMAL_MATERIAL_KEY[1],
   THERMO_FORMULATION_KEY[1]: THERMO_MATERIAL_KEY[1],
 }
+
+
+@dataclass(frozen=True, slots=True)
+class ContinuumGeometryProfile:
+  """The pinned geometry recipe of one supported continuum cell-block shape.
+
+  ``quadrature`` is the authored region quadrature name the shape requires;
+  ``formulation_key`` resolves the rank-specific small-strain kinematics
+  descriptor; ``quadrature_measure`` is the parent-domain measure the pinned
+  rule's weights must sum to.
+  """
+
+  geometry_interpolation: str
+  reference_topology: str
+  topological_dimension: int
+  embedding_dimension: int
+  node_count: int
+  point_count: int
+  quadrature: str
+  quadrature_order: int
+  quadrature_measure: float
+  topology_key: RegistryKey
+  quadrature_key: RegistryKey
+  formulation_key: RegistryKey
+  field_components: tuple[str, ...]
+  local_coefficient_count: int
+  voigt_size: int
+
+
+_Q8_GEOMETRY = ContinuumGeometryProfile(
+  geometry_interpolation="serendipity-quad8",
+  reference_topology="quadrilateral",
+  topological_dimension=2,
+  embedding_dimension=2,
+  node_count=_NODE_COUNT,
+  point_count=_POINT_COUNT,
+  quadrature=Q8_QUADRATURE_KEY[1],
+  quadrature_order=3,
+  quadrature_measure=4.0,
+  topology_key=Q8_TOPOLOGY_KEY,
+  quadrature_key=Q8_QUADRATURE_KEY,
+  formulation_key=Q8_FORMULATION_KEY,
+  field_components=("x", "y"),
+  local_coefficient_count=_LOCAL_COEFFICIENT_COUNT,
+  voigt_size=3,
+)
+_TRIA3_GEOMETRY = ContinuumGeometryProfile(
+  geometry_interpolation="linear-tria3",
+  reference_topology="triangle",
+  topological_dimension=2,
+  embedding_dimension=2,
+  node_count=3,
+  point_count=1,
+  quadrature=TRIA3_QUADRATURE_KEY[1],
+  quadrature_order=1,
+  quadrature_measure=0.5,
+  topology_key=TRIA3_TOPOLOGY_KEY,
+  quadrature_key=TRIA3_QUADRATURE_KEY,
+  formulation_key=Q8_FORMULATION_KEY,
+  field_components=("x", "y"),
+  local_coefficient_count=6,
+  voigt_size=3,
+)
+_QUAD4_GEOMETRY = ContinuumGeometryProfile(
+  geometry_interpolation="bilinear-quad4",
+  reference_topology="quadrilateral",
+  topological_dimension=2,
+  embedding_dimension=2,
+  node_count=4,
+  point_count=4,
+  quadrature=QUAD4_QUADRATURE_KEY[1],
+  quadrature_order=2,
+  quadrature_measure=4.0,
+  topology_key=QUAD4_TOPOLOGY_KEY,
+  quadrature_key=QUAD4_QUADRATURE_KEY,
+  formulation_key=Q8_FORMULATION_KEY,
+  field_components=("x", "y"),
+  local_coefficient_count=8,
+  voigt_size=3,
+)
+_HEX8_GEOMETRY = ContinuumGeometryProfile(
+  geometry_interpolation="trilinear-hex8",
+  reference_topology="hexahedron",
+  topological_dimension=3,
+  embedding_dimension=3,
+  node_count=8,
+  point_count=8,
+  quadrature=HEX8_QUADRATURE_KEY[1],
+  quadrature_order=2,
+  quadrature_measure=8.0,
+  topology_key=HEX8_TOPOLOGY_KEY,
+  quadrature_key=HEX8_QUADRATURE_KEY,
+  formulation_key=CONTINUUM_3D_FORMULATION_KEY,
+  field_components=("x", "y", "z"),
+  local_coefficient_count=24,
+  voigt_size=6,
+)
+_CONTINUUM_GEOMETRIES = {
+  profile.geometry_interpolation: profile
+  for profile in (_Q8_GEOMETRY, _TRIA3_GEOMETRY, _QUAD4_GEOMETRY, _HEX8_GEOMETRY)
+}
+# The thermal formulations remain pinned to the landed quad8 slice; only the
+# small-strain mechanical formulation admits the breadth geometries.
+_FORMULATION_GEOMETRIES = {
+  Q8_FORMULATION_KEY[1]: frozenset(
+    (
+      _Q8_GEOMETRY.geometry_interpolation,
+      _TRIA3_GEOMETRY.geometry_interpolation,
+      _QUAD4_GEOMETRY.geometry_interpolation,
+      _HEX8_GEOMETRY.geometry_interpolation,
+    )
+  ),
+  THERMAL_FORMULATION_KEY[1]: frozenset((_Q8_GEOMETRY.geometry_interpolation,)),
+  THERMO_FORMULATION_KEY[1]: frozenset((_Q8_GEOMETRY.geometry_interpolation,)),
+}
+_BREADTH_DESCRIPTOR_KEYS = frozenset(
+  (
+    TRIA3_TOPOLOGY_KEY,
+    QUAD4_TOPOLOGY_KEY,
+    HEX8_TOPOLOGY_KEY,
+    TRIA3_QUADRATURE_KEY,
+    QUAD4_QUADRATURE_KEY,
+    HEX8_QUADRATURE_KEY,
+    CONTINUUM_3D_FORMULATION_KEY,
+    PLANE_STRAIN_MATERIAL_KEY,
+    ISOTROPIC_MATERIAL_KEY,
+  )
+)
+_PLANAR_LINEAR_MATERIAL_MODELS = frozenset(
+  (Q8_MATERIAL_KEY[1], PLANE_STRAIN_MATERIAL_KEY[1])
+)
 
 
 def _new[ValueT](cls: type[ValueT], /, **fields: object) -> ValueT:
@@ -203,6 +364,7 @@ class RegionSelection:
   fields: tuple[FieldSpec, ...]
   material: MaterialSpec
   region: RegionSpec
+  geometry: ContinuumGeometryProfile
   cells: tuple[CellSpec, ...]
 
 
@@ -302,6 +464,129 @@ class Q8ContinuumOperator(CompilerConstructed):
     weights = self.payload.normalized_integration_weights.values
     constitutive = self.payload.constitutive.values
     tangent = np.einsum(
+      "ep,epai,ab,epbj->eij",
+      weights,
+      b_matrix,
+      constitutive,
+      b_matrix,
+      optimize=True,
+    )
+    residual_values = ()
+    if request.residual_channel_ids:
+      residual = np.einsum("eij,ej->ei", tangent, values, optimize=True)
+      residual_values = (FinalizedArray(residual, dtype=np.float64),)
+    jacobian_values = (
+      (FinalizedArray(tangent, dtype=np.float64),)
+      if request.jacobian_channel_ids
+      else ()
+    )
+    return _new(
+      OperatorEvaluation,
+      residual_values=residual_values,
+      jacobian_values=jacobian_values,
+      trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+    )
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Hex8ContinuumPayload(CompilerConstructed):
+  quadrature_points: FinalizedArray
+  quadrature_weights: FinalizedArray
+  shape_values: FinalizedArray
+  parent_gradients: FinalizedArray
+  geometry_scales: FinalizedArray
+  normalized_gradients: FinalizedArray
+  normalized_strain_displacement: FinalizedArray
+  normalized_integration_weights: FinalizedArray
+  constitutive: FinalizedArray
+  material_parameters: FinalizedArray
+
+  def physical_gradients(self) -> FinalizedArray:
+    values = (
+      self.normalized_gradients.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
+
+  def physical_strain_displacement(self) -> FinalizedArray:
+    values = (
+      self.normalized_strain_displacement.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
+
+  def physical_integration_weights(self) -> FinalizedArray:
+    scales = self.geometry_scales.values[:, None]
+    values = self.normalized_integration_weights.values * scales * scales * scales
+    return FinalizedArray(values, dtype=np.float64)
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Hex8ContinuumOperator(CompilerConstructed):
+  """Three-dimensional small-strain linear continuum operator (hex8).
+
+  The payload factors are scale-normalized like the two-dimensional slices,
+  but the 3D stiffness does not share the planar scale cancellation:
+  ``K = scale * ∫ B_normᵀ C B_norm dV_norm``, so evaluation multiplies the
+  normalized einsum by the per-cell geometry scale.
+  """
+
+  header: OperatorHeader
+  entity_block: IncidenceEntityBlock
+  payload: Hex8ContinuumPayload
+  content_manifest: CanonicalManifest
+
+  def evaluate(
+    self,
+    inputs: OperatorEvaluationInput,
+  ) -> OperatorEvaluation:
+    """Evaluate local internal force and material tangent from compiled meaning."""
+    if type(inputs) is not OperatorEvaluationInput:
+      msg = "hex8 evaluation requires an exact immutable evaluation input"
+      raise TypeError(msg)
+    if type(inputs.port_values) is not tuple or len(inputs.port_values) != 1:
+      msg = "hex8 evaluation requires exactly one displacement port batch"
+      raise TypeError(msg)
+    values = inputs.port_values[0].values
+    expected = self.header.ports[0].coefficient_map.values.shape
+    if (
+      values.dtype != np.dtype(np.float64)
+      or values.dtype.metadata is not None
+      or values.shape != expected
+      or not bool(np.isfinite(values).all())
+    ):
+      msg = "hex8 displacement port values must be a finite metadata-free float64 batch"
+      raise TypeError(msg)
+    layout = self.header.state_layout
+    accepted_state = inputs.accepted_state.values
+    if (
+      accepted_state.dtype != np.dtype(np.float64)
+      or accepted_state.dtype.metadata is not None
+      or accepted_state.shape != layout.row_shape
+      or not bool(np.isfinite(accepted_state).all())
+    ):
+      msg = "hex8 accepted state must match the compiled zero-width state layout"
+      raise TypeError(msg)
+    if inputs.signals or self.header.signal_ports:
+      msg = "hex8 model operator does not accept program signal inputs"
+      raise ValueError(msg)
+    residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
+    jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    request = inputs.request
+    if (
+      type(request) is not ChannelRequest
+      or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
+      or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or not set(request.residual_channel_ids).issubset(residual_ids)
+      or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+    ):
+      msg = "hex8 evaluation request contains an unavailable or duplicate channel"
+      raise ValueError(msg)
+
+    b_matrix = self.payload.normalized_strain_displacement.values
+    weights = self.payload.normalized_integration_weights.values
+    constitutive = self.payload.constitutive.values
+    tangent = self.payload.geometry_scales.values[:, None, None] * np.einsum(
       "ep,epai,ab,epbj->eij",
       weights,
       b_matrix,
@@ -1077,6 +1362,8 @@ def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
     return thermo_elastic_descriptor_metadata(*key)
   if key == PLASTIC_MATERIAL_KEY:
     return isotropic_hardening_plasticity_metadata()
+  if key in _BREADTH_DESCRIPTOR_KEYS:
+    return breadth_descriptor_metadata(*key)
   return q8_descriptor_metadata(*key)
 
 
@@ -1321,22 +1608,31 @@ def _select_region(
     )
   block_owners[block_id] = region
   block = blocks_by_id[block_id]
+  profile = _CONTINUUM_GEOMETRIES.get(block.geometry_interpolation)
   if (
-    block.reference_topology != "quadrilateral"
-    or block.topological_dimension != 2
-    or block.embedding_dimension != 2
-    or block.geometry_interpolation != "serendipity-quad8"
+    profile is None
+    or block.reference_topology != profile.reference_topology
+    or block.topological_dimension != profile.topological_dimension
+    or block.embedding_dimension != profile.embedding_dimension
   ):
     _fail(
       "incompatible-cell-block",
-      "Q8 requires explicit two-dimensional quadrilateral serendipity geometry",
+      "unsupported or inconsistent continuum cell-block geometry",
       block.source,
     )
   for cell in block.cells:
-    if len(cell.node_ids) != _NODE_COUNT:
+    if len(cell.node_ids) != profile.node_count:
+      if profile is _Q8_GEOMETRY:
+        _fail(
+          "invalid-q8-arity",
+          f"Q8 cell {render_diagnostic_value(cell.id)} must reference eight nodes",
+          cell.source,
+        )
       _fail(
-        "invalid-q8-arity",
-        f"Q8 cell {render_diagnostic_value(cell.id)} must reference eight nodes",
+        "invalid-cell-arity",
+        f"{profile.geometry_interpolation} cell "
+        f"{render_diagnostic_value(cell.id)} must reference "
+        f"{profile.node_count} nodes",
         cell.source,
       )
   contract = _FORMULATION_CONTRACTS.get(region.formulation)
@@ -1345,6 +1641,13 @@ def _select_region(
       "incompatible-formulation",
       "unsupported continuum formulation",
       region.source,
+    )
+  if profile.geometry_interpolation not in _FORMULATION_GEOMETRIES[region.formulation]:
+    _fail(
+      "incompatible-cell-block",
+      f"the {region.formulation} formulation does not compile on the "
+      f"{profile.geometry_interpolation} geometry",
+      block.source,
     )
   if len(region.field_ids) != len(contract) or any(
     field_id not in fields_by_id for field_id in region.field_ids
@@ -1364,10 +1667,19 @@ def _select_region(
           f"the {role} field must carry exactly one component",
           field.source,
         )
-    elif field.components != signature:
+      continue
+    expected_components = (
+      profile.field_components
+      if region.formulation == Q8_FORMULATION_KEY[1]
+      else signature
+    )
+    if field.components != expected_components:
+      rendered = (
+        "('x', 'y')" if expected_components == ("x", "y") else repr(expected_components)
+      )
       _fail(
         "incompatible-field-signature",
-        f"the {role} field requires physical components ('x', 'y')",
+        f"the {role} field requires physical components {rendered}",
         field.source,
       )
   material = materials_by_id.get(region.material_id)
@@ -1377,7 +1689,7 @@ def _select_region(
       "the region must reference a declared material",
       region.source,
     )
-  if region.quadrature != Q8_QUADRATURE_KEY[1]:
+  if region.quadrature != profile.quadrature:
     _fail(
       "incompatible-quadrature",
       "unsupported continuum quadrature",
@@ -1390,11 +1702,36 @@ def _select_region(
       f"the {region.formulation} region requires material model {expected_model!r}",
       material.source,
     )
+  if region.formulation == Q8_FORMULATION_KEY[1]:
+    if profile.voigt_size != 3:
+      if material.model != ISOTROPIC_MATERIAL_KEY[1]:
+        _fail(
+          "incompatible-material-model",
+          f"the three-dimensional {profile.geometry_interpolation} geometry "
+          f"requires material model {ISOTROPIC_MATERIAL_KEY[1]!r}",
+          material.source,
+        )
+    elif material.model == ISOTROPIC_MATERIAL_KEY[1]:
+      _fail(
+        "incompatible-material-model",
+        f"material model {ISOTROPIC_MATERIAL_KEY[1]!r} requires a "
+        "three-dimensional cell-block geometry",
+        material.source,
+      )
+    elif material.model not in _PLANAR_LINEAR_MATERIAL_MODELS and (
+      profile is not _Q8_GEOMETRY
+    ):
+      _fail(
+        "incompatible-material-model",
+        "stateful continuum materials compile on the serendipity-quad8 geometry only",
+        material.source,
+      )
   return RegionSelection(
     block=block,
     fields=fields,
     material=material,
     region=region,
+    geometry=profile,
     cells=tuple(
       sorted(
         (
@@ -1408,11 +1745,14 @@ def _select_region(
 
 
 def _required_keys(selection: ContinuumSelection) -> tuple[RegistryKey, ...]:
-  keys = {Q8_TOPOLOGY_KEY, Q8_QUADRATURE_KEY}
+  keys: set[RegistryKey] = set()
   for region_selection in selection.regions:
+    profile = region_selection.geometry
+    keys.add(profile.topology_key)
+    keys.add(profile.quadrature_key)
     formulation = region_selection.region.formulation
     if formulation == Q8_FORMULATION_KEY[1]:
-      keys.add(Q8_FORMULATION_KEY)
+      keys.add(profile.formulation_key)
       keys.add(("material", region_selection.material.model))
     elif formulation == THERMAL_FORMULATION_KEY[1]:
       keys.update((THERMAL_FORMULATION_KEY, THERMAL_MATERIAL_KEY))
@@ -1435,14 +1775,17 @@ def capture_registry(
       "the injected registry could not capture the required continuum implementations",
       selection.regions[0].region.source,
     )
-  sources: dict[RegistryKey, SourceContext] = {
-    Q8_TOPOLOGY_KEY: selection.regions[0].block.source,
-    Q8_QUADRATURE_KEY: selection.regions[0].region.source,
-  }
+  sources: dict[RegistryKey, SourceContext] = {}
   for region_selection in selection.regions:
+    profile = region_selection.geometry
+    sources.setdefault(profile.topology_key, region_selection.block.source)
+    sources.setdefault(profile.quadrature_key, region_selection.region.source)
     formulation = region_selection.region.formulation
     if formulation == Q8_FORMULATION_KEY[1]:
-      selected = (Q8_FORMULATION_KEY, ("material", region_selection.material.model))
+      selected = (
+        profile.formulation_key,
+        ("material", region_selection.material.model),
+      )
     elif formulation == THERMAL_FORMULATION_KEY[1]:
       selected = (THERMAL_FORMULATION_KEY, THERMAL_MATERIAL_KEY)
     else:
@@ -1607,6 +1950,78 @@ def _qualified_constitutive(
   return exact, binary64_route
 
 
+def _qualified_plane_strain_constitutive(
+  youngs_modulus: float,
+  poisson_ratio: float,
+  source: SourceContext,
+) -> tuple[np.ndarray, np.ndarray]:
+  modulus = Fraction.from_float(youngs_modulus)
+  ratio = Fraction.from_float(poisson_ratio)
+  normal = modulus * (1 - ratio) / ((1 + ratio) * (1 - 2 * ratio))
+  coupling = normal * ratio / (1 - ratio)
+  shear = modulus / (2 * (1 + ratio))
+  try:
+    exact = np.array(
+      [
+        [float(normal), float(coupling), 0.0],
+        [float(coupling), float(normal), 0.0],
+        [0.0, 0.0, float(shear)],
+      ],
+      dtype=np.float64,
+    )
+    if not bool(np.isfinite(exact).all()):
+      raise OverflowError
+  except (ArithmeticError, OverflowError, ValueError):
+    _fail(
+      "unrepresentable-material-law",
+      "plane-strain matrix cannot be represented as finite float64",
+      source,
+    )
+  with warnings.catch_warnings(action="ignore", category=RuntimeWarning):
+    binary64_route = plane_strain_matrix(youngs_modulus, poisson_ratio)
+  if not bool(np.isfinite(binary64_route).all()):
+    binary64_route = exact
+  return exact, binary64_route
+
+
+def _qualified_isotropic_constitutive(
+  youngs_modulus: float,
+  poisson_ratio: float,
+  source: SourceContext,
+) -> tuple[np.ndarray, np.ndarray]:
+  modulus = Fraction.from_float(youngs_modulus)
+  ratio = Fraction.from_float(poisson_ratio)
+  denominator = 2 * ratio * ratio + ratio - 1
+  normal = modulus * (ratio - 1) / denominator
+  coupling = -modulus * ratio / denominator
+  shear = modulus / (2 + 2 * ratio)
+  try:
+    exact = np.array(
+      [
+        [float(normal), float(coupling), float(coupling), 0.0, 0.0, 0.0],
+        [float(coupling), float(normal), float(coupling), 0.0, 0.0, 0.0],
+        [float(coupling), float(coupling), float(normal), 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, float(shear), 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, float(shear), 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, float(shear)],
+      ],
+      dtype=np.float64,
+    )
+    if not bool(np.isfinite(exact).all()):
+      raise OverflowError
+  except (ArithmeticError, OverflowError, ValueError):
+    _fail(
+      "unrepresentable-material-law",
+      "isotropic 3D matrix cannot be represented as finite float64",
+      source,
+    )
+  with warnings.catch_warnings(action="ignore", category=RuntimeWarning):
+    binary64_route = isotropic_matrix(youngs_modulus, poisson_ratio)
+  if not bool(np.isfinite(binary64_route).all()):
+    binary64_route = exact
+  return exact, binary64_route
+
+
 def _outside_relative_envelope(actual: float, first: float, second: float) -> bool:
   lower, upper = sorted((first, second))
   return not (
@@ -1683,92 +2098,161 @@ def _qualified_shapes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
   return values, np.stack((dxi, deta), axis=2)
 
 
+def _qualified_quadrature(
+  profile: ContinuumGeometryProfile,
+) -> tuple[np.ndarray, np.ndarray]:
+  """Return the pinned parent points and weights of one geometry's rule."""
+  if profile is _Q8_GEOMETRY:
+    abscissa = math.sqrt(3.0 / 5.0)
+    expected_points = np.array(
+      [(x, y) for x in (-abscissa, 0.0, abscissa) for y in (-abscissa, 0.0, abscissa)],
+      dtype=np.float64,
+    )
+    expected_weights = np.array(
+      [
+        x * y
+        for x in (5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0)
+        for y in (5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0)
+      ],
+      dtype=np.float64,
+    )
+    return expected_points, expected_weights
+  if profile is _TRIA3_GEOMETRY:
+    return (
+      np.array([[1.0 / 3.0, 1.0 / 3.0]], dtype=np.float64),
+      np.array([0.5], dtype=np.float64),
+    )
+  abscissa = 1.0 / math.sqrt(3.0)
+  if profile is _QUAD4_GEOMETRY:
+    return (
+      np.array(
+        [(x, y) for x in (-abscissa, abscissa) for y in (-abscissa, abscissa)],
+        dtype=np.float64,
+      ),
+      np.ones(profile.point_count, dtype=np.float64),
+    )
+  return (
+    np.array(
+      [
+        (x, y, z)
+        for x in (-abscissa, abscissa)
+        for y in (-abscissa, abscissa)
+        for z in (-abscissa, abscissa)
+      ],
+      dtype=np.float64,
+    ),
+    np.ones(profile.point_count, dtype=np.float64),
+  )
+
+
+def _qualified_profile_shapes(
+  profile: ContinuumGeometryProfile,
+  points: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+  """Return the trusted shape values and parent gradients at the rule points.
+
+  The quad8 reference mirrors the qualified in-builder formulas; the breadth
+  geometries consume the landed ``pyfem.v3.fem.shapes`` implementations as
+  their reference instead of duplicating them.
+  """
+  if profile is _Q8_GEOMETRY:
+    return _qualified_shapes(points)
+  if profile is _TRIA3_GEOMETRY:
+    values, gradients = linear_tria3(points)
+  elif profile is _QUAD4_GEOMETRY:
+    values, gradients = bilinear_quad4(points)
+  else:
+    values, gradients = trilinear_hex8(points)
+  return (
+    np.array(values, dtype=np.float64, order="C", copy=True, subok=False),
+    np.array(gradients, dtype=np.float64, order="C", copy=True, subok=False),
+  )
+
+
 def _recipes(
   snapshot: RegistrySnapshot,
   selection: RegionSelection,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-  quadrature = snapshot.resolve(*Q8_QUADRATURE_KEY).binding
+  profile = selection.geometry
+  label = "Q8" if profile is _Q8_GEOMETRY else profile.geometry_interpolation
+  quadrature = snapshot.resolve(*profile.quadrature_key).binding
   try:
-    raw_quadrature = quadrature(3)
+    raw_quadrature = quadrature(profile.quadrature_order)
   except Exception:
     _fail(
       "quadrature-binding-failed",
-      "Q8 quadrature binding failed",
+      f"{label} quadrature binding failed",
       selection.region.source,
     )
   if type(raw_quadrature) is not tuple or len(raw_quadrature) != 2:
     _fail(
       "invalid-quadrature-binding-output",
-      "Q8 quadrature must return exactly points and weights",
+      f"{label} quadrature must return exactly points and weights",
       selection.region.source,
     )
   points = _binding_array(
     raw_quadrature[0],
-    shape=(_POINT_COUNT, 2),
+    shape=(profile.point_count, profile.topological_dimension),
     code="invalid-quadrature-binding-output",
-    label="Q8 quadrature points",
+    label=f"{label} quadrature points",
     source=selection.region.source,
   )
   weights = _binding_array(
     raw_quadrature[1],
-    shape=(_POINT_COUNT,),
+    shape=(profile.point_count,),
     code="invalid-quadrature-binding-output",
-    label="Q8 quadrature weights",
+    label=f"{label} quadrature weights",
     source=selection.region.source,
   )
-  abscissa = math.sqrt(3.0 / 5.0)
-  expected_points = np.array(
-    [(x, y) for x in (-abscissa, 0.0, abscissa) for y in (-abscissa, 0.0, abscissa)],
-    dtype=np.float64,
-  )
-  expected_weights = np.array(
-    [
-      x * y
-      for x in (5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0)
-      for y in (5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0)
-    ],
-    dtype=np.float64,
-  )
+  expected_points, expected_weights = _qualified_quadrature(profile)
   if (
     bool(np.any(weights <= 0.0))
     or bool(np.any(np.abs(points) > 1.0))
-    or not math.isclose(float(weights.sum()), 4.0, rel_tol=1.0e-14, abs_tol=1.0e-14)
+    or not math.isclose(
+      float(weights.sum()),
+      profile.quadrature_measure,
+      rel_tol=1.0e-14,
+      abs_tol=1.0e-14,
+    )
     or not _corresponds(points, expected_points)
     or not _corresponds(weights, expected_weights)
   ):
+    measure = "four" if profile is _Q8_GEOMETRY else "the parent measure"
     _fail(
       "invalid-quadrature-binding-output",
-      "Q8 quadrature requires positive in-domain weights summing to four",
+      f"{label} quadrature requires positive in-domain weights summing to {measure}",
       selection.region.source,
     )
-  topology = snapshot.resolve(*Q8_TOPOLOGY_KEY).binding
+  topology = snapshot.resolve(*profile.topology_key).binding
   try:
     raw_topology = topology(np.array(points, copy=True))
   except Exception:
     _fail(
-      "topology-binding-failed", "Q8 topology binding failed", selection.block.source
+      "topology-binding-failed",
+      f"{label} topology binding failed",
+      selection.block.source,
     )
   if type(raw_topology) is not tuple or len(raw_topology) != 2:
     _fail(
       "invalid-topology-binding-output",
-      "Q8 topology must return exactly shape values and parent gradients",
+      f"{label} topology must return exactly shape values and parent gradients",
       selection.block.source,
     )
   shape_values = _binding_array(
     raw_topology[0],
-    shape=(_POINT_COUNT, _NODE_COUNT),
+    shape=(profile.point_count, profile.node_count),
     code="invalid-topology-binding-output",
-    label="Q8 shape values",
+    label=f"{label} shape values",
     source=selection.block.source,
   )
   parent_gradients = _binding_array(
     raw_topology[1],
-    shape=(_POINT_COUNT, _NODE_COUNT, 2),
+    shape=(profile.point_count, profile.node_count, profile.topological_dimension),
     code="invalid-topology-binding-output",
-    label="Q8 parent gradients",
+    label=f"{label} parent gradients",
     source=selection.block.source,
   )
-  expected_values, expected_gradients = _qualified_shapes(points)
+  expected_values, expected_gradients = _qualified_profile_shapes(profile, points)
   if (
     not bool(np.allclose(shape_values.sum(1), 1.0, rtol=0.0, atol=1.0e-12))
     or not bool(np.allclose(parent_gradients.sum(1), 0.0, rtol=0.0, atol=1.0e-12))
@@ -1777,18 +2261,28 @@ def _recipes(
   ):
     _fail(
       "invalid-topology-binding-output",
-      "Q8 topology violates partition or gradient completeness",
+      f"{label} topology violates partition or gradient completeness",
       selection.block.source,
     )
   return points, weights, shape_values, parent_gradients
 
 
-def _parameters(selection: RegionSelection) -> tuple[float, float]:
+def _parameters(
+  selection: RegionSelection,
+  profile: ContinuumGeometryProfile,
+) -> tuple[float, float]:
   by_name = {item.name: item for item in selection.material.parameters}
   if tuple(sorted(by_name)) != tuple(sorted(_PARAMETER_NAMES)):
+    if profile is _Q8_GEOMETRY:
+      message = "Q8 plane stress requires youngs_modulus and poisson_ratio"
+    else:
+      message = (
+        f"the {selection.material.model} material on {profile.geometry_interpolation} "
+        "requires youngs_modulus and poisson_ratio"
+      )
     _fail(
       "invalid-material-parameter-schema",
-      "Q8 plane stress requires youngs_modulus and poisson_ratio",
+      message,
       selection.material.source,
     )
   values: list[float] = []
@@ -1956,16 +2450,21 @@ def _geometry(
   parent_gradients: np.ndarray,
   cells: tuple[CellSpec, ...],
   tolerance: float,
+  profile: ContinuumGeometryProfile,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-  gradients = np.empty((len(cells), _POINT_COUNT, _NODE_COUNT, 2), dtype=np.float64)
-  determinants = np.empty((len(cells), _POINT_COUNT), dtype=np.float64)
+  label = "Q8" if profile is _Q8_GEOMETRY else profile.geometry_interpolation
+  point_count = profile.point_count
+  gradients = np.empty(
+    (len(cells), point_count, profile.node_count, 2), dtype=np.float64
+  )
+  determinants = np.empty((len(cells), point_count), dtype=np.float64)
   scales = np.empty(len(cells), dtype=np.float64)
   for cell_index, cell in enumerate(cells):
     normalized, scales[cell_index] = _normalized_coordinates(
       coordinates[connectivity[cell_index]], cell
     )
-    norm_squares = np.empty(_POINT_COUNT, dtype=np.float64)
-    for point_index in range(_POINT_COUNT):
+    norm_squares = np.empty(point_count, dtype=np.float64)
+    for point_index in range(point_count):
       jacobian = normalized.T @ parent_gradients[point_index]
       determinant = float(
         jacobian[0, 0] * jacobian[1, 1] - jacobian[0, 1] * jacobian[1, 0]
@@ -1978,7 +2477,7 @@ def _geometry(
       ):
         _fail(
           "non-finite-reference-geometry",
-          "Q8 has a non-finite reference Jacobian",
+          f"{label} has a non-finite reference Jacobian",
           cell.source,
         )
       determinants[cell_index, point_index] = determinant
@@ -1987,16 +2486,16 @@ def _geometry(
     if bool(np.any(signs > 0.0)) and bool(np.any(signs < 0.0)):
       _fail(
         "sign-changing-reference-geometry",
-        "Q8 changes orientation across quadrature points",
+        f"{label} changes orientation across quadrature points",
         cell.source,
       )
     if bool(np.any(signs < 0.0)):
       _fail(
         "inverted-reference-geometry",
-        "Q8 has negative reference orientation",
+        f"{label} has negative reference orientation",
         cell.source,
       )
-    for point_index in range(_POINT_COUNT):
+    for point_index in range(point_count):
       determinant = float(determinants[cell_index, point_index])
       if (
         determinant <= tolerance
@@ -2004,7 +2503,7 @@ def _geometry(
       ):
         _fail(
           "near-singular-reference-geometry",
-          f"Q8 cell {render_diagnostic_value(cell.id)} has a scale-relative "
+          f"{label} cell {render_diagnostic_value(cell.id)} has a scale-relative "
           f"near-singular Jacobian at point {point_index}",
           cell.source,
         )
@@ -2018,7 +2517,106 @@ def _geometry(
       if not bool(np.isfinite(gradients[cell_index, point_index]).all()):
         _fail(
           "non-finite-reference-geometry",
-          "Q8 physical gradients are non-finite",
+          f"{label} physical gradients are non-finite",
+          cell.source,
+        )
+  return gradients, determinants, scales
+
+
+def _geometry_3d(
+  coordinates: np.ndarray,
+  connectivity: np.ndarray,
+  parent_gradients: np.ndarray,
+  cells: tuple[CellSpec, ...],
+  tolerance: float,
+  profile: ContinuumGeometryProfile,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+  """Three-dimensional analogue of ``_geometry`` (explicit 3x3 adjugate)."""
+  label = profile.geometry_interpolation
+  point_count = profile.point_count
+  gradients = np.empty(
+    (len(cells), point_count, profile.node_count, 3), dtype=np.float64
+  )
+  determinants = np.empty((len(cells), point_count), dtype=np.float64)
+  scales = np.empty(len(cells), dtype=np.float64)
+  for cell_index, cell in enumerate(cells):
+    normalized, scales[cell_index] = _normalized_coordinates(
+      coordinates[connectivity[cell_index]], cell
+    )
+    norm_squares = np.empty(point_count, dtype=np.float64)
+    for point_index in range(point_count):
+      jacobian = normalized.T @ parent_gradients[point_index]
+      determinant = float(
+        jacobian[0, 0]
+        * (jacobian[1, 1] * jacobian[2, 2] - jacobian[1, 2] * jacobian[2, 1])
+        - jacobian[0, 1]
+        * (jacobian[1, 0] * jacobian[2, 2] - jacobian[1, 2] * jacobian[2, 0])
+        + jacobian[0, 2]
+        * (jacobian[1, 0] * jacobian[2, 1] - jacobian[1, 1] * jacobian[2, 0])
+      )
+      norm_square = math.fsum(float(value * value) for value in jacobian.flat)
+      if (
+        not math.isfinite(determinant)
+        or not math.isfinite(norm_square)
+        or norm_square == 0.0
+      ):
+        _fail(
+          "non-finite-reference-geometry",
+          f"{label} has a non-finite reference Jacobian",
+          cell.source,
+        )
+      determinants[cell_index, point_index] = determinant
+      norm_squares[point_index] = norm_square
+    signs = determinants[cell_index]
+    if bool(np.any(signs > 0.0)) and bool(np.any(signs < 0.0)):
+      _fail(
+        "sign-changing-reference-geometry",
+        f"{label} changes orientation across quadrature points",
+        cell.source,
+      )
+    if bool(np.any(signs < 0.0)):
+      _fail(
+        "inverted-reference-geometry",
+        f"{label} has negative reference orientation",
+        cell.source,
+      )
+    for point_index in range(point_count):
+      determinant = float(determinants[cell_index, point_index])
+      condition = float(norm_squares[point_index]) ** 1.5
+      if determinant <= tolerance or determinant / condition <= tolerance:
+        _fail(
+          "near-singular-reference-geometry",
+          f"{label} cell {render_diagnostic_value(cell.id)} has a scale-relative "
+          f"near-singular Jacobian at point {point_index}",
+          cell.source,
+        )
+      jacobian = normalized.T @ parent_gradients[point_index]
+      inverse = np.array(
+        (
+          (
+            jacobian[1, 1] * jacobian[2, 2] - jacobian[1, 2] * jacobian[2, 1],
+            jacobian[0, 2] * jacobian[2, 1] - jacobian[0, 1] * jacobian[2, 2],
+            jacobian[0, 1] * jacobian[1, 2] - jacobian[0, 2] * jacobian[1, 1],
+          ),
+          (
+            jacobian[1, 2] * jacobian[2, 0] - jacobian[1, 0] * jacobian[2, 2],
+            jacobian[0, 0] * jacobian[2, 2] - jacobian[0, 2] * jacobian[2, 0],
+            jacobian[0, 2] * jacobian[1, 0] - jacobian[0, 0] * jacobian[1, 2],
+          ),
+          (
+            jacobian[1, 0] * jacobian[2, 1] - jacobian[1, 1] * jacobian[2, 0],
+            jacobian[0, 1] * jacobian[2, 0] - jacobian[0, 0] * jacobian[2, 1],
+            jacobian[0, 0] * jacobian[1, 1] - jacobian[0, 1] * jacobian[1, 0],
+          ),
+        ),
+        dtype=np.float64,
+      )
+      inverse /= determinant
+      gradients[cell_index, point_index] = parent_gradients[point_index] @ inverse
+      if not bool(np.isfinite(gradients[cell_index, point_index]).all()):
+        _fail(
+          "non-finite-reference-geometry",
+          f"{label} physical gradients are non-finite",
           cell.source,
         )
   return gradients, determinants, scales
@@ -2030,11 +2628,15 @@ def _validate_physical_recovery(
   integration_weights: np.ndarray,
   scales: np.ndarray,
   cells: tuple[CellSpec, ...],
+  profile: ContinuumGeometryProfile,
 ) -> None:
+  label = "Q8" if profile is _Q8_GEOMETRY else profile.geometry_interpolation
   with np.errstate(divide="ignore", invalid="ignore", over="ignore", under="ignore"):
     physical_gradients = gradients / scales[:, None, None, None]
     physical_b = b_matrix / scales[:, None, None, None]
     physical_weights = integration_weights * scales[:, None] * scales[:, None]
+    if profile.embedding_dimension == 3:
+      physical_weights = physical_weights * scales[:, None]
   for index, cell in enumerate(cells):
     if (
       not bool(np.isfinite(physical_gradients[index]).all())
@@ -2044,7 +2646,7 @@ def _validate_physical_recovery(
     ):
       _fail(
         "unrepresentable-physical-geometry",
-        f"Q8 cell {render_diagnostic_value(cell.id)} physical gradients or "
+        f"{label} cell {render_diagnostic_value(cell.id)} physical gradients or "
         "integration measure cannot be represented as float64",
         cell.source,
       )
@@ -2140,7 +2742,18 @@ def _compile_mechanical(
   index_dtype: np.dtype,
   geometry_relative_tolerance: float,
 ) -> tuple[IncidenceEntityBlock, CompiledOperator]:
-  if selection.material.model != Q8_MATERIAL_KEY[1]:
+  model = selection.material.model
+  if model == ISOTROPIC_MATERIAL_KEY[1]:
+    return _compile_mechanical_3d(
+      selection,
+      coordinates=coordinates,
+      node_dense=node_dense,
+      spaces=spaces,
+      snapshot=snapshot,
+      index_dtype=index_dtype,
+      geometry_relative_tolerance=geometry_relative_tolerance,
+    )
+  if model not in _PLANAR_LINEAR_MATERIAL_MODELS:
     return _compile_mechanical_stateful(
       selection,
       coordinates=coordinates,
@@ -2150,6 +2763,29 @@ def _compile_mechanical(
       index_dtype=index_dtype,
       geometry_relative_tolerance=geometry_relative_tolerance,
     )
+  return _compile_mechanical_linear(
+    selection,
+    coordinates=coordinates,
+    node_dense=node_dense,
+    spaces=spaces,
+    snapshot=snapshot,
+    index_dtype=index_dtype,
+    geometry_relative_tolerance=geometry_relative_tolerance,
+  )
+
+
+def _compile_mechanical_linear(
+  selection: RegionSelection,
+  *,
+  coordinates: FinalizedArray,
+  node_dense: dict[SpecId, int],
+  spaces: dict[SpecId, DiscreteSpace],
+  snapshot: RegistrySnapshot,
+  index_dtype: np.dtype,
+  geometry_relative_tolerance: float,
+) -> tuple[IncidenceEntityBlock, CompiledOperator]:
+  profile = selection.geometry
+  label = "Q8" if profile is _Q8_GEOMETRY else profile.geometry_interpolation
   space = spaces[selection.fields[0].id]
   connectivity_values = [
     [node_dense[node_id] for node_id in cell.node_ids] for cell in selection.cells
@@ -2170,21 +2806,27 @@ def _compile_mechanical(
     parent_gradients,
     selection.cells,
     geometry_relative_tolerance,
+    profile,
   )
-  formulation = snapshot.resolve(*Q8_FORMULATION_KEY).binding
+  formulation = snapshot.resolve(*profile.formulation_key).binding
   try:
     raw_b_matrix = formulation(np.array(gradients, copy=True))
   except Exception:
     _fail(
       "formulation-binding-failed",
-      "Q8 formulation binding failed",
+      f"{label} formulation binding failed",
       selection.region.source,
     )
   b_matrix = _binding_array(
     raw_b_matrix,
-    shape=(len(selection.cells), _POINT_COUNT, 3, _LOCAL_COEFFICIENT_COUNT),
+    shape=(
+      len(selection.cells),
+      profile.point_count,
+      3,
+      profile.local_coefficient_count,
+    ),
     code="invalid-formulation-binding-output",
-    label="Q8 strain-displacement binding",
+    label=f"{label} strain-displacement binding",
     source=selection.region.source,
   )
   expected_b = np.zeros_like(b_matrix)
@@ -2195,37 +2837,51 @@ def _compile_mechanical(
   if not _corresponds(b_matrix, expected_b):
     _fail(
       "incompatible-formulation-binding-output",
-      "Q8 formulation output contradicts the qualified engineering-shear map",
+      f"{label} formulation output contradicts the qualified engineering-shear map",
       selection.region.source,
     )
-  youngs_modulus, poisson_ratio = _parameters(selection)
-  exact_constitutive, binary64_route = _qualified_constitutive(
-    youngs_modulus,
-    poisson_ratio,
-    selection.material.source,
-  )
-  material = snapshot.resolve(*Q8_MATERIAL_KEY).binding
+  youngs_modulus, poisson_ratio = _parameters(selection, profile)
+  if selection.material.model == PLANE_STRAIN_MATERIAL_KEY[1]:
+    exact_constitutive, binary64_route = _qualified_plane_strain_constitutive(
+      youngs_modulus,
+      poisson_ratio,
+      selection.material.source,
+    )
+  else:
+    exact_constitutive, binary64_route = _qualified_constitutive(
+      youngs_modulus,
+      poisson_ratio,
+      selection.material.source,
+    )
+  material = snapshot.resolve("material", selection.material.model).binding
   try:
     with warnings.catch_warnings():
       warnings.simplefilter("error", RuntimeWarning)
       raw_constitutive = material(youngs_modulus, poisson_ratio)
   except Exception:
     _fail(
-      "material-binding-failed", "Q8 material binding failed", selection.material.source
+      "material-binding-failed",
+      f"{label} material binding failed",
+      selection.material.source,
     )
   constitutive = _binding_array(
     raw_constitutive,
     shape=(3, 3),
     code="invalid-material-binding-output",
-    label="Q8 material binding",
+    label=f"{label} material binding",
     source=selection.material.source,
   )
   if not bool(np.array_equal(constitutive, constitutive.T)):
     _fail(
       "nonsymmetric-material-binding",
-      "Q8 material tangent must be symmetric",
+      f"{label} material tangent must be symmetric",
       selection.material.source,
     )
+  law = (
+    "plane-strain"
+    if selection.material.model == PLANE_STRAIN_MATERIAL_KEY[1]
+    else "plane-stress"
+  )
   if not _constitutive_corresponds(
     constitutive,
     exact_constitutive,
@@ -2233,7 +2889,7 @@ def _compile_mechanical(
   ):
     _fail(
       "incompatible-material-binding-output",
-      "Q8 material output contradicts the qualified plane-stress law",
+      f"{label} material output contradicts the qualified {law} law",
       selection.material.source,
     )
   integration_weights = determinants * weights[None, :]
@@ -2243,6 +2899,7 @@ def _compile_mechanical(
     integration_weights,
     geometry_scales,
     selection.cells,
+    profile,
   )
   with np.errstate(invalid="ignore", over="ignore", under="ignore"):
     tangent = np.einsum(
@@ -2256,7 +2913,7 @@ def _compile_mechanical(
   if not bool(np.isfinite(tangent).all()):
     _fail(
       "non-finite-element-operator",
-      "Q8 element operator is non-finite",
+      f"{label} element operator is non-finite",
       selection.region.source,
     )
   tangent_scale = float(np.max(np.abs(tangent)))
@@ -2274,7 +2931,7 @@ def _compile_mechanical(
   ):
     _fail(
       "nonsymmetric-element-operator",
-      "Q8 element operator is not symmetric",
+      f"{label} element operator is not symmetric",
       selection.region.source,
     )
 
@@ -2403,6 +3060,286 @@ def _compile_mechanical(
   )
 
 
+def _compile_mechanical_3d(
+  selection: RegionSelection,
+  *,
+  coordinates: FinalizedArray,
+  node_dense: dict[SpecId, int],
+  spaces: dict[SpecId, DiscreteSpace],
+  snapshot: RegistrySnapshot,
+  index_dtype: np.dtype,
+  geometry_relative_tolerance: float,
+) -> tuple[IncidenceEntityBlock, CompiledOperator]:
+  """Compile the three-dimensional linear mechanical slice (hex8, isotropic)."""
+  profile = selection.geometry
+  label = profile.geometry_interpolation
+  space = spaces[selection.fields[0].id]
+  connectivity_values = [
+    [node_dense[node_id] for node_id in cell.node_ids] for cell in selection.cells
+  ]
+  connectivity = FinalizedArray(connectivity_values, dtype=index_dtype)
+  entity_block_id = selection.block.id
+  entity_block = _new(
+    IncidenceEntityBlock,
+    block_id=entity_block_id,
+    entity_ids=tuple(cell.id for cell in selection.cells),
+    sources=tuple(_source(cell.source) for cell in selection.cells),
+    incidence=connectivity,
+  )
+  points, weights, shape_values, parent_gradients = _recipes(snapshot, selection)
+  gradients, determinants, geometry_scales = _geometry_3d(
+    coordinates.values,
+    connectivity.values,
+    parent_gradients,
+    selection.cells,
+    geometry_relative_tolerance,
+    profile,
+  )
+  formulation = snapshot.resolve(*profile.formulation_key).binding
+  try:
+    raw_b_matrix = formulation(np.array(gradients, copy=True))
+  except Exception:
+    _fail(
+      "formulation-binding-failed",
+      f"{label} formulation binding failed",
+      selection.region.source,
+    )
+  b_matrix = _binding_array(
+    raw_b_matrix,
+    shape=(
+      len(selection.cells),
+      profile.point_count,
+      6,
+      profile.local_coefficient_count,
+    ),
+    code="invalid-formulation-binding-output",
+    label=f"{label} strain-displacement binding",
+    source=selection.region.source,
+  )
+  expected_b = np.zeros_like(b_matrix)
+  expected_b[..., 0, 0::3] = gradients[..., :, 0]
+  expected_b[..., 1, 1::3] = gradients[..., :, 1]
+  expected_b[..., 2, 2::3] = gradients[..., :, 2]
+  expected_b[..., 3, 1::3] = gradients[..., :, 2]
+  expected_b[..., 3, 2::3] = gradients[..., :, 1]
+  expected_b[..., 4, 0::3] = gradients[..., :, 2]
+  expected_b[..., 4, 2::3] = gradients[..., :, 0]
+  expected_b[..., 5, 0::3] = gradients[..., :, 1]
+  expected_b[..., 5, 1::3] = gradients[..., :, 0]
+  if not _corresponds(b_matrix, expected_b):
+    _fail(
+      "incompatible-formulation-binding-output",
+      f"{label} formulation output contradicts the qualified engineering-shear map",
+      selection.region.source,
+    )
+  youngs_modulus, poisson_ratio = _parameters(selection, profile)
+  exact_constitutive, binary64_route = _qualified_isotropic_constitutive(
+    youngs_modulus,
+    poisson_ratio,
+    selection.material.source,
+  )
+  material = snapshot.resolve("material", selection.material.model).binding
+  try:
+    with warnings.catch_warnings():
+      warnings.simplefilter("error", RuntimeWarning)
+      raw_constitutive = material(youngs_modulus, poisson_ratio)
+  except Exception:
+    _fail(
+      "material-binding-failed",
+      f"{label} material binding failed",
+      selection.material.source,
+    )
+  constitutive = _binding_array(
+    raw_constitutive,
+    shape=(6, 6),
+    code="invalid-material-binding-output",
+    label=f"{label} material binding",
+    source=selection.material.source,
+  )
+  if not bool(np.array_equal(constitutive, constitutive.T)):
+    _fail(
+      "nonsymmetric-material-binding",
+      f"{label} material tangent must be symmetric",
+      selection.material.source,
+    )
+  if not _constitutive_corresponds(
+    constitutive,
+    exact_constitutive,
+    binary64_route,
+  ):
+    _fail(
+      "incompatible-material-binding-output",
+      f"{label} material output contradicts the qualified isotropic 3D law",
+      selection.material.source,
+    )
+  integration_weights = determinants * weights[None, :]
+  _validate_physical_recovery(
+    gradients,
+    b_matrix,
+    integration_weights,
+    geometry_scales,
+    selection.cells,
+    profile,
+  )
+  with np.errstate(invalid="ignore", over="ignore", under="ignore"):
+    tangent = geometry_scales[:, None, None] * np.einsum(
+      "ep,epai,ab,epbj->eij",
+      integration_weights,
+      b_matrix,
+      constitutive,
+      b_matrix,
+      optimize=True,
+    )
+  if not bool(np.isfinite(tangent).all()):
+    _fail(
+      "non-finite-element-operator",
+      f"{label} element operator is non-finite",
+      selection.region.source,
+    )
+  tangent_scale = float(np.max(np.abs(tangent)))
+  symmetry_tolerance = 64.0 * max(
+    float(np.finfo(np.float64).eps) * tangent_scale,
+    abs(tangent_scale - math.nextafter(tangent_scale, 0.0)),
+  )
+  if not bool(
+    np.allclose(
+      tangent,
+      tangent.transpose(0, 2, 1),
+      rtol=0.0,
+      atol=symmetry_tolerance,
+    )
+  ):
+    _fail(
+      "nonsymmetric-element-operator",
+      f"{label} element operator is not symmetric",
+      selection.region.source,
+    )
+
+  gather = FinalizedArray(
+    _gather_map(space, connectivity.values, node_dense).reshape(
+      len(selection.cells), -1
+    ),
+    dtype=index_dtype,
+  )
+  block_id = selection.block.id, selection.region.id
+  state_layout = _new(
+    OperatorStateLayout,
+    schema="pyfem-v3-operator-state-layout-v1",
+    block_id=block_id,
+    entity_count=len(selection.cells),
+    slots=(),
+    entity_offsets=FinalizedArray(
+      np.zeros(len(selection.cells) + 1), dtype=index_dtype
+    ),
+    row_width=0,
+    dtype=np.dtype(np.float64).str,
+    lifetime=StateLifetime.ACCEPTED_TRIAL,
+  )
+  port = _new(
+    PortBinding,
+    port_id="displacement",
+    space_id=space.space_id,
+    mode=PortMode.COEFFICIENTS,
+    coefficient_map=gather,
+  )
+  residual_channel = _new(
+    ResidualChannel,
+    channel_id="internal-force",
+    target_port_id=port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+  )
+  jacobian_channel = _new(
+    JacobianChannel,
+    channel_id="material-tangent",
+    residual_channel_id="internal-force",
+    target_port_id=port.port_id,
+    source_port_id=port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+    symmetric=True,
+  )
+  header = _new(
+    OperatorHeader,
+    block_id=block_id,
+    entity_block_id=entity_block_id,
+    implementations=_identities(snapshot),
+    ports=(port,),
+    signal_ports=(),
+    residual_channels=(residual_channel,),
+    jacobian_channels=(jacobian_channel,),
+    state_layout=state_layout,
+    coupling_policy=CouplingPolicy.FIXED,
+  )
+  payload = _new(
+    Hex8ContinuumPayload,
+    quadrature_points=FinalizedArray(points, dtype=np.float64),
+    quadrature_weights=FinalizedArray(weights, dtype=np.float64),
+    shape_values=FinalizedArray(shape_values, dtype=np.float64),
+    parent_gradients=FinalizedArray(parent_gradients, dtype=np.float64),
+    geometry_scales=FinalizedArray(geometry_scales, dtype=np.float64),
+    normalized_gradients=FinalizedArray(gradients, dtype=np.float64),
+    normalized_strain_displacement=FinalizedArray(b_matrix, dtype=np.float64),
+    normalized_integration_weights=FinalizedArray(
+      integration_weights, dtype=np.float64
+    ),
+    constitutive=FinalizedArray(constitutive, dtype=np.float64),
+    material_parameters=FinalizedArray(
+      [[youngs_modulus, poisson_ratio]], dtype=np.float64
+    ),
+  )
+  manifest = CanonicalManifest(
+    {
+      "block_id": block_id,
+      "entity_block_id": entity_block_id,
+      "entity_ids": entity_block.entity_ids,
+      "implementations": [
+        {
+          "kind": item.kind,
+          "name": item.name,
+          "version": item.version,
+          "implementation_id": item.implementation_id,
+        }
+        for item in header.implementations
+      ],
+      "port": {
+        "port_id": port.port_id,
+        "space_id": port.space_id,
+        "coefficient_map": port.coefficient_map.values,
+      },
+      "channels": ["internal-force", "material-tangent"],
+      "state": {
+        "schema": state_layout.schema,
+        "row_width": 0,
+        "entity_offsets": state_layout.entity_offsets.values,
+      },
+      "payload": {
+        "quadrature_points": payload.quadrature_points.values,
+        "quadrature_weights": payload.quadrature_weights.values,
+        "shape_values": payload.shape_values.values,
+        "parent_gradients": payload.parent_gradients.values,
+        "geometry_scales": payload.geometry_scales.values,
+        "normalized_gradients": payload.normalized_gradients.values,
+        "normalized_strain_displacement": (
+          payload.normalized_strain_displacement.values
+        ),
+        "normalized_integration_weights": (
+          payload.normalized_integration_weights.values
+        ),
+        "constitutive": payload.constitutive.values,
+        "material_parameters": payload.material_parameters.values,
+      },
+    }
+  )
+  return entity_block, _new(
+    Hex8ContinuumOperator,
+    header=header,
+    entity_block=entity_block,
+    payload=payload,
+    content_manifest=manifest,
+  )
+
+
 def _flat_binding_array(
   value: object,
   *,
@@ -2461,6 +3398,7 @@ def _compile_mechanical_stateful(
     parent_gradients,
     selection.cells,
     geometry_relative_tolerance,
+    selection.geometry,
   )
   formulation = snapshot.resolve(*Q8_FORMULATION_KEY).binding
   try:
@@ -2635,6 +3573,7 @@ def _compile_mechanical_stateful(
     integration_weights,
     geometry_scales,
     selection.cells,
+    selection.geometry,
   )
   gather = FinalizedArray(
     _gather_map(space, connectivity.values, node_dense).reshape(
@@ -2913,6 +3852,7 @@ def _compile_thermal(
     parent_gradients,
     selection.cells,
     geometry_relative_tolerance,
+    selection.geometry,
   )
   formulation = snapshot.resolve(*THERMAL_FORMULATION_KEY).binding
   try:
@@ -2978,6 +3918,7 @@ def _compile_thermal(
     integration_weights,
     geometry_scales,
     selection.cells,
+    selection.geometry,
   )
   with np.errstate(invalid="ignore", over="ignore", under="ignore"):
     tangent = np.einsum(
@@ -3146,6 +4087,7 @@ def _compile_coupled(
     parent_gradients,
     selection.cells,
     geometry_relative_tolerance,
+    selection.geometry,
   )
   formulation = snapshot.resolve(*THERMO_FORMULATION_KEY).binding
   try:
@@ -3295,6 +4237,7 @@ def _compile_coupled(
     integration_weights,
     geometry_scales,
     selection.cells,
+    selection.geometry,
   )
   with np.errstate(invalid="ignore", over="ignore", under="ignore"):
     tangent_uu = np.einsum(
