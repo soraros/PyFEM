@@ -4,7 +4,9 @@ A trial state is authored as a mapping of node id to displacement components;
 the helpers map it onto the compiled system's coefficient vector, gather the
 operator's port batch, supply a zero accepted state of the compiled layout,
 and request every channel. This covers the teaching path (stateless Q8 and
-truss operators); stateful spring flows use the transaction owner directly.
+truss operators); stateful flows step through the transaction helpers in
+:mod:`pyfem.v3.authoring.transactions` (``state_owner``/``nonlinear_static``),
+passing the trial's accepted snapshot as ``accepted_state`` here.
 """
 
 from __future__ import annotations
