@@ -16,7 +16,11 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
-from pyfem.v3.compile.continuum import Q8ContinuumOperator, q8_reference_registry
+from pyfem.v3.compile.continuum import (
+  Q8ContinuumOperator,
+  plasticity_reference_registry,
+  q8_reference_registry,
+)
 from pyfem.v3.compile.diagnostics import ModelCompilationError
 from pyfem.v3.compile.spring import (
   SpringDeclaration,
@@ -1041,3 +1045,134 @@ def test_trusted_carriers_and_typed_evaluations_resist_reconstruction() -> None:
     with pytest.raises(TypeError, match="constructed only by their compiler"):
       carrier()
   assert evaluation_status(evaluation) is EvaluationStatus.OK
+
+
+def _plasticity_system() -> CompiledSystem:
+  """One Q8 element bound to the first stateful law."""
+  nodes = tuple(
+    NodeSpec(
+      id=index + 1,
+      coordinates=point,
+      source=_source(f"plastic-node-{index + 1}"),
+    )
+    for index, point in enumerate(_UNIT_COORDINATES)
+  )
+  cell = CellSpec(
+    id="cell-1",
+    node_ids=tuple(node.id for node in nodes),
+    source=_source("plastic-cell"),
+  )
+  model = ModelSpec(
+    mesh=MeshSpec(
+      nodes=nodes,
+      cell_blocks=(
+        CellBlockSpec(
+          id="cells",
+          reference_topology="quadrilateral",
+          topological_dimension=2,
+          embedding_dimension=2,
+          geometry_interpolation="serendipity-quad8",
+          cells=(cell,),
+          source=_source("plastic-block"),
+        ),
+      ),
+      source=_source("plastic-mesh"),
+    ),
+    fields=(
+      FieldSpec(
+        id="displacement",
+        components=("x", "y"),
+        location="node",
+        source=_source("plastic-field"),
+      ),
+    ),
+    materials=(
+      MaterialSpec(
+        id="steel",
+        model="isotropic-hardening-plasticity",
+        parameters=(
+          MaterialParameterSpec("youngs_modulus", 210000.0),
+          MaterialParameterSpec("poisson_ratio", 0.3),
+          MaterialParameterSpec("initial_yield_stress", 250.0),
+          MaterialParameterSpec("hardening_slope", 1000.0),
+        ),
+        source=_source("plastic-material"),
+      ),
+    ),
+    regions=(
+      RegionSpec(
+        id="domain",
+        cell_refs=(CellRef("cells", "cell-1"),),
+        field_ids=("displacement",),
+        material_id="steel",
+        formulation="small-strain-continuum",
+        quadrature="gauss-3x3",
+        source=_source("plastic-region"),
+      ),
+    ),
+    source=_source("plastic-model"),
+  )
+  return compile_system(model, plasticity_reference_registry())
+
+
+def test_owner_seeds_accepted_rows_from_compiler_emitted_initial_rows() -> None:
+  # Landed layouts carry no initial rows: the owner keeps zero-initializing.
+  system = _damage_system()
+  owner = StateTransactionOwner(system)
+  for operator in system.operators:
+    layout = operator.header.state_layout
+    assert getattr(layout, "initial_rows", None) is None
+    assert np.all(owner.accepted_state(layout.block_id).values == 0.0)
+
+  # The first stateful law binds explicit (zero) initial rows and the owner
+  # applies exactly those rows at construction (F3 G2).
+  plastic = _plasticity_system()
+  layout = plastic.operators[0].header.state_layout
+  assert layout.initial_rows is not None
+  assert layout.row_shape == (9, 19)
+  owner = StateTransactionOwner(plastic)
+  np.testing.assert_array_equal(
+    owner.accepted_state(layout.block_id).values,
+    layout.initial_rows.values,
+  )
+  # The emitted entity offsets stride one full row per integration point.
+  np.testing.assert_array_equal(
+    layout.entity_offsets.values,
+    np.arange(10) * 19,
+  )
+
+
+def test_owner_rejects_malformed_initial_rows_and_annotations() -> None:
+  system = _plasticity_system()
+  layout = system.operators[0].header.state_layout
+  object.__setattr__(layout, "initial_rows", np.zeros((9, 19)))
+  with pytest.raises(TypeError, match="initial rows must be an exact FinalizedArray"):
+    StateTransactionOwner(system)
+
+  system = _plasticity_system()
+  layout = system.operators[0].header.state_layout
+  object.__setattr__(
+    layout,
+    "initial_rows",
+    FinalizedArray(np.zeros((9, 18)), dtype=np.float64),
+  )
+  with pytest.raises(ValueError, match="initial rows must match the layout row shape"):
+    StateTransactionOwner(system)
+
+  system = _plasticity_system()
+  layout = system.operators[0].header.state_layout
+  object.__setattr__(
+    layout,
+    "initial_rows",
+    FinalizedArray(np.full((9, 19), np.inf), dtype=np.float64),
+  )
+  with pytest.raises(ValueError, match="initial rows must be finite"):
+    StateTransactionOwner(system)
+
+  system = _plasticity_system()
+  slot = system.operators[0].header.state_layout.slots[0]
+  object.__setattr__(slot, "annotation", 3)
+  with pytest.raises(
+    TypeError, match="slot annotations must be non-empty exact strings"
+  ):
+    StateTransactionOwner(system)

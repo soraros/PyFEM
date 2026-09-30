@@ -83,6 +83,10 @@ def _validated_layout(value: object) -> OperatorStateLayout:
     ):
       msg = "operator state layout slots must be positive-width float64 rows"
       raise TypeError(msg)
+    annotation = getattr(slot, "annotation", None)
+    if annotation is not None and (type(annotation) is not str or not annotation):
+      msg = "operator state slot annotations must be non-empty exact strings"
+      raise TypeError(msg)
   if sum(slot.width for slot in layout.slots) != layout.row_width:
     msg = "operator state layout row width must equal the summed slot widths"
     raise TypeError(msg)
@@ -100,6 +104,22 @@ def _validated_layout(value: object) -> OperatorStateLayout:
   ):
     msg = "operator state layout entity offsets must bound contiguous rows"
     raise TypeError(msg)
+  initial_rows = getattr(layout, "initial_rows", None)
+  if initial_rows is not None:
+    if type(initial_rows) is not FinalizedArray:
+      msg = "operator state layout initial rows must be an exact FinalizedArray"
+      raise TypeError(msg)
+    rows = initial_rows.values
+    if (
+      rows.dtype != np.dtype(np.float64)
+      or rows.dtype.metadata is not None
+      or rows.shape != layout.row_shape
+    ):
+      msg = "operator state layout initial rows must match the layout row shape"
+      raise ValueError(msg)
+    if not bool(np.isfinite(rows).all()):
+      msg = "operator state layout initial rows must be finite"
+      raise ValueError(msg)
   return layout
 
 
@@ -276,9 +296,23 @@ class StateTransactionOwner:
       )
       if codec is None:
         codec = Float64StateRowCodec(layout.schema)
+      # Layouts carrying compiler-emitted initial rows seed the accepted buffer
+      # with them; all other layouts keep zero initialization.
+      initial_rows = getattr(layout, "initial_rows", None)
+      accepted = (
+        np.array(
+          initial_rows.values,
+          dtype=np.float64,
+          order="C",
+          copy=True,
+          subok=False,
+        )
+        if initial_rows is not None
+        else np.zeros(layout.row_shape, dtype=np.float64)
+      )
       blocks[block_id] = _BlockBinding(
         layout=layout,
-        accepted=np.zeros(layout.row_shape, dtype=np.float64),
+        accepted=accepted,
         codec=codec,
       )
 
