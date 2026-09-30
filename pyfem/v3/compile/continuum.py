@@ -1,4 +1,30 @@
-"""Concrete direct compiler and evaluator for the qualified Q8 continuum slice."""
+"""Concrete direct compiler and evaluators for the qualified Q8 continuum slices.
+
+The continuum family compiles three formulations sharing two-dimensional
+serendipity-quad8 geometry and 3x3 Gauss quadrature:
+
+- ``small-strain-continuum``: one node displacement field with physical
+  components ``('x', 'y')`` and a plane-stress linear-elastic material. This
+  is the landed single-field slice; its compiled output is byte-identical to
+  the original direct compiler.
+- ``small-strain-thermal-continuum``: one node temperature field carrying
+  exactly one component and an isotropic linear conductor.
+- ``small-strain-thermo-elastic-continuum``: one displacement field followed
+  by one temperature field in the region field signature, with a coupled
+  linear thermo-elastic material. The operator binds both spaces with
+  per-port coefficient maps and carries exactly the nonzero static Jacobian
+  blocks: the mechanical tangent (displacement from displacement, symmetric),
+  the thermal-expansion tangent (displacement from temperature,
+  nonsymmetric), and the conduction tangent (temperature from temperature,
+  symmetric). A stateless static thermo-elastic operator honestly has no
+  mechanical-to-thermal block: that coupling is a rate effect owned by
+  stateful formulations with accepted state and signals.
+
+Capability boundary: every cell belongs to exactly one region; each region
+draws its cells from exactly one cell block; each cell block feeds exactly
+one region; every declared field and material is referenced by at least one
+region. Violations fail with coded source-context diagnostics.
+"""
 
 from __future__ import annotations
 
@@ -22,6 +48,7 @@ from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
   BalanceRole,
   ChannelRequest,
+  CompiledOperator,
   CompilerConstructed,
   CouplingPolicy,
   ImplementationIdentity,
@@ -47,6 +74,7 @@ from pyfem.v3.spec.model import (
   CellBlockSpec,
   CellSpec,
   FieldSpec,
+  MaterialParameterSpec,
   MaterialSpec,
   ModelSpec,
   RegionSpec,
@@ -57,17 +85,41 @@ Q8_TOPOLOGY_KEY: RegistryKey = ("topology", "serendipity-quad8")
 Q8_QUADRATURE_KEY: RegistryKey = ("quadrature", "gauss-3x3")
 Q8_FORMULATION_KEY: RegistryKey = ("formulation", "small-strain-continuum")
 Q8_MATERIAL_KEY: RegistryKey = ("material", "plane-stress-linear-elastic")
-_REQUIRED_KEYS = (
-  Q8_TOPOLOGY_KEY,
-  Q8_QUADRATURE_KEY,
-  Q8_FORMULATION_KEY,
-  Q8_MATERIAL_KEY,
+THERMAL_FORMULATION_KEY: RegistryKey = (
+  "formulation",
+  "small-strain-thermal-continuum",
 )
+THERMAL_MATERIAL_KEY: RegistryKey = ("material", "linear-thermal-conductor")
+THERMO_FORMULATION_KEY: RegistryKey = (
+  "formulation",
+  "small-strain-thermo-elastic-continuum",
+)
+THERMO_MATERIAL_KEY: RegistryKey = ("material", "linear-thermo-elastic")
 _PARAMETER_NAMES = ("youngs_modulus", "poisson_ratio")
+_THERMAL_PARAMETER_NAMES = ("conductivity",)
+_THERMO_PARAMETER_NAMES = (
+  "youngs_modulus",
+  "poisson_ratio",
+  "thermal_expansion",
+  "conductivity",
+)
 _POINT_COUNT = 9
 _NODE_COUNT = 8
 _LOCAL_COEFFICIENT_COUNT = 16
 _MATERIAL_RELATIVE_TOLERANCE = 16.0 * float(np.finfo(np.float64).eps)
+
+_DISPLACEMENT_ROLE = ("displacement", ("x", "y"))
+_TEMPERATURE_ROLE = ("temperature", "scalar")
+_FORMULATION_CONTRACTS = {
+  Q8_FORMULATION_KEY[1]: (_DISPLACEMENT_ROLE,),
+  THERMAL_FORMULATION_KEY[1]: (_TEMPERATURE_ROLE,),
+  THERMO_FORMULATION_KEY[1]: (_DISPLACEMENT_ROLE, _TEMPERATURE_ROLE),
+}
+_FORMULATION_MATERIAL_MODELS = {
+  Q8_FORMULATION_KEY[1]: Q8_MATERIAL_KEY[1],
+  THERMAL_FORMULATION_KEY[1]: THERMAL_MATERIAL_KEY[1],
+  THERMO_FORMULATION_KEY[1]: THERMO_MATERIAL_KEY[1],
+}
 
 
 def _new[ValueT](cls: type[ValueT], /, **fields: object) -> ValueT:
@@ -101,12 +153,17 @@ def _source(value: SourceContext) -> CompiledSource:
 
 
 @dataclass(frozen=True, slots=True, eq=False)
-class ContinuumSelection:
+class RegionSelection:
   block: CellBlockSpec
-  field: FieldSpec
+  fields: tuple[FieldSpec, ...]
   material: MaterialSpec
   region: RegionSpec
   cells: tuple[CellSpec, ...]
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class ContinuumSelection:
+  regions: tuple[RegionSelection, ...]
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
@@ -224,6 +281,332 @@ class Q8ContinuumOperator(CompilerConstructed):
     )
 
 
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Q8ThermalPayload(CompilerConstructed):
+  quadrature_points: FinalizedArray
+  quadrature_weights: FinalizedArray
+  shape_values: FinalizedArray
+  parent_gradients: FinalizedArray
+  geometry_scales: FinalizedArray
+  normalized_gradients: FinalizedArray
+  normalized_temperature_gradients: FinalizedArray
+  normalized_integration_weights: FinalizedArray
+  conductivity: FinalizedArray
+  material_parameters: FinalizedArray
+
+  def physical_gradients(self) -> FinalizedArray:
+    values = (
+      self.normalized_gradients.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
+
+  def physical_temperature_gradients(self) -> FinalizedArray:
+    values = (
+      self.normalized_temperature_gradients.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
+
+  def physical_integration_weights(self) -> FinalizedArray:
+    scales = self.geometry_scales.values[:, None]
+    values = self.normalized_integration_weights.values * scales * scales
+    return FinalizedArray(values, dtype=np.float64)
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Q8ThermalOperator(CompilerConstructed):
+  header: OperatorHeader
+  entity_block: IncidenceEntityBlock
+  payload: Q8ThermalPayload
+  content_manifest: CanonicalManifest
+
+  def evaluate(
+    self,
+    inputs: OperatorEvaluationInput,
+  ) -> OperatorEvaluation:
+    """Evaluate local heat flux and conduction tangent from compiled meaning."""
+    if type(inputs) is not OperatorEvaluationInput:
+      msg = "thermal evaluation requires an exact immutable evaluation input"
+      raise TypeError(msg)
+    if type(inputs.port_values) is not tuple or len(inputs.port_values) != 1:
+      msg = "thermal evaluation requires exactly one temperature port batch"
+      raise TypeError(msg)
+    values = inputs.port_values[0].values
+    expected = self.header.ports[0].coefficient_map.values.shape
+    if (
+      values.dtype != np.dtype(np.float64)
+      or values.dtype.metadata is not None
+      or values.shape != expected
+      or not bool(np.isfinite(values).all())
+    ):
+      msg = (
+        "thermal temperature port values must be a finite metadata-free float64 batch"
+      )
+      raise TypeError(msg)
+    layout = self.header.state_layout
+    accepted_state = inputs.accepted_state.values
+    if (
+      accepted_state.dtype != np.dtype(np.float64)
+      or accepted_state.dtype.metadata is not None
+      or accepted_state.shape != layout.row_shape
+      or not bool(np.isfinite(accepted_state).all())
+    ):
+      msg = "thermal accepted state must match the compiled zero-width state layout"
+      raise TypeError(msg)
+    if inputs.signals or self.header.signal_ports:
+      msg = "thermal model operator does not accept program signal inputs"
+      raise ValueError(msg)
+    residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
+    jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    request = inputs.request
+    if (
+      type(request) is not ChannelRequest
+      or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
+      or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or not set(request.residual_channel_ids).issubset(residual_ids)
+      or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+    ):
+      msg = "thermal evaluation request contains an unavailable or duplicate channel"
+      raise ValueError(msg)
+
+    requested_residuals = set(request.residual_channel_ids)
+    requested_jacobians = set(request.jacobian_channel_ids)
+    tangent = None
+    if (
+      "heat-flux" in requested_residuals or "conduction-tangent" in requested_jacobians
+    ):
+      b_t = self.payload.normalized_temperature_gradients.values
+      weights = self.payload.normalized_integration_weights.values
+      conduction = self.payload.conductivity.values
+      with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        tangent = np.einsum(
+          "ep,epai,ab,epbj->eij",
+          weights,
+          b_t,
+          conduction,
+          b_t,
+          optimize=True,
+        )
+      if not bool(np.isfinite(tangent).all()):
+        msg = "thermal evaluation response is not representable as finite float64"
+        raise ValueError(msg)
+    residual_values: tuple[FinalizedArray, ...] = ()
+    if "heat-flux" in requested_residuals:
+      assert tangent is not None
+      with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        residual = np.einsum("eij,ej->ei", tangent, values, optimize=True)
+      if not bool(np.isfinite(residual).all()):
+        msg = "thermal evaluation response is not representable as finite float64"
+        raise ValueError(msg)
+      residual_values = (FinalizedArray(residual, dtype=np.float64),)
+    jacobian_values = (
+      (FinalizedArray(tangent, dtype=np.float64),)
+      if "conduction-tangent" in requested_jacobians
+      else ()
+    )
+    return _new(
+      OperatorEvaluation,
+      residual_values=residual_values,
+      jacobian_values=jacobian_values,
+      trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+    )
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Q8ThermoElasticPayload(CompilerConstructed):
+  quadrature_points: FinalizedArray
+  quadrature_weights: FinalizedArray
+  shape_values: FinalizedArray
+  parent_gradients: FinalizedArray
+  geometry_scales: FinalizedArray
+  normalized_gradients: FinalizedArray
+  normalized_strain_displacement: FinalizedArray
+  normalized_temperature_gradients: FinalizedArray
+  normalized_integration_weights: FinalizedArray
+  constitutive: FinalizedArray
+  thermal_expansion: FinalizedArray
+  conductivity: FinalizedArray
+  material_parameters: FinalizedArray
+
+  def physical_gradients(self) -> FinalizedArray:
+    values = (
+      self.normalized_gradients.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
+
+  def physical_strain_displacement(self) -> FinalizedArray:
+    values = (
+      self.normalized_strain_displacement.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
+
+  def physical_temperature_gradients(self) -> FinalizedArray:
+    values = (
+      self.normalized_temperature_gradients.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
+
+  def physical_integration_weights(self) -> FinalizedArray:
+    scales = self.geometry_scales.values[:, None]
+    values = self.normalized_integration_weights.values * scales * scales
+    return FinalizedArray(values, dtype=np.float64)
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Q8ThermoElasticOperator(CompilerConstructed):
+  header: OperatorHeader
+  entity_block: IncidenceEntityBlock
+  payload: Q8ThermoElasticPayload
+  content_manifest: CanonicalManifest
+
+  def evaluate(
+    self,
+    inputs: OperatorEvaluationInput,
+  ) -> OperatorEvaluation:
+    """Evaluate coupled internal force and heat flux from compiled meaning."""
+    if type(inputs) is not OperatorEvaluationInput:
+      msg = "coupled evaluation requires an exact immutable evaluation input"
+      raise TypeError(msg)
+    if type(inputs.port_values) is not tuple or len(inputs.port_values) != 2:
+      msg = "coupled evaluation requires exactly displacement and temperature batches"
+      raise TypeError(msg)
+    port_values = []
+    for port, port_input in zip(self.header.ports, inputs.port_values, strict=True):
+      values = port_input.values
+      expected = port.coefficient_map.values.shape
+      if (
+        values.dtype != np.dtype(np.float64)
+        or values.dtype.metadata is not None
+        or values.shape != expected
+        or not bool(np.isfinite(values).all())
+      ):
+        msg = "coupled port values must be finite metadata-free float64 batches"
+        raise TypeError(msg)
+      port_values.append(values)
+    displacements, temperatures = port_values
+    layout = self.header.state_layout
+    accepted_state = inputs.accepted_state.values
+    if (
+      accepted_state.dtype != np.dtype(np.float64)
+      or accepted_state.dtype.metadata is not None
+      or accepted_state.shape != layout.row_shape
+      or not bool(np.isfinite(accepted_state).all())
+    ):
+      msg = "coupled accepted state must match the compiled zero-width state layout"
+      raise TypeError(msg)
+    if inputs.signals or self.header.signal_ports:
+      msg = "coupled model operator does not accept program signal inputs"
+      raise ValueError(msg)
+    residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
+    jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    request = inputs.request
+    if (
+      type(request) is not ChannelRequest
+      or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
+      or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or not set(request.residual_channel_ids).issubset(residual_ids)
+      or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+    ):
+      msg = "coupled evaluation request contains an unavailable or duplicate channel"
+      raise ValueError(msg)
+
+    requested_residuals = set(request.residual_channel_ids)
+    requested_jacobians = set(request.jacobian_channel_ids)
+    mechanical = (
+      "internal-force" in requested_residuals
+      or "material-tangent" in requested_jacobians
+    )
+    coupling = (
+      "internal-force" in requested_residuals
+      or "thermal-expansion-tangent" in requested_jacobians
+    )
+    thermal = (
+      "heat-flux" in requested_residuals or "conduction-tangent" in requested_jacobians
+    )
+    b_matrix = self.payload.normalized_strain_displacement.values
+    b_t = self.payload.normalized_temperature_gradients.values
+    weights = self.payload.normalized_integration_weights.values
+    constitutive = self.payload.constitutive.values
+    tangent_uu = tangent_ut = tangent_tt = None
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+      if mechanical:
+        tangent_uu = np.einsum(
+          "ep,epai,ab,epbj->eij",
+          weights,
+          b_matrix,
+          constitutive,
+          b_matrix,
+          optimize=True,
+        )
+      if coupling:
+        dilatation = constitutive @ self.payload.thermal_expansion.values
+        tangent_ut = self.payload.geometry_scales.values[:, None, None] * np.einsum(
+          "ep,epai,a,pb->eib",
+          weights,
+          b_matrix,
+          dilatation,
+          self.payload.shape_values.values,
+          optimize=True,
+        )
+      if thermal:
+        tangent_tt = np.einsum(
+          "ep,epai,ab,epbj->eij",
+          weights,
+          b_t,
+          self.payload.conductivity.values,
+          b_t,
+          optimize=True,
+        )
+    computed = tuple(
+      block for block in (tangent_uu, tangent_ut, tangent_tt) if block is not None
+    )
+    if any(not bool(np.isfinite(block).all()) for block in computed):
+      msg = "coupled evaluation response is not representable as finite float64"
+      raise ValueError(msg)
+
+    residual_u = residual_t = None
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+      if "internal-force" in requested_residuals:
+        assert tangent_uu is not None and tangent_ut is not None
+        residual_u = np.einsum(
+          "eij,ej->ei", tangent_uu, displacements, optimize=True
+        ) - np.einsum("eij,ej->ei", tangent_ut, temperatures, optimize=True)
+      if "heat-flux" in requested_residuals:
+        assert tangent_tt is not None
+        residual_t = np.einsum("eij,ej->ei", tangent_tt, temperatures, optimize=True)
+    residuals = tuple(block for block in (residual_u, residual_t) if block is not None)
+    if any(not bool(np.isfinite(block).all()) for block in residuals):
+      msg = "coupled evaluation response is not representable as finite float64"
+      raise ValueError(msg)
+
+    residual_arrays = {"internal-force": residual_u, "heat-flux": residual_t}
+    residual_values = tuple(
+      FinalizedArray(residual_arrays[item.channel_id], dtype=np.float64)
+      for item in self.header.residual_channels
+      if item.channel_id in requested_residuals
+    )
+    jacobian_arrays = {
+      "material-tangent": tangent_uu,
+      "thermal-expansion-tangent": (None if tangent_ut is None else -tangent_ut),
+      "conduction-tangent": tangent_tt,
+    }
+    jacobian_values = tuple(
+      FinalizedArray(jacobian_arrays[item.channel_id], dtype=np.float64)
+      for item in self.header.jacobian_channels
+      if item.channel_id in requested_jacobians
+    )
+    return _new(
+      OperatorEvaluation,
+      residual_values=residual_values,
+      jacobian_values=jacobian_values,
+      trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+    )
+
+
 def q8_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
   """Return the exact semantic metadata for one selected Q8 implementation."""
   key = kind, name
@@ -288,6 +671,85 @@ def q8_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
   raise KeyError(msg)
 
 
+def thermal_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
+  """Return the exact semantic metadata for one selected thermal implementation."""
+  key = kind, name
+  if key == THERMAL_FORMULATION_KEY:
+    return {
+      "schema": "pyfem-v3-formulation-descriptor-v1",
+      "field_quantity": "temperature",
+      "field_location": "node",
+      "field_components": "scalar",
+      "kinematic_regime": "steady-diffusion",
+      "thermal_measure": "temperature-gradient",
+      "formulation_history_width": 0,
+      "tangent_contribution": "material",
+      "tangent_symmetry": "symmetric",
+    }
+  if key == THERMAL_MATERIAL_KEY:
+    return {
+      "schema": "pyfem-v3-material-descriptor-v1",
+      "law": "linear-isotropic-conduction",
+      "parameter_names": ["conductivity"],
+      "parameter_dtype": "float64",
+      "material_history_width": 0,
+      "tangent_class": "constant-symmetric",
+    }
+  msg = "no thermal descriptor metadata exists for that exact registry key"
+  raise KeyError(msg)
+
+
+def thermo_elastic_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
+  """Return the exact semantic metadata for one selected coupled implementation."""
+  key = kind, name
+  if key == THERMO_FORMULATION_KEY:
+    return {
+      "schema": "pyfem-v3-formulation-descriptor-v1",
+      "field_quantities": ["displacement", "temperature"],
+      "field_location": "node",
+      "field_signatures": {
+        "displacement": ["x", "y"],
+        "temperature": "scalar",
+      },
+      "kinematic_regime": "small-strain",
+      "strain_measure": "infinitesimal",
+      "strain_voigt_order": ["xx", "yy", "xy"],
+      "shear_convention": "engineering",
+      "thermal_measure": "temperature-gradient",
+      "coupling": "thermo-elastic-dilatation",
+      "formulation_history_width": 0,
+      "tangent_contribution": "material",
+      "tangent_symmetry": "nonsymmetric",
+    }
+  if key == THERMO_MATERIAL_KEY:
+    return {
+      "schema": "pyfem-v3-material-descriptor-v1",
+      "law": "linear-thermo-elastic",
+      "stress_state": "plane-stress",
+      "parameter_names": [
+        "youngs_modulus",
+        "poisson_ratio",
+        "thermal_expansion",
+        "conductivity",
+      ],
+      "parameter_dtype": "float64",
+      "stress_voigt_order": ["xx", "yy", "xy"],
+      "strain_shear_convention": "engineering",
+      "material_history_width": 0,
+      "tangent_class": "constant-nonsymmetric-coupled",
+    }
+  msg = "no thermo-elastic descriptor metadata exists for that exact registry key"
+  raise KeyError(msg)
+
+
+def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
+  if key in (THERMAL_FORMULATION_KEY, THERMAL_MATERIAL_KEY):
+    return thermal_descriptor_metadata(*key)
+  if key in (THERMO_FORMULATION_KEY, THERMO_MATERIAL_KEY):
+    return thermo_elastic_descriptor_metadata(*key)
+  return q8_descriptor_metadata(*key)
+
+
 def q8_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
   """Build a fresh injectable registry for the qualified Q8 convention."""
   bindings = {
@@ -312,6 +774,103 @@ def q8_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
       version="1",
       implementation_id=implementation_id,
       metadata=q8_descriptor_metadata(*key),
+      binding=binding,
+    )
+    for key, (implementation_id, binding) in bindings.items()
+  )
+  return {descriptor.key: descriptor for descriptor in descriptors}
+
+
+def thermal_gradient_map(gradients: np.ndarray) -> np.ndarray:
+  """Reference steady thermal kinematics: temperature-gradient operator rows."""
+  return np.ascontiguousarray(np.swapaxes(gradients, 2, 3))
+
+
+def linear_thermal_conductor(conductivity: float) -> np.ndarray:
+  """Reference isotropic conduction law: conductivity as a diagonal 2x2 matrix."""
+  return np.array(
+    [[conductivity, 0.0], [0.0, conductivity]],
+    dtype=np.float64,
+  )
+
+
+def thermo_elastic_kinematics(
+  gradients: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+  """Reference coupled kinematics: engineering-shear and temperature gradients."""
+  return strain_displacement(gradients), thermal_gradient_map(gradients)
+
+
+def linear_thermo_elastic(
+  youngs_modulus: float,
+  poisson_ratio: float,
+  thermal_expansion: float,
+  conductivity: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+  """Reference coupled law: plane-stress matrix, thermal vector, conductivity."""
+  matrix = plane_stress_matrix(youngs_modulus, poisson_ratio)
+  expansion = np.array(
+    [thermal_expansion, thermal_expansion, 0.0],
+    dtype=np.float64,
+  )
+  return matrix, expansion, linear_thermal_conductor(conductivity)
+
+
+def thermal_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
+  """Build a fresh injectable registry for the qualified thermal convention."""
+  bindings = {
+    Q8_TOPOLOGY_KEY: ("pyfem-v3-serendipity-quad8-v1", serendipity_quad8),
+    Q8_QUADRATURE_KEY: (
+      "pyfem-v3-gauss-tensor-product-2d-order-3-v1",
+      gauss_tensor_product_2d,
+    ),
+    THERMAL_FORMULATION_KEY: (
+      "pyfem-v3-steady-temperature-gradient-v1",
+      thermal_gradient_map,
+    ),
+    THERMAL_MATERIAL_KEY: (
+      "pyfem-v3-linear-isotropic-conductor-v1",
+      linear_thermal_conductor,
+    ),
+  }
+  descriptors = tuple(
+    RegistryDescriptor(
+      kind=key[0],
+      name=key[1],
+      version="1",
+      implementation_id=implementation_id,
+      metadata=_qualified_descriptor_metadata(key),
+      binding=binding,
+    )
+    for key, (implementation_id, binding) in bindings.items()
+  )
+  return {descriptor.key: descriptor for descriptor in descriptors}
+
+
+def thermo_elastic_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
+  """Build a fresh injectable registry for the qualified coupled convention."""
+  bindings = {
+    Q8_TOPOLOGY_KEY: ("pyfem-v3-serendipity-quad8-v1", serendipity_quad8),
+    Q8_QUADRATURE_KEY: (
+      "pyfem-v3-gauss-tensor-product-2d-order-3-v1",
+      gauss_tensor_product_2d,
+    ),
+    THERMO_FORMULATION_KEY: (
+      "pyfem-v3-thermo-elastic-kinematics-v1",
+      thermo_elastic_kinematics,
+    ),
+    THERMO_MATERIAL_KEY: (
+      "pyfem-v3-linear-thermo-elastic-v1",
+      linear_thermo_elastic,
+    ),
+  }
+  descriptors = tuple(
+    RegistryDescriptor(
+      kind=key[0],
+      name=key[1],
+      version="1",
+      implementation_id=implementation_id,
+      metadata=_qualified_descriptor_metadata(key),
       binding=binding,
     )
     for key, (implementation_id, binding) in bindings.items()
@@ -353,28 +912,70 @@ def select_model(spec: ModelSpec) -> ContinuumSelection:
         f"source cell {rendered} belongs to more than one compiled region",
         cell.source,
       )
-  if (
-    len(spec.mesh.cell_blocks) != 1
-    or len(spec.fields) != 1
-    or len(spec.materials) != 1
-    or len(spec.regions) != 1
-  ):
-    _fail(
-      "unsupported-continuum-declaration-count",
-      "the direct Q8 slice requires one active field, cell block, material, and region",
-      spec.source,
+  fields_by_id = {field.id: field for field in spec.fields}
+  materials_by_id = {material.id: material for material in spec.materials}
+  blocks_by_id = {block.id: block for block in spec.mesh.cell_blocks}
+  block_owners: dict[SpecId, RegionSpec] = {}
+  selections = tuple(
+    _select_region(
+      region,
+      fields_by_id,
+      materials_by_id,
+      blocks_by_id,
+      cells_by_key,
+      block_owners,
     )
-  block = spec.mesh.cell_blocks[0]
-  material = spec.materials[0]
-  region = spec.regions[0]
-  fields = {field.id: field for field in spec.fields}
-  if len(region.field_ids) != 1 or region.field_ids[0] not in fields:
+    for region in sorted(spec.regions, key=lambda item: _sort_key(item.id))
+  )
+  referenced_fields = {
+    field_id for region in spec.regions for field_id in region.field_ids
+  }
+  for field in sorted(spec.fields, key=lambda item: _sort_key(item.id)):
+    if field.id not in referenced_fields:
+      _fail(
+        "unreferenced-field-declaration",
+        f"declared field {render_diagnostic_value(field.id)} is not referenced "
+        "by a compiled region",
+        field.source,
+      )
+  referenced_materials = {region.material_id for region in spec.regions}
+  for material in sorted(spec.materials, key=lambda item: _sort_key(item.id)):
+    if material.id not in referenced_materials:
+      _fail(
+        "unreferenced-material-declaration",
+        f"declared material {render_diagnostic_value(material.id)} is not "
+        "referenced by a compiled region",
+        material.source,
+      )
+  return ContinuumSelection(regions=selections)
+
+
+def _select_region(
+  region: RegionSpec,
+  fields_by_id: dict[SpecId, FieldSpec],
+  materials_by_id: dict[SpecId, MaterialSpec],
+  blocks_by_id: dict[SpecId, CellBlockSpec],
+  cells_by_key: dict[tuple[SpecId, SpecId], CellSpec],
+  block_owners: dict[SpecId, RegionSpec],
+) -> RegionSelection:
+  block_ids = {cell_ref.block_id for cell_ref in region.cell_refs}
+  if len(block_ids) != 1:
     _fail(
-      "incompatible-region-field-signature",
-      "the Q8 region must reference exactly one declared field",
+      "unsupported-region-cell-block-span",
+      "each compiled region draws its cells from exactly one cell block",
       region.source,
     )
-  field = fields[region.field_ids[0]]
+  block_id = next(iter(block_ids))
+  owner = block_owners.get(block_id)
+  if owner is not None:
+    _fail(
+      "shared-cell-block",
+      f"cell block {render_diagnostic_value(block_id)} already feeds region "
+      f"{render_diagnostic_value(owner.id)}",
+      region.source,
+    )
+  block_owners[block_id] = region
+  block = blocks_by_id[block_id]
   if (
     block.reference_topology != "quadrilateral"
     or block.topological_dimension != 2
@@ -393,31 +994,85 @@ def select_model(spec: ModelSpec) -> ContinuumSelection:
         f"Q8 cell {render_diagnostic_value(cell.id)} must reference eight nodes",
         cell.source,
       )
-  if field.location != "node" or field.components != ("x", "y"):
+  contract = _FORMULATION_CONTRACTS.get(region.formulation)
+  if contract is None:
     _fail(
-      "incompatible-field-signature",
-      "Q8 requires one node field with physical components ('x', 'y')",
-      field.source,
-    )
-  if region.material_id != material.id:
-    _fail(
-      "incompatible-region-material",
-      "the Q8 region must reference the selected material",
+      "incompatible-formulation",
+      "unsupported continuum formulation",
       region.source,
     )
-  if region.formulation != Q8_FORMULATION_KEY[1]:
-    _fail("incompatible-formulation", "unsupported Q8 formulation", region.source)
+  if len(region.field_ids) != len(contract) or any(
+    field_id not in fields_by_id for field_id in region.field_ids
+  ):
+    _fail(
+      "incompatible-region-field-signature",
+      f"the {region.formulation} region must reference exactly "
+      f"{len(contract)} declared field(s) in role order",
+      region.source,
+    )
+  fields = tuple(fields_by_id[field_id] for field_id in region.field_ids)
+  for field, (role, signature) in zip(fields, contract, strict=True):
+    if signature == "scalar":
+      if len(field.components) != 1:
+        _fail(
+          "incompatible-field-signature",
+          f"the {role} field must carry exactly one component",
+          field.source,
+        )
+    elif field.components != signature:
+      _fail(
+        "incompatible-field-signature",
+        f"the {role} field requires physical components ('x', 'y')",
+        field.source,
+      )
+  material = materials_by_id.get(region.material_id)
+  if material is None:
+    _fail(
+      "incompatible-region-material",
+      "the region must reference a declared material",
+      region.source,
+    )
   if region.quadrature != Q8_QUADRATURE_KEY[1]:
-    _fail("incompatible-quadrature", "unsupported Q8 quadrature", region.source)
-  if material.model != Q8_MATERIAL_KEY[1]:
-    _fail("incompatible-material-model", "unsupported Q8 material", material.source)
-  return ContinuumSelection(
+    _fail(
+      "incompatible-quadrature",
+      "unsupported continuum quadrature",
+      region.source,
+    )
+  expected_model = _FORMULATION_MATERIAL_MODELS[region.formulation]
+  if material.model != expected_model:
+    _fail(
+      "incompatible-material-model",
+      f"the {region.formulation} region requires material model {expected_model!r}",
+      material.source,
+    )
+  return RegionSelection(
     block=block,
-    field=field,
+    fields=fields,
     material=material,
     region=region,
-    cells=tuple(sorted(block.cells, key=lambda item: _sort_key(item.id))),
+    cells=tuple(
+      sorted(
+        (
+          cells_by_key[cell_ref.block_id, cell_ref.cell_id]
+          for cell_ref in region.cell_refs
+        ),
+        key=lambda item: _sort_key(item.id),
+      )
+    ),
   )
+
+
+def _required_keys(selection: ContinuumSelection) -> tuple[RegistryKey, ...]:
+  keys = {Q8_TOPOLOGY_KEY, Q8_QUADRATURE_KEY}
+  for region_selection in selection.regions:
+    formulation = region_selection.region.formulation
+    if formulation == Q8_FORMULATION_KEY[1]:
+      keys.update((Q8_FORMULATION_KEY, Q8_MATERIAL_KEY))
+    elif formulation == THERMAL_FORMULATION_KEY[1]:
+      keys.update((THERMAL_FORMULATION_KEY, THERMAL_MATERIAL_KEY))
+    else:
+      keys.update((THERMO_FORMULATION_KEY, THERMO_MATERIAL_KEY))
+  return tuple(sorted(keys))
 
 
 def capture_registry(
@@ -425,31 +1080,44 @@ def capture_registry(
   selection: ContinuumSelection,
 ) -> RegistrySnapshot:
   """Capture and validate exactly the implementations selected by this builder."""
+  required = _required_keys(selection)
   try:
-    snapshot = RegistrySnapshot.capture(registry, required=_REQUIRED_KEYS)
+    snapshot = RegistrySnapshot.capture(registry, required=required)
   except (KeyError, TypeError, ValueError):
     _fail(
       "registry-capture-failed",
-      "the injected registry could not capture the required Q8 implementations",
-      selection.region.source,
+      "the injected registry could not capture the required continuum implementations",
+      selection.regions[0].region.source,
     )
-  sources = {
-    Q8_TOPOLOGY_KEY: selection.block.source,
-    Q8_QUADRATURE_KEY: selection.region.source,
-    Q8_FORMULATION_KEY: selection.region.source,
-    Q8_MATERIAL_KEY: selection.material.source,
+  sources: dict[RegistryKey, SourceContext] = {
+    Q8_TOPOLOGY_KEY: selection.regions[0].block.source,
+    Q8_QUADRATURE_KEY: selection.regions[0].region.source,
   }
-  for key in _REQUIRED_KEYS:
+  for region_selection in selection.regions:
+    formulation = region_selection.region.formulation
+    if formulation == Q8_FORMULATION_KEY[1]:
+      selected = (Q8_FORMULATION_KEY, Q8_MATERIAL_KEY)
+    elif formulation == THERMAL_FORMULATION_KEY[1]:
+      selected = (THERMAL_FORMULATION_KEY, THERMAL_MATERIAL_KEY)
+    else:
+      selected = (THERMO_FORMULATION_KEY, THERMO_MATERIAL_KEY)
+    sources.setdefault(selected[0], region_selection.region.source)
+    sources.setdefault(selected[1], region_selection.material.source)
+  for key in required:
     try:
       descriptor = snapshot.resolve(*key)
-      expected = CanonicalManifest(q8_descriptor_metadata(*key))
+      expected = CanonicalManifest(_qualified_descriptor_metadata(key))
       compatible = descriptor.metadata.to_bytes() == expected.to_bytes()
     except (KeyError, TypeError, ValueError):
-      _fail("malformed-registry-descriptor", "malformed Q8 descriptor", sources[key])
+      _fail(
+        "malformed-registry-descriptor",
+        "malformed continuum descriptor",
+        sources[key],
+      )
     if not compatible:
       _fail(
         "incompatible-registry-descriptor",
-        "Q8 descriptor metadata does not match the qualified convention",
+        "continuum descriptor metadata does not match the qualified convention",
         sources[key],
       )
   return snapshot
@@ -599,7 +1267,7 @@ def _qualified_shapes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 def _recipes(
   snapshot: RegistrySnapshot,
-  selection: ContinuumSelection,
+  selection: RegionSelection,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
   quadrature = snapshot.resolve(*Q8_QUADRATURE_KEY).binding
   try:
@@ -697,7 +1365,7 @@ def _recipes(
   return points, weights, shape_values, parent_gradients
 
 
-def _parameters(selection: ContinuumSelection) -> tuple[float, float]:
+def _parameters(selection: RegionSelection) -> tuple[float, float]:
   by_name = {item.name: item for item in selection.material.parameters}
   if tuple(sorted(by_name)) != tuple(sorted(_PARAMETER_NAMES)):
     _fail(
@@ -743,6 +1411,87 @@ def _parameters(selection: ContinuumSelection) -> tuple[float, float]:
       by_name[_PARAMETER_NAMES[1]].source,
     )
   return youngs_modulus, poisson_ratio
+
+
+def _scalar_parameters(
+  selection: RegionSelection,
+  names: tuple[str, ...],
+) -> dict[str, tuple[MaterialParameterSpec, float]]:
+  by_name = {item.name: item for item in selection.material.parameters}
+  if tuple(sorted(by_name)) != tuple(sorted(names)):
+    _fail(
+      "invalid-material-parameter-schema",
+      f"the {selection.material.model} material requires exactly {', '.join(names)}",
+      selection.material.source,
+    )
+  values: dict[str, tuple[MaterialParameterSpec, float]] = {}
+  for name in names:
+    parameter = by_name[name]
+    if type(parameter.value) is not int and type(parameter.value) is not float:
+      _fail(
+        "invalid-material-parameter-type",
+        f"{name} must be an exact scalar",
+        parameter.source,
+      )
+    try:
+      value = float(parameter.value)
+    except OverflowError:
+      _fail(
+        "invalid-material-parameter-value",
+        f"{name} must fit finite float64",
+        parameter.source,
+      )
+    if not math.isfinite(value):
+      _fail(
+        "invalid-material-parameter-value",
+        f"{name} must fit finite float64",
+        parameter.source,
+      )
+    values[name] = parameter, value
+  return values
+
+
+def _thermal_parameters(selection: RegionSelection) -> float:
+  values = _scalar_parameters(selection, _THERMAL_PARAMETER_NAMES)
+  parameter, conductivity = values[_THERMAL_PARAMETER_NAMES[0]]
+  if conductivity <= 0.0:
+    _fail(
+      "invalid-conductivity",
+      "conductivity must be positive",
+      parameter.source,
+    )
+  return conductivity
+
+
+def _thermo_elastic_parameters(selection: RegionSelection) -> tuple[float, ...]:
+  values = _scalar_parameters(selection, _THERMO_PARAMETER_NAMES)
+  youngs_parameter, youngs_modulus = values[_THERMO_PARAMETER_NAMES[0]]
+  ratio_parameter, poisson_ratio = values[_THERMO_PARAMETER_NAMES[1]]
+  conductivity_parameter, conductivity = values[_THERMO_PARAMETER_NAMES[3]]
+  if youngs_modulus <= 0.0:
+    _fail(
+      "invalid-youngs-modulus",
+      "youngs_modulus must be positive",
+      youngs_parameter.source,
+    )
+  if not -1.0 < poisson_ratio < 0.5:
+    _fail(
+      "invalid-poisson-ratio",
+      "poisson_ratio must lie between -1 and 0.5",
+      ratio_parameter.source,
+    )
+  if conductivity <= 0.0:
+    _fail(
+      "invalid-conductivity",
+      "conductivity must be positive",
+      conductivity_parameter.source,
+    )
+  return (
+    youngs_modulus,
+    poisson_ratio,
+    values[_THERMO_PARAMETER_NAMES[2]][1],
+    conductivity,
+  )
 
 
 def _normalized_coordinates(
@@ -883,6 +1632,30 @@ def _validate_physical_recovery(
       )
 
 
+def _gather_map(
+  space: DiscreteSpace,
+  connectivity: np.ndarray,
+  node_dense: dict[SpecId, int],
+) -> np.ndarray:
+  coefficient_map = space.coefficient_map.values
+  if coefficient_map.shape[0] == len(node_dense):
+    return coefficient_map[connectivity]
+  component_count = len(space.components)
+  support_rows = {
+    node_dense[point_id]: row
+    for row, point_id in enumerate(
+      space.coefficient_ids[index][1]
+      for index in range(0, len(space.coefficient_ids), component_count)
+    )
+  }
+  rows = np.fromiter(
+    (support_rows[int(dense)] for dense in connectivity.flat),
+    dtype=connectivity.dtype,
+    count=connectivity.size,
+  ).reshape(connectivity.shape)
+  return coefficient_map[rows]
+
+
 def _identities(snapshot: RegistrySnapshot) -> tuple[ImplementationIdentity, ...]:
   return tuple(
     _new(
@@ -897,16 +1670,59 @@ def _identities(snapshot: RegistrySnapshot) -> tuple[ImplementationIdentity, ...
 
 
 def compile_operator(
-  selection: ContinuumSelection,
+  selection: RegionSelection,
   *,
   coordinates: FinalizedArray,
   node_dense: dict[SpecId, int],
-  space: DiscreteSpace,
+  spaces: dict[SpecId, DiscreteSpace],
+  snapshot: RegistrySnapshot,
+  index_dtype: np.dtype,
+  geometry_relative_tolerance: float,
+) -> tuple[IncidenceEntityBlock, CompiledOperator]:
+  """Compile the concrete payload and return it behind the open operator header."""
+  formulation = selection.region.formulation
+  if formulation == THERMAL_FORMULATION_KEY[1]:
+    return _compile_thermal(
+      selection,
+      coordinates=coordinates,
+      node_dense=node_dense,
+      spaces=spaces,
+      snapshot=snapshot,
+      index_dtype=index_dtype,
+      geometry_relative_tolerance=geometry_relative_tolerance,
+    )
+  if formulation == THERMO_FORMULATION_KEY[1]:
+    return _compile_coupled(
+      selection,
+      coordinates=coordinates,
+      node_dense=node_dense,
+      spaces=spaces,
+      snapshot=snapshot,
+      index_dtype=index_dtype,
+      geometry_relative_tolerance=geometry_relative_tolerance,
+    )
+  return _compile_mechanical(
+    selection,
+    coordinates=coordinates,
+    node_dense=node_dense,
+    spaces=spaces,
+    snapshot=snapshot,
+    index_dtype=index_dtype,
+    geometry_relative_tolerance=geometry_relative_tolerance,
+  )
+
+
+def _compile_mechanical(
+  selection: RegionSelection,
+  *,
+  coordinates: FinalizedArray,
+  node_dense: dict[SpecId, int],
+  spaces: dict[SpecId, DiscreteSpace],
   snapshot: RegistrySnapshot,
   index_dtype: np.dtype,
   geometry_relative_tolerance: float,
 ) -> tuple[IncidenceEntityBlock, Q8ContinuumOperator]:
-  """Compile the concrete payload and return it behind the open operator header."""
+  space = spaces[selection.fields[0].id]
   connectivity_values = [
     [node_dense[node_id] for node_id in cell.node_ids] for cell in selection.cells
   ]
@@ -1035,7 +1851,9 @@ def compile_operator(
     )
 
   gather = FinalizedArray(
-    space.coefficient_map.values[connectivity.values].reshape(len(selection.cells), -1),
+    _gather_map(space, connectivity.values, node_dense).reshape(
+      len(selection.cells), -1
+    ),
     dtype=index_dtype,
   )
   block_id = selection.block.id, selection.region.id
@@ -1150,6 +1968,693 @@ def compile_operator(
   )
   return entity_block, _new(
     Q8ContinuumOperator,
+    header=header,
+    entity_block=entity_block,
+    payload=payload,
+    content_manifest=manifest,
+  )
+
+
+def _element_block(
+  selection: RegionSelection,
+  node_dense: dict[SpecId, int],
+  index_dtype: np.dtype,
+) -> tuple[FinalizedArray, IncidenceEntityBlock]:
+  connectivity_values = [
+    [node_dense[node_id] for node_id in cell.node_ids] for cell in selection.cells
+  ]
+  connectivity = FinalizedArray(connectivity_values, dtype=index_dtype)
+  entity_block = _new(
+    IncidenceEntityBlock,
+    block_id=selection.block.id,
+    entity_ids=tuple(cell.id for cell in selection.cells),
+    sources=tuple(_source(cell.source) for cell in selection.cells),
+    incidence=connectivity,
+  )
+  return connectivity, entity_block
+
+
+def _zero_width_state_layout(
+  block_id: tuple[SpecId, SpecId],
+  entity_count: int,
+  index_dtype: np.dtype,
+) -> OperatorStateLayout:
+  return _new(
+    OperatorStateLayout,
+    schema="pyfem-v3-operator-state-layout-v1",
+    block_id=block_id,
+    entity_count=entity_count,
+    slots=(),
+    entity_offsets=FinalizedArray(np.zeros(entity_count + 1), dtype=index_dtype),
+    row_width=0,
+    dtype=np.dtype(np.float64).str,
+    lifetime=StateLifetime.ACCEPTED_TRIAL,
+  )
+
+
+def _compile_thermal(
+  selection: RegionSelection,
+  *,
+  coordinates: FinalizedArray,
+  node_dense: dict[SpecId, int],
+  spaces: dict[SpecId, DiscreteSpace],
+  snapshot: RegistrySnapshot,
+  index_dtype: np.dtype,
+  geometry_relative_tolerance: float,
+) -> tuple[IncidenceEntityBlock, Q8ThermalOperator]:
+  space = spaces[selection.fields[0].id]
+  connectivity, entity_block = _element_block(selection, node_dense, index_dtype)
+  points, weights, shape_values, parent_gradients = _recipes(snapshot, selection)
+  gradients, determinants, geometry_scales = _geometry(
+    coordinates.values,
+    connectivity.values,
+    parent_gradients,
+    selection.cells,
+    geometry_relative_tolerance,
+  )
+  formulation = snapshot.resolve(*THERMAL_FORMULATION_KEY).binding
+  try:
+    raw_gradients = formulation(np.array(gradients, copy=True))
+  except Exception:
+    _fail(
+      "formulation-binding-failed",
+      "thermal formulation binding failed",
+      selection.region.source,
+    )
+  temperature_gradients = _binding_array(
+    raw_gradients,
+    shape=(len(selection.cells), _POINT_COUNT, 2, _NODE_COUNT),
+    code="invalid-formulation-binding-output",
+    label="thermal temperature-gradient binding",
+    source=selection.region.source,
+  )
+  if not _corresponds(temperature_gradients, np.swapaxes(gradients, 2, 3)):
+    _fail(
+      "incompatible-formulation-binding-output",
+      "thermal formulation output contradicts the qualified temperature-gradient map",
+      selection.region.source,
+    )
+  conductivity = _thermal_parameters(selection)
+  material = snapshot.resolve(*THERMAL_MATERIAL_KEY).binding
+  try:
+    with warnings.catch_warnings():
+      warnings.simplefilter("error", RuntimeWarning)
+      raw_conduction = material(conductivity)
+  except Exception:
+    _fail(
+      "material-binding-failed",
+      "thermal material binding failed",
+      selection.material.source,
+    )
+  conduction = _binding_array(
+    raw_conduction,
+    shape=(2, 2),
+    code="invalid-material-binding-output",
+    label="thermal material binding",
+    source=selection.material.source,
+  )
+  if not bool(np.array_equal(conduction, conduction.T)):
+    _fail(
+      "nonsymmetric-material-binding",
+      "thermal conductivity must be symmetric",
+      selection.material.source,
+    )
+  qualified = np.array(
+    [[conductivity, 0.0], [0.0, conductivity]],
+    dtype=np.float64,
+  )
+  if not _constitutive_corresponds(conduction, qualified, qualified):
+    _fail(
+      "incompatible-material-binding-output",
+      "thermal material output contradicts the qualified isotropic conductor",
+      selection.material.source,
+    )
+  integration_weights = determinants * weights[None, :]
+  _validate_physical_recovery(
+    gradients,
+    np.swapaxes(gradients, 2, 3),
+    integration_weights,
+    geometry_scales,
+    selection.cells,
+  )
+  with np.errstate(invalid="ignore", over="ignore", under="ignore"):
+    tangent = np.einsum(
+      "ep,epai,ab,epbj->eij",
+      integration_weights,
+      temperature_gradients,
+      conduction,
+      temperature_gradients,
+      optimize=True,
+    )
+  if not bool(np.isfinite(tangent).all()):
+    _fail(
+      "non-finite-element-operator",
+      "thermal element operator is non-finite",
+      selection.region.source,
+    )
+  tangent_scale = float(np.max(np.abs(tangent)))
+  symmetry_tolerance = 64.0 * max(
+    float(np.finfo(np.float64).eps) * tangent_scale,
+    abs(tangent_scale - math.nextafter(tangent_scale, 0.0)),
+  )
+  if not bool(
+    np.allclose(
+      tangent,
+      tangent.transpose(0, 2, 1),
+      rtol=0.0,
+      atol=symmetry_tolerance,
+    )
+  ):
+    _fail(
+      "nonsymmetric-element-operator",
+      "thermal element operator is not symmetric",
+      selection.region.source,
+    )
+
+  gather = FinalizedArray(
+    _gather_map(space, connectivity.values, node_dense).reshape(
+      len(selection.cells), -1
+    ),
+    dtype=index_dtype,
+  )
+  block_id = selection.block.id, selection.region.id
+  state_layout = _zero_width_state_layout(block_id, len(selection.cells), index_dtype)
+  port = _new(
+    PortBinding,
+    port_id="temperature",
+    space_id=space.space_id,
+    mode=PortMode.COEFFICIENTS,
+    coefficient_map=gather,
+  )
+  residual_channel = _new(
+    ResidualChannel,
+    channel_id="heat-flux",
+    target_port_id=port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+  )
+  jacobian_channel = _new(
+    JacobianChannel,
+    channel_id="conduction-tangent",
+    residual_channel_id="heat-flux",
+    target_port_id=port.port_id,
+    source_port_id=port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+    symmetric=True,
+  )
+  header = _new(
+    OperatorHeader,
+    block_id=block_id,
+    entity_block_id=entity_block.block_id,
+    implementations=_identities(snapshot),
+    ports=(port,),
+    signal_ports=(),
+    residual_channels=(residual_channel,),
+    jacobian_channels=(jacobian_channel,),
+    state_layout=state_layout,
+    coupling_policy=CouplingPolicy.FIXED,
+  )
+  payload = _new(
+    Q8ThermalPayload,
+    quadrature_points=FinalizedArray(points, dtype=np.float64),
+    quadrature_weights=FinalizedArray(weights, dtype=np.float64),
+    shape_values=FinalizedArray(shape_values, dtype=np.float64),
+    parent_gradients=FinalizedArray(parent_gradients, dtype=np.float64),
+    geometry_scales=FinalizedArray(geometry_scales, dtype=np.float64),
+    normalized_gradients=FinalizedArray(gradients, dtype=np.float64),
+    normalized_temperature_gradients=FinalizedArray(
+      temperature_gradients, dtype=np.float64
+    ),
+    normalized_integration_weights=FinalizedArray(
+      integration_weights, dtype=np.float64
+    ),
+    conductivity=FinalizedArray(conduction, dtype=np.float64),
+    material_parameters=FinalizedArray([[conductivity]], dtype=np.float64),
+  )
+  manifest = CanonicalManifest(
+    {
+      "block_id": block_id,
+      "entity_block_id": entity_block.block_id,
+      "entity_ids": entity_block.entity_ids,
+      "implementations": [
+        {
+          "kind": item.kind,
+          "name": item.name,
+          "version": item.version,
+          "implementation_id": item.implementation_id,
+        }
+        for item in header.implementations
+      ],
+      "port": {
+        "port_id": port.port_id,
+        "space_id": port.space_id,
+        "coefficient_map": port.coefficient_map.values,
+      },
+      "channels": ["heat-flux", "conduction-tangent"],
+      "state": {
+        "schema": state_layout.schema,
+        "row_width": 0,
+        "entity_offsets": state_layout.entity_offsets.values,
+      },
+      "payload": {
+        "quadrature_points": payload.quadrature_points.values,
+        "quadrature_weights": payload.quadrature_weights.values,
+        "shape_values": payload.shape_values.values,
+        "parent_gradients": payload.parent_gradients.values,
+        "geometry_scales": payload.geometry_scales.values,
+        "normalized_gradients": payload.normalized_gradients.values,
+        "normalized_temperature_gradients": (
+          payload.normalized_temperature_gradients.values
+        ),
+        "normalized_integration_weights": (
+          payload.normalized_integration_weights.values
+        ),
+        "conductivity": payload.conductivity.values,
+        "material_parameters": payload.material_parameters.values,
+      },
+    }
+  )
+  return entity_block, _new(
+    Q8ThermalOperator,
+    header=header,
+    entity_block=entity_block,
+    payload=payload,
+    content_manifest=manifest,
+  )
+
+
+def _compile_coupled(
+  selection: RegionSelection,
+  *,
+  coordinates: FinalizedArray,
+  node_dense: dict[SpecId, int],
+  spaces: dict[SpecId, DiscreteSpace],
+  snapshot: RegistrySnapshot,
+  index_dtype: np.dtype,
+  geometry_relative_tolerance: float,
+) -> tuple[IncidenceEntityBlock, Q8ThermoElasticOperator]:
+  displacement_space = spaces[selection.fields[0].id]
+  temperature_space = spaces[selection.fields[1].id]
+  connectivity, entity_block = _element_block(selection, node_dense, index_dtype)
+  points, weights, shape_values, parent_gradients = _recipes(snapshot, selection)
+  gradients, determinants, geometry_scales = _geometry(
+    coordinates.values,
+    connectivity.values,
+    parent_gradients,
+    selection.cells,
+    geometry_relative_tolerance,
+  )
+  formulation = snapshot.resolve(*THERMO_FORMULATION_KEY).binding
+  try:
+    raw_kinematics = formulation(np.array(gradients, copy=True))
+  except Exception:
+    _fail(
+      "formulation-binding-failed",
+      "coupled formulation binding failed",
+      selection.region.source,
+    )
+  if type(raw_kinematics) is not tuple or len(raw_kinematics) != 2:
+    _fail(
+      "invalid-formulation-binding-output",
+      "coupled formulation must return exactly strain-displacement and "
+      "temperature-gradient maps",
+      selection.region.source,
+    )
+  b_matrix = _binding_array(
+    raw_kinematics[0],
+    shape=(len(selection.cells), _POINT_COUNT, 3, _LOCAL_COEFFICIENT_COUNT),
+    code="invalid-formulation-binding-output",
+    label="coupled strain-displacement binding",
+    source=selection.region.source,
+  )
+  temperature_gradients = _binding_array(
+    raw_kinematics[1],
+    shape=(len(selection.cells), _POINT_COUNT, 2, _NODE_COUNT),
+    code="invalid-formulation-binding-output",
+    label="coupled temperature-gradient binding",
+    source=selection.region.source,
+  )
+  expected_b = np.zeros_like(b_matrix)
+  expected_b[..., 0, 0::2] = gradients[..., :, 0]
+  expected_b[..., 1, 1::2] = gradients[..., :, 1]
+  expected_b[..., 2, 0::2] = gradients[..., :, 1]
+  expected_b[..., 2, 1::2] = gradients[..., :, 0]
+  if not _corresponds(b_matrix, expected_b) or not _corresponds(
+    temperature_gradients, np.swapaxes(gradients, 2, 3)
+  ):
+    _fail(
+      "incompatible-formulation-binding-output",
+      "coupled formulation output contradicts the qualified kinematic maps",
+      selection.region.source,
+    )
+  youngs_modulus, poisson_ratio, thermal_expansion, conductivity = (
+    _thermo_elastic_parameters(selection)
+  )
+  exact_constitutive, binary64_route = _qualified_constitutive(
+    youngs_modulus,
+    poisson_ratio,
+    selection.material.source,
+  )
+  material = snapshot.resolve(*THERMO_MATERIAL_KEY).binding
+  try:
+    with warnings.catch_warnings():
+      warnings.simplefilter("error", RuntimeWarning)
+      raw_response = material(
+        youngs_modulus,
+        poisson_ratio,
+        thermal_expansion,
+        conductivity,
+      )
+  except Exception:
+    _fail(
+      "material-binding-failed",
+      "coupled material binding failed",
+      selection.material.source,
+    )
+  if type(raw_response) is not tuple or len(raw_response) != 3:
+    _fail(
+      "invalid-material-binding-output",
+      "coupled material must return exactly the constitutive matrix, the "
+      "thermal-expansion vector, and the conductivity matrix",
+      selection.material.source,
+    )
+  constitutive = _binding_array(
+    raw_response[0],
+    shape=(3, 3),
+    code="invalid-material-binding-output",
+    label="coupled constitutive binding",
+    source=selection.material.source,
+  )
+  expansion = _binding_array(
+    raw_response[1],
+    shape=(3,),
+    code="invalid-material-binding-output",
+    label="coupled thermal-expansion binding",
+    source=selection.material.source,
+  )
+  conduction = _binding_array(
+    raw_response[2],
+    shape=(2, 2),
+    code="invalid-material-binding-output",
+    label="coupled conductivity binding",
+    source=selection.material.source,
+  )
+  if not bool(np.array_equal(constitutive, constitutive.T)) or not bool(
+    np.array_equal(conduction, conduction.T)
+  ):
+    _fail(
+      "nonsymmetric-material-binding",
+      "coupled constitutive and conductivity matrices must be symmetric",
+      selection.material.source,
+    )
+  if not _constitutive_corresponds(
+    constitutive,
+    exact_constitutive,
+    binary64_route,
+  ):
+    _fail(
+      "incompatible-material-binding-output",
+      "coupled constitutive output contradicts the qualified plane-stress law",
+      selection.material.source,
+    )
+  qualified_expansion = np.array(
+    [thermal_expansion, thermal_expansion, 0.0],
+    dtype=np.float64,
+  )
+  if not _constitutive_corresponds(
+    expansion,
+    qualified_expansion,
+    qualified_expansion,
+  ):
+    _fail(
+      "incompatible-material-binding-output",
+      "coupled thermal expansion contradicts the qualified isotropic dilatation",
+      selection.material.source,
+    )
+  qualified_conduction = np.array(
+    [[conductivity, 0.0], [0.0, conductivity]],
+    dtype=np.float64,
+  )
+  if not _constitutive_corresponds(
+    conduction,
+    qualified_conduction,
+    qualified_conduction,
+  ):
+    _fail(
+      "incompatible-material-binding-output",
+      "coupled conductivity contradicts the qualified isotropic conductor",
+      selection.material.source,
+    )
+  integration_weights = determinants * weights[None, :]
+  _validate_physical_recovery(
+    gradients,
+    b_matrix,
+    integration_weights,
+    geometry_scales,
+    selection.cells,
+  )
+  with np.errstate(invalid="ignore", over="ignore", under="ignore"):
+    tangent_uu = np.einsum(
+      "ep,epai,ab,epbj->eij",
+      integration_weights,
+      b_matrix,
+      constitutive,
+      b_matrix,
+      optimize=True,
+    )
+    dilatation = constitutive @ expansion
+    tangent_ut = geometry_scales[:, None, None] * np.einsum(
+      "ep,epai,a,pb->eib",
+      integration_weights,
+      b_matrix,
+      dilatation,
+      shape_values,
+      optimize=True,
+    )
+    tangent_tt = np.einsum(
+      "ep,epai,ab,epbj->eij",
+      integration_weights,
+      temperature_gradients,
+      conduction,
+      temperature_gradients,
+      optimize=True,
+    )
+  if not bool(np.isfinite(tangent_uu).all()) or not bool(np.isfinite(tangent_tt).all()):
+    _fail(
+      "non-finite-element-operator",
+      "coupled element operator is non-finite",
+      selection.region.source,
+    )
+  if not bool(np.isfinite(tangent_ut).all()):
+    _fail(
+      "non-finite-element-operator",
+      "coupled thermal-expansion operator is non-finite",
+      selection.region.source,
+    )
+  tangent_scale = float(np.max(np.abs(tangent_uu)))
+  symmetry_tolerance = 64.0 * max(
+    float(np.finfo(np.float64).eps) * tangent_scale,
+    abs(tangent_scale - math.nextafter(tangent_scale, 0.0)),
+  )
+  if not bool(
+    np.allclose(
+      tangent_uu,
+      tangent_uu.transpose(0, 2, 1),
+      rtol=0.0,
+      atol=symmetry_tolerance,
+    )
+  ):
+    _fail(
+      "nonsymmetric-element-operator",
+      "coupled mechanical element operator is not symmetric",
+      selection.region.source,
+    )
+  thermal_scale = float(np.max(np.abs(tangent_tt)))
+  thermal_tolerance = 64.0 * max(
+    float(np.finfo(np.float64).eps) * thermal_scale,
+    abs(thermal_scale - math.nextafter(thermal_scale, 0.0)),
+  )
+  if not bool(
+    np.allclose(
+      tangent_tt,
+      tangent_tt.transpose(0, 2, 1),
+      rtol=0.0,
+      atol=thermal_tolerance,
+    )
+  ):
+    _fail(
+      "nonsymmetric-element-operator",
+      "coupled thermal element operator is not symmetric",
+      selection.region.source,
+    )
+
+  displacement_gather = FinalizedArray(
+    _gather_map(displacement_space, connectivity.values, node_dense).reshape(
+      len(selection.cells), -1
+    ),
+    dtype=index_dtype,
+  )
+  temperature_gather = FinalizedArray(
+    _gather_map(temperature_space, connectivity.values, node_dense).reshape(
+      len(selection.cells), -1
+    ),
+    dtype=index_dtype,
+  )
+  block_id = selection.block.id, selection.region.id
+  state_layout = _zero_width_state_layout(block_id, len(selection.cells), index_dtype)
+  displacement_port = _new(
+    PortBinding,
+    port_id="displacement",
+    space_id=displacement_space.space_id,
+    mode=PortMode.COEFFICIENTS,
+    coefficient_map=displacement_gather,
+  )
+  temperature_port = _new(
+    PortBinding,
+    port_id="temperature",
+    space_id=temperature_space.space_id,
+    mode=PortMode.COEFFICIENTS,
+    coefficient_map=temperature_gather,
+  )
+  force_channel = _new(
+    ResidualChannel,
+    channel_id="internal-force",
+    target_port_id=displacement_port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+  )
+  heat_channel = _new(
+    ResidualChannel,
+    channel_id="heat-flux",
+    target_port_id=temperature_port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+  )
+  mechanical_jacobian = _new(
+    JacobianChannel,
+    channel_id="material-tangent",
+    residual_channel_id="internal-force",
+    target_port_id=displacement_port.port_id,
+    source_port_id=displacement_port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+    symmetric=True,
+  )
+  coupling_jacobian = _new(
+    JacobianChannel,
+    channel_id="thermal-expansion-tangent",
+    residual_channel_id="internal-force",
+    target_port_id=displacement_port.port_id,
+    source_port_id=temperature_port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+    symmetric=False,
+  )
+  thermal_jacobian = _new(
+    JacobianChannel,
+    channel_id="conduction-tangent",
+    residual_channel_id="heat-flux",
+    target_port_id=temperature_port.port_id,
+    source_port_id=temperature_port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=True,
+    symmetric=True,
+  )
+  header = _new(
+    OperatorHeader,
+    block_id=block_id,
+    entity_block_id=entity_block.block_id,
+    implementations=_identities(snapshot),
+    ports=(displacement_port, temperature_port),
+    signal_ports=(),
+    residual_channels=(force_channel, heat_channel),
+    jacobian_channels=(mechanical_jacobian, coupling_jacobian, thermal_jacobian),
+    state_layout=state_layout,
+    coupling_policy=CouplingPolicy.FIXED,
+  )
+  payload = _new(
+    Q8ThermoElasticPayload,
+    quadrature_points=FinalizedArray(points, dtype=np.float64),
+    quadrature_weights=FinalizedArray(weights, dtype=np.float64),
+    shape_values=FinalizedArray(shape_values, dtype=np.float64),
+    parent_gradients=FinalizedArray(parent_gradients, dtype=np.float64),
+    geometry_scales=FinalizedArray(geometry_scales, dtype=np.float64),
+    normalized_gradients=FinalizedArray(gradients, dtype=np.float64),
+    normalized_strain_displacement=FinalizedArray(b_matrix, dtype=np.float64),
+    normalized_temperature_gradients=FinalizedArray(
+      temperature_gradients, dtype=np.float64
+    ),
+    normalized_integration_weights=FinalizedArray(
+      integration_weights, dtype=np.float64
+    ),
+    constitutive=FinalizedArray(constitutive, dtype=np.float64),
+    thermal_expansion=FinalizedArray(expansion, dtype=np.float64),
+    conductivity=FinalizedArray(conduction, dtype=np.float64),
+    material_parameters=FinalizedArray(
+      [[youngs_modulus, poisson_ratio, thermal_expansion, conductivity]],
+      dtype=np.float64,
+    ),
+  )
+  manifest = CanonicalManifest(
+    {
+      "block_id": block_id,
+      "entity_block_id": entity_block.block_id,
+      "entity_ids": entity_block.entity_ids,
+      "implementations": [
+        {
+          "kind": item.kind,
+          "name": item.name,
+          "version": item.version,
+          "implementation_id": item.implementation_id,
+        }
+        for item in header.implementations
+      ],
+      "ports": [
+        {
+          "port_id": port.port_id,
+          "space_id": port.space_id,
+          "coefficient_map": port.coefficient_map.values,
+        }
+        for port in header.ports
+      ],
+      "channels": [
+        "internal-force",
+        "heat-flux",
+        "material-tangent",
+        "thermal-expansion-tangent",
+        "conduction-tangent",
+      ],
+      "state": {
+        "schema": state_layout.schema,
+        "row_width": 0,
+        "entity_offsets": state_layout.entity_offsets.values,
+      },
+      "payload": {
+        "quadrature_points": payload.quadrature_points.values,
+        "quadrature_weights": payload.quadrature_weights.values,
+        "shape_values": payload.shape_values.values,
+        "parent_gradients": payload.parent_gradients.values,
+        "geometry_scales": payload.geometry_scales.values,
+        "normalized_gradients": payload.normalized_gradients.values,
+        "normalized_strain_displacement": (
+          payload.normalized_strain_displacement.values
+        ),
+        "normalized_temperature_gradients": (
+          payload.normalized_temperature_gradients.values
+        ),
+        "normalized_integration_weights": (
+          payload.normalized_integration_weights.values
+        ),
+        "constitutive": payload.constitutive.values,
+        "thermal_expansion": payload.thermal_expansion.values,
+        "conductivity": payload.conductivity.values,
+        "material_parameters": payload.material_parameters.values,
+      },
+    }
+  )
+  return entity_block, _new(
+    Q8ThermoElasticOperator,
     header=header,
     entity_block=entity_block,
     payload=payload,

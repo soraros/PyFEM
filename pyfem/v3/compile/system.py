@@ -33,7 +33,7 @@ from pyfem.v3.model.system import (
   SystemProvenance,
 )
 from pyfem.v3.spec.diagnostics import SourceContext
-from pyfem.v3.spec.model import CellSpec, FieldSpec, ModelSpec, SpecId
+from pyfem.v3.spec.model import CellSpec, FieldSpec, ModelSpec, NodeSpec, SpecId
 from pyfem.v3.spec.normalize import normalize_model_spec
 
 COMPILED_SYSTEM_MANIFEST_SCHEMA = "pyfem-v3-compiled-system-v1"
@@ -138,7 +138,13 @@ def _index_dtype(
 
 
 class OperatorFamilySelection(Protocol):
-  """Validated family-specific spec slice consumed by the generic compiler."""
+  """Validated family-specific spec slice consumed by the generic compiler.
+
+  A selection either is itself a single operator slice (the landed
+  ``cells``/``field`` shape, e.g. the truss family) or carries a ``regions``
+  tuple of per-region slices with ``cells``/``fields`` members (the continuum
+  family); the compiler compiles one operator per slice.
+  """
 
   cells: tuple[CellSpec, ...]
   field: FieldSpec
@@ -171,12 +177,19 @@ class OperatorFamilyBuilder(Protocol):
     index_dtype: np.dtype,
     geometry_relative_tolerance: float,
   ) -> tuple[IncidenceEntityBlock, CompiledOperator]:
-    """Compile the family payload behind the open operator header."""
+    """Compile the family payload behind the open operator header.
+
+    Single-field families receive the slice's one selected ``space``;
+    multi-field families receive the system's ``spaces`` mapping keyed by
+    field ID and bind one port per slice field.
+    """
     ...
 
 
 _OPERATOR_FAMILY_BUILDERS: tuple[tuple[str, OperatorFamilyBuilder], ...] = (
   (_continuum_builder.Q8_FORMULATION_KEY[1], _continuum_builder),
+  (_continuum_builder.THERMAL_FORMULATION_KEY[1], _continuum_builder),
+  (_continuum_builder.THERMO_FORMULATION_KEY[1], _continuum_builder),
   (_truss_builder.TRUSS_FORMULATION_KEY[1], _truss_builder),
 )
 
@@ -194,21 +207,66 @@ def _operator_family_builder(spec: ModelSpec) -> OperatorFamilyBuilder:
   return _OPERATOR_FAMILY_BUILDERS[0][1]
 
 
+def _operator_slices(
+  selection: OperatorFamilySelection,
+) -> tuple[OperatorFamilySelection, ...]:
+  """Return the per-region operator slices of a validated family selection."""
+  regions = getattr(selection, "regions", None)
+  if regions is None:
+    return (selection,)
+  return tuple(regions)
+
+
+def _slice_fields(slice_: OperatorFamilySelection) -> tuple[FieldSpec, ...]:
+  """Return the fields one operator slice binds, in port order."""
+  fields = getattr(slice_, "fields", None)
+  if fields is None:
+    return (slice_.field,)
+  return tuple(fields)
+
+
+def _field_supports(
+  spec: ModelSpec,
+  slices: tuple[OperatorFamilySelection, ...],
+  nodes: tuple[NodeSpec, ...],
+) -> dict[SpecId, tuple[SpecId, ...]]:
+  """Resolve each declared field's support in canonical point-block order.
+
+  A field's support is the union of the nodes of the cells of every region
+  referencing it; nodes outside all supports own no coefficients.
+  """
+  memberships: dict[SpecId, set[SpecId]] = {field.id: set() for field in spec.fields}
+  for slice_ in slices:
+    for field in _slice_fields(slice_):
+      for cell in slice_.cells:
+        memberships[field.id].update(cell.node_ids)
+  return {
+    field.id: tuple(node.id for node in nodes if node.id in memberships[field.id])
+    for field in spec.fields
+  }
+
+
 def compile_discrete_spaces(
   point_block: PointEntityBlock,
   fields: tuple[FieldSpec, ...],
   *,
+  supports: dict[SpecId, tuple[SpecId, ...]] | None = None,
   index_dtype: np.dtype = np.dtype(np.int64),
 ) -> tuple[DiscreteSpace, ...]:
   """Allocate ordered disjoint native coefficient maps for explicit fields.
 
   This structural helper consumes already-normalized declarations. It performs no
   normalization and is intentionally not re-exported as public API.
+
+  Without ``supports`` every field covers the whole point block (the landed
+  single-slice semantics). With ``supports`` each field covers exactly its
+  listed support entities in point-block order, so partial-support fields own
+  no coefficients outside their support: no ghost DOFs. The support of every
+  allocated space remains recoverable from its ``coefficient_ids``.
   """
   ordered = tuple(sorted(fields, key=lambda item: _sort_key(item.id)))
   offset = 0
   spaces: list[DiscreteSpace] = []
-  point_count = len(point_block.entity_ids)
   for field in ordered:
     if field.location != "node":
       _fail(
@@ -216,15 +274,34 @@ def compile_discrete_spaces(
         "this G1 compiler allocates only truthful node-supported spaces",
         field.source,
       )
+    if supports is None:
+      support_ids: tuple[SpecId, ...] = point_block.entity_ids
+    else:
+      if type(supports) is not dict or type(supports.get(field.id)) is not tuple:
+        _fail(
+          "invalid-space-support",
+          "field supports must be exact tuples of point entities keyed by field ID",
+          field.source,
+        )
+      members = set(supports[field.id])
+      support_ids = tuple(
+        point_id for point_id in point_block.entity_ids if point_id in members
+      )
+      if len(support_ids) != len(members):
+        _fail(
+          "invalid-space-support",
+          "field support references entities outside the point block",
+          field.source,
+        )
     component_count = len(field.components)
-    count = point_count * component_count
+    count = len(support_ids) * component_count
     coefficient_map = np.arange(offset, offset + count, dtype=index_dtype).reshape(
-      point_count,
+      len(support_ids),
       component_count,
     )
     coefficient_ids = tuple(
       (field.id, point_id, component)
-      for point_id in point_block.entity_ids
+      for point_id in support_ids
       for component in field.components
     )
     spaces.append(
@@ -246,7 +323,7 @@ def compile_discrete_spaces(
 def _attribution(
   spec: ModelSpec,
   *,
-  operator_block_id: tuple[SpecId, SpecId],
+  operator_sources: tuple[tuple[SpecId, SourceContext], ...],
 ) -> tuple[SourceAttribution, ...]:
   records: list[SourceAttribution] = []
 
@@ -282,7 +359,8 @@ def _attribution(
       )
   for region in sorted(spec.regions, key=lambda item: _sort_key(item.id)):
     add("region", region.id, region.source)
-  add("operator", operator_block_id, spec.regions[0].source)
+  for block_id, source in operator_sources:
+    add("operator", block_id, source)
   return tuple(records)
 
 
@@ -300,14 +378,22 @@ def compile_system(
   snapshot = builder.capture_registry(registry, selection)
 
   nodes = tuple(sorted(normalized.mesh.nodes, key=lambda item: _sort_key(item.id)))
-  total_coefficients = sum(
-    len(nodes) * len(field.components) for field in normalized.fields
+  slices = _operator_slices(selection)
+  supports: dict[SpecId, tuple[SpecId, ...]] | None = None
+  if len(normalized.fields) != 1 or len(slices) != 1:
+    supports = _field_supports(normalized, slices, nodes)
+  total_coefficients = (
+    sum(len(nodes) * len(field.components) for field in normalized.fields)
+    if supports is None
+    else sum(
+      len(supports[field.id]) * len(field.components) for field in normalized.fields
+    )
   )
   index_dtype = _index_dtype(
     policy=selected_policy,
     point_count=len(nodes),
     coefficient_count=total_coefficients,
-    cell_count=len(selection.cells),
+    cell_count=max(len(slice_.cells) for slice_ in slices),
     source=normalized.mesh.source,
   )
   coordinates = FinalizedArray(
@@ -324,24 +410,41 @@ def compile_system(
   spaces = compile_discrete_spaces(
     point_block,
     normalized.fields,
+    supports=supports,
     index_dtype=index_dtype,
   )
-  selected_space = next(
-    space for space in spaces if space.space_id == selection.field.id
-  )
+  spaces_by_id = {space.space_id: space for space in spaces}
   node_dense = {node.id: index for index, node in enumerate(nodes)}
-  entity_block, operator = builder.compile_operator(
-    selection,
-    coordinates=coordinates,
-    node_dense=node_dense,
-    space=selected_space,
-    snapshot=snapshot,
-    index_dtype=index_dtype,
-    geometry_relative_tolerance=selected_policy.geometry_relative_tolerance,
-  )
+  entity_blocks: list[IncidenceEntityBlock] = []
+  operators: list[CompiledOperator] = []
+  operator_sources: list[tuple[SpecId, SourceContext]] = []
+  for slice_ in slices:
+    if hasattr(slice_, "fields"):
+      entity_block, operator = builder.compile_operator(
+        slice_,
+        coordinates=coordinates,
+        node_dense=node_dense,
+        spaces=spaces_by_id,
+        snapshot=snapshot,
+        index_dtype=index_dtype,
+        geometry_relative_tolerance=selected_policy.geometry_relative_tolerance,
+      )
+    else:
+      entity_block, operator = builder.compile_operator(
+        slice_,
+        coordinates=coordinates,
+        node_dense=node_dense,
+        space=spaces_by_id[slice_.field.id],
+        snapshot=snapshot,
+        index_dtype=index_dtype,
+        geometry_relative_tolerance=selected_policy.geometry_relative_tolerance,
+      )
+    entity_blocks.append(entity_block)
+    operators.append(operator)
+    operator_sources.append((operator.header.block_id, slice_.region.source))
   attributions = _attribution(
     normalized,
-    operator_block_id=operator.header.block_id,
+    operator_sources=tuple(operator_sources),
   )
   manifest = CanonicalManifest(
     {
@@ -363,6 +466,7 @@ def compile_system(
           "entity_ids": entity_block.entity_ids,
           "incidence": entity_block.incidence.values,
         }
+        for entity_block in entity_blocks
       ],
       "spaces": [
         {
@@ -376,7 +480,7 @@ def compile_system(
         }
         for space in spaces
       ],
-      "operators": [operator.content_manifest],
+      "operators": [operator.content_manifest for operator in operators],
       "source_attribution": [
         {
           "kind": record.kind,
@@ -403,8 +507,8 @@ def compile_system(
     provenance=provenance,
     registry_snapshot=snapshot,
     point_blocks=(point_block,),
-    entity_blocks=(entity_block,),
+    entity_blocks=tuple(entity_blocks),
     spaces=spaces,
-    operators=(operator,),
+    operators=tuple(operators),
     source_attribution=attributions,
   )
