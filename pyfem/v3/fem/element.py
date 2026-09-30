@@ -58,7 +58,9 @@ def _integrate_btcb_batched(
   return stiffness
 
 
-@njit(cache=True, parallel=True)
+# cache=False: callees live in quadrature.py and shapes.py; numba's on-disk
+# cache cannot invalidate cross-module callees (NUMBA_CACHING.md §5).
+@njit(cache=False, parallel=True)
 def _quad8_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
   """Batched Q8 stiffness, ``nodal_coords`` shape ``(n_elems, 8, 2)``."""
   parent_pts, parent_w = gauss_tensor_product_2d(3)
@@ -86,7 +88,10 @@ def _quad8_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -
   return stiffness
 
 
-@njit(cache=True, parallel=True)
+# cache=False: callees live in quadrature.py, shapes.py, and kinematics.py;
+# numba's on-disk cache cannot invalidate cross-module callees
+# (NUMBA_CACHING.md §5).
+@njit(cache=False, parallel=True)
 def _quad4_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
   parent_pts, parent_w = gauss_tensor_product_2d(2)
   _, dN = bilinear_quad4(parent_pts)
@@ -95,7 +100,10 @@ def _quad4_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -
   return _integrate_btcb_batched(parent_w, det_j, b, constitutive)
 
 
-@njit(cache=True, parallel=True)
+# cache=False: callees live in quadrature.py, shapes.py, and kinematics.py;
+# numba's on-disk cache cannot invalidate cross-module callees
+# (NUMBA_CACHING.md §5).
+@njit(cache=False, parallel=True)
 def _tria3_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
   parent_pts, parent_w = gauss_tria3(1)
   _, dN = linear_tria3(parent_pts)
@@ -104,7 +112,10 @@ def _tria3_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -
   return _integrate_btcb_batched(parent_w, det_j, b, constitutive)
 
 
-@njit(cache=True, parallel=True)
+# cache=False: callees live in quadrature.py, shapes.py, and kinematics.py;
+# numba's on-disk cache cannot invalidate cross-module callees
+# (NUMBA_CACHING.md §5).
+@njit(cache=False, parallel=True)
 def _hex8_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
   parent_pts, parent_w = gauss_tensor_product_3d(2)
   _, dN = trilinear_hex8(parent_pts)
@@ -113,7 +124,10 @@ def _hex8_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) ->
   return _integrate_btcb_batched(parent_w, det_j, b, constitutive)
 
 
-@njit(cache=True, parallel=True)
+# cache=False: callees live in quadrature.py, shapes.py, and kinematics.py;
+# numba's on-disk cache cannot invalidate cross-module callees
+# (NUMBA_CACHING.md §5).
+@njit(cache=False, parallel=True)
 def _tet4_stiffness_from_coords_batched(nodal_coords: F64, constitutive: F64) -> F64:
   parent_pts, parent_w = gauss_tet4(1)
   _, dN = linear_tet4(parent_pts)

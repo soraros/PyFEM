@@ -6,6 +6,8 @@ import os
 import platform
 import subprocess
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 THREAD_ENV_VARS = (
@@ -16,6 +18,75 @@ THREAD_ENV_VARS = (
   "VECLIB_MAXIMUM_THREADS",
   "NUMBA_CACHE_DIR",
 )
+
+# Caller -> callee source pairs whose numba cache coherence is recorded in
+# every run manifest (NUMBA_CACHING.md §6). A cached caller embeds its jit
+# callees' machine code, so a caller .nbi cache entry older than the callee
+# source makes the run's timings cache-suspect even when the parity gates pass
+# (performance-only callee edits leave numerics unchanged). These pairs are the
+# fem kernel call-graph edges that cross module boundaries; their callers
+# currently carry documented cache=False, so any caller cache entry at all is
+# worth recording.
+CACHE_COHERENCE_PAIRS: tuple[tuple[str, str], ...] = (
+  ("pyfem/v3/fem/element.py", "pyfem/v3/fem/quadrature.py"),
+  ("pyfem/v3/fem/element.py", "pyfem/v3/fem/shapes.py"),
+  ("pyfem/v3/fem/element.py", "pyfem/v3/fem/kinematics.py"),
+  ("pyfem/v3/fem/tl_element.py", "pyfem/v3/fem/quadrature.py"),
+  ("pyfem/v3/fem/tl_element.py", "pyfem/v3/fem/shapes.py"),
+  ("pyfem/v3/fem/tl_element.py", "pyfem/v3/fem/tl_kinematics.py"),
+)
+
+
+def check_cache_coherence(root: Path | None = None) -> list[dict[str, Any]]:
+  """Check that each declared caller's live .nbi cache entries are newer than
+  the callee source (NUMBA_CACHING.md §6). An entry counts as live only when
+  it is at least as new as the caller source itself — numba's per-file
+  (mtime, size) stamp gate empties the index of any caller edited since the
+  entry was written, so such dead entries are excluded. A caller with no live
+  entries is trivially coherent (e.g. documented cache=False kernels, whose
+  stale leftover files are inert). When NUMBA_CACHE_DIR redirects the cache
+  out of the source tree, no entries are found here; thread_env records that
+  setting.
+  """
+  base = root if root is not None else Path(__file__).resolve().parents[1]
+  pairs: list[dict[str, Any]] = []
+  for caller_rel, callee_rel in CACHE_COHERENCE_PAIRS:
+    caller = base / caller_rel
+    callee = base / callee_rel
+    cache_dir = caller.parent / "__pycache__"
+    entries = (
+      sorted(cache_dir.glob(f"{caller.stem}.*.nbi")) if cache_dir.is_dir() else []
+    )
+    caller_mtime = caller.stat().st_mtime
+    live_mtimes = [
+      entry.stat().st_mtime
+      for entry in entries
+      if entry.stat().st_mtime >= caller_mtime
+    ]
+    callee_mtime = callee.stat().st_mtime if callee.is_file() else None
+    coherent = callee_mtime is not None and all(
+      mtime >= callee_mtime for mtime in live_mtimes
+    )
+    pairs.append(
+      {
+        "caller": caller_rel,
+        "callee": callee_rel,
+        "callee_source_mtime_utc": (
+          datetime.fromtimestamp(callee_mtime, UTC).isoformat()
+          if callee_mtime is not None
+          else None
+        ),
+        "caller_cache_entries": len(entries),
+        "caller_cache_live_entries": len(live_mtimes),
+        "caller_cache_oldest_live_mtime_utc": (
+          datetime.fromtimestamp(min(live_mtimes), UTC).isoformat()
+          if live_mtimes
+          else None
+        ),
+        "coherent": coherent,
+      }
+    )
+  return pairs
 
 
 def _cpu_brand() -> str:
@@ -95,4 +166,9 @@ def collect_manifest(threads: int | None = None) -> dict[str, Any]:
   }
   if threads is not None:
     manifest["threads_requested"] = threads
+  pairs = check_cache_coherence()
+  manifest["numba_cache_coherence"] = {
+    "coherent": all(pair["coherent"] for pair in pairs),
+    "pairs": pairs,
+  }
   return manifest
