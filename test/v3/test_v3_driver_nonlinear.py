@@ -11,6 +11,7 @@ exactly once per committed substep; rejections never advance them).
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -621,8 +622,16 @@ def test_stateful_damage_rows_commit_and_survive_forced_failure() -> None:
 
 def _scripted_linear_spring(
   reject_at_runtime_calls: dict[int, EvaluationStatus],
-) -> tuple[SpringKernel, list[int]]:
+) -> tuple[SpringKernel, list[int], Callable[[], int]]:
+  """Linear spring scripting typed rejections by runtime kernel call index.
+
+  The compile boundary probes the kernel (the virgin probe plus the seeded
+  nonzero-state tangent probe), so the reject map keys only runtime calls:
+  ``mark_runtime`` records the compile-time call count once driver
+  construction — and with it compilation — has finished.
+  """
   calls: list[int] = []
+  runtime_start: list[int] = []
 
   def kernel(
     displacements: np.ndarray,
@@ -631,7 +640,12 @@ def _scripted_linear_spring(
   ) -> SpringKernelResult:
     calls.append(len(calls))
     stiffness = float(parameters[0])
-    status = reject_at_runtime_calls.get(len(calls) - 1, EvaluationStatus.OK)
+    status = EvaluationStatus.OK
+    if runtime_start:
+      status = reject_at_runtime_calls.get(
+        len(calls) - 1 - runtime_start[0],
+        EvaluationStatus.OK,
+      )
     if status is not EvaluationStatus.OK:
       return SpringKernelResult(
         force=np.zeros_like(displacements),
@@ -647,14 +661,21 @@ def _scripted_linear_spring(
       status=EvaluationStatus.OK,
     )
 
-  return kernel, calls
+  def mark_runtime() -> int:
+    runtime_start.append(len(calls))
+    return len(calls)
+
+  return kernel, calls, mark_runtime
 
 
 def test_operator_reject_iteration_retries_with_damped_iterate() -> None:
-  # Compile probe consumes call 0; runtime call 2 is the second driver
-  # evaluation (the first Newton correction of the first substep).
-  kernel, calls = _scripted_linear_spring({2: EvaluationStatus.REJECT_ITERATION})
+  # The scripted map keys runtime kernel calls; runtime call 1 is the second
+  # driver evaluation (the first Newton correction of the first substep).
+  kernel, calls, mark_runtime = _scripted_linear_spring(
+    {1: EvaluationStatus.REJECT_ITERATION}
+  )
   driver = _truss_driver(scripted_kernel=kernel)
+  compile_calls = mark_runtime()
   result = _run_ramp(driver, 100.0)
   assert result.status is DriverStatus.COMPLETED
   first = result.records[0]
@@ -670,13 +691,17 @@ def test_operator_reject_iteration_retries_with_damped_iterate() -> None:
     rtol=_STATE_RTOL,
     atol=_STATE_ATOL,
   )
-  # One compile probe plus one kernel call per driver evaluation.
-  assert len(calls) == driver.statistics.evaluation_count + 1
+  # mark_runtime accounts for the compile-time probes; one kernel call per
+  # driver evaluation afterwards.
+  assert len(calls) == driver.statistics.evaluation_count + compile_calls
 
 
 def test_operator_reject_step_cuts_back_and_recovers() -> None:
-  kernel, _calls = _scripted_linear_spring({2: EvaluationStatus.REJECT_STEP})
+  kernel, _calls, mark_runtime = _scripted_linear_spring(
+    {1: EvaluationStatus.REJECT_STEP}
+  )
   driver = _truss_driver(scripted_kernel=kernel)
+  mark_runtime()
   result = _run_ramp(driver, 100.0)
   assert result.status is DriverStatus.COMPLETED
   assert result.statistics.cutback_count == 1
@@ -691,21 +716,25 @@ def test_operator_reject_step_cuts_back_and_recovers() -> None:
 def test_first_evaluation_reject_iteration_escalates_to_cutback() -> None:
   # Rejecting the very first evaluation leaves no Newton direction to damp,
   # so the protocol cuts back instead of retrying in place.
-  kernel, _calls = _scripted_linear_spring({1: EvaluationStatus.REJECT_ITERATION})
+  kernel, _calls, mark_runtime = _scripted_linear_spring(
+    {0: EvaluationStatus.REJECT_ITERATION}
+  )
   driver = _truss_driver(scripted_kernel=kernel)
+  mark_runtime()
   result = _run_ramp(driver, 100.0)
   assert result.status is DriverStatus.COMPLETED
   assert result.statistics.cutback_count == 1
 
 
 def test_operator_reject_step_budget_exhaustion_fails_typed() -> None:
-  kernel, _calls = _scripted_linear_spring(
-    {index: EvaluationStatus.REJECT_STEP for index in range(1, 12)}
+  kernel, _calls, mark_runtime = _scripted_linear_spring(
+    {index: EvaluationStatus.REJECT_STEP for index in range(11)}
   )
   driver = _truss_driver(
     NonlinearStaticSettings(max_cutbacks=2),
     scripted_kernel=kernel,
   )
+  mark_runtime()
   snapshot = _owner_snapshot(driver.owner)
   result = _run_ramp(driver, 100.0)
   assert result.status is DriverStatus.STEP_FAILED
