@@ -14,19 +14,25 @@ from collections.abc import Callable
 
 from pyfem.v3.authoring.diagnostics import raise_descriptor_mismatch
 from pyfem.v3.compile.continuum import (
+  PLASTIC_MATERIAL_KEY,
   Q8_FORMULATION_KEY,
   Q8_MATERIAL_KEY,
   Q8_QUADRATURE_KEY,
   Q8_TOPOLOGY_KEY,
+  plasticity_reference_registry,
   q8_descriptor_metadata,
   q8_reference_registry,
 )
+from pyfem.v3.compile.contracts import StatefulContinuumBinding
 from pyfem.v3.compile.truss import (
   TRUSS_FORMULATION_KEY,
   TRUSS_MATERIAL_KEY,
   TRUSS_TOPOLOGY_KEY,
   truss_descriptor_metadata,
   truss_reference_registry,
+)
+from pyfem.v3.materials.isotropic_hardening_plasticity import (
+  isotropic_hardening_plasticity_metadata,
 )
 from pyfem.v3.model.provenance import CanonicalManifest
 from pyfem.v3.model.registry import RegistryDescriptor, RegistryKey
@@ -77,6 +83,35 @@ def uniaxial_law(
     version=version,
     implementation_id=implementation_id,
     metadata=truss_descriptor_metadata(*TRUSS_MATERIAL_KEY),
+    binding=binding,
+  )
+
+
+def plasticity_law(
+  binding: StatefulContinuumBinding,
+  *,
+  implementation_id: str,
+  version: str = "1",
+) -> RegistryDescriptor:
+  """Bind a stateful J2 plasticity binding to the qualified material convention.
+
+  ``binding`` implements the v2 stateful continuum binding protocol: a
+  calibration call receiving ``(youngs_modulus, poisson_ratio,
+  initial_yield_stress, hardening_slope)`` and returning the law's flat
+  float64 calibration vector, a batched kernel over total 6-Voigt strains and
+  accepted state rows, and an optional ``initial_state``. The descriptor pins
+  the qualified isotropic-hardening-plasticity convention (metadata the user
+  never has to copy); compilation re-declares the binding's metadata and
+  validates it byte-wise against the captured descriptor, so equivalent
+  kernels are accepted and contradictory ones rejected with coded
+  diagnostics.
+  """
+  return RegistryDescriptor(
+    kind=PLASTIC_MATERIAL_KEY[0],
+    name=PLASTIC_MATERIAL_KEY[1],
+    version=version,
+    implementation_id=implementation_id,
+    metadata=isotropic_hardening_plasticity_metadata(),
     binding=binding,
   )
 
@@ -172,6 +207,45 @@ def truss_registry(
   return registry
 
 
+def _continuum_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
+  """Resolve the qualified continuum metadata, including the stateful seam."""
+  if (kind, name) == PLASTIC_MATERIAL_KEY:
+    return isotropic_hardening_plasticity_metadata()
+  return q8_descriptor_metadata(kind, name)
+
+
+def plasticity_registry(
+  *,
+  topology: RegistryDescriptor | None = None,
+  quadrature: RegistryDescriptor | None = None,
+  formulation: RegistryDescriptor | None = None,
+  material: RegistryDescriptor | None = None,
+) -> dict[RegistryKey, RegistryDescriptor]:
+  """Compose a plasticity registry: reference implementations plus replacements.
+
+  Mirrors :func:`q8_registry` for the qualified stateful convention: the Q8
+  reference implementations plus the first stateful law. Replacements keep
+  the qualified registry key and metadata convention; only the implementation
+  (its id, version, and binding) is yours. A mismatching key or metadata
+  field fails here with a field-level diff, not later with a bare compile
+  error.
+  """
+  registry = plasticity_reference_registry()
+  _replace(
+    registry,
+    (
+      (Q8_TOPOLOGY_KEY, topology),
+      (Q8_QUADRATURE_KEY, quadrature),
+      (Q8_FORMULATION_KEY, formulation),
+      (PLASTIC_MATERIAL_KEY, material),
+    ),
+    family="plasticity",
+    metadata_for=_continuum_descriptor_metadata,
+    source="authoring.plasticity_registry",
+  )
+  return registry
+
+
 def check_registry(
   spec: ModelSpec,
   registry: dict[RegistryKey, RegistryDescriptor],
@@ -194,16 +268,9 @@ def check_registry(
   formulations = {region.formulation for region in spec.regions}
   if Q8_FORMULATION_KEY[1] in formulations:
     family = "Q8"
-    keys = (
-      Q8_TOPOLOGY_KEY,
-      Q8_QUADRATURE_KEY,
-      Q8_FORMULATION_KEY,
-      Q8_MATERIAL_KEY,
-    )
-    metadata_for = q8_descriptor_metadata
+    metadata_for = _continuum_descriptor_metadata
   elif TRUSS_FORMULATION_KEY[1] in formulations:
     family = "truss"
-    keys = (TRUSS_TOPOLOGY_KEY, TRUSS_FORMULATION_KEY, TRUSS_MATERIAL_KEY)
     metadata_for = truss_descriptor_metadata
   else:
     return
@@ -216,6 +283,25 @@ def check_registry(
   block = spec.mesh.cell_blocks[0]
   material = spec.materials[0]
   region = spec.regions[0]
+  if family == "Q8":
+    # The small-strain formulation is the open stateful seam: the compiler
+    # selects the material descriptor by the spec's model name. Only the
+    # pinned Q8 and plasticity conventions carry a qualified metadata
+    # contract here; other stateful keys defer to the landed compiler's
+    # binding re-declaration validation.
+    material_key: RegistryKey = ("material", material.model)
+    keys = (
+      Q8_TOPOLOGY_KEY,
+      Q8_QUADRATURE_KEY,
+      Q8_FORMULATION_KEY,
+      material_key,
+    )
+  else:
+    keys = (TRUSS_TOPOLOGY_KEY, TRUSS_FORMULATION_KEY, TRUSS_MATERIAL_KEY)
+  try:
+    expected_by_key = {key: metadata_for(*key) for key in keys}
+  except KeyError:
+    return
   sources = {
     "topology": block.source,
     "quadrature": region.source,
@@ -227,7 +313,7 @@ def check_registry(
     if type(descriptor) is not RegistryDescriptor:
       continue
     try:
-      expected = CanonicalManifest(metadata_for(*key))
+      expected = CanonicalManifest(expected_by_key[key])
       authored = descriptor.metadata.to_bytes()
     except (TypeError, ValueError):
       continue
@@ -235,7 +321,7 @@ def check_registry(
       raise_descriptor_mismatch(
         family=family,
         key=key,
-        expected_metadata=metadata_for(*key),
+        expected_metadata=expected_by_key[key],
         descriptor=descriptor,
         source=sources[key[0]],
       )

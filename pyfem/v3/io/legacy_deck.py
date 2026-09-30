@@ -22,8 +22,12 @@ Deck structure (``.pro`` side):
   the v3 driver owns its own cutback schedule);
 - one element block per mesh group, named after the group, of type
   ``SmallStrainContinuum`` (with a nested ``material`` block of type
-  ``PlaneStress`` carrying ``E`` and ``nu``) or ``Truss`` (carrying ``E`` and
-  ``Area`` directly);
+  ``PlaneStress`` carrying ``E`` and ``nu``, or of type
+  ``IsotropicHardeningPlasticity`` carrying ``E``, ``nu``, ``syield``, and
+  ``hard`` — the linear-hardening configuration the v3 stateful law ships;
+  the legacy hardening-table (``EqPlasStrains``/``Stresses``) and power-law
+  (``q``/``K``) properties reject, citing the M25 scoping decision) or
+  ``Truss`` (carrying ``E`` and ``Area`` directly);
 - ``outputModules = [...]`` naming blocks whose ``type`` is a known legacy
   writer (``MeshWriter``, ``OutputWriter``, ``GraphWriter``, ``HDF5Writer``,
   ``DataDump``, ``ContourWriter``, ``ROMSnapshotWriter``). Writers do not
@@ -73,11 +77,19 @@ context — never a silent skip. Known legacy constructs and their codes:
   extra keys in an element block, or a ``Truss`` block without ``E``/``Area``;
 - ``missing-element-block`` — a mesh group with no same-named ``.pro`` block;
 - ``unsupported-element-groups`` — more than one element group in the mesh;
-- ``unsupported-material-model`` — material type outside ``{PlaneStress}``
-  (e.g. ``PlaneStrain``, ``Isotropic``);
+- ``unsupported-material-model`` — material type outside
+  ``{PlaneStress, IsotropicHardeningPlasticity}`` (e.g. ``PlaneStrain``,
+  ``IsotropicKinematicHardening``);
+- ``unsupported-hardening-form`` — an ``IsotropicHardeningPlasticity``
+  material carrying the legacy hardening-table (``EqPlasStrains``,
+  ``Stresses``) or power-law (``q``, ``K``) properties; the v3 stateful law
+  ships exactly the linear-hardening ``hard`` configuration (the M25 scoping
+  decision: the legacy law's plastic branch reads its ``hard`` property for
+  the tangent, so no other hardening form ever defined plastic behavior);
 - ``unsupported-material-parameter`` / ``missing-material-parameter`` —
-  extra keys in a material block, or a ``PlaneStress`` block without
-  ``E``/``nu``;
+  extra keys in a material block, or a block without its model's required
+  properties (``E``/``nu`` for ``PlaneStress``; ``E``/``nu``/``syield``/
+  ``hard`` for ``IsotropicHardeningPlasticity``);
 - ``unsupported-solver-type`` — solver type outside
   ``{LinearSolver, NonlinearSolver}`` (e.g. ``RiksSolver``);
 - ``unsupported-solver-parameter`` — solver key outside the supported set;
@@ -118,7 +130,10 @@ from typing import NoReturn
 
 import numpy as np
 
-from pyfem.v3.compile.continuum import q8_reference_registry
+from pyfem.v3.compile.continuum import (
+  plasticity_reference_registry,
+  q8_reference_registry,
+)
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.compile.truss import truss_reference_registry
 from pyfem.v3.constraints import CompiledConstraintMap, compile_constraint_map
@@ -184,6 +199,9 @@ _KNOWN_OUTPUT_TYPES = frozenset(
 _NONLINEAR_SOLVER_KEYS = frozenset(
   {"type", "tol", "iterMax", "maxCycle", "dtime", "loadTable", "loadFunc", "fixedStep"}
 )
+_PLASTICITY_MODEL = "IsotropicHardeningPlasticity"
+_PLASTICITY_VALUE_KEYS = frozenset({"E", "nu", "syield", "hard"})
+_PLASTICITY_TABLE_KEYS = frozenset({"EqPlasStrains", "Stresses", "q", "K"})
 
 
 class DeckConversionError(ValueError):
@@ -1239,6 +1257,7 @@ def _block_number(
   extra_code: str,
   allowed: frozenset[str],
   diagnostics: list[SpecDiagnostic],
+  ignored: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, tuple[float, SourceContext]], bool]:
   """Collect numeric assignments of ``allowed`` names from one flat block."""
   values: dict[str, tuple[float, SourceContext]] = {}
@@ -1253,6 +1272,8 @@ def _block_number(
         ),
       )
       sound = False
+      continue
+    if item.name in ignored:
       continue
     if item.name not in allowed:
       diagnostics.append(
@@ -1333,12 +1354,14 @@ def _continuum_family(
     if type(item) is _ProAssignment and item.name == "type":
       raw = item.value.value
       material_type = raw if type(raw) is str else None
+  if material_type == _PLASTICITY_MODEL:
+    return _plasticity_family(block, material_block, diagnostics)
   if material_type != "PlaneStress":
     diagnostics.append(
       _diagnostic(
         "unsupported-material-model",
         f"material model {material_type!r} is outside the supported deck "
-        "subset ('PlaneStress' only)",
+        "subset ('PlaneStress' and 'IsotropicHardeningPlasticity' only)",
         material_block.source,
       ),
     )
@@ -1379,6 +1402,84 @@ def _continuum_family(
       ("poisson_ratio", poisson[0], poisson[1]),
     ),
     registry_kind="q8",
+  )
+
+
+def _plasticity_family(
+  block: _ProBlock,
+  material_block: _ProBlock,
+  diagnostics: list[SpecDiagnostic],
+) -> _FamilyProfile | None:
+  """Read the linear-hardening plasticity form into the v2 stateful descriptor.
+
+  Only the ``hard`` configuration converts: the legacy law's plastic branch
+  reads its ``hard`` property for the tangent, so the table and power-law
+  hardening forms never defined consistent plastic behavior (the M25 scoping
+  decision); carrying their properties rejects with a coded diagnostic.
+  """
+  sound = True
+  table_keys = sorted(
+    {
+      item.name
+      for item in material_block.items
+      if type(item) is _ProAssignment and item.name in _PLASTICITY_TABLE_KEYS
+    }
+  )
+  if table_keys:
+    diagnostics.append(
+      _diagnostic(
+        "unsupported-hardening-form",
+        f"material model 'IsotropicHardeningPlasticity' with hardening "
+        f"properties {table_keys} is outside the supported deck subset: the "
+        "v3 stateful law ships exactly the linear-hardening configuration "
+        "(E, nu, syield, hard) — the M25 scoping decision, since the legacy "
+        "law's plastic branch reads its 'hard' property for the tangent and "
+        "the table/power-law forms never defined consistent plastic behavior",
+        material_block.source,
+      ),
+    )
+    sound = False
+  parameters, params_sound = _block_number(
+    material_block,
+    "material",
+    extra_code="unsupported-material-parameter",
+    allowed=frozenset({"type", *_PLASTICITY_VALUE_KEYS}),
+    diagnostics=diagnostics,
+    ignored=_PLASTICITY_TABLE_KEYS,
+  )
+  sound = sound and params_sound
+  missing = _PLASTICITY_VALUE_KEYS - set(parameters)
+  if missing:
+    diagnostics.append(
+      _diagnostic(
+        "missing-material-parameter",
+        f"material block in {block.name!r} misses {sorted(missing)}",
+        material_block.source,
+      ),
+    )
+    sound = False
+  if not sound:
+    return None
+  youngs = parameters["E"]
+  poisson = parameters["nu"]
+  syield = parameters["syield"]
+  hard = parameters["hard"]
+  return _FamilyProfile(
+    formulation="small-strain-continuum",
+    quadrature="gauss-3x3",
+    reference_topology="quadrilateral",
+    topological_dimension=2,
+    embedding_dimension=2,
+    geometry_interpolation="serendipity-quad8",
+    cell_arity=8,
+    material_model="isotropic-hardening-plasticity",
+    parameters=(
+      ("youngs_modulus", youngs[0], youngs[1]),
+      ("poisson_ratio", poisson[0], poisson[1]),
+      ("initial_yield_stress", syield[0], syield[1]),
+      ("hardening_slope", hard[0], hard[1]),
+    ),
+    registry_kind="plasticity",
   )
 
 
@@ -2038,11 +2139,12 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
     if pro_deck.solver_block is not None
     else pro_source,
   )
-  registry = (
-    q8_reference_registry()
-    if profile.family is not None and profile.family.registry_kind == "q8"
-    else truss_reference_registry()
-  )
+  if profile.family is not None and profile.family.registry_kind == "q8":
+    registry = q8_reference_registry()
+  elif profile.family is not None and profile.family.registry_kind == "plasticity":
+    registry = plasticity_reference_registry()
+  else:
+    registry = truss_reference_registry()
   return ConvertedDeck(
     name=pro_path.stem,
     pro_path=pro_path,
