@@ -25,7 +25,7 @@ from _legacy_parity import (
   load_parity_tolerances,
 )
 
-from pyfem.v3.driver import DriverStatus
+from pyfem.v3.driver import DriverStatus, NonlinearStaticDriver, NonlinearStaticSettings
 from pyfem.v3.io.legacy_deck import (
   ConvertedDeck,
   DeckConversionError,
@@ -33,7 +33,18 @@ from pyfem.v3.io.legacy_deck import (
   read_legacy_deck,
   run_deck,
 )
-from pyfem.v3.spec.program import AffineTieSpec, PrescribedDofSpec
+from pyfem.v3.materials.isotropic_hardening_plasticity import (
+  isotropic_hardening_calibration,
+  isotropic_hardening_plasticity_kernel,
+)
+from pyfem.v3.model.operator import EvaluationStatus
+from pyfem.v3.model.system import CompiledSystem
+from pyfem.v3.spec.program import (
+  AffineTieSpec,
+  PrescribedDofSpec,
+  ProgramCoordinateValue,
+  ProgramPoint,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 SKIMS = ROOT / "skims"
@@ -340,6 +351,268 @@ def test_truss_deck_round_trip_matches_legacy(tmp_path: Path) -> None:
   assert run.result.statistics.committed_substep_count == 4
   legacy = legacy_nonlinear_state(pro)
   np.testing.assert_allclose(run.state, legacy, rtol=1.0e-8, atol=1.0e-10)
+
+
+# --- plasticity material decks --------------------------------------------------
+
+# The documented M25 parity configuration (test_v3_stateful_plasticity.py):
+# linear hardening, the only configuration the legacy law ever defined on the
+# plastic path.
+_M25_E = 210000.0
+_M25_NU = 0.3
+_M25_SYIELD = 250.0
+_M25_HARD = 1000.0
+_M25_LOAD_TABLE = (0.001, 0.002, 0.004)
+
+_PLASTICITY_NODES = (
+  " 1 0.0 0.0; 2 0.5 0.0; 3 1.0 0.0; 4 1.0 0.5;\n"
+  " 5 1.0 1.0; 6 0.5 1.0; 7 0.0 1.0; 8 0.0 0.5;"
+)
+_PLASTICITY_ELEMENT = ' 1 "ContElem" 1 2 3 4 5 6 7 8;'
+# A homogeneous eps_xx ramp: u_x is prescribed to the node x coordinate and
+# scales with the load coordinate under NonlinearSolver (node 6's x stays
+# free so every Newton iteration assembles and factorizes the tangent).
+_PLASTICITY_CONSTRAINTS = (
+  " u[1] = 0.0; u[2] = 0.5; u[3] = 1.0; u[4] = 1.0;\n"
+  " u[5] = 1.0; u[7] = 0.0; u[8] = 0.0;\n"
+  " v[1] = 0.0; v[2] = 0.0; v[3] = 0.0; v[4] = 0.0;\n"
+  " v[5] = 0.0; v[6] = 0.0; v[7] = 0.0; v[8] = 0.0;"
+)
+_PLASTICITY_ELEMENT_BLOCK = """ContElem =
+{
+  type = "SmallStrainContinuum";
+  material =
+  {
+    type = "IsotropicHardeningPlasticity";
+    E = 210000.0;
+    nu = 0.3;
+    syield = 250.0;
+    hard = 1000.0;
+  };
+};
+"""
+_PLASTICITY_SOLVER_BLOCK = """solver =
+{
+  type = "NonlinearSolver";
+  tol = 1.0e-10;
+  iterMax = 25;
+  loadTable = [0.001, 0.002, 0.004];
+};
+"""
+
+
+def _plasticity_pro(
+  *,
+  element_block: str = _PLASTICITY_ELEMENT_BLOCK,
+  solver_block: str = _PLASTICITY_SOLVER_BLOCK,
+) -> str:
+  return _mini_pro(element_block=element_block, solver_block=solver_block)
+
+
+def _plasticity_dat() -> str:
+  return _mini_dat(
+    nodes=_PLASTICITY_NODES,
+    elements=_PLASTICITY_ELEMENT,
+    constraints=_PLASTICITY_CONSTRAINTS,
+    forces="",
+  )
+
+
+def _committed_ip_strains(system: CompiledSystem, values: np.ndarray) -> np.ndarray:
+  """Recompute the committed per-integration-point 6-Voigt strains.
+
+  The M25 parity harness expression (test_v3_stateful_plasticity.py): the
+  operator's own physical strain-displacement map applied to the committed
+  coefficient vector.
+  """
+  operator = system.operators[0]
+  payload = operator.payload
+  b_matrix = (
+    payload.normalized_strain_displacement.values
+    / payload.geometry_scales.values[:, None, None, None]
+  )
+  gather = operator.header.ports[0].coefficient_map.values
+  strain3 = np.einsum("epai,ei->epa", b_matrix, values[gather], optimize=True)
+  strains = np.zeros((np.prod(strain3.shape[:2]), 6), dtype=np.float64)
+  flat = strain3.reshape(-1, 3)
+  strains[:, 0] = flat[:, 0]
+  strains[:, 1] = flat[:, 1]
+  strains[:, 5] = flat[:, 2]
+  return strains
+
+
+def test_plasticity_deck_reads_the_stateful_material_form(tmp_path: Path) -> None:
+  deck = _convert_mini(tmp_path, _plasticity_pro(), _plasticity_dat())
+  (material,) = deck.model.materials
+  assert material.model == "isotropic-hardening-plasticity"
+  assert tuple(parameter.name for parameter in material.parameters) == (
+    "youngs_modulus",
+    "poisson_ratio",
+    "initial_yield_stress",
+    "hardening_slope",
+  )
+  values = {parameter.name: parameter.value for parameter in material.parameters}
+  assert values == {
+    "youngs_modulus": _M25_E,
+    "poisson_ratio": _M25_NU,
+    "initial_yield_stress": _M25_SYIELD,
+    "hardening_slope": _M25_HARD,
+  }
+  (region,) = deck.model.regions
+  assert region.formulation == "small-strain-continuum"
+  assert region.quadrature == "gauss-3x3"
+  assert ("material", "isotropic-hardening-plasticity") in deck.registry
+  assert deck.solver.solver_type == "NonlinearSolver"
+  assert deck.solver.load_factors == _M25_LOAD_TABLE
+
+
+def test_plasticity_deck_drives_the_m25_parity_path(tmp_path: Path) -> None:
+  """The converted plasticity deck commits the M25 kernel-oracle state.
+
+  Mirrors the driver battery of test_v3_stateful_plasticity.py on the
+  documented ramp eps_xx = 0.001, 0.002, 0.004: the committed rows equal the
+  batched M25 kernel stepped on the committed per-integration-point strain
+  path — bitwise, since the driver stages the trial rows of the converged
+  iterate — and the algorithmic channel re-factorizes every iteration.
+  """
+  deck = _convert_mini(tmp_path, _plasticity_pro(), _plasticity_dat())
+  compiled = compile_deck(deck)
+  settings = NonlinearStaticSettings(
+    tolerance=deck.solver.tolerance,
+    max_iterations=deck.solver.max_iterations,
+  )
+  driver = NonlinearStaticDriver(
+    compiled.system,
+    compiled.constraint_map,
+    compiled.loads,
+    settings,
+  )
+  assert driver.plan.constant_tangent is False
+  layout = compiled.system.operators[0].header.state_layout
+  assert layout.schema == (
+    "pyfem-v3-j2-isotropic-hardening-state-v1|sigma:6,epsilon_e:6,epsilon_p:6,kappa:1"
+  )
+  assert layout.initial_rows is not None
+  assert np.all(layout.initial_rows.values == 0.0)
+  block_id = layout.block_id
+  calibration = isotropic_hardening_calibration(_M25_E, _M25_NU, _M25_SYIELD, _M25_HARD)
+  oracle_rows = np.zeros((9, 19))
+  base = ProgramPoint((ProgramCoordinateValue("load", 0.0),))
+  for step, factor in enumerate(deck.solver.load_factors, 1):
+    target = ProgramPoint((ProgramCoordinateValue("load", factor),))
+    result = driver.run(base_point=base, target_points=(target,))
+    assert result.status is DriverStatus.COMPLETED
+    base = target
+    oracle = isotropic_hardening_plasticity_kernel(
+      _committed_ip_strains(compiled.system, driver.owner.accepted_physical().values),
+      oracle_rows,
+      calibration,
+    )
+    assert oracle.status is EvaluationStatus.OK
+    oracle_rows = oracle.trial_rows
+    rows = driver.owner.accepted_state(block_id).values
+    assert rows.shape == (9, 19)
+    np.testing.assert_array_equal(rows, oracle_rows)
+    # Homogeneous strain: all nine integration points agree to ~1e-10.
+    np.testing.assert_allclose(
+      rows, np.broadcast_to(rows[0], rows.shape), rtol=1.0e-9, atol=1.0e-10
+    )
+    assert result.final_generation.ordinal == step
+  assert rows[0, 18] > 0.0  # kappa: the ramp went plastic
+  statistics = result.statistics
+  assert statistics.committed_substep_count == 3
+  assert statistics.rejected_substep_count == 0
+  assert statistics.factorization_reuse_count == 0
+  assert statistics.factorization_count == statistics.tangent_refill_count
+  assert statistics.factorization_count == statistics.linear_solve_count
+  assert statistics.factorization_count > statistics.committed_substep_count
+
+  # The one-call run_deck schedule lands on the same committed bytes.
+  run = run_deck(deck)
+  assert run.result.status is DriverStatus.COMPLETED
+  np.testing.assert_array_equal(
+    run.driver.owner.accepted_state(block_id).values,
+    driver.owner.accepted_state(block_id).values,
+  )
+  np.testing.assert_array_equal(run.state, driver.owner.accepted_physical().values)
+
+
+_PLASTICITY_TABLE_BLOCK = _PLASTICITY_ELEMENT_BLOCK.replace(
+  "    hard = 1000.0;\n",
+  "    hard = 1000.0;\n"
+  "    EqPlasStrains = [0.0, 1.0];\n"
+  "    Stresses = [250.0, 1250.0];\n",
+)
+
+_PLASTICITY_REJECTIONS = {
+  "table-hardening": (
+    _plasticity_pro(element_block=_PLASTICITY_TABLE_BLOCK),
+    {"unsupported-hardening-form"},
+  ),
+  "power-law-hardening": (
+    _plasticity_pro(
+      element_block=_PLASTICITY_ELEMENT_BLOCK.replace(
+        "    hard = 1000.0;\n",
+        "    q = 0.05;\n",
+      ),
+    ),
+    {"unsupported-hardening-form", "missing-material-parameter"},
+  ),
+  "missing-hardening-slope": (
+    _plasticity_pro(
+      element_block=_PLASTICITY_ELEMENT_BLOCK.replace("    hard = 1000.0;\n", ""),
+    ),
+    {"missing-material-parameter"},
+  ),
+  "extra-material-key": (
+    _plasticity_pro(
+      element_block=_PLASTICITY_ELEMENT_BLOCK.replace(
+        "    hard = 1000.0;\n",
+        "    hard = 1000.0;\n    rho = 7850.0;\n",
+      ),
+    ),
+    {"unsupported-material-parameter"},
+  ),
+  "kinematic-hardening-model": (
+    _plasticity_pro(
+      element_block=_PLASTICITY_ELEMENT_BLOCK.replace(
+        'type = "IsotropicHardeningPlasticity";',
+        'type = "IsotropicKinematicHardening";',
+      ),
+    ),
+    {"unsupported-material-model", "unsupported-material-parameter"},
+  ),
+}
+
+
+@pytest.mark.parametrize(
+  ("pro_text", "expected"),
+  [
+    pytest.param(text, codes, id=name)
+    for name, (text, codes) in _PLASTICITY_REJECTIONS.items()
+  ],
+)
+def test_plasticity_construct_rejections(
+  tmp_path: Path,
+  pro_text: str,
+  expected: set[str],
+) -> None:
+  with pytest.raises(DeckConversionError) as excinfo:
+    _convert_mini(tmp_path, pro_text, _plasticity_dat())
+  assert expected == _rejection_codes(excinfo)
+
+
+def test_table_hardening_rejection_cites_the_m25_scoping(tmp_path: Path) -> None:
+  with pytest.raises(DeckConversionError) as excinfo:
+    _convert_mini(
+      tmp_path,
+      _plasticity_pro(element_block=_PLASTICITY_TABLE_BLOCK),
+      _plasticity_dat(),
+    )
+  assert _rejection_codes(excinfo) == {"unsupported-hardening-form"}
+  (diagnostic,) = excinfo.value.diagnostics
+  assert "M25" in diagnostic.message
+  assert "EqPlasStrains" in diagnostic.message
 
 
 # --- coded rejections ------------------------------------------------------------

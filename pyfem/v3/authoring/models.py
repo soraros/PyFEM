@@ -49,13 +49,19 @@ def _single_block(mesh: object, *, builder: str) -> CellBlockSpec:
   return mesh.cell_blocks[0]
 
 
-def _require_material(material: object, *, model: str, helper: str) -> MaterialSpec:
+def _require_material(
+  material: object,
+  *,
+  models: tuple[str, ...],
+  helper: str,
+) -> MaterialSpec:
   if type(material) is not MaterialSpec:
     msg = f"material must be an exact MaterialSpec from {helper}"
     raise TypeError(msg)
-  if material.model != model:
+  if material.model not in models:
+    quoted = " or ".join(repr(model) for model in models)
     msg = (
-      f"this family requires a {model!r} material (use {helper}), "
+      f"this family requires a {quoted} material (use {helper}), "
       f"got model {material.model!r}"
     )
     raise ValueError(msg)
@@ -138,11 +144,14 @@ def small_strain_continuum(
   region_id: SpecId = "domain",
   source: str = "authoring.small_strain_continuum",
 ) -> ModelSpec:
-  """Compose a serendipity-quad8 mesh and plane-stress material into a model.
+  """Compose a serendipity-quad8 mesh and continuum material into a model.
 
   The region covers every cell of the mesh with the qualified
   ``small-strain-continuum`` formulation on a ``gauss-3x3`` quadrature — one
-  readable call for the classic teaching continuum.
+  readable call for the classic teaching continuum. The material is the
+  elastic ``linear_elastic(E, nu)`` slice or the stateful
+  ``plasticity(E, nu, syield, hard)`` slice; a stateful law authors exactly
+  like an elastic one.
   """
   block = _single_block(mesh, builder="small_strain_continuum")
   _require_geometry(
@@ -156,8 +165,8 @@ def small_strain_continuum(
   )
   selected = _require_material(
     material,
-    model="plane-stress-linear-elastic",
-    helper="linear_elastic(E, nu)",
+    models=("plane-stress-linear-elastic", "isotropic-hardening-plasticity"),
+    helper="linear_elastic(E, nu) or plasticity(E, nu, syield, hard)",
   )
   return _model(
     mesh,
@@ -196,7 +205,7 @@ def truss(
   )
   selected = _require_material(
     material,
-    model="uniaxial-linear-elastic",
+    models=("uniaxial-linear-elastic",),
     helper="uniaxial_elastic(E, area)",
   )
   return _model(

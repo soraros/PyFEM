@@ -21,6 +21,14 @@ A new material is a plain law function plus one descriptor line::
     law = plane_stress_law(my_law, implementation_id="my-law-v1")
     system = compile(model, q8_registry(material=law))
 
+A stateful law authors exactly like an elastic one::
+
+    model = small_strain_continuum(
+      mesh,
+      material=plasticity(210.0e3, 0.3, 250.0, 1000.0),
+    )
+    system = compile(model)  # the plasticity reference registry is the default
+
 A stateful workflow adds a spring kernel with state slots and steps it through
 the landed driver — transactions stay begin/stage/commit plain, never touching
 owner internals::
@@ -46,13 +54,15 @@ owner internals::
 
 from pyfem.v3.authoring.compile import compile
 from pyfem.v3.authoring.evaluate import evaluate, trial_vector
-from pyfem.v3.authoring.materials import linear_elastic, uniaxial_elastic
+from pyfem.v3.authoring.materials import linear_elastic, plasticity, uniaxial_elastic
 from pyfem.v3.authoring.mesh import line2_mesh, quad8_mesh, quad8_patch
 from pyfem.v3.authoring.models import small_strain_continuum, truss
 from pyfem.v3.authoring.program import fixed, nodal_load
 from pyfem.v3.authoring.registry import (
   check_registry,
   plane_stress_law,
+  plasticity_law,
+  plasticity_registry,
   q8_registry,
   truss_registry,
   uniaxial_law,
@@ -96,6 +106,9 @@ __all__ = [
   "nodal_load",
   "nonlinear_static",
   "plane_stress_law",
+  "plasticity",
+  "plasticity_law",
+  "plasticity_registry",
   "q8_registry",
   "quad8_mesh",
   "quad8_patch",

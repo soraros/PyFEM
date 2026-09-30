@@ -77,6 +77,57 @@ def linear_elastic(
   )
 
 
+def plasticity(
+  E: float,
+  nu: float,
+  syield: float,
+  hard: float,
+  *,
+  id: SpecId = "material",
+  source: str = "authoring.plasticity",
+) -> MaterialSpec:
+  """Author J2 isotropic-hardening plasticity parameters for a continuum region.
+
+  ``E`` is Young's modulus, ``nu`` Poisson's ratio, ``syield`` the initial
+  yield stress, and ``hard`` the linear hardening slope; they map onto the
+  qualified ``youngs_modulus``/``poisson_ratio``/``initial_yield_stress``/
+  ``hardening_slope`` parameter convention of the v2 stateful descriptor.
+  Domain checks (positive modulus and yield stress, ``-1 < nu < 0.5``,
+  non-negative slope) run at compile time with coded diagnostics.
+  """
+  youngs_modulus = _finite_scalar(E, label="plasticity E")
+  poisson_ratio = _finite_scalar(nu, label="plasticity nu")
+  initial_yield_stress = _finite_scalar(syield, label="plasticity syield")
+  hardening_slope = _finite_scalar(hard, label="plasticity hard")
+  return MaterialSpec(
+    id=_material_id(id),
+    model="isotropic-hardening-plasticity",
+    parameters=(
+      MaterialParameterSpec(
+        "youngs_modulus",
+        youngs_modulus,
+        _source(f"{source}:youngs_modulus"),
+      ),
+      MaterialParameterSpec(
+        "poisson_ratio",
+        poisson_ratio,
+        _source(f"{source}:poisson_ratio"),
+      ),
+      MaterialParameterSpec(
+        "initial_yield_stress",
+        initial_yield_stress,
+        _source(f"{source}:initial_yield_stress"),
+      ),
+      MaterialParameterSpec(
+        "hardening_slope",
+        hardening_slope,
+        _source(f"{source}:hardening_slope"),
+      ),
+    ),
+    source=_source(source),
+  )
+
+
 def uniaxial_elastic(
   E: float,
   area: float,
