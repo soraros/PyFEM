@@ -110,9 +110,9 @@ Outer-boundary nodes receive the PatchTest8 prescribed displacement field. Grid 
 |-----------|----------|-------|
 | Uniform Q8 patch mesh | `pyfem/v3/mesh/refined_patch.py` | Benchmark / programmatic problems |
 | Loaded Q8 patch problem | `build_uniform_q8_loaded(..., material_type=...)` | Scale sweeps for PlaneStress / PlaneStrain |
-| Chunked assembly | `pyfem/v3/assembly.py` | Auto when `n_elems > 2048`, `chunk_size=4096` |
+| Chunked assembly | `pyfem/v3/_prototype_assembly.py` | Auto when `n_elems > 2048`, `chunk_size=4096` |
 | Factorized reuse | `pyfem/v3/solver/context.py` | `factorized_reduced_solve`; `prepare_linear_solve` → `LinearSolutionContext` |
-| Tangent + `f_int` | `pyfem/v3/assembly.py`, `solver/tangent_context.py`, `solver/nonlinear.py` | Fused `K_e`; cached `K @ u`; factorized `K_red` per NR load step — see [tangent-assembly evidence](#tangent-assembly-evidence) |
+| Tangent + `f_int` | `pyfem/v3/_prototype_assembly.py`, `solver/tangent_context.py`, `solver/nonlinear.py` | Fused `K_e`; cached `K @ u`; factorized `K_red` per NR load step — see [tangent-assembly evidence](#tangent-assembly-evidence) |
 | Parity path | `solve_linear` | Unchanged; always full assemble + solve |
 
 ## Linear Q8 accuracy
@@ -196,7 +196,7 @@ extrapolate from the five-element skims alone.
 | API | Location | Role |
 |---|---|---|
 | `assemble_tangent_coo` | `pyfem/v3/fem/assembly.py` | One `K_e` batch to COO scatter plus optional `f_e = K_e @ u_e` |
-| `assemble_tangent_loaded` | `pyfem/v3/assembly.py` | Chunked global tangent plus `internal_force` |
+| `assemble_tangent_loaded` | `pyfem/v3/_prototype_assembly.py` | Chunked global tangent plus `internal_force` |
 | `TangentAssemblyContext` | `pyfem/v3/solver/tangent_context.py` | Cache CSR `K`; repeated `f_int = K @ u` |
 | `prepare_tangent_assembly` | same | One-shot context builder |
 
@@ -253,11 +253,12 @@ three-element `shallow_truss_riks` skim. Do not extrapolate from that book mesh.
 |---|---|---|
 | `link2_tangent_single` / `link2_tangent_batched` | `pyfem/v3/fem/link2.py` | Corotational TL truss and axial spring in one two-node kernel |
 | `local_to_global_4`, `rotation_matrix_2d`, `to_element_vector_4` | `pyfem/v3/fem/link2.py` | Element rotation matrix and local/global transforms (colocated after M20) |
-| `assemble_tangent_loaded` | `pyfem/v3/assembly.py` | Multi-group tangent plus `f_int` |
+| `assemble_tangent_loaded` | `pyfem/v3/_prototype_assembly.py` | Multi-group tangent plus `f_int` |
 | `solve_riks` | `pyfem/v3/solver/riks.py` | Riks arc length with `solve_reduced_displacement` |
 
 Truss and Spring shared one batched kernel; prototype assembly dispatched by
-`group_kind` with truss group 0 and spring group 1.
+`group_kind` (`GROUP_TRUSS=1` for trusses, `GROUP_SPRING=2` for springs;
+`pyfem/v3/types.py`).
 `build_truss_fan(n_rays)` in `pyfem/v3/mesh/truss_fan.py` produced
 `n_rays` trusses plus one apex spring; `n_rays=2` reproduced the chapter-4
 `ShallowtrussRiks` topology. `build_truss_fan_loaded(n_rays)` added
