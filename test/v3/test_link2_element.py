@@ -14,6 +14,7 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
+from pyfem.elements.Spring import Spring as LegacySpring
 from pyfem.elements.Truss import Truss as LegacyTruss
 from pyfem.io.InputReader import InputRead
 from pyfem.util.dataStructures import elementData
@@ -49,6 +50,13 @@ def _unit_axial_vector(coords: np.ndarray) -> np.ndarray:
   return np.array([c, s, -c, -s], dtype=np.float64)
 
 
+def _unit_transverse_vector(coords: np.ndarray) -> np.ndarray:
+  """Unit transverse vector ``t = (-s, c, s, -c)`` of a 2-node element."""
+  direction = coords[1] - coords[0]
+  c, s = direction / np.linalg.norm(direction)
+  return np.array([-s, c, s, -c], dtype=np.float64)
+
+
 @pytest.fixture(scope="module")
 def legacy_truss_element() -> LegacyTruss:
   props, globdat = InputRead(str(TRUSS_SKIM_PRO))
@@ -68,6 +76,29 @@ def _legacy_truss_response(
   elemdat = elementData(state, state)
   elemdat.coords = coords
   elemdat.props = SimpleNamespace(E=TRUSS_E, Area=TRUSS_AREA)
+  elemdat.stiff.fill(0.0)
+  elemdat.fint.fill(0.0)
+  element.getTangentStiffness(elemdat)
+  return elemdat.stiff.copy(), elemdat.fint.copy()
+
+
+@pytest.fixture(scope="module")
+def legacy_spring_element() -> LegacySpring:
+  props, globdat = InputRead(str(TRUSS_SKIM_PRO))
+  element = next(iter(globdat.elements.iterElementGroup("SpringElem")))
+  element.globdat = globdat
+  return element
+
+
+def _legacy_spring_response(
+  element: LegacySpring,
+  coords: np.ndarray,
+  state: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+  """Legacy ``Spring`` tangent and internal force (no history to reset)."""
+  elemdat = elementData(state, state)
+  elemdat.coords = coords
+  elemdat.props = SimpleNamespace(k=SPRING_K)
   elemdat.stiff.fill(0.0)
   elemdat.fint.fill(0.0)
   element.getTangentStiffness(elemdat)
@@ -107,9 +138,52 @@ def test_truss_zero_state_tangent_matches_closed_form(coords: np.ndarray) -> Non
 
 @pytest.mark.parametrize("coords", ANGLED_COORDS, ids=ANGLED_IDS)
 def test_spring_tangent_matches_closed_form(coords: np.ndarray) -> None:
+  """Pin the axial spring semantics: ``K = k * b b^T``, ``b = (c, s, -c, -s)``.
+
+  This tangent is the exact derivative of the axial residual
+  ``f = -k * (b.a) * b``. The legacy Spring element's isotropic tangent is
+  explicitly NOT the oracle - see ``test_spring_legacy_tangent_is_not_the_oracle``.
+  """
   ke, _ = link2_tangent_single(coords, PROBE_STATE, GROUP_SPRING, SPRING_K, 0.0)
   b = _unit_axial_vector(coords)
   np.testing.assert_allclose(ke, SPRING_K * np.outer(b, b), rtol=1.0e-12, atol=1.0e-10)
+
+
+@pytest.mark.parametrize("coords", ANGLED_COORDS, ids=ANGLED_IDS)
+def test_spring_transverse_motion_is_unresisted(coords: np.ndarray) -> None:
+  """An axial spring resists only relative motion along its axis."""
+  ke, _ = link2_tangent_single(coords, PROBE_STATE, GROUP_SPRING, SPRING_K, 0.0)
+  t_perp = _unit_transverse_vector(coords)
+  np.testing.assert_allclose(ke @ t_perp, np.zeros(4), atol=1.0e-10)
+
+
+@pytest.mark.parametrize("coords", ANGLED_COORDS, ids=ANGLED_IDS)
+def test_spring_legacy_tangent_is_not_the_oracle(
+  legacy_spring_element: LegacySpring,
+  coords: np.ndarray,
+) -> None:
+  """State explicitly which legacy Spring behavior is (not) the v3 oracle.
+
+  Legacy ``pyfem/elements/Spring.py`` assembles an isotropic tangent
+  ``k * [[I, -I], [-I, I]]`` (stiffness ``k`` in the axial AND transverse
+  directions, rotation-invariant) while its internal force is purely axial.
+  That tangent is not the derivative of its own residual, so the legacy
+  spring TANGENT is not a valid oracle for v3: v3 pins the consistent axial
+  tangent ``k * b b^T``, and the legacy tangent differs from it by exactly
+  the transverse projector ``k * t t^T``. The legacy spring RESIDUAL remains
+  authoritative: internal-force parity holds.
+  """
+  k_legacy, f_legacy = _legacy_spring_response(
+    legacy_spring_element, coords, PROBE_STATE
+  )
+  ke, fe = link2_tangent_single(coords, PROBE_STATE, GROUP_SPRING, SPRING_K, 0.0)
+  isotropic = SPRING_K * np.block([[np.eye(2), -np.eye(2)], [-np.eye(2), np.eye(2)]])
+  np.testing.assert_allclose(k_legacy, isotropic, rtol=1.0e-12, atol=1.0e-10)
+  np.testing.assert_allclose(f_legacy, fe, rtol=1.0e-10, atol=1.0e-8)
+  t_perp = _unit_transverse_vector(coords)
+  np.testing.assert_allclose(
+    k_legacy - ke, SPRING_K * np.outer(t_perp, t_perp), rtol=1.0e-12, atol=1.0e-10
+  )
 
 
 @pytest.mark.parametrize("coords", ANGLED_COORDS, ids=ANGLED_IDS)

@@ -252,7 +252,7 @@ three-element `shallow_truss_riks` skim. Do not extrapolate from that book mesh.
 | API | Location | Role |
 |---|---|---|
 | `link2_tangent_single` / `link2_tangent_batched` | `pyfem/v3/fem/link2.py` | Corotational TL truss and axial spring in one two-node kernel |
-| `local_to_global_4` | `pyfem/v3/fem/transforms.py` | Element rotation matrix |
+| `local_to_global_4`, `rotation_matrix_2d`, `to_element_vector_4` | `pyfem/v3/fem/link2.py` | Element rotation matrix and local/global transforms (colocated after M20) |
 | `assemble_tangent_loaded` | `pyfem/v3/assembly.py` | Multi-group tangent plus `f_int` |
 | `solve_riks` | `pyfem/v3/solver/riks.py` | Riks arc length with `solve_reduced_displacement` |
 
