@@ -1,5 +1,13 @@
 """Purified typed drivers: explicit solve schedules over the transaction owner."""
 
+from pyfem.v3.driver.continuation import (
+  ArcLengthContinuationState,
+  ArcLengthIterationRecord,
+  ArcLengthResult,
+  ArcLengthSettings,
+  ArcLengthStepRecord,
+  ArcLengthTermination,
+)
 from pyfem.v3.driver.contracts import (
   DriverStatistics,
   DriverStatus,
@@ -29,9 +37,16 @@ from pyfem.v3.driver.plan import (
   evaluate_signals,
   refill_tangent,
 )
+from pyfem.v3.driver.riks import RiksDriver
 
 __all__ = [
   "DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA",
+  "ArcLengthContinuationState",
+  "ArcLengthIterationRecord",
+  "ArcLengthResult",
+  "ArcLengthSettings",
+  "ArcLengthStepRecord",
+  "ArcLengthTermination",
   "CompiledLoadProgram",
   "DriverAssemblyPlan",
   "DriverDiagnostic",
@@ -46,6 +61,7 @@ __all__ = [
   "NonlinearStaticSettings",
   "OperatorAssemblySlice",
   "OperatorSignalPortSlice",
+  "RiksDriver",
   "SubstepObservation",
   "SubstepRecord",
   "SubstepStatus",
