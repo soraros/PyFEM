@@ -97,3 +97,30 @@ def skim_cases(names: tuple[str, ...] | None = None) -> list[SkimCase]:
       rtol, atol = _parity_tolerances(name)
       cases.append(SkimCase(name=name, kind=kind, rtol=rtol, atol=atol))
   return cases
+
+
+@dataclass(frozen=True)
+class MaterialKernelCase:
+  """Documented stateful-kernel batch workload (M30: reference vs optimized).
+
+  ``n_entities`` is the flattened integration-point count of the batch; the
+  documented size 36864 is the 64x64 Q8 patch (4096 elements x 9 Gauss
+  points), the largest gated patch's material-kernel call size.
+  """
+
+  name: str
+  n_entities: int
+
+  @property
+  def workload(self) -> str:
+    return f"material/{self.name}/{self.n_entities}"
+
+
+MATERIAL_KERNEL_CASES: tuple[MaterialKernelCase, ...] = (
+  MaterialKernelCase("j2-isotropic-hardening", 36864),
+)
+
+
+def material_cases() -> list[MaterialKernelCase]:
+  """All registered material-kernel batch workloads."""
+  return list(MATERIAL_KERNEL_CASES)

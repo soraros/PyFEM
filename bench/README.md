@@ -90,6 +90,22 @@ identical generated files. This is the benchmark that catches the known
 quadratic `pack_problem._dof_node_type` regression class (M3 §4: v3 load
 loses at >=32x32), which pure assembly timings would never see.
 
+**Material kernel batches (`material/<law>/<n>`).** The M30 stateful-kernel
+throughput case: the optimized J2 isotropic-hardening kernel against its own
+M25 pure-NumPy reference (`..._kernel_reference`), on a documented batch of
+n = 36864 entities — the 64x64 patch's 4096 elements x 9 Gauss points, the
+largest gated patch's material-kernel call size. The batch is deterministic:
+eps_xx sweeps the documented parity ramp (0.0002 .. 0.004, straddling yield)
+and every third entity carries gamma_xy = 0.003, so elastic, plastic-normal,
+and plastic-mixed branches all appear. The gate is **bitwise**: the optimized
+kernel must reproduce the reference bit for bit — statuses included — on the
+documented batch (virgin and stepped), a seeded random sweep (virgin and
+stepped), and two rejecting batches (beyond the hardening table, non-finite
+predictor) before any timing is recorded. The reference side is timed once
+(single-threaded pure-NumPy per-entity loop, reduced fixed reps like the slow
+legacy cells); the optimized side sweeps the thread counts like the other
+threaded stages.
+
 ## What is measured
 
 **Stage decomposition** (v3, per workload; `bench/v3_pipeline.py`):

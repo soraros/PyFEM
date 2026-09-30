@@ -23,8 +23,20 @@ from bench.legacy_cases import (
   legacy_riks_state,
   write_legacy_q8_patch,
 )
-from bench.workloads import GATE_ATOL, GATE_RTOL, Q8Workload, SkimCase
+from bench.workloads import (
+  GATE_ATOL,
+  GATE_RTOL,
+  MaterialKernelCase,
+  Q8Workload,
+  SkimCase,
+)
 from pyfem.v3 import load_problem, solve_linear, solve_nonlinear, solve_riks
+from pyfem.v3.compile.contracts import StatefulContinuumKernelResult
+from pyfem.v3.materials.isotropic_hardening_plasticity import (
+  isotropic_hardening_calibration,
+  isotropic_hardening_plasticity_kernel,
+  isotropic_hardening_plasticity_kernel_reference,
+)
 from pyfem.v3.mesh.refined_patch import (
   build_uniform_q8_loaded,
   patch_displacement,
@@ -193,3 +205,133 @@ def check_fast_reference_selftest(materials: tuple[str, ...]) -> list[CheckResul
       )
     )
   return results
+
+
+# Documented parity configuration of the J2 law (the battery in
+# test/v3/test_v3_stateful_plasticity.py uses the same values).
+MATERIAL_CALIBRATION = (210000.0, 0.3, 250.0, 1000.0)
+MATERIAL_SWEEP_ENTITIES = 4096
+MATERIAL_GATE_SEED = 42
+
+
+def material_kernel_batch(
+  case: MaterialKernelCase,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+  """The documented benchmark batch: strains, virgin rows, calibration.
+
+  Deterministic construction: eps_xx sweeps the documented parity ramp
+  (0.0002 .. 0.004, straddling the plane-strain yield strain) and every third
+  entity carries a gamma_xy = 0.003 shear, so elastic, plastic-normal, and
+  plastic-mixed branches all appear in one batch.
+  """
+  calibration = isotropic_hardening_calibration(*MATERIAL_CALIBRATION)
+  strains = np.zeros((case.n_entities, 6), dtype=np.float64)
+  strains[:, 0] = np.linspace(0.0002, 0.004, case.n_entities)
+  strains[::3, 5] = 0.003
+  rows = np.zeros((case.n_entities, 19), dtype=np.float64)
+  return strains, rows, calibration
+
+
+def _bitwise_check(
+  name: str,
+  optimized: StatefulContinuumKernelResult,
+  reference: StatefulContinuumKernelResult,
+) -> CheckResult:
+  """Bitwise (uint64-view) equality of one optimized-vs-reference evaluation."""
+  if optimized.status is not reference.status:
+    return CheckResult(
+      name=name,
+      passed=False,
+      max_rel_diff=float("inf"),
+      rtol=0.0,
+      atol=0.0,
+      detail=f"status {optimized.status} != {reference.status}",
+    )
+  worst_rel = 0.0
+  detail = "bitwise equal"
+  passed = True
+  for label in ("stresses", "tangents", "trial_rows"):
+    candidate = getattr(optimized, label)
+    referent = getattr(reference, label)
+    if np.array_equal(candidate.view(np.uint64), referent.view(np.uint64)):
+      continue
+    passed = False
+    diff = np.abs(candidate - referent)
+    denom = np.maximum(np.abs(referent), 1.0e-30)
+    worst_rel = max(worst_rel, float((diff / denom).max()))
+    detail = f"{label} not bitwise equal"
+  return CheckResult(
+    name=name, passed=passed, max_rel_diff=worst_rel, rtol=0.0, atol=0.0, detail=detail
+  )
+
+
+def gate_material(case: MaterialKernelCase) -> GateResult:
+  """Gate the optimized J2 kernel against its M25 reference: bitwise parity.
+
+  No timing is recorded unless the optimized kernel reproduces the reference
+  bit for bit — statuses included — on the documented batch (virgin and
+  stepped), a seeded random sweep (virgin and stepped), and two rejecting
+  batches (beyond the hardening table, non-finite predictor).
+  """
+  optimized = isotropic_hardening_plasticity_kernel
+  reference = isotropic_hardening_plasticity_kernel_reference
+  strains, virgin, calibration = material_kernel_batch(case)
+
+  checks: list[CheckResult] = []
+  stepped = reference(strains, virgin, calibration)
+  checks.append(
+    _bitwise_check(
+      "documented-virgin", optimized(strains, virgin, calibration), stepped
+    )
+  )
+  checks.append(
+    _bitwise_check(
+      "documented-stepped",
+      optimized(strains, stepped.trial_rows, calibration),
+      reference(strains, stepped.trial_rows, calibration),
+    )
+  )
+
+  rng = np.random.default_rng(MATERIAL_GATE_SEED)
+  random_strains = rng.normal(size=(MATERIAL_SWEEP_ENTITIES, 6)) * 1.5e-3
+  random_virgin = np.zeros((MATERIAL_SWEEP_ENTITIES, 19))
+  random_stepped = reference(random_strains, random_virgin, calibration)
+  checks.append(
+    _bitwise_check(
+      "seeded-virgin",
+      optimized(random_strains, random_virgin, calibration),
+      random_stepped,
+    )
+  )
+  next_strains = rng.normal(size=(MATERIAL_SWEEP_ENTITIES, 6)) * 1.0e-3
+  checks.append(
+    _bitwise_check(
+      "seeded-stepped",
+      optimized(next_strains, random_stepped.trial_rows, calibration),
+      reference(next_strains, random_stepped.trial_rows, calibration),
+    )
+  )
+
+  extreme = np.zeros((8, 6))
+  extreme[3, 0] = 2.0
+  checks.append(
+    _bitwise_check(
+      "reject-beyond-table",
+      optimized(extreme, np.zeros((8, 19)), calibration),
+      reference(extreme, np.zeros((8, 19)), calibration),
+    )
+  )
+  nonfinite = np.zeros((8, 6))
+  nonfinite[5, 4] = np.inf
+  checks.append(
+    _bitwise_check(
+      "reject-nonfinite",
+      optimized(nonfinite, np.zeros((8, 19)), calibration),
+      reference(nonfinite, np.zeros((8, 19)), calibration),
+    )
+  )
+  return GateResult(
+    workload=case.workload,
+    passed=all(check.passed for check in checks),
+    checks=checks,
+  )
