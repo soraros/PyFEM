@@ -23,13 +23,24 @@ pytestmark = pytest.mark.skipif(
 )
 
 _REPO_ROOT = _V3_TEST.parents[1]
-_V3_FEM_DIR = _REPO_ROOT / "pyfem" / "v3" / "fem"
+_V3_DIR = _REPO_ROOT / "pyfem" / "v3"
 
 # Cache-policy canary (NUMBA_CACHING.md §5): an @njit(cache=True) kernel whose
 # body references names imported from other pyfem.v3 modules is a bug — numba's
 # on-disk cache cannot invalidate cross-module callees or frozen globals. Such
 # sites must instead carry an explicit cache=False with a comment citing
 # NUMBA_CACHING.md. The scan is AST/tokenize-only and never touches cache state.
+#
+# Scan roots: the pyfem.v3 packages that host @njit kernels — currently fem/
+# and materials/ (M30's J2 return-map kernels). When another pyfem.v3 package
+# grows @njit kernels, add its directory name to _CACHE_POLICY_SCAN_PACKAGES
+# and to _SELF_TEST_EXPECTED_ROOTS below, so the policy covers it from the
+# day the kernels land.
+
+_CACHE_POLICY_SCAN_PACKAGES: tuple[str, ...] = ("fem", "materials")
+_CACHE_POLICY_SCAN_ROOTS: tuple[Path, ...] = tuple(
+  _V3_DIR / package for package in _CACHE_POLICY_SCAN_PACKAGES
+)
 
 _DOC_MARKER = "NUMBA_CACHING"
 _DOC_WINDOW_LINES = 8
@@ -204,15 +215,91 @@ def numba_cache_policy_scanner() -> Callable[[Path], list[str]]:
   return scan_numba_cache_policy
 
 
+def _scan_cache_policy_roots(
+  scanner: Callable[[Path], list[str]],
+  roots: tuple[Path, ...],
+) -> list[str]:
+  """Violations across all scan ``roots``, each prefixed with its repo path."""
+  violations: list[str] = []
+  for root in roots:
+    prefix = root.relative_to(_REPO_ROOT)
+    violations.extend(f"{prefix}/{violation}" for violation in scanner(root))
+  return violations
+
+
+_PLANTED_VIOLATION_NAME = "_canary_planted_violation.py"
+_PLANTED_VIOLATION_SOURCE = """\
+from numba import njit
+
+from pyfem.v3.fem.quadrature import gauss_tria3
+
+
+@njit(cache=True)
+def planted_cached() -> tuple:
+  return gauss_tria3(1)
+"""
+
+
+# Roots the self-test plants under, hardcoded apart from
+# _CACHE_POLICY_SCAN_PACKAGES on purpose: deriving them from the constant the
+# canary reads would let a dropped package pass silently. Keep both lists in
+# sync when a kernel-hosting package joins or leaves.
+_SELF_TEST_EXPECTED_ROOTS: tuple[Path, ...] = (
+  _V3_DIR / "fem",
+  _V3_DIR / "materials",
+)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _numba_cache_policy_canary_self_test(
+  numba_cache_policy_scanner: Callable[[Path], list[str]],
+) -> None:
+  """Prove the canary fires on a planted violation under each expected root.
+
+  Plants a NUMBA_CACHING.md §5 violation in every kernel-hosting package in
+  _SELF_TEST_EXPECTED_ROOTS (currently fem/ and materials/) and requires
+  the canary's scan to flag each one: a package dropped from
+  _CACHE_POLICY_SCAN_PACKAGES leaves its planted violation undetected.
+  """
+  planted = [root / _PLANTED_VIOLATION_NAME for root in _SELF_TEST_EXPECTED_ROOTS]
+  try:
+    for path in planted:
+      path.write_text(_PLANTED_VIOLATION_SOURCE, encoding="utf-8")
+    violations = _scan_cache_policy_roots(
+      numba_cache_policy_scanner, _CACHE_POLICY_SCAN_ROOTS
+    )
+  finally:
+    for path in planted:
+      path.unlink(missing_ok=True)
+  missed = [
+    str(path.relative_to(_REPO_ROOT))
+    for path in planted
+    if not any(str(path.relative_to(_REPO_ROOT)) in hit for hit in violations)
+  ]
+  if missed:
+    pytest.fail(
+      "numba cache policy canary missed planted violations (NUMBA_CACHING.md "
+      "§5 self-test — is every kernel-hosting package still scanned?):\n"
+      + "\n".join(f"  - {path}" for path in missed),
+      pytrace=False,
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _numba_cache_policy_canary(
   numba_cache_policy_scanner: Callable[[Path], list[str]],
 ) -> None:
-  """Fail the test session on cache-unfriendly kernels in pyfem/v3/fem."""
-  violations = numba_cache_policy_scanner(_V3_FEM_DIR)
+  """Fail the test session on cache-unfriendly kernels under the scan roots.
+
+  Scan roots: pyfem/v3/fem and pyfem/v3/materials — see
+  _CACHE_POLICY_SCAN_PACKAGES for how future kernel-hosting packages join.
+  """
+  violations = _scan_cache_policy_roots(
+    numba_cache_policy_scanner, _CACHE_POLICY_SCAN_ROOTS
+  )
   if violations:
     pytest.fail(
-      "numba cache policy violations in pyfem/v3/fem (NUMBA_CACHING.md §5):\n"
+      "numba cache policy violations (NUMBA_CACHING.md §5):\n"
       + "\n".join(f"  - {violation}" for violation in violations),
       pytrace=False,
     )
