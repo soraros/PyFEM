@@ -155,10 +155,13 @@ class ArcLengthIterationRecord:
   unconverged OK record ``increment_norm`` and ``delta_lam`` describe the
   correction computed at that iteration's tail, which leads to the next
   iterate; on the committing record they describe the correction that led to
-  the converged iterate. On operator-rejected evaluations and on iterations
-  rejected before a solve ``residual_norm``, ``increment_norm``, and
-  ``delta_lam`` are ``None`` while ``load_parameter`` still tracks the
-  rejected trial's ``lam``.
+  the converged iterate. On operator-rejected evaluations
+  (``REJECT_STEP``/``REJECT_ITERATION``) ``residual_norm``,
+  ``increment_norm``, and ``delta_lam`` are all ``None``. On attempts
+  rejected after an OK evaluation (divergence, a singular or non-finite
+  solve, a zero or non-finite normal-plane denominator) ``residual_norm``
+  stays set while ``increment_norm`` and ``delta_lam`` are ``None``.
+  ``load_parameter`` tracks the rejected trial's ``lam`` in both cases.
   """
 
   iteration: int
