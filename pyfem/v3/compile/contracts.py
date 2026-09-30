@@ -1,11 +1,33 @@
-"""Frozen descriptor meaning for the first injected Q8 registry."""
+"""Frozen descriptor meaning for the first injected Q8 registry.
+
+Also hosts the permanent stateful-material descriptor ABI (schema
+``pyfem-v3-material-descriptor-v2``): typed per-entity state slots declared as
+canonical metadata, their compile-time resolution into ``OperatorStateLayout``
+emissions, and the researcher-facing binding protocol kernels and initial-state
+bindings plug into. Descriptors carrying the v1 material schema remain
+byte-identical; the v2 schema is a strict extension consumed only by the
+generic stateful compiler path.
+"""
 
 from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Protocol
+
+import numpy as np
 
 from pyfem.v3.fem.kinematics import strain_displacement
 from pyfem.v3.fem.quadrature import gauss_tensor_product_2d
 from pyfem.v3.fem.shapes import serendipity_quad8
 from pyfem.v3.materials.plane_stress import plane_stress_matrix
+from pyfem.v3.model.arrays import FinalizedArray
+from pyfem.v3.model.operator import (
+  EvaluationStatus,
+  OperatorStateLayout,
+  OperatorStateSlot,
+  SemanticId,
+  StateLifetime,
+)
 from pyfem.v3.model.registry import RegistryDescriptor, RegistryKey
 
 Q8_TOPOLOGY_KEY: RegistryKey = ("topology", "serendipity-quad8")
@@ -127,3 +149,445 @@ def q8_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
     ),
   )
   return {descriptor.key: descriptor for descriptor in descriptors}
+
+
+STATEFUL_MATERIAL_DESCRIPTOR_SCHEMA = "pyfem-v3-material-descriptor-v2"
+
+_STATE_SLOT_DTYPES = ("float64",)
+_STATE_SLOT_LIFETIMES = ("accepted-trial",)
+_STATE_SLOT_ANNOTATIONS = ("envelope-max", "monotone-nondecreasing")
+_STATE_SLOT_KEYS = frozenset(("name", "width", "dtype", "lifetime", "annotation"))
+_STATE_SLOT_REQUIRED_KEYS = frozenset(("name", "width", "dtype", "lifetime"))
+_STATEFUL_METADATA_KEYS = frozenset(
+  (
+    "schema",
+    "law",
+    "stress_state",
+    "parameter_names",
+    "parameter_dtype",
+    "stress_voigt_order",
+    "strain_shear_convention",
+    "internal_voigt_order",
+    "tangent_class",
+    "state_schema",
+    "state_slots",
+  )
+)
+_STATEFUL_TANGENT_CLASS_FLAGS: dict[str, tuple[bool, bool]] = {
+  "algorithmic-symmetric": (False, True),
+  "algorithmic-nonsymmetric": (False, False),
+  "secant-branch": (False, False),
+}
+_LIFETIME_ENUMS = {"accepted-trial": StateLifetime.ACCEPTED_TRIAL}
+_FLOAT64_STR = np.dtype(np.float64).str
+
+
+def _new[ValueT](cls: type[ValueT], /, **fields: object) -> ValueT:
+  value = object.__new__(cls)
+  for name, field in fields.items():
+    object.__setattr__(value, name, field)
+  return value
+
+
+def _nonempty_exact_str(value: object, label: str) -> str:
+  if type(value) is not str or not value:
+    msg = f"stateful material {label} must be a non-empty exact string"
+    raise TypeError(msg)
+  return value
+
+
+def _exact_str_list(value: object, label: str) -> list[str]:
+  if (
+    type(value) is not list
+    or not value
+    or any(type(item) is not str or not item for item in value)
+  ):
+    msg = f"stateful material {label} must be a non-empty list of exact strings"
+    raise TypeError(msg)
+  return value
+
+
+@dataclass(frozen=True, slots=True)
+class MaterialStateSlot:
+  """One resolved descriptor state slot of the permanent material state ABI."""
+
+  name: str
+  width: int
+  dtype: str
+  lifetime: str
+  annotation: str | None
+
+  def __post_init__(self) -> None:
+    _nonempty_exact_str(self.name, "state slot name")
+    if type(self.width) is not int or self.width <= 0:
+      msg = "material state slot widths must be positive exact integers"
+      raise TypeError(msg)
+    if _nonempty_exact_str(self.dtype, "state slot dtype") not in _STATE_SLOT_DTYPES:
+      msg = f"material state slot dtypes must be one of {_STATE_SLOT_DTYPES}"
+      raise ValueError(msg)
+    if (
+      _nonempty_exact_str(self.lifetime, "state slot lifetime")
+      not in _STATE_SLOT_LIFETIMES
+    ):
+      msg = f"material state slot lifetimes must be one of {_STATE_SLOT_LIFETIMES}"
+      raise ValueError(msg)
+    if self.annotation is not None and (
+      type(self.annotation) is not str or self.annotation not in _STATE_SLOT_ANNOTATIONS
+    ):
+      msg = f"material state slot annotations must be one of {_STATE_SLOT_ANNOTATIONS}"
+      raise ValueError(msg)
+
+
+def _resolve_slot_width(declaration: object, parameters: dict[str, float]) -> int:
+  """Resolve one slot width declaration, possibly from validated parameters."""
+  if type(declaration) is int:
+    if declaration <= 0:
+      msg = "material state slot widths must be positive exact integers"
+      raise ValueError(msg)
+    return declaration
+  if type(declaration) is dict:
+    keys = set(declaration)
+    if not keys.issubset(("parameter", "scale")) or "parameter" not in keys:
+      msg = "parameterized slot widths declare exactly parameter plus optional scale"
+      raise ValueError(msg)
+    parameter = _nonempty_exact_str(declaration["parameter"], "slot width parameter")
+    scale = declaration.get("scale", 1)
+    if type(scale) is not int or scale <= 0:
+      msg = "parameterized slot width scales must be positive exact integers"
+      raise TypeError(msg)
+    if parameter not in parameters:
+      msg = f"slot width references undeclared material parameter {parameter!r}"
+      raise ValueError(msg)
+    value = parameters[parameter]
+    if not float(value).is_integer() or value < 1.0:
+      msg = f"slot width parameter {parameter!r} must be a positive integer value"
+      raise ValueError(msg)
+    return scale * int(value)
+  msg = "material state slot widths must be exact ints or parameter mappings"
+  raise TypeError(msg)
+
+
+def resolve_material_state_slots(
+  slots: object,
+  parameters: dict[str, float],
+) -> tuple[MaterialStateSlot, ...]:
+  """Resolve descriptor ``state_slots`` metadata into typed slots.
+
+  Widths are either literal positive ints or ``{"parameter": name,
+  "scale": int}`` mappings resolved against the validated material parameters
+  at compile time, so parameter-dependent laws (a Crystal-style slip count or a
+  ViscoElasticity-style term count) fit the ABI without field changes.
+  """
+  if type(slots) is not list and type(slots) is not tuple:
+    msg = "stateful material state_slots must be an exact list of declarations"
+    raise TypeError(msg)
+  if not slots:
+    msg = "stateful material state_slots must declare at least one slot"
+    raise ValueError(msg)
+  resolved: list[MaterialStateSlot] = []
+  for item in slots:
+    if type(item) is not dict:
+      msg = "material state slot declarations must be exact dictionaries"
+      raise TypeError(msg)
+    keys = set(item)
+    if not keys.issubset(_STATE_SLOT_KEYS) or not keys.issuperset(
+      _STATE_SLOT_REQUIRED_KEYS
+    ):
+      msg = (
+        "material state slot declarations carry exactly name, width, dtype, "
+        "lifetime, and optional annotation"
+      )
+      raise ValueError(msg)
+    resolved.append(
+      MaterialStateSlot(
+        name=_nonempty_exact_str(item["name"], "state slot name"),
+        width=_resolve_slot_width(item["width"], parameters),
+        dtype=_nonempty_exact_str(item["dtype"], "state slot dtype"),
+        lifetime=_nonempty_exact_str(item["lifetime"], "state slot lifetime"),
+        annotation=item.get("annotation"),
+      )
+    )
+  names = [slot.name for slot in resolved]
+  if len(set(names)) != len(names):
+    msg = "material state slot names must be unique"
+    raise ValueError(msg)
+  return tuple(resolved)
+
+
+def validate_stateful_material_metadata(metadata: object) -> dict[str, object]:
+  """Validate the structure of one v2 stateful material metadata mapping."""
+  if type(metadata) is not dict:
+    msg = "stateful material metadata must be an exact dictionary"
+    raise TypeError(msg)
+  if set(metadata) != _STATEFUL_METADATA_KEYS:
+    msg = (
+      "stateful material metadata carries exactly the frozen v2 field set "
+      f"{tuple(sorted(_STATEFUL_METADATA_KEYS))}"
+    )
+    raise ValueError(msg)
+  if metadata["schema"] != STATEFUL_MATERIAL_DESCRIPTOR_SCHEMA:
+    msg = f"stateful material schema must be {STATEFUL_MATERIAL_DESCRIPTOR_SCHEMA!r}"
+    raise ValueError(msg)
+  _nonempty_exact_str(metadata["law"], "law")
+  _nonempty_exact_str(metadata["stress_state"], "stress_state")
+  _nonempty_exact_str(metadata["state_schema"], "state_schema")
+  names = _exact_str_list(metadata["parameter_names"], "parameter_names")
+  if len(set(names)) != len(names):
+    msg = "stateful material parameter names must be unique"
+    raise ValueError(msg)
+  if metadata["parameter_dtype"] != "float64":
+    msg = "stateful material parameter_dtype must be 'float64'"
+    raise ValueError(msg)
+  _exact_str_list(metadata["stress_voigt_order"], "stress_voigt_order")
+  _exact_str_list(metadata["internal_voigt_order"], "internal_voigt_order")
+  if metadata["strain_shear_convention"] != "engineering":
+    msg = "stateful material strain_shear_convention must be 'engineering'"
+    raise ValueError(msg)
+  tangent_class = metadata["tangent_class"]
+  if (
+    type(tangent_class) is not str or tangent_class not in _STATEFUL_TANGENT_CLASS_FLAGS
+  ):
+    msg = (
+      "stateful material tangent_class must be one of "
+      f"{tuple(sorted(_STATEFUL_TANGENT_CLASS_FLAGS))}"
+    )
+    raise ValueError(msg)
+  slots = metadata["state_slots"]
+  if type(slots) is not list or not slots:
+    msg = "stateful material state_slots must be a non-empty exact list"
+    raise TypeError(msg)
+  for item in slots:
+    if type(item) is not dict:
+      msg = "material state slot declarations must be exact dictionaries"
+      raise TypeError(msg)
+    keys = set(item)
+    if not keys.issubset(_STATE_SLOT_KEYS) or not keys.issuperset(
+      _STATE_SLOT_REQUIRED_KEYS
+    ):
+      msg = (
+        "material state slot declarations carry exactly name, width, dtype, "
+        "lifetime, and optional annotation"
+      )
+      raise ValueError(msg)
+    _nonempty_exact_str(item["name"], "state slot name")
+    _nonempty_exact_str(item["dtype"], "state slot dtype")
+    _nonempty_exact_str(item["lifetime"], "state slot lifetime")
+    width = item["width"]
+    if type(width) is dict:
+      sub_keys = set(width)
+      if not sub_keys.issubset(("parameter", "scale")) or "parameter" not in sub_keys:
+        msg = "parameterized slot widths declare exactly parameter plus optional scale"
+        raise ValueError(msg)
+      _nonempty_exact_str(width["parameter"], "slot width parameter")
+      if "scale" in width and (type(width["scale"]) is not int or width["scale"] <= 0):
+        msg = "parameterized slot width scales must be positive exact integers"
+        raise TypeError(msg)
+    elif type(width) is not int or width <= 0:
+      msg = "material state slot widths must be positive exact integers"
+      raise TypeError(msg)
+    annotation = item.get("annotation")
+    if annotation is not None and (
+      type(annotation) is not str or annotation not in _STATE_SLOT_ANNOTATIONS
+    ):
+      msg = f"material state slot annotations must be one of {_STATE_SLOT_ANNOTATIONS}"
+      raise ValueError(msg)
+  return metadata
+
+
+def stateful_tangent_channel_flags(tangent_class: object) -> tuple[bool, bool]:
+  """Map one stateful tangent class onto ``(linear, symmetric)`` channel flags.
+
+  Every stateful class is nonlinear: no v2 tangent class is ever linear, so a
+  stateful Jacobian channel can never mark itself factorization-reusable.
+  """
+  if (
+    type(tangent_class) is not str or tangent_class not in _STATEFUL_TANGENT_CLASS_FLAGS
+  ):
+    msg = (
+      "stateful tangent class must be one of "
+      f"{tuple(sorted(_STATEFUL_TANGENT_CLASS_FLAGS))}"
+    )
+    raise ValueError(msg)
+  return _STATEFUL_TANGENT_CLASS_FLAGS[tangent_class]
+
+
+def material_state_layout_schema(
+  schema_prefix: str,
+  slots: tuple[MaterialStateSlot, ...],
+) -> str:
+  """Compose the layout schema string versioning the resolved slot layout."""
+  _nonempty_exact_str(schema_prefix, "state schema prefix")
+  if (
+    type(slots) is not tuple
+    or not slots
+    or any(type(slot) is not MaterialStateSlot for slot in slots)
+  ):
+    msg = "state layout schemas require a non-empty resolved slot tuple"
+    raise TypeError(msg)
+  encoded = ",".join(f"{slot.name}:{slot.width}" for slot in slots)
+  return f"{schema_prefix}|{encoded}"
+
+
+def validated_material_initial_rows(
+  value: object,
+  *,
+  entity_count: int,
+  row_width: int,
+) -> np.ndarray | None:
+  """Validate descriptor-bound initial state rows, or ``None`` for zero-init."""
+  if value is None:
+    return None
+  if (
+    type(value) is not np.ndarray
+    or value.dtype != np.dtype(np.float64)
+    or value.dtype.metadata is not None
+    or value.shape != (entity_count, row_width)
+  ):
+    msg = (
+      "initial state rows must be a plain float64 ndarray with shape "
+      "(entity_count, row_width)"
+    )
+    raise TypeError(msg)
+  if not bool(np.isfinite(value).all()):
+    msg = "initial state rows must be finite"
+    raise ValueError(msg)
+  return np.array(value, dtype=np.float64, order="C", copy=True, subok=False)
+
+
+def build_material_state_layout(
+  *,
+  schema_prefix: str,
+  block_id: SemanticId,
+  entity_count: int,
+  slots: tuple[MaterialStateSlot, ...],
+  initial_rows: np.ndarray | None,
+  index_dtype: np.dtype,
+) -> OperatorStateLayout:
+  """Emit the compiled operator state layout for resolved descriptor slots.
+
+  The entity axis is the flattened element x integration-point x material-slot
+  axis of the block's integration layout; every entity owns one contiguous row
+  of ``sum(widths)`` float64 values. ``initial_rows`` (when the descriptor
+  binds an initial state) is validated and embedded for the state owner to
+  apply at construction.
+  """
+  schema = material_state_layout_schema(schema_prefix, slots)
+  if type(entity_count) is not int or entity_count <= 0:
+    msg = "state layout entity count must be a positive exact int"
+    raise TypeError(msg)
+  if not isinstance(index_dtype, np.dtype) or index_dtype.kind not in "iu":
+    msg = "state layout index dtype must be an integer NumPy dtype"
+    raise TypeError(msg)
+  row_width = sum(slot.width for slot in slots)
+  if entity_count * row_width > int(np.iinfo(index_dtype).max):
+    msg = "state layout size overflows the compiled index dtype"
+    raise ValueError(msg)
+  initial = validated_material_initial_rows(
+    initial_rows,
+    entity_count=entity_count,
+    row_width=row_width,
+  )
+  operator_slots = tuple(
+    _new(
+      OperatorStateSlot,
+      name=slot.name,
+      width=slot.width,
+      dtype=_FLOAT64_STR,
+      lifetime=_LIFETIME_ENUMS[slot.lifetime],
+      annotation=slot.annotation,
+    )
+    for slot in slots
+  )
+  offsets = np.arange(entity_count + 1, dtype=index_dtype) * row_width
+  return _new(
+    OperatorStateLayout,
+    schema=schema,
+    block_id=block_id,
+    entity_count=entity_count,
+    slots=operator_slots,
+    entity_offsets=FinalizedArray(offsets, dtype=index_dtype),
+    row_width=row_width,
+    dtype=_FLOAT64_STR,
+    lifetime=StateLifetime.ACCEPTED_TRIAL,
+    initial_rows=(
+      None if initial is None else FinalizedArray(initial, dtype=np.float64)
+    ),
+  )
+
+
+@dataclass(frozen=True, slots=True)
+class StatefulContinuumKernelResult:
+  """One batched stateful law response over flattened state entities.
+
+  ``stresses`` has shape ``(entity_count, 6)`` in the law's internal Voigt
+  order, ``tangents`` has shape ``(entity_count, 6, 6)``, and ``trial_rows``
+  has shape ``(entity_count, row_width)``. When ``status`` is not ``OK`` the
+  operator discards the arrays and returns the accepted rows byte-equal.
+  """
+
+  stresses: np.ndarray
+  tangents: np.ndarray
+  trial_rows: np.ndarray
+  status: EvaluationStatus
+
+  def __post_init__(self) -> None:
+    if type(self.status) is not EvaluationStatus:
+      msg = "stateful kernel status must be an exact EvaluationStatus"
+      raise TypeError(msg)
+    for label, array in (
+      ("stresses", self.stresses),
+      ("tangents", self.tangents),
+      ("trial_rows", self.trial_rows),
+    ):
+      if (
+        type(array) is not np.ndarray
+        or array.dtype != np.dtype(np.float64)
+        or array.dtype.metadata is not None
+      ):
+        msg = f"stateful kernel {label} must be a plain float64 ndarray"
+        raise TypeError(msg)
+
+
+class StatefulContinuumKernel(Protocol):
+  """Batched stateful law kernel: total strains and accepted rows in, trial out."""
+
+  def __call__(
+    self,
+    strains: np.ndarray,
+    accepted_rows: np.ndarray,
+    calibration: np.ndarray,
+  ) -> StatefulContinuumKernelResult: ...
+
+
+class StatefulContinuumBinding(Protocol):
+  """The permanent stateful-material binding ABI behind registry descriptors.
+
+  ``__call__`` maps the validated parameter tuple (in ``parameter_names``
+  order) onto the law's flat float64 calibration vector. ``kernel`` evaluates
+  total engineering 6-Voigt strain batches plus accepted state rows into
+  stresses, algorithmic tangents, and trial rows. ``descriptor_metadata``
+  re-declares the descriptor's v2 metadata so the compiler can verify the
+  binding against the captured canonical bytes. Bindings may omit
+  ``initial_state``; laws without it keep zero-initialized state rows.
+  Kernels must return the accepted rows byte-equal on a zero-strain
+  evaluation over the initial state (the compiler probes this invariant), and
+  expected numerical failures report typed statuses with byte-equal trial
+  rows, never exceptions.
+  """
+
+  def __call__(self, *parameters: float) -> np.ndarray: ...
+
+  def descriptor_metadata(self) -> dict[str, object]: ...
+
+  def kernel(
+    self,
+    strains: np.ndarray,
+    accepted_rows: np.ndarray,
+    calibration: np.ndarray,
+  ) -> StatefulContinuumKernelResult: ...
+
+  def initial_state(
+    self,
+    parameters: tuple[float, ...],
+    layout: OperatorStateLayout,
+  ) -> np.ndarray: ...

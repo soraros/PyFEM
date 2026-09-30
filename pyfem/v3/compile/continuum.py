@@ -20,6 +20,18 @@ serendipity-quad8 geometry and 3x3 Gauss quadrature:
   mechanical-to-thermal block: that coupling is a rate effect owned by
   stateful formulations with accepted state and signals.
 
+The small-strain formulation is also the open stateful seam: a region whose
+material is not the pinned linear-elastic law compiles through the generic
+descriptor-driven stateful path whenever its registry descriptor carries
+valid v2 stateful metadata and a binding implementing the
+``StatefulContinuumBinding`` protocol (calibration call, batched kernel,
+optional ``initial_state``). The path emits nonzero-width
+``OperatorStateLayout`` values from descriptor ``state_slots`` with the entity
+axis flattened (element x integration point x material slot), wires the
+descriptor's initial-state rows into the layout, and marks every channel
+nonlinear per the declared tangent class. The first such law is
+``isotropic-hardening-plasticity`` (J2, 19-float rows).
+
 Capability boundary: every cell belongs to exactly one region; each region
 draws its cells from exactly one cell block; each cell block feeds exactly
 one region; every declared field and material is referenced by at least one
@@ -36,6 +48,15 @@ from typing import NoReturn
 
 import numpy as np
 
+from pyfem.v3.compile.contracts import (
+  StatefulContinuumKernel,
+  StatefulContinuumKernelResult,
+  build_material_state_layout,
+  resolve_material_state_slots,
+  stateful_tangent_channel_flags,
+  validate_stateful_material_metadata,
+  validated_material_initial_rows,
+)
 from pyfem.v3.compile.diagnostics import (
   ModelCompilationDiagnostic,
   ModelCompilationError,
@@ -43,6 +64,10 @@ from pyfem.v3.compile.diagnostics import (
 from pyfem.v3.fem.kinematics import strain_displacement
 from pyfem.v3.fem.quadrature import gauss_tensor_product_2d
 from pyfem.v3.fem.shapes import serendipity_quad8
+from pyfem.v3.materials.isotropic_hardening_plasticity import (
+  ISOTROPIC_HARDENING_PLASTICITY_BINDING,
+  isotropic_hardening_plasticity_metadata,
+)
 from pyfem.v3.materials.plane_stress import plane_stress_matrix
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
@@ -51,6 +76,7 @@ from pyfem.v3.model.operator import (
   CompiledOperator,
   CompilerConstructed,
   CouplingPolicy,
+  EvaluationStatus,
   ImplementationIdentity,
   JacobianChannel,
   OperatorEvaluation,
@@ -61,6 +87,7 @@ from pyfem.v3.model.operator import (
   PortMode,
   ResidualChannel,
   StateLifetime,
+  evaluation_status,
 )
 from pyfem.v3.model.provenance import CanonicalManifest
 from pyfem.v3.model.registry import (
@@ -95,6 +122,7 @@ THERMO_FORMULATION_KEY: RegistryKey = (
   "small-strain-thermo-elastic-continuum",
 )
 THERMO_MATERIAL_KEY: RegistryKey = ("material", "linear-thermo-elastic")
+PLASTIC_MATERIAL_KEY: RegistryKey = ("material", "isotropic-hardening-plasticity")
 _PARAMETER_NAMES = ("youngs_modulus", "poisson_ratio")
 _THERMAL_PARAMETER_NAMES = ("conductivity",)
 _THERMO_PARAMETER_NAMES = (
@@ -115,8 +143,10 @@ _FORMULATION_CONTRACTS = {
   THERMAL_FORMULATION_KEY[1]: (_TEMPERATURE_ROLE,),
   THERMO_FORMULATION_KEY[1]: (_DISPLACEMENT_ROLE, _TEMPERATURE_ROLE),
 }
+# The small-strain formulation is the open stateful seam (any captured v2
+# stateful material descriptor may bind); the thermal formulations keep their
+# closed material sets.
 _FORMULATION_MATERIAL_MODELS = {
-  Q8_FORMULATION_KEY[1]: Q8_MATERIAL_KEY[1],
   THERMAL_FORMULATION_KEY[1]: THERMAL_MATERIAL_KEY[1],
   THERMO_FORMULATION_KEY[1]: THERMO_MATERIAL_KEY[1],
 }
@@ -607,6 +637,200 @@ class Q8ThermoElasticOperator(CompilerConstructed):
     )
 
 
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Q8StatefulContinuumPayload(CompilerConstructed):
+  quadrature_points: FinalizedArray
+  quadrature_weights: FinalizedArray
+  shape_values: FinalizedArray
+  parent_gradients: FinalizedArray
+  geometry_scales: FinalizedArray
+  normalized_gradients: FinalizedArray
+  normalized_strain_displacement: FinalizedArray
+  normalized_integration_weights: FinalizedArray
+  calibration: FinalizedArray
+  material_parameters: FinalizedArray
+
+  def physical_gradients(self) -> FinalizedArray:
+    values = (
+      self.normalized_gradients.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
+
+  def physical_strain_displacement(self) -> FinalizedArray:
+    values = (
+      self.normalized_strain_displacement.values
+      / self.geometry_scales.values[:, None, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
+
+  def physical_integration_weights(self) -> FinalizedArray:
+    scales = self.geometry_scales.values[:, None]
+    values = self.normalized_integration_weights.values * scales * scales
+    return FinalizedArray(values, dtype=np.float64)
+
+
+def _validated_stateful_kernel_result(
+  result: object,
+  *,
+  entity_count: int,
+  row_width: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, EvaluationStatus]:
+  if type(result) is not StatefulContinuumKernelResult:
+    msg = "stateful kernels must return an exact StatefulContinuumKernelResult"
+    raise TypeError(msg)
+  arrays = (result.stresses, result.tangents, result.trial_rows)
+  shapes = ((entity_count, 6), (entity_count, 6, 6), (entity_count, row_width))
+  for array, shape in zip(arrays, shapes, strict=True):
+    if array.shape != shape:
+      msg = "stateful kernel arrays must match the declared batched shapes"
+      raise TypeError(msg)
+  if result.status is EvaluationStatus.OK and not all(
+    bool(np.isfinite(array).all()) for array in arrays
+  ):
+    msg = "stateful kernel arrays must be finite for a successful evaluation"
+    raise TypeError(msg)
+  return result.stresses, result.tangents, result.trial_rows, result.status
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Q8StatefulContinuumOperator(CompilerConstructed):
+  """Kernel-driven stateful small-strain continuum operator (v2 descriptor ABI).
+
+  Evaluation is pure: total displacements and accepted state rows in, internal
+  force, algorithmic tangent, and trial rows out. Port strains are embedded in
+  the law's 6-Voigt internal order as ``[xx, yy, 0, 0, 0, xy]`` (plane strain);
+  stresses and tangents truncate back to the ``[xx, yy, xy]`` port convention.
+  """
+
+  header: OperatorHeader
+  entity_block: IncidenceEntityBlock
+  payload: Q8StatefulContinuumPayload
+  content_manifest: CanonicalManifest
+  kernel: StatefulContinuumKernel
+
+  def evaluate(
+    self,
+    inputs: OperatorEvaluationInput,
+  ) -> OperatorEvaluation:
+    """Evaluate stateful internal force and tangent from compiled meaning."""
+    if type(inputs) is not OperatorEvaluationInput:
+      msg = "stateful evaluation requires an exact immutable evaluation input"
+      raise TypeError(msg)
+    if type(inputs.port_values) is not tuple or len(inputs.port_values) != 1:
+      msg = "stateful evaluation requires exactly one displacement port batch"
+      raise TypeError(msg)
+    values = inputs.port_values[0].values
+    expected = self.header.ports[0].coefficient_map.values.shape
+    if (
+      values.dtype != np.dtype(np.float64)
+      or values.dtype.metadata is not None
+      or values.shape != expected
+      or not bool(np.isfinite(values).all())
+    ):
+      msg = "stateful displacement port values must be a finite float64 batch"
+      raise TypeError(msg)
+    layout = self.header.state_layout
+    accepted_state = inputs.accepted_state.values
+    if (
+      accepted_state.dtype != np.dtype(np.float64)
+      or accepted_state.dtype.metadata is not None
+      or accepted_state.shape != layout.row_shape
+      or not bool(np.isfinite(accepted_state).all())
+    ):
+      msg = "stateful accepted state must match the compiled state layout"
+      raise TypeError(msg)
+    if inputs.signals or self.header.signal_ports:
+      msg = "stateful model operator does not accept program signal inputs"
+      raise ValueError(msg)
+    residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
+    jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    request = inputs.request
+    if (
+      type(request) is not ChannelRequest
+      or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
+      or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or not set(request.residual_channel_ids).issubset(residual_ids)
+      or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+    ):
+      msg = "stateful evaluation request contains an unavailable or duplicate channel"
+      raise ValueError(msg)
+
+    scales = self.payload.geometry_scales.values
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+      b_matrix = (
+        self.payload.normalized_strain_displacement.values / scales[:, None, None, None]
+      )
+      weights = (
+        self.payload.normalized_integration_weights.values
+        * scales[:, None]
+        * scales[:, None]
+      )
+      strain_voigt = np.einsum("epai,ei->epa", b_matrix, values, optimize=True)
+    strains = np.zeros((layout.entity_count, 6), dtype=np.float64)
+    flat = strain_voigt.reshape(layout.entity_count, 3)
+    strains[:, 0] = flat[:, 0]
+    strains[:, 1] = flat[:, 1]
+    strains[:, 5] = flat[:, 2]
+
+    stresses, tangents, trial_rows, status = _validated_stateful_kernel_result(
+      self.kernel(strains, accepted_state, self.payload.calibration.values),
+      entity_count=layout.entity_count,
+      row_width=layout.row_width,
+    )
+    if status is not EvaluationStatus.OK:
+      return _new(
+        OperatorEvaluation,
+        residual_values=(),
+        jacobian_values=(),
+        trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+        status=status,
+      )
+
+    element_count = values.shape[0]
+    stress3 = stresses.reshape(element_count, _POINT_COUNT, 6)[:, :, [0, 1, 5]]
+    tangent6 = tangents.reshape(element_count, _POINT_COUNT, 6, 6)
+    tangent3 = tangent6[:, :, [0, 1, 5], :][:, :, :, [0, 1, 5]]
+    requested_residuals = set(request.residual_channel_ids)
+    requested_jacobians = set(request.jacobian_channel_ids)
+    residual = tangent = None
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+      if "internal-force" in requested_residuals:
+        residual = np.einsum(
+          "ep,epa,epai->ei",
+          weights,
+          stress3,
+          b_matrix,
+          optimize=True,
+        )
+      if "material-tangent" in requested_jacobians:
+        tangent = np.einsum(
+          "ep,epai,epab,epbj->eij",
+          weights,
+          b_matrix,
+          tangent3,
+          b_matrix,
+          optimize=True,
+        )
+    for block in (residual, tangent):
+      if block is not None and not bool(np.isfinite(block).all()):
+        msg = "stateful evaluation response is not representable as finite float64"
+        raise ValueError(msg)
+    residual_values = (
+      (FinalizedArray(residual, dtype=np.float64),) if residual is not None else ()
+    )
+    jacobian_values = (
+      (FinalizedArray(tangent, dtype=np.float64),) if tangent is not None else ()
+    )
+    return _new(
+      OperatorEvaluation,
+      residual_values=residual_values,
+      jacobian_values=jacobian_values,
+      trial_state=FinalizedArray(trial_rows, dtype=np.float64),
+      status=status,
+    )
+
+
 def q8_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
   """Return the exact semantic metadata for one selected Q8 implementation."""
   key = kind, name
@@ -747,6 +971,8 @@ def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
     return thermal_descriptor_metadata(*key)
   if key in (THERMO_FORMULATION_KEY, THERMO_MATERIAL_KEY):
     return thermo_elastic_descriptor_metadata(*key)
+  if key == PLASTIC_MATERIAL_KEY:
+    return isotropic_hardening_plasticity_metadata()
   return q8_descriptor_metadata(*key)
 
 
@@ -876,6 +1102,21 @@ def thermo_elastic_reference_registry() -> dict[RegistryKey, RegistryDescriptor]
     for key, (implementation_id, binding) in bindings.items()
   )
   return {descriptor.key: descriptor for descriptor in descriptors}
+
+
+def plasticity_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
+  """Build the Q8 reference registry plus the first stateful law descriptor."""
+  registry = dict(q8_reference_registry())
+  descriptor = RegistryDescriptor(
+    kind=PLASTIC_MATERIAL_KEY[0],
+    name=PLASTIC_MATERIAL_KEY[1],
+    version="1",
+    implementation_id="pyfem-v3-isotropic-hardening-plasticity-v1",
+    metadata=isotropic_hardening_plasticity_metadata(),
+    binding=ISOTROPIC_HARDENING_PLASTICITY_BINDING,
+  )
+  registry[descriptor.key] = descriptor
+  return registry
 
 
 def select_model(spec: ModelSpec) -> ContinuumSelection:
@@ -1038,8 +1279,8 @@ def _select_region(
       "unsupported continuum quadrature",
       region.source,
     )
-  expected_model = _FORMULATION_MATERIAL_MODELS[region.formulation]
-  if material.model != expected_model:
+  expected_model = _FORMULATION_MATERIAL_MODELS.get(region.formulation)
+  if expected_model is not None and material.model != expected_model:
     _fail(
       "incompatible-material-model",
       f"the {region.formulation} region requires material model {expected_model!r}",
@@ -1067,7 +1308,8 @@ def _required_keys(selection: ContinuumSelection) -> tuple[RegistryKey, ...]:
   for region_selection in selection.regions:
     formulation = region_selection.region.formulation
     if formulation == Q8_FORMULATION_KEY[1]:
-      keys.update((Q8_FORMULATION_KEY, Q8_MATERIAL_KEY))
+      keys.add(Q8_FORMULATION_KEY)
+      keys.add(("material", region_selection.material.model))
     elif formulation == THERMAL_FORMULATION_KEY[1]:
       keys.update((THERMAL_FORMULATION_KEY, THERMAL_MATERIAL_KEY))
     else:
@@ -1096,7 +1338,7 @@ def capture_registry(
   for region_selection in selection.regions:
     formulation = region_selection.region.formulation
     if formulation == Q8_FORMULATION_KEY[1]:
-      selected = (Q8_FORMULATION_KEY, Q8_MATERIAL_KEY)
+      selected = (Q8_FORMULATION_KEY, ("material", region_selection.material.model))
     elif formulation == THERMAL_FORMULATION_KEY[1]:
       selected = (THERMAL_FORMULATION_KEY, THERMAL_MATERIAL_KEY)
     else:
@@ -1106,9 +1348,29 @@ def capture_registry(
   for key in required:
     try:
       descriptor = snapshot.resolve(*key)
-      expected = CanonicalManifest(_qualified_descriptor_metadata(key))
-      compatible = descriptor.metadata.to_bytes() == expected.to_bytes()
     except (KeyError, TypeError, ValueError):
+      _fail(
+        "malformed-registry-descriptor",
+        "malformed continuum descriptor",
+        sources[key],
+      )
+    try:
+      qualified = _qualified_descriptor_metadata(key)
+    except KeyError:
+      qualified = None
+    if qualified is None:
+      if key[0] != "material":
+        _fail(
+          "malformed-registry-descriptor",
+          "malformed continuum descriptor",
+          sources[key],
+        )
+      _validate_stateful_material_descriptor(descriptor, sources[key])
+      continue
+    try:
+      expected = CanonicalManifest(qualified)
+      compatible = descriptor.metadata.to_bytes() == expected.to_bytes()
+    except (TypeError, ValueError):
       _fail(
         "malformed-registry-descriptor",
         "malformed continuum descriptor",
@@ -1121,6 +1383,58 @@ def capture_registry(
         sources[key],
       )
   return snapshot
+
+
+def _validate_stateful_material_descriptor(
+  descriptor: RegistryDescriptor,
+  source: SourceContext,
+) -> None:
+  """Validate one researcher-supplied v2 stateful material descriptor.
+
+  The binding must re-declare the descriptor metadata it was authored with;
+  the re-declaration is canonicalized and byte-compared against the captured
+  descriptor manifest, then structurally validated against the frozen v2
+  schema. This is the open extension seam: no in-tree convention is pinned
+  for keys the reference registries do not carry.
+  """
+  binding = descriptor.binding
+  declared = getattr(binding, "descriptor_metadata", None)
+  if not callable(declared):
+    _fail(
+      "malformed-registry-descriptor",
+      "stateful material bindings must re-declare their descriptor metadata",
+      source,
+    )
+  try:
+    metadata = declared()
+  except Exception:
+    _fail(
+      "malformed-registry-descriptor",
+      "stateful material binding metadata declaration failed",
+      source,
+    )
+  try:
+    canonical = CanonicalManifest(metadata)
+  except (TypeError, ValueError):
+    _fail(
+      "malformed-registry-descriptor",
+      "stateful material binding metadata is not canonicalizable",
+      source,
+    )
+  if canonical.to_bytes() != descriptor.metadata.to_bytes():
+    _fail(
+      "incompatible-registry-descriptor",
+      "stateful material binding metadata does not match its descriptor",
+      source,
+    )
+  try:
+    validate_stateful_material_metadata(metadata)
+  except (TypeError, ValueError):
+    _fail(
+      "malformed-registry-descriptor",
+      "stateful material metadata violates the v2 descriptor schema",
+      source,
+    )
 
 
 def _binding_array(
@@ -1721,7 +2035,17 @@ def _compile_mechanical(
   snapshot: RegistrySnapshot,
   index_dtype: np.dtype,
   geometry_relative_tolerance: float,
-) -> tuple[IncidenceEntityBlock, Q8ContinuumOperator]:
+) -> tuple[IncidenceEntityBlock, CompiledOperator]:
+  if selection.material.model != Q8_MATERIAL_KEY[1]:
+    return _compile_mechanical_stateful(
+      selection,
+      coordinates=coordinates,
+      node_dense=node_dense,
+      spaces=spaces,
+      snapshot=snapshot,
+      index_dtype=index_dtype,
+      geometry_relative_tolerance=geometry_relative_tolerance,
+    )
   space = spaces[selection.fields[0].id]
   connectivity_values = [
     [node_dense[node_id] for node_id in cell.node_ids] for cell in selection.cells
@@ -1973,6 +2297,410 @@ def _compile_mechanical(
     payload=payload,
     content_manifest=manifest,
   )
+
+
+def _flat_binding_array(
+  value: object,
+  *,
+  code: str,
+  label: str,
+  source: SourceContext,
+) -> np.ndarray:
+  if (
+    type(value) is not np.ndarray
+    or value.ndim != 1
+    or not value.size
+    or value.dtype.metadata is not None
+    or value.dtype.kind not in "iuf"
+  ):
+    _fail(
+      code,
+      f"{label} must return a metadata-free non-empty 1D numeric array",
+      source,
+    )
+  try:
+    captured = np.array(value, dtype=np.float64, order="C", copy=True, subok=False)
+  except (OverflowError, TypeError, ValueError):
+    _fail(code, f"{label} cannot be represented as float64", source)
+  if not bool(np.isfinite(captured).all()):
+    _fail(code, f"{label} must contain finite values", source)
+  return captured
+
+
+def _compile_mechanical_stateful(
+  selection: RegionSelection,
+  *,
+  coordinates: FinalizedArray,
+  node_dense: dict[SpecId, int],
+  spaces: dict[SpecId, DiscreteSpace],
+  snapshot: RegistrySnapshot,
+  index_dtype: np.dtype,
+  geometry_relative_tolerance: float,
+) -> tuple[IncidenceEntityBlock, Q8StatefulContinuumOperator]:
+  """Compile the generic descriptor-driven stateful small-strain operator.
+
+  Everything numerical comes from the descriptor: the resolved ``state_slots``
+  (widths possibly computed from validated parameters) drive the emitted
+  ``OperatorStateLayout``, the binding's optional ``initial_state`` wires the
+  owner's construction-time rows, and the declared tangent class sets channel
+  linearity and symmetry. A virgin-state probe over the initial rows enforces
+  the byte-equal no-evolution invariant before the operator can escape.
+  """
+  space = spaces[selection.fields[0].id]
+  connectivity, entity_block = _element_block(selection, node_dense, index_dtype)
+  points, weights, shape_values, parent_gradients = _recipes(snapshot, selection)
+  gradients, determinants, geometry_scales = _geometry(
+    coordinates.values,
+    connectivity.values,
+    parent_gradients,
+    selection.cells,
+    geometry_relative_tolerance,
+  )
+  formulation = snapshot.resolve(*Q8_FORMULATION_KEY).binding
+  try:
+    raw_b_matrix = formulation(np.array(gradients, copy=True))
+  except Exception:
+    _fail(
+      "formulation-binding-failed",
+      "Q8 formulation binding failed",
+      selection.region.source,
+    )
+  b_matrix = _binding_array(
+    raw_b_matrix,
+    shape=(len(selection.cells), _POINT_COUNT, 3, _LOCAL_COEFFICIENT_COUNT),
+    code="invalid-formulation-binding-output",
+    label="Q8 strain-displacement binding",
+    source=selection.region.source,
+  )
+  expected_b = np.zeros_like(b_matrix)
+  expected_b[..., 0, 0::2] = gradients[..., :, 0]
+  expected_b[..., 1, 1::2] = gradients[..., :, 1]
+  expected_b[..., 2, 0::2] = gradients[..., :, 1]
+  expected_b[..., 2, 1::2] = gradients[..., :, 0]
+  if not _corresponds(b_matrix, expected_b):
+    _fail(
+      "incompatible-formulation-binding-output",
+      "Q8 formulation output contradicts the qualified engineering-shear map",
+      selection.region.source,
+    )
+
+  descriptor = snapshot.resolve("material", selection.material.model)
+  binding = descriptor.binding
+  kernel = getattr(binding, "kernel", None)
+  metadata_binding = getattr(binding, "descriptor_metadata", None)
+  if not callable(kernel) or not callable(metadata_binding):
+    _fail(
+      "malformed-registry-descriptor",
+      "stateful material bindings must provide kernel and descriptor_metadata",
+      selection.material.source,
+    )
+  try:
+    metadata = metadata_binding()
+  except Exception:
+    _fail(
+      "material-binding-failed",
+      "stateful material metadata binding failed",
+      selection.material.source,
+    )
+  try:
+    validate_stateful_material_metadata(metadata)
+    canonical = CanonicalManifest(metadata)
+  except (TypeError, ValueError):
+    _fail(
+      "malformed-registry-descriptor",
+      "stateful material metadata violates the v2 descriptor schema",
+      selection.material.source,
+    )
+  if canonical.to_bytes() != descriptor.metadata.to_bytes():
+    _fail(
+      "incompatible-registry-descriptor",
+      "stateful material binding metadata does not match its descriptor",
+      selection.material.source,
+    )
+  if (
+    metadata["stress_voigt_order"] != ["xx", "yy", "xy"]
+    or metadata["internal_voigt_order"] != ["xx", "yy", "zz", "yz", "zx", "xy"]
+    or metadata["strain_shear_convention"] != "engineering"
+  ):
+    _fail(
+      "incompatible-registry-descriptor",
+      "the Q8 stateful slice requires xx/yy/xy stress ports over the 6-Voigt "
+      "internal order with engineering shear",
+      selection.material.source,
+    )
+  parameter_names = tuple(metadata["parameter_names"])
+  parameter_specs = _scalar_parameters(selection, parameter_names)
+  parameter_values = tuple(parameter_specs[name][1] for name in parameter_names)
+  parameters_by_name = {name: parameter_specs[name][1] for name in parameter_names}
+  try:
+    slots = resolve_material_state_slots(metadata["state_slots"], parameters_by_name)
+  except (TypeError, ValueError):
+    _fail(
+      "invalid-material-state-schema",
+      "material state slots violate the v2 descriptor schema",
+      selection.material.source,
+    )
+  try:
+    with warnings.catch_warnings():
+      warnings.simplefilter("error", RuntimeWarning)
+      raw_calibration = binding(*parameter_values)
+  except Exception:
+    _fail(
+      "material-binding-failed",
+      "stateful material calibration binding failed",
+      selection.material.source,
+    )
+  calibration = _flat_binding_array(
+    raw_calibration,
+    code="invalid-material-binding-output",
+    label="stateful material calibration binding",
+    source=selection.material.source,
+  )
+  block_id = selection.block.id, selection.region.id
+  entity_count = len(selection.cells) * _POINT_COUNT
+  try:
+    layout = build_material_state_layout(
+      schema_prefix=str(metadata["state_schema"]),
+      block_id=block_id,
+      entity_count=entity_count,
+      slots=slots,
+      initial_rows=None,
+      index_dtype=index_dtype,
+    )
+  except (TypeError, ValueError):
+    _fail(
+      "invalid-material-state-schema",
+      "material state schema cannot emit a valid layout",
+      selection.material.source,
+    )
+  initial_binding = getattr(binding, "initial_state", None)
+  initial_rows = None
+  if initial_binding is not None:
+    if not callable(initial_binding):
+      _fail(
+        "malformed-registry-descriptor",
+        "stateful material initial_state binding must be callable",
+        selection.material.source,
+      )
+    try:
+      raw_initial = initial_binding(parameter_values, layout)
+    except Exception:
+      _fail(
+        "material-binding-failed",
+        "stateful material initial-state binding failed",
+        selection.material.source,
+      )
+    try:
+      initial_rows = validated_material_initial_rows(
+        raw_initial,
+        entity_count=entity_count,
+        row_width=layout.row_width,
+      )
+      layout = build_material_state_layout(
+        schema_prefix=str(metadata["state_schema"]),
+        block_id=block_id,
+        entity_count=entity_count,
+        slots=slots,
+        initial_rows=initial_rows,
+        index_dtype=index_dtype,
+      )
+    except (TypeError, ValueError):
+      _fail(
+        "invalid-material-binding-output",
+        "stateful material initial-state rows are invalid",
+        selection.material.source,
+      )
+  linear, symmetric = stateful_tangent_channel_flags(metadata["tangent_class"])
+  integration_weights = determinants * weights[None, :]
+  _validate_physical_recovery(
+    gradients,
+    b_matrix,
+    integration_weights,
+    geometry_scales,
+    selection.cells,
+  )
+  gather = FinalizedArray(
+    _gather_map(space, connectivity.values, node_dense).reshape(
+      len(selection.cells), -1
+    ),
+    dtype=index_dtype,
+  )
+  port = _new(
+    PortBinding,
+    port_id="displacement",
+    space_id=space.space_id,
+    mode=PortMode.COEFFICIENTS,
+    coefficient_map=gather,
+  )
+  residual_channel = _new(
+    ResidualChannel,
+    channel_id="internal-force",
+    target_port_id=port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=linear,
+  )
+  jacobian_channel = _new(
+    JacobianChannel,
+    channel_id="material-tangent",
+    residual_channel_id=residual_channel.channel_id,
+    target_port_id=port.port_id,
+    source_port_id=port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=linear,
+    symmetric=symmetric,
+  )
+  header = _new(
+    OperatorHeader,
+    block_id=block_id,
+    entity_block_id=entity_block.block_id,
+    implementations=_identities(snapshot),
+    ports=(port,),
+    signal_ports=(),
+    residual_channels=(residual_channel,),
+    jacobian_channels=(jacobian_channel,),
+    state_layout=layout,
+    coupling_policy=CouplingPolicy.FIXED,
+  )
+  payload = _new(
+    Q8StatefulContinuumPayload,
+    quadrature_points=FinalizedArray(points, dtype=np.float64),
+    quadrature_weights=FinalizedArray(weights, dtype=np.float64),
+    shape_values=FinalizedArray(shape_values, dtype=np.float64),
+    parent_gradients=FinalizedArray(parent_gradients, dtype=np.float64),
+    geometry_scales=FinalizedArray(geometry_scales, dtype=np.float64),
+    normalized_gradients=FinalizedArray(gradients, dtype=np.float64),
+    normalized_strain_displacement=FinalizedArray(b_matrix, dtype=np.float64),
+    normalized_integration_weights=FinalizedArray(
+      integration_weights, dtype=np.float64
+    ),
+    calibration=FinalizedArray(calibration, dtype=np.float64),
+    material_parameters=FinalizedArray([list(parameter_values)], dtype=np.float64),
+  )
+  manifest = CanonicalManifest(
+    {
+      "block_id": block_id,
+      "entity_block_id": entity_block.block_id,
+      "entity_ids": entity_block.entity_ids,
+      "implementations": [
+        {
+          "kind": item.kind,
+          "name": item.name,
+          "version": item.version,
+          "implementation_id": item.implementation_id,
+        }
+        for item in header.implementations
+      ],
+      "port": {
+        "port_id": port.port_id,
+        "space_id": port.space_id,
+        "coefficient_map": port.coefficient_map.values,
+      },
+      "channels": ["internal-force", "material-tangent"],
+      "state": {
+        "schema": layout.schema,
+        "row_width": layout.row_width,
+        "entity_offsets": layout.entity_offsets.values,
+        "slots": [
+          {"name": slot.name, "width": slot.width, "annotation": slot.annotation}
+          for slot in layout.slots
+        ],
+        "initial_rows": (
+          None if layout.initial_rows is None else layout.initial_rows.values
+        ),
+      },
+      "payload": {
+        "quadrature_points": payload.quadrature_points.values,
+        "quadrature_weights": payload.quadrature_weights.values,
+        "shape_values": payload.shape_values.values,
+        "parent_gradients": payload.parent_gradients.values,
+        "geometry_scales": payload.geometry_scales.values,
+        "normalized_gradients": payload.normalized_gradients.values,
+        "normalized_strain_displacement": (
+          payload.normalized_strain_displacement.values
+        ),
+        "normalized_integration_weights": (
+          payload.normalized_integration_weights.values
+        ),
+        "calibration": payload.calibration.values,
+        "material_parameters": payload.material_parameters.values,
+      },
+    }
+  )
+  operator = _new(
+    Q8StatefulContinuumOperator,
+    header=header,
+    entity_block=entity_block,
+    payload=payload,
+    content_manifest=manifest,
+    kernel=kernel,
+  )
+
+  # The virgin probe mirrors runtime input mutability exactly: read-only
+  # accepted rows and fresh writable port values, over the initial state.
+  probe_state = (
+    layout.initial_rows
+    if layout.initial_rows is not None
+    else FinalizedArray(np.zeros(layout.row_shape), dtype=np.float64)
+  )
+  try:
+    probe = operator.evaluate(
+      OperatorEvaluationInput(
+        port_values=(
+          FinalizedArray(
+            np.zeros((len(selection.cells), _LOCAL_COEFFICIENT_COUNT)),
+            dtype=np.float64,
+          ),
+        ),
+        accepted_state=probe_state,
+        signals=(),
+        request=ChannelRequest(("internal-force",), ("material-tangent",)),
+      )
+    )
+  except (TypeError, ValueError):
+    _fail(
+      "kernel-probe-failed",
+      "stateful kernel failed its virgin-state compile probe",
+      selection.material.source,
+    )
+  if evaluation_status(probe) is not EvaluationStatus.OK:
+    _fail(
+      "invalid-kernel-probe",
+      "stateful kernel must evaluate its virgin initial state successfully",
+      selection.material.source,
+    )
+  if probe.trial_state.values.tobytes() != probe_state.values.tobytes():
+    _fail(
+      "invalid-kernel-probe",
+      "stateful kernel virgin probe must return the accepted rows byte-equal",
+      selection.material.source,
+    )
+  probe_tangent = probe.jacobian_values[0].values
+  if not bool(np.isfinite(probe_tangent).all()):
+    _fail(
+      "invalid-kernel-probe",
+      "stateful kernel virgin tangent must be finite",
+      selection.material.source,
+    )
+  if symmetric:
+    tangent_scale = float(np.max(np.abs(probe_tangent)))
+    symmetry_tolerance = 64.0 * max(
+      float(np.finfo(np.float64).eps) * tangent_scale,
+      abs(tangent_scale - math.nextafter(tangent_scale, 0.0)),
+    )
+    if not bool(
+      np.allclose(
+        probe_tangent,
+        probe_tangent.transpose(0, 2, 1),
+        rtol=0.0,
+        atol=symmetry_tolerance,
+      )
+    ):
+      _fail(
+        "invalid-kernel-probe",
+        "stateful kernel virgin tangent must be symmetric for its declared class",
+        selection.material.source,
+      )
+  return entity_block, operator
 
 
 def _element_block(

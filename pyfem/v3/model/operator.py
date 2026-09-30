@@ -121,14 +121,30 @@ class JacobianChannel(CompilerConstructed):
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class OperatorStateSlot(CompilerConstructed):
+  """One named contiguous slice of an operator state row.
+
+  ``annotation`` is optional slot metadata (for example ``envelope-max`` or
+  ``monotone-nondecreasing``); compilers predating annotations leave it unset
+  and consumers read it as ``None``.
+  """
+
   name: str
   width: int
   dtype: str
   lifetime: StateLifetime
+  annotation: str | None
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class OperatorStateLayout(CompilerConstructed):
+  """The accepted-trial state-row ABI of one operator block.
+
+  ``initial_rows`` is optional: when the compiler sets it, state owners seed
+  the accepted buffer with those rows at construction instead of zeros. Layouts
+  predating the field carry no ``initial_rows`` attribute and consumers read
+  them as ``None`` (zero initialization).
+  """
+
   schema: str
   block_id: SemanticId
   entity_count: int
@@ -137,6 +153,7 @@ class OperatorStateLayout(CompilerConstructed):
   row_width: int
   dtype: str
   lifetime: StateLifetime
+  initial_rows: FinalizedArray | None
 
   @property
   def row_shape(self) -> tuple[int, int]:
