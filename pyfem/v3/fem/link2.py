@@ -110,6 +110,13 @@ def _truss_local(
 
 @njit(cache=True)
 def _spring_local(a: F64, stiffness_k: float) -> tuple[F64, F64]:
+  # Axial spring semantics: the tangent carries stiffness k along the element
+  # axis only and is the exact derivative of the axial residual (globally
+  # K = k * b b^T and f = -k * (b.a) * b with b = (c, s, -c, -s)); relative
+  # transverse motion is unresisted. Legacy pyfem/elements/Spring.py assembles
+  # an isotropic k * eye(2) block tangent that is NOT the derivative of its
+  # own axial residual, so the legacy spring tangent is deliberately not
+  # matched; the legacy axial residual remains the parity oracle.
   elong = a[2] - a[0]
   force = elong * stiffness_k
   k_bar = np.zeros((4, 4), dtype=np.float64)
