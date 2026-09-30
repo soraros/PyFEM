@@ -18,7 +18,10 @@ from pyfem.v3.fem.tl_kinematics import (
 from pyfem.v3.types import F64
 
 
-@njit(cache=True, parallel=True)
+# cache=False: callees live in quadrature.py, shapes.py, and tl_kinematics.py;
+# numba's on-disk cache cannot invalidate cross-module callees
+# (NUMBA_CACHING.md §5).
+@njit(cache=False, parallel=True)
 def quad8_tl_tangent_batched(
   nodal_coords: F64,
   element_state: F64,

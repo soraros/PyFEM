@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -75,7 +77,10 @@ def test_gauss_tria3_order1_tabulated() -> None:
   np.testing.assert_allclose(weights, [0.5], rtol=0, atol=0.0)
 
 
-@njit(cache=True)
+# cache=False: probes call kernels from pyfem/v3/fem/quadrature.py, and numba's
+# on-disk cache cannot invalidate cross-module callees (NUMBA_CACHING.md §5) —
+# a cached probe would keep passing against stale quadrature code.
+@njit(cache=False)
 def _probe_gauss_tria3_order1() -> tuple[F64, F64]:
   return gauss_tria3(1)
 
@@ -87,7 +92,8 @@ def test_gauss_tria3_njit_literal_order_matches_tabulated() -> None:
   np.testing.assert_allclose(weights, [0.5], rtol=0, atol=0.0)
 
 
-@njit(cache=True)
+# cache=False: cross-module probe (NUMBA_CACHING.md §5; see first probe above).
+@njit(cache=False)
 def _probe_gauss_tria3_variable_in_loop() -> None:
   for order in range(1, 3):
     gauss_tria3(order)
@@ -98,17 +104,20 @@ def test_gauss_tria3_rejects_non_literal_order_in_njit_loop() -> None:
     _probe_gauss_tria3_variable_in_loop()
 
 
-@njit(cache=True)
+# cache=False: cross-module probe (NUMBA_CACHING.md §5; see first probe above).
+@njit(cache=False)
 def _probe_gauss_legendre_1d_q8() -> tuple[F64, F64]:
   return gauss_legendre_1d(3)
 
 
-@njit(cache=True)
+# cache=False: cross-module probe (NUMBA_CACHING.md §5; see first probe above).
+@njit(cache=False)
 def _probe_gauss_tensor_product_2d_q8() -> tuple[F64, F64]:
   return gauss_tensor_product_2d(3)
 
 
-@njit(cache=True)
+# cache=False: cross-module probe (NUMBA_CACHING.md §5; see first probe above).
+@njit(cache=False)
 def _probe_gauss_tensor_product_2d_decomposed_q8() -> tuple[F64, F64]:
   xi, wx = gauss_legendre_1d(3)
   return _meshgrid_2d(xi, wx)
@@ -150,13 +159,15 @@ def test_dispatcher_and_nested_njit_agree_for_q8() -> None:
   np.testing.assert_allclose(d_weights_2d, n_weights_2d, rtol=0, atol=0.0)
 
 
-@njit(cache=True)
+# cache=False: cross-module probe (NUMBA_CACHING.md §5; see first probe above).
+@njit(cache=False)
 def _probe_gauss_legendre_1d_variable_in_loop() -> None:
   for order in range(2, 5):
     gauss_legendre_1d(order)
 
 
-@njit(cache=True)
+# cache=False: cross-module probe (NUMBA_CACHING.md §5; see first probe above).
+@njit(cache=False)
 def _probe_gauss_tensor_product_2d_variable_in_loop() -> None:
   for order in range(2, 5):
     gauss_tensor_product_2d(order)
@@ -170,3 +181,75 @@ def test_gauss_legendre_1d_rejects_non_literal_order_in_njit_loop() -> None:
 def test_gauss_tensor_product_2d_rejects_non_literal_order_in_njit_loop() -> None:
   with pytest.raises(TypingError, match="literal"):
     _probe_gauss_tensor_product_2d_variable_in_loop()
+
+
+# --- NUMBA_CACHING.md §5 canary self-test --------------------------------------
+
+_PLANTED_CACHE_TRUE = """\
+from numba import njit
+
+from pyfem.v3.fem.quadrature import gauss_tria3
+
+
+@njit(cache=True)
+def planted_cached() -> tuple:
+  return gauss_tria3(1)
+"""
+
+_PLANTED_UNDOCUMENTED = """\
+from numba import njit
+
+from pyfem.v3.fem.quadrature import gauss_tria3
+
+
+@njit(cache=False)
+def planted_undocumented() -> tuple:
+  return gauss_tria3(1)
+"""
+
+_PLANTED_DOCUMENTED = """\
+from numba import njit
+
+from pyfem.v3.fem.quadrature import gauss_tria3
+
+
+# cache=False: cross-module callee gauss_tria3 (NUMBA_CACHING.md §5).
+@njit(cache=False)
+def planted_documented() -> tuple:
+  return gauss_tria3(1)
+"""
+
+_PLANTED_SAME_FILE = """\
+from numba import njit
+
+from pyfem.v3.types import GROUP_TRUSS
+
+
+@njit(cache=True)
+def planted_helper(x: float) -> float:
+  return 2.0 * x
+
+
+@njit(cache=True)
+def planted_friendly(x: float) -> float:
+  return planted_helper(x) + 1.0
+
+
+def plain_python() -> int:
+  return GROUP_TRUSS
+"""
+
+
+def test_cache_policy_canary_fires_on_planted_violation(
+  numba_cache_policy_scanner: Callable[[Path], list[str]],
+  tmp_path: Path,
+) -> None:
+  """The §5 scanner flags planted violations and passes clean/documented sites."""
+  (tmp_path / "planted_cached.py").write_text(_PLANTED_CACHE_TRUE)
+  (tmp_path / "planted_undocumented.py").write_text(_PLANTED_UNDOCUMENTED)
+  (tmp_path / "planted_documented.py").write_text(_PLANTED_DOCUMENTED)
+  (tmp_path / "planted_friendly.py").write_text(_PLANTED_SAME_FILE)
+  violations = numba_cache_policy_scanner(tmp_path)
+  assert len(violations) == 2
+  assert any("planted_cached" in v and "cache=True" in v for v in violations)
+  assert any("planted_undocumented" in v and "documented" in v for v in violations)

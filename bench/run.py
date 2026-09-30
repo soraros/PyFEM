@@ -59,7 +59,7 @@ from bench.legacy_cases import (
   silence_legacy_logging,
   write_legacy_q8_patch,
 )
-from bench.manifest import collect_manifest
+from bench.manifest import check_cache_coherence, collect_manifest
 from bench.v3_pipeline import V3Q8Pipeline
 from bench.workloads import (
   Q8_MATERIALS,
@@ -692,10 +692,27 @@ def build_parser() -> argparse.ArgumentParser:
   return parser
 
 
+def _warn_cache_incoherence() -> None:
+  """Warn on stderr about stale caller cache entries (NUMBA_CACHING.md §6).
+
+  The same coherence data is recorded in every run manifest via
+  ``collect_manifest``; this startup warning keeps incoherent runs visible.
+  """
+  for pair in check_cache_coherence():
+    if not pair["coherent"]:
+      print(
+        f"warning: {pair['caller']} has cache entries older than "
+        f"{pair['callee']}; timings may measure stale embedded callees "
+        "(NUMBA_CACHING.md §6)",
+        file=sys.stderr,
+      )
+
+
 def main() -> int:
   silence_legacy_logging()
   warnings.simplefilter("ignore", SparseEfficiencyWarning)
   args = build_parser().parse_args()
+  _warn_cache_incoherence()
   if getattr(args, "quick", False):
     args.sizes = "2,4,8,16"
     args.threads = "1,16"
