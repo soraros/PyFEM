@@ -32,6 +32,11 @@ Protocol summary:
 - Constraints apply exclusively through the M15 coordinate map
   (``full_coefficients``/``reduce_residual``/``reduce_tangent``); reactions
   and constraint work are observed from the FULL residual at commit.
+- Program signals reach operators exclusively through the plan: each substep
+  binds its fixed trial point once into per-operator ``ProgramSignalInput``
+  values (identity-bound coordinates this revision), so schedule-owned time
+  replaces any solverStat-style hidden global. Operators without declared
+  signal ports keep receiving an empty signal tuple.
 - The tangent is assembled through the compiled plan (values-only refill).
   When every Jacobian channel is compiled ``linear`` the reduced tangent is
   state-independent: it is assembled and factorized once and the
@@ -68,6 +73,7 @@ from pyfem.v3.driver.plan import (
   assemble_internal_force,
   compile_driver_plan,
   evaluate_loads,
+  evaluate_signals,
   refill_tangent,
 )
 from pyfem.v3.model.arrays import FinalizedArray
@@ -260,6 +266,7 @@ class NonlinearStaticDriver:
         copy=True,
       )
       external = evaluate_loads(plan.loads, point).values
+      signal_inputs = evaluate_signals(plan, point)
       external_reduced = reduce_residual(coordinate_map, external).values
       reference_norm = float(np.linalg.norm(external_reduced))
       first_residual_norm: float | None = None
@@ -269,9 +276,10 @@ class NonlinearStaticDriver:
       for iteration in range(1, settings.max_iterations + 1):
         full = full_coefficients(coordinate_map, reduced, point)
         evaluations = []
-        for operator, request in zip(
+        for operator, request, signals in zip(
           self._system.operators,
           self._requests,
+          signal_inputs,
           strict=True,
         ):
           gather = operator.header.ports[0].coefficient_map.values
@@ -288,7 +296,7 @@ class NonlinearStaticDriver:
                 accepted_state=transaction.accepted_state(
                   operator.header.state_layout.block_id
                 ),
-                signals=(),
+                signals=signals,
                 request=request,
               )
             )

@@ -7,6 +7,12 @@ emissions, and the researcher-facing binding protocol kernels and initial-state
 bindings plug into. Descriptors carrying the v1 material schema remain
 byte-identical; the v2 schema is a strict extension consumed only by the
 generic stateful compiler path.
+
+The v2 schema carries one optional extension field, ``signal_ports``: typed
+program-signal port declarations (``port_id``, ``signal_id``,
+``derivative_coordinate_ids``) resolved into ``SignalPortBinding`` emissions at
+compile time. Descriptors without the field declare no ports and keep
+byte-identical metadata, manifests, and kernel calls.
 """
 
 from __future__ import annotations
@@ -173,6 +179,7 @@ _STATEFUL_METADATA_KEYS = frozenset(
     "state_slots",
   )
 )
+_STATEFUL_OPTIONAL_METADATA_KEYS = frozenset(("signal_ports",))
 _STATEFUL_TANGENT_CLASS_FLAGS: dict[str, tuple[bool, bool]] = {
   "algorithmic-symmetric": (False, True),
   "algorithmic-nonsymmetric": (False, False),
@@ -180,6 +187,8 @@ _STATEFUL_TANGENT_CLASS_FLAGS: dict[str, tuple[bool, bool]] = {
 }
 _LIFETIME_ENUMS = {"accepted-trial": StateLifetime.ACCEPTED_TRIAL}
 _FLOAT64_STR = np.dtype(np.float64).str
+_SIGNAL_PORT_KEYS = frozenset(("port_id", "signal_id", "derivative_coordinate_ids"))
+_SIGNAL_PORT_REQUIRED_KEYS = frozenset(("port_id", "signal_id"))
 
 
 def _new[ValueT](cls: type[ValueT], /, **fields: object) -> ValueT:
@@ -314,15 +323,106 @@ def resolve_material_state_slots(
   return tuple(resolved)
 
 
+@dataclass(frozen=True, slots=True)
+class MaterialSignalPort:
+  """One resolved descriptor signal port declaration of the material ABI.
+
+  ``port_id`` names the operator-facing port emitted onto the compiled
+  ``SignalPortBinding``; ``signal_id`` names the program signal the driver
+  binds to the port (this ABI revision binds declared program coordinates by
+  name); ``derivative_coordinate_ids`` names the program coordinates whose
+  ``d(signal)/d(coordinate)`` channels the driver forwards alongside the value.
+  """
+
+  port_id: str
+  signal_id: str
+  derivative_coordinate_ids: tuple[str, ...]
+
+  def __post_init__(self) -> None:
+    _nonempty_exact_str(self.port_id, "signal port id")
+    _nonempty_exact_str(self.signal_id, "signal id")
+    if type(self.derivative_coordinate_ids) is not tuple or any(
+      type(item) is not str or not item for item in self.derivative_coordinate_ids
+    ):
+      msg = "material signal port derivative coordinates must be exact strings"
+      raise TypeError(msg)
+    if len(set(self.derivative_coordinate_ids)) != len(self.derivative_coordinate_ids):
+      msg = "material signal port derivative coordinates must be unique"
+      raise ValueError(msg)
+
+
+def _signal_derivative_coordinates(value: object) -> tuple[str, ...]:
+  if type(value) is not list:
+    msg = "material signal port derivative_coordinate_ids must be an exact list"
+    raise TypeError(msg)
+  coordinates = tuple(
+    _nonempty_exact_str(item, "signal derivative coordinate") for item in value
+  )
+  if len(set(coordinates)) != len(coordinates):
+    msg = "material signal port derivative coordinates must be unique"
+    raise ValueError(msg)
+  return coordinates
+
+
+def resolve_material_signal_ports(ports: object) -> tuple[MaterialSignalPort, ...]:
+  """Resolve descriptor ``signal_ports`` metadata into typed port declarations.
+
+  Each declaration names one typed signal port the compiled operator accepts
+  program signal inputs for. Ports are the only channel through which schedule
+  values (time-like or load-like coordinates) may reach a law: a descriptor
+  without ``signal_ports`` compiles an operator that rejects every signal, so
+  no hidden-global back channel can form.
+  """
+  if type(ports) is not list:
+    msg = "stateful material signal_ports must be an exact list of declarations"
+    raise TypeError(msg)
+  if not ports:
+    msg = "stateful material signal_ports must declare at least one port"
+    raise ValueError(msg)
+  resolved: list[MaterialSignalPort] = []
+  for item in ports:
+    if type(item) is not dict:
+      msg = "material signal port declarations must be exact dictionaries"
+      raise TypeError(msg)
+    keys = set(item)
+    if not keys.issubset(_SIGNAL_PORT_KEYS) or not keys.issuperset(
+      _SIGNAL_PORT_REQUIRED_KEYS
+    ):
+      msg = (
+        "material signal port declarations carry exactly port_id, signal_id, "
+        "and optional derivative_coordinate_ids"
+      )
+      raise ValueError(msg)
+    resolved.append(
+      MaterialSignalPort(
+        port_id=_nonempty_exact_str(item["port_id"], "signal port id"),
+        signal_id=_nonempty_exact_str(item["signal_id"], "signal id"),
+        derivative_coordinate_ids=_signal_derivative_coordinates(
+          item.get("derivative_coordinate_ids", [])
+        ),
+      )
+    )
+  port_ids = [port.port_id for port in resolved]
+  if len(set(port_ids)) != len(port_ids):
+    msg = "material signal port ids must be unique"
+    raise ValueError(msg)
+  return tuple(resolved)
+
+
 def validate_stateful_material_metadata(metadata: object) -> dict[str, object]:
   """Validate the structure of one v2 stateful material metadata mapping."""
   if type(metadata) is not dict:
     msg = "stateful material metadata must be an exact dictionary"
     raise TypeError(msg)
-  if set(metadata) != _STATEFUL_METADATA_KEYS:
+  keys = set(metadata)
+  if (
+    not keys.issuperset(_STATEFUL_METADATA_KEYS)
+    or (keys - _STATEFUL_METADATA_KEYS) - _STATEFUL_OPTIONAL_METADATA_KEYS
+  ):
     msg = (
       "stateful material metadata carries exactly the frozen v2 field set "
-      f"{tuple(sorted(_STATEFUL_METADATA_KEYS))}"
+      f"{tuple(sorted(_STATEFUL_METADATA_KEYS))} plus the optional extension "
+      f"fields {tuple(sorted(_STATEFUL_OPTIONAL_METADATA_KEYS))}"
     )
     raise ValueError(msg)
   if metadata["schema"] != STATEFUL_MATERIAL_DESCRIPTOR_SCHEMA:
@@ -391,6 +491,8 @@ def validate_stateful_material_metadata(metadata: object) -> dict[str, object]:
     ):
       msg = f"material state slot annotations must be one of {_STATE_SLOT_ANNOTATIONS}"
       raise ValueError(msg)
+  if "signal_ports" in metadata:
+    resolve_material_signal_ports(metadata["signal_ports"])
   return metadata
 
 
@@ -559,6 +661,79 @@ class StatefulContinuumKernel(Protocol):
   ) -> StatefulContinuumKernelResult: ...
 
 
+def _plain_float64_scalar(value: object, label: str) -> None:
+  if (
+    type(value) is not np.ndarray
+    or value.dtype != np.dtype(np.float64)
+    or value.dtype.metadata is not None
+    or value.shape != (1,)
+  ):
+    msg = f"stateful material {label} must be a plain one-element float64 array"
+    raise TypeError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class StatefulContinuumSignalDerivative:
+  """One program-coordinate derivative channel of one bound signal port.
+
+  ``values`` holds ``d(signal)/d(coordinate_id)`` at the bound program point.
+  This ABI revision's signals are scalar, so every values array carries exactly
+  one float64.
+  """
+
+  coordinate_id: str
+  values: np.ndarray
+
+  def __post_init__(self) -> None:
+    _nonempty_exact_str(self.coordinate_id, "signal derivative coordinate")
+    _plain_float64_scalar(self.values, "signal derivative values")
+
+
+@dataclass(frozen=True, slots=True)
+class StatefulContinuumSignalInput:
+  """One bound signal port forwarded to a stateful kernel evaluation.
+
+  The compiled operator builds these from validated ``ProgramSignalInput``
+  values in declared port order; ``derivatives`` follows the port's declared
+  ``derivative_coordinate_ids`` order exactly. ``values`` carries the bound
+  scalar signal value at the current program point.
+  """
+
+  port_id: str
+  values: np.ndarray
+  derivatives: tuple[StatefulContinuumSignalDerivative, ...]
+
+  def __post_init__(self) -> None:
+    _nonempty_exact_str(self.port_id, "signal port id")
+    _plain_float64_scalar(self.values, "signal values")
+    if type(self.derivatives) is not tuple or any(
+      type(item) is not StatefulContinuumSignalDerivative for item in self.derivatives
+    ):
+      msg = (
+        "stateful signal derivatives must be an exact tuple of "
+        "StatefulContinuumSignalDerivative values"
+      )
+      raise TypeError(msg)
+
+
+class StatefulContinuumSignalKernel(Protocol):
+  """Batched stateful law kernel with bound signal ports (four-argument form).
+
+  Descriptors declaring ``signal_ports`` bind kernels of this form: the fourth
+  positional argument carries one ``StatefulContinuumSignalInput`` per declared
+  port, in declaration order. Signal-free descriptors keep the three-argument
+  ``StatefulContinuumKernel`` call byte-identical.
+  """
+
+  def __call__(
+    self,
+    strains: np.ndarray,
+    accepted_rows: np.ndarray,
+    calibration: np.ndarray,
+    signals: tuple[StatefulContinuumSignalInput, ...],
+  ) -> StatefulContinuumKernelResult: ...
+
+
 class StatefulContinuumBinding(Protocol):
   """The permanent stateful-material binding ABI behind registry descriptors.
 
@@ -573,6 +748,12 @@ class StatefulContinuumBinding(Protocol):
   evaluation over the initial state (the compiler probes this invariant), and
   expected numerical failures report typed statuses with byte-equal trial
   rows, never exceptions.
+
+  A descriptor declaring the optional ``signal_ports`` field requires a kernel
+  accepting the bound signal tuple as its fourth positional argument (the
+  ``StatefulContinuumSignalKernel`` form); the compiler probes that form before
+  the operator can escape. Signal values reach the law exclusively through
+  this argument — there is no schedule back channel.
   """
 
   def __call__(self, *parameters: float) -> np.ndarray: ...

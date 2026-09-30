@@ -32,6 +32,14 @@ descriptor's initial-state rows into the layout, and marks every channel
 nonlinear per the declared tangent class. The first such law is
 ``isotropic-hardening-plasticity`` (J2, 19-float rows).
 
+A stateful descriptor may additionally declare the optional ``signal_ports``
+field: typed program-signal ports emitted as ``SignalPortBinding`` values on
+the operator header. The compiled operator then accepts one bound
+``ProgramSignalInput`` per declared port and forwards the validated scalar
+values to the kernel's fourth positional argument, so schedule-owned signals
+(time-like coordinates) reach the law without any hidden global. Descriptors
+without the field compile byte-identical operators that reject every signal.
+
 Capability boundary: every cell belongs to exactly one region; each region
 draws its cells from exactly one cell block; each cell block feeds exactly
 one region; every declared field and material is referenced by at least one
@@ -51,7 +59,11 @@ import numpy as np
 from pyfem.v3.compile.contracts import (
   StatefulContinuumKernel,
   StatefulContinuumKernelResult,
+  StatefulContinuumSignalDerivative,
+  StatefulContinuumSignalInput,
+  StatefulContinuumSignalKernel,
   build_material_state_layout,
+  resolve_material_signal_ports,
   resolve_material_state_slots,
   stateful_tangent_channel_flags,
   validate_stateful_material_metadata,
@@ -85,7 +97,10 @@ from pyfem.v3.model.operator import (
   OperatorStateLayout,
   PortBinding,
   PortMode,
+  ProgramSignalInput,
   ResidualChannel,
+  SignalDerivativeInput,
+  SignalPortBinding,
   StateLifetime,
   evaluation_status,
 )
@@ -693,6 +708,73 @@ def _validated_stateful_kernel_result(
   return result.stresses, result.tangents, result.trial_rows, result.status
 
 
+def _signal_scalar(value: np.ndarray, label: str) -> None:
+  if (
+    value.dtype != np.dtype(np.float64)
+    or value.dtype.metadata is not None
+    or value.shape != (1,)
+    or not bool(np.isfinite(value).all())
+  ):
+    msg = f"stateful {label} must be a finite metadata-free float64 scalar"
+    raise TypeError(msg)
+
+
+def _validated_stateful_signals(
+  ports: tuple[SignalPortBinding, ...],
+  signals: tuple[ProgramSignalInput, ...],
+) -> tuple[StatefulContinuumSignalInput, ...]:
+  """Bind evaluation signal inputs exactly onto the declared signal ports.
+
+  Every declared port must be bound exactly once and every input must name a
+  declared port; derivative channels must follow the port's declared
+  ``derivative_coordinate_ids`` order. The forwarded carriers preserve
+  declaration order so kernels read a deterministic layout.
+  """
+  by_port: dict[str, ProgramSignalInput] = {}
+  for signal in signals:
+    if signal.port_id in by_port:
+      msg = "stateful evaluation received a duplicate program signal port"
+      raise ValueError(msg)
+    by_port[signal.port_id] = signal
+  declared = {port.port_id: port for port in ports}
+  for port_id in by_port:
+    if port_id not in declared:
+      msg = "stateful evaluation received an undeclared program signal port"
+      raise ValueError(msg)
+  kernel_signals: list[StatefulContinuumSignalInput] = []
+  for port in ports:
+    signal = by_port.get(port.port_id)
+    if signal is None:
+      msg = "stateful evaluation is missing a declared program signal port"
+      raise ValueError(msg)
+    values = signal.values.values
+    _signal_scalar(values, "signal values")
+    if (
+      tuple(item.coordinate_id for item in signal.derivatives)
+      != port.derivative_coordinate_ids
+    ):
+      msg = "stateful signal derivatives must match the declared coordinates"
+      raise ValueError(msg)
+    kernel_derivatives: list[StatefulContinuumSignalDerivative] = []
+    for item in signal.derivatives:
+      derivative_values = item.values.values
+      _signal_scalar(derivative_values, "signal derivative values")
+      kernel_derivatives.append(
+        StatefulContinuumSignalDerivative(
+          coordinate_id=item.coordinate_id,
+          values=derivative_values,
+        )
+      )
+    kernel_signals.append(
+      StatefulContinuumSignalInput(
+        port_id=port.port_id,
+        values=values,
+        derivatives=tuple(kernel_derivatives),
+      )
+    )
+  return tuple(kernel_signals)
+
+
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class Q8StatefulContinuumOperator(CompilerConstructed):
   """Kernel-driven stateful small-strain continuum operator (v2 descriptor ABI).
@@ -701,13 +783,17 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
   force, algorithmic tangent, and trial rows out. Port strains are embedded in
   the law's 6-Voigt internal order as ``[xx, yy, 0, 0, 0, xy]`` (plane strain);
   stresses and tangents truncate back to the ``[xx, yy, xy]`` port convention.
+  An operator compiled with declared signal ports accepts exactly one bound
+  ``ProgramSignalInput`` per port and forwards the validated scalar values and
+  derivative channels to the kernel's fourth positional argument; an operator
+  compiled without ports rejects every signal input.
   """
 
   header: OperatorHeader
   entity_block: IncidenceEntityBlock
   payload: Q8StatefulContinuumPayload
   content_manifest: CanonicalManifest
-  kernel: StatefulContinuumKernel
+  kernel: StatefulContinuumKernel | StatefulContinuumSignalKernel
 
   def evaluate(
     self,
@@ -740,9 +826,14 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
     ):
       msg = "stateful accepted state must match the compiled state layout"
       raise TypeError(msg)
-    if inputs.signals or self.header.signal_ports:
+    signal_ports = self.header.signal_ports
+    if signal_ports:
+      kernel_signals = _validated_stateful_signals(signal_ports, inputs.signals)
+    elif inputs.signals:
       msg = "stateful model operator does not accept program signal inputs"
       raise ValueError(msg)
+    else:
+      kernel_signals = ()
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
     request = inputs.request
@@ -773,8 +864,21 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
     strains[:, 1] = flat[:, 1]
     strains[:, 5] = flat[:, 2]
 
+    if signal_ports:
+      kernel_result = self.kernel(
+        strains,
+        accepted_state,
+        self.payload.calibration.values,
+        kernel_signals,
+      )
+    else:
+      kernel_result = self.kernel(
+        strains,
+        accepted_state,
+        self.payload.calibration.values,
+      )
     stresses, tangents, trial_rows, status = _validated_stateful_kernel_result(
-      self.kernel(strains, accepted_state, self.payload.calibration.values),
+      kernel_result,
       entity_count=layout.entity_count,
       row_width=layout.row_width,
     )
@@ -2343,8 +2447,10 @@ def _compile_mechanical_stateful(
   (widths possibly computed from validated parameters) drive the emitted
   ``OperatorStateLayout``, the binding's optional ``initial_state`` wires the
   owner's construction-time rows, and the declared tangent class sets channel
-  linearity and symmetry. A virgin-state probe over the initial rows enforces
-  the byte-equal no-evolution invariant before the operator can escape.
+  linearity and symmetry. The optional ``signal_ports`` declarations emit
+  ``SignalPortBinding`` values that open the operator's signal slot for exactly
+  the declared ports. A virgin-state probe over the initial rows enforces the
+  byte-equal no-evolution invariant before the operator can escape.
   """
   space = spaces[selection.fields[0].id]
   connectivity, entity_block = _element_block(selection, node_dense, index_dtype)
@@ -2440,6 +2546,17 @@ def _compile_mechanical_stateful(
       "material state slots violate the v2 descriptor schema",
       selection.material.source,
     )
+  if "signal_ports" in metadata:
+    try:
+      signal_declarations = resolve_material_signal_ports(metadata["signal_ports"])
+    except (TypeError, ValueError):
+      _fail(
+        "invalid-material-signal-ports",
+        "material signal ports violate the v2 descriptor schema",
+        selection.material.source,
+      )
+  else:
+    signal_declarations = ()
   try:
     with warnings.catch_warnings():
       warnings.simplefilter("error", RuntimeWarning)
@@ -2549,13 +2666,22 @@ def _compile_mechanical_stateful(
     linear=linear,
     symmetric=symmetric,
   )
+  signal_ports = tuple(
+    _new(
+      SignalPortBinding,
+      port_id=declaration.port_id,
+      signal_id=declaration.signal_id,
+      derivative_coordinate_ids=declaration.derivative_coordinate_ids,
+    )
+    for declaration in signal_declarations
+  )
   header = _new(
     OperatorHeader,
     block_id=block_id,
     entity_block_id=entity_block.block_id,
     implementations=_identities(snapshot),
     ports=(port,),
-    signal_ports=(),
+    signal_ports=signal_ports,
     residual_channels=(residual_channel,),
     jacobian_channels=(jacobian_channel,),
     state_layout=layout,
@@ -2576,56 +2702,60 @@ def _compile_mechanical_stateful(
     calibration=FinalizedArray(calibration, dtype=np.float64),
     material_parameters=FinalizedArray([list(parameter_values)], dtype=np.float64),
   )
-  manifest = CanonicalManifest(
-    {
-      "block_id": block_id,
-      "entity_block_id": entity_block.block_id,
-      "entity_ids": entity_block.entity_ids,
-      "implementations": [
-        {
-          "kind": item.kind,
-          "name": item.name,
-          "version": item.version,
-          "implementation_id": item.implementation_id,
-        }
-        for item in header.implementations
+  manifest_content: dict[str, object] = {
+    "block_id": block_id,
+    "entity_block_id": entity_block.block_id,
+    "entity_ids": entity_block.entity_ids,
+    "implementations": [
+      {
+        "kind": item.kind,
+        "name": item.name,
+        "version": item.version,
+        "implementation_id": item.implementation_id,
+      }
+      for item in header.implementations
+    ],
+    "port": {
+      "port_id": port.port_id,
+      "space_id": port.space_id,
+      "coefficient_map": port.coefficient_map.values,
+    },
+    "channels": ["internal-force", "material-tangent"],
+    "state": {
+      "schema": layout.schema,
+      "row_width": layout.row_width,
+      "entity_offsets": layout.entity_offsets.values,
+      "slots": [
+        {"name": slot.name, "width": slot.width, "annotation": slot.annotation}
+        for slot in layout.slots
       ],
-      "port": {
-        "port_id": port.port_id,
-        "space_id": port.space_id,
-        "coefficient_map": port.coefficient_map.values,
-      },
-      "channels": ["internal-force", "material-tangent"],
-      "state": {
-        "schema": layout.schema,
-        "row_width": layout.row_width,
-        "entity_offsets": layout.entity_offsets.values,
-        "slots": [
-          {"name": slot.name, "width": slot.width, "annotation": slot.annotation}
-          for slot in layout.slots
-        ],
-        "initial_rows": (
-          None if layout.initial_rows is None else layout.initial_rows.values
-        ),
-      },
-      "payload": {
-        "quadrature_points": payload.quadrature_points.values,
-        "quadrature_weights": payload.quadrature_weights.values,
-        "shape_values": payload.shape_values.values,
-        "parent_gradients": payload.parent_gradients.values,
-        "geometry_scales": payload.geometry_scales.values,
-        "normalized_gradients": payload.normalized_gradients.values,
-        "normalized_strain_displacement": (
-          payload.normalized_strain_displacement.values
-        ),
-        "normalized_integration_weights": (
-          payload.normalized_integration_weights.values
-        ),
-        "calibration": payload.calibration.values,
-        "material_parameters": payload.material_parameters.values,
-      },
-    }
-  )
+      "initial_rows": (
+        None if layout.initial_rows is None else layout.initial_rows.values
+      ),
+    },
+    "payload": {
+      "quadrature_points": payload.quadrature_points.values,
+      "quadrature_weights": payload.quadrature_weights.values,
+      "shape_values": payload.shape_values.values,
+      "parent_gradients": payload.parent_gradients.values,
+      "geometry_scales": payload.geometry_scales.values,
+      "normalized_gradients": payload.normalized_gradients.values,
+      "normalized_strain_displacement": (payload.normalized_strain_displacement.values),
+      "normalized_integration_weights": (payload.normalized_integration_weights.values),
+      "calibration": payload.calibration.values,
+      "material_parameters": payload.material_parameters.values,
+    },
+  }
+  if signal_ports:
+    manifest_content["signal_ports"] = [
+      {
+        "port_id": signal_port.port_id,
+        "signal_id": signal_port.signal_id,
+        "derivative_coordinate_ids": list(signal_port.derivative_coordinate_ids),
+      }
+      for signal_port in signal_ports
+    ]
+  manifest = CanonicalManifest(manifest_content)
   operator = _new(
     Q8StatefulContinuumOperator,
     header=header,
@@ -2637,10 +2767,34 @@ def _compile_mechanical_stateful(
 
   # The virgin probe mirrors runtime input mutability exactly: read-only
   # accepted rows and fresh writable port values, over the initial state.
+  # Ported descriptors probe with zero-valued scalar signals; the derivative
+  # channels carry the identity-binding delta the driver forwards at runtime
+  # (d(signal)/d(p) is one for the signal's own coordinate, zero otherwise),
+  # so a time-like law sees its no-elapsed-time evaluation at the origin.
   probe_state = (
     layout.initial_rows
     if layout.initial_rows is not None
     else FinalizedArray(np.zeros(layout.row_shape), dtype=np.float64)
+  )
+  probe_signals = tuple(
+    ProgramSignalInput(
+      port_id=signal_port.port_id,
+      values=FinalizedArray(np.zeros(1, dtype=np.float64), dtype=np.float64),
+      derivatives=tuple(
+        SignalDerivativeInput(
+          coordinate,
+          FinalizedArray(
+            np.array(
+              [1.0 if coordinate == signal_port.signal_id else 0.0],
+              dtype=np.float64,
+            ),
+            dtype=np.float64,
+          ),
+        )
+        for coordinate in signal_port.derivative_coordinate_ids
+      ),
+    )
+    for signal_port in signal_ports
   )
   try:
     probe = operator.evaluate(
@@ -2652,7 +2806,7 @@ def _compile_mechanical_stateful(
           ),
         ),
         accepted_state=probe_state,
-        signals=(),
+        signals=probe_signals,
         request=ChannelRequest(("internal-force",), ("material-tangent",)),
       )
     )
