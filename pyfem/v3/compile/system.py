@@ -1,19 +1,28 @@
-"""Direct normalized-model compiler for the generic compiled-system boundary."""
+"""Direct normalized-model compiler for the generic compiled-system boundary.
+
+Region-routed families (continuum, truss) are selected from the normalized
+spec; the point-spring family is declaration-routed: spring groups bind
+researcher kernel callables a pure spec cannot carry, so they enter
+compilation through ``compile_system``'s ``springs`` channel and compose
+through the landed kernel-parameterized seam.
+"""
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Protocol
+from typing import NoReturn, Protocol, cast
 
 import numpy as np
 
 from pyfem.v3.compile import continuum as _continuum_builder
+from pyfem.v3.compile import spring as _spring_builder
 from pyfem.v3.compile import truss as _truss_builder
 from pyfem.v3.compile.diagnostics import (
   ModelCompilationDiagnostic,
   ModelCompilationError,
 )
+from pyfem.v3.compile.spring import SpringDeclaration, SpringOperator
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import InstanceId
 from pyfem.v3.model.operator import CompiledOperator
@@ -186,25 +195,148 @@ class OperatorFamilyBuilder(Protocol):
     ...
 
 
-_OPERATOR_FAMILY_BUILDERS: tuple[tuple[str, OperatorFamilyBuilder], ...] = (
+POINT_SPRING_FORMULATION_KEY: RegistryKey = ("formulation", "point-spring")
+
+
+class SpringFamilyBuilder(Protocol):
+  """Declaration-routed family contract behind the spring dispatch entry.
+
+  A point-spring group binds a researcher kernel callable, which a pure
+  ``ModelSpec`` cannot express, so the spring family enters compilation
+  through ``compile_system``'s ``springs`` channel — one exact
+  ``SpringDeclaration`` per authored spring group — instead of through
+  region-formulation selection. This is the acceptance shape the wave-8
+  converter emission targets: the parser emits the base ``ModelSpec`` for the
+  region-routed groups plus one declaration per parsed spring group, and the
+  system wiring composes every group in one compiled system.
+  """
+
+  @staticmethod
+  def select_model(spec: ModelSpec) -> NoReturn:
+    """Refuse region-routed selection with a coded diagnostic."""
+    ...
+
+  @staticmethod
+  def select_declarations(
+    declarations: object,
+    source: SourceContext,
+  ) -> tuple[SpringDeclaration, ...]:
+    """Validate the authored spring groups alongside the normalized model."""
+    ...
+
+  @staticmethod
+  def compile_group(
+    system: CompiledSystem,
+    declaration: SpringDeclaration,
+  ) -> tuple[PointEntityBlock, SpringOperator]:
+    """Compile one validated spring group against the composed system."""
+    ...
+
+  @staticmethod
+  def compose(
+    base: CompiledSystem,
+    spring_block: PointEntityBlock,
+    spring_operator: SpringOperator,
+  ) -> CompiledSystem:
+    """Compose one compiled spring group into the compiled system."""
+    ...
+
+
+class _PointSpringFamilyBuilder:
+  """Spring family dispatch entry delegating to the landed spring seam.
+
+  Every phase routes through the landed kernel-parameterized seam unchanged,
+  so the wired path and the standalone
+  ``compile_spring_operator``/``compose_system`` sequence produce identical
+  operators, coded diagnostics, membership validation, and composed systems.
+  """
+
+  @staticmethod
+  def select_model(spec: ModelSpec) -> NoReturn:
+    region = next(
+      (
+        item
+        for item in spec.regions
+        if item.formulation == POINT_SPRING_FORMULATION_KEY[1]
+      ),
+      None,
+    )
+    _fail(
+      "unsupported-spring-region",
+      "point springs cannot compile from a spec region alone: a spring group "
+      "binds a kernel callable, which a pure ModelSpec cannot carry; pass one "
+      "SpringDeclaration per spring group via compile_system's springs channel",
+      region.source if region is not None else spec.source,
+    )
+
+  @staticmethod
+  def select_declarations(
+    declarations: object,
+    source: SourceContext,
+  ) -> tuple[SpringDeclaration, ...]:
+    if type(declarations) is not tuple or any(
+      type(item) is not SpringDeclaration for item in declarations
+    ):
+      _fail(
+        "invalid-spring-declarations",
+        "spring groups must be an exact tuple of exact SpringDeclaration values",
+        source,
+      )
+    return declarations
+
+  @staticmethod
+  def compile_group(
+    system: CompiledSystem,
+    declaration: SpringDeclaration,
+  ) -> tuple[PointEntityBlock, SpringOperator]:
+    return _spring_builder.compile_spring_operator(system, declaration)
+
+  @staticmethod
+  def compose(
+    base: CompiledSystem,
+    spring_block: PointEntityBlock,
+    spring_operator: SpringOperator,
+  ) -> CompiledSystem:
+    return _spring_builder.compose_system(base, spring_block, spring_operator)
+
+
+_OPERATOR_FAMILY_BUILDERS: tuple[
+  tuple[str, OperatorFamilyBuilder | SpringFamilyBuilder],
+  ...,
+] = (
   (_continuum_builder.Q8_FORMULATION_KEY[1], _continuum_builder),
   (_continuum_builder.THERMAL_FORMULATION_KEY[1], _continuum_builder),
   (_continuum_builder.THERMO_FORMULATION_KEY[1], _continuum_builder),
   (_truss_builder.TRUSS_FORMULATION_KEY[1], _truss_builder),
+  (POINT_SPRING_FORMULATION_KEY[1], _PointSpringFamilyBuilder),
 )
 
 
-def _operator_family_builder(spec: ModelSpec) -> OperatorFamilyBuilder:
+def _operator_family_builder(
+  spec: ModelSpec,
+) -> OperatorFamilyBuilder | SpringFamilyBuilder:
   """Route the normalized spec to the builder owning its region formulation.
 
   Specs whose formulations no registered family claims fall back to the first
-  builder so its landed coded diagnostics describe the mismatch.
+  builder so its landed coded diagnostics describe the mismatch. A region
+  naming the spring formulation routes to the declaration-routed spring
+  family, whose selection refuses with a coded diagnostic: spring groups need
+  kernel declarations a pure spec cannot carry.
   """
   formulations = {region.formulation for region in spec.regions}
   for name, builder in _OPERATOR_FAMILY_BUILDERS:
     if name in formulations:
       return builder
   return _OPERATOR_FAMILY_BUILDERS[0][1]
+
+
+def _operator_family(name: str) -> OperatorFamilyBuilder | SpringFamilyBuilder:
+  """Return the family builder registered under one exact dispatch name."""
+  for family_name, builder in _OPERATOR_FAMILY_BUILDERS:
+    if family_name == name:
+      return builder
+  msg = f"no operator family builder is registered under {name!r}"
+  raise KeyError(msg)
 
 
 def _operator_slices(
@@ -369,10 +501,29 @@ def compile_system(
   registry: dict[RegistryKey, RegistryDescriptor],
   *,
   policy: SystemCompilationPolicy | None = None,
+  springs: tuple[SpringDeclaration, ...] = (),
 ) -> CompiledSystem:
-  """Normalize once and compile directly to the unexported generic system."""
+  """Normalize once and compile directly to the unexported generic system.
+
+  ``springs`` declares the point-spring groups of a mixed-family model: one
+  exact ``SpringDeclaration`` per group, each binding its own kernel. Groups
+  compile in order against the composed system through the landed
+  kernel-parameterized seam, so the wired path reproduces the standalone
+  ``compile_spring_operator``/``compose_system`` sequence exactly — same
+  operators, state layouts, coded diagnostics, membership validation, and
+  composed provenance. This is the acceptance shape prepared for the wave-8
+  converter: it parses each legacy spring element group into one declaration
+  and leaves all spring semantics to this channel; the base spec carries only
+  the region-routed families. Without ``springs`` the compiled content is
+  byte-identical to the region-routed path alone.
+  """
   normalized = normalize_model_spec(spec)
   selected_policy = _validated_policy(policy, normalized.source)
+  spring_family = cast(
+    SpringFamilyBuilder,
+    _operator_family(POINT_SPRING_FORMULATION_KEY[1]),
+  )
+  declarations = spring_family.select_declarations(springs, normalized.source)
   builder = _operator_family_builder(normalized)
   selection = builder.select_model(normalized)
   snapshot = builder.capture_registry(registry, selection)
@@ -500,7 +651,7 @@ def compile_system(
     dense_index_dtype=index_dtype.str,
     geometry_relative_tolerance=selected_policy.geometry_relative_tolerance,
   )
-  return _new(
+  system = _new(
     CompiledSystem,
     instance_id=InstanceId(),
     content_fingerprint=ContentFingerprint.from_manifest(manifest),
@@ -512,3 +663,10 @@ def compile_system(
     operators=tuple(operators),
     source_attribution=attributions,
   )
+  for declaration in declarations:
+    spring_block, spring_operator = spring_family.compile_group(
+      system,
+      declaration,
+    )
+    system = spring_family.compose(system, spring_block, spring_operator)
+  return system
