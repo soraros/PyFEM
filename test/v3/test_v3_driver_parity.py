@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Driver oracles vs legacy: shallow-truss nonlinear and patch_test8 skims.
+"""Driver oracles vs legacy: shallow-truss nonlinear/Riks and patch_test8 skims.
 
 Documented tolerances:
 
@@ -11,6 +11,14 @@ Documented tolerances:
   host is below 1e-12 (the residual norms differ slightly: legacy norms the
   constrained residual via ``C.T`` on free DOFs, the driver norms ``P.T r`` in
   reduced coordinates), so the documented band carries ~100x headroom.
+- Shallow truss Riks arc-length (same truss-only geometry, ``fixedStep``,
+  ``maxLam=10.0``, ``tol=1e-10`` both sides): the same documented band. The
+  observed per-cycle deviation on this host is below 7e-14 on the committed
+  load parameters and below 6e-17 on the committed states — the reduced-space
+  two-solve and the residual/reference norms differ from legacy's full-space
+  ``DofSpace`` arithmetic at the last-ulp level — with exact integer
+  cycle-count and per-cycle correction-count equality (fixedStep makes the
+  trajectory deterministic), so the documented band carries ~1000x headroom.
 - patch_test8_nonlinear / _ramp / _prescribed: the skim's own
   ``parity.toml`` (``rtol=1e-10``, ``atol=1e-12``); the observed final-state
   deviation is at the 1e-19 level (direct solves of an exactly linear
@@ -35,9 +43,19 @@ from pyfem.v3.compile.continuum import q8_reference_registry
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.compile.truss import truss_reference_registry
 from pyfem.v3.constraints import compile_constraint_map
-from pyfem.v3.driver import DriverStatus, NonlinearStaticDriver
+from pyfem.v3.driver import (
+  ArcLengthSettings,
+  ArcLengthTermination,
+  DriverStatus,
+  NonlinearStaticDriver,
+  RiksDriver,
+  SubstepStatus,
+)
 from pyfem.v3.io.dat import read_dat_mesh
-from pyfem.v3.io.solver_pro import parse_nonlinear_solver_settings
+from pyfem.v3.io.solver_pro import (
+  parse_nonlinear_solver_settings,
+  parse_riks_solver_settings,
+)
 from pyfem.v3.spec import (
   CellBlockSpec,
   CellRef,
@@ -111,6 +129,30 @@ solver =
   tol = 1.0e-10;
   iterMax = 25;
   loadTable = [0.25, 0.5, 0.75, 1.0];
+}};
+"""
+
+_SHALLOW_TRUSS_RIKS_PRO = """
+#  Shallow truss (ch.4 geometry) + RiksSolver arc-length continuation.
+#  Spring element of the Riks skim intentionally absent: pure truss pair.
+
+input = "{dat}";
+
+TrussElem =
+{{
+  type = "Truss";
+  E    = 5e6;
+  Area = 1.0;
+}};
+
+solver =
+{{
+  type = "RiksSolver";
+
+  tol = 1.0e-10;
+  iterMax = 25;
+  fixedStep = true;
+  maxLam = 10.0;
 }};
 """
 
@@ -244,6 +286,136 @@ def test_shallow_truss_nonlinear_matches_legacy(tmp_path: Path) -> None:
     rtol=0.0,
     atol=1.0e-6,
   )
+
+
+def _shallow_truss_riks_driver() -> RiksDriver:
+  system = compile_system(_shallow_truss_model(), truss_reference_registry())
+  coordinate_map = compile_constraint_map(
+    system,
+    constraints=tuple(
+      PrescribedDofSpec(
+        id=f"fix-{node}-{component}",
+        target=DofRef(
+          node_id=node,
+          field_id="displacement",
+          component=component,
+        ),
+        value=AffineValueSpec(constant=0.0),
+        source=_source(f"fix-{node}-{component}"),
+      )
+      for node in (0, 1)
+      for component in ("x", "y")
+    ),
+    coordinates=(ProgramCoordinateSpec(name="load", kind="load"),),
+  )
+  loads = (
+    NodalLoadSpec(
+      id="apex",
+      target=DofRef(node_id=2, field_id="displacement", component="y"),
+      value=AffineValueSpec(
+        coefficients=(AffineCoefficientSpec("load", -100.0, _source("coef")),),
+        source=_source("load"),
+      ),
+      source=_source("apex"),
+    ),
+  )
+  return RiksDriver(
+    system,
+    coordinate_map,
+    loads,
+    ArcLengthSettings(
+      tolerance=1.0e-10,
+      max_iterations=25,
+      fixed_step=True,
+      max_lam=10.0,
+    ),
+  )
+
+
+def _legacy_riks_cycles(pro_path: Path) -> list[tuple[float, int, np.ndarray]]:
+  """Legacy ``RiksSolver`` run cycle by cycle, capturing committed points."""
+  from pyfem.io.InputReader import InputRead
+  from pyfem.solvers.RiksSolver import RiksSolver
+
+  props, globdat = InputRead(str(pro_path))
+  solver = RiksSolver(props, globdat)
+  settings = parse_riks_solver_settings(pro_path.read_text(encoding="utf-8"))
+  assert settings is not None
+  solver.tol = settings.tol
+  solver.iterMax = settings.iter_max
+  solver.optiter = settings.opt_iter
+  solver.fixedStep = settings.fixed_step
+  solver.maxLam = settings.max_lam
+  solver.maxFactor = settings.max_factor
+  cycles: list[tuple[float, int, np.ndarray]] = []
+  while globdat.active:
+    solver.run(props, globdat)
+    cycles.append(
+      (
+        float(globdat.lam),
+        globdat.solverStatus.iiter,
+        np.asarray(globdat.state).copy(),
+      )
+    )
+  return cycles
+
+
+def test_shallow_truss_riks_matches_legacy_per_cycle(tmp_path: Path) -> None:
+  dat = tmp_path / "ShallowtrussRiksTrussOnly.dat"
+  pro = tmp_path / "skim.pro"
+  dat.write_text(_SHALLOW_TRUSS_DAT, encoding="utf-8")
+  pro.write_text(_SHALLOW_TRUSS_RIKS_PRO.format(dat=dat), encoding="utf-8")
+  legacy = _legacy_riks_cycles(pro)
+
+  driver = _shallow_truss_riks_driver()
+  result = driver.run(base_point=ProgramPoint())
+  assert result.status is DriverStatus.COMPLETED
+  assert result.termination_reason is ArcLengthTermination.LOAD_PARAMETER_LIMIT
+  committed = [
+    record for record in result.records if record.status is SubstepStatus.COMMITTED
+  ]
+  # Exact integer cycle-count equality: fixedStep makes the path deterministic.
+  assert len(committed) == len(legacy)
+  for record, (legacy_lam, legacy_iiter, legacy_state) in zip(
+    committed,
+    legacy,
+    strict=True,
+  ):
+    # Per-cycle committed points (lam_k, u_k) and correction-count equality.
+    np.testing.assert_allclose(
+      record.lam,
+      legacy_lam,
+      rtol=SHALLOW_TRUSS_RTOL,
+      atol=SHALLOW_TRUSS_ATOL,
+    )
+    assert record.committed_coefficients is not None
+    np.testing.assert_allclose(
+      record.committed_coefficients.values,
+      legacy_state,
+      rtol=SHALLOW_TRUSS_RTOL,
+      atol=SHALLOW_TRUSS_ATOL,
+    )
+    assert len(record.iterations) - 1 == legacy_iiter
+  # Final state equality (implied per-cycle, pinned explicitly).
+  np.testing.assert_allclose(
+    driver.owner.accepted_physical().values,
+    legacy[-1][2],
+    rtol=SHALLOW_TRUSS_RTOL,
+    atol=SHALLOW_TRUSS_ATOL,
+  )
+  # The final full-residual reactions equilibrate lam * fhat: symmetric
+  # supports each carry half the apex load, and the x reactions cancel.
+  observation = result.records[-1].observation
+  assert observation is not None
+  lam_final = result.final_continuation.lam
+  reactions = observation.reactions.values
+  np.testing.assert_allclose(
+    reactions[[1, 3]],
+    [50.0 * lam_final, 50.0 * lam_final],
+    rtol=1.0e-9,
+    atol=1.0e-8,
+  )
+  assert float(reactions[0] + reactions[2]) == pytest.approx(0.0, abs=1.0e-8)
 
 
 def _patch_model(dat_path: Path) -> tuple[ModelSpec, tuple, tuple, tuple]:
