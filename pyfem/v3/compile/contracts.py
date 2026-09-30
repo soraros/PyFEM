@@ -1,5 +1,14 @@
 """Frozen descriptor meaning for the first injected Q8 registry.
 
+The v1 descriptor set also covers the small-strain continuum breadth wave:
+the ``linear-tria3``, ``bilinear-quad4``, and ``trilinear-hex8`` topologies
+with their pinned quadrature rules, the three-dimensional small-strain
+kinematics, and the ``plane-strain-linear-elastic`` and
+``isotropic-linear-elastic`` (3D) linear laws — all mirroring the landed
+plane-stress v1 idiom. :func:`continuum_reference_registry` assembles the
+full v1 continuum set; snapshots capture exactly the keys a model selects,
+so the superset leaves existing pinned snapshots byte-identical.
+
 Also hosts the permanent stateful-material descriptor ABI (schema
 ``pyfem-v3-material-descriptor-v2``): typed per-entity state slots declared as
 canonical metadata, their compile-time resolution into ``OperatorStateLayout``
@@ -22,9 +31,20 @@ from typing import Protocol
 
 import numpy as np
 
-from pyfem.v3.fem.kinematics import strain_displacement
-from pyfem.v3.fem.quadrature import gauss_tensor_product_2d
-from pyfem.v3.fem.shapes import serendipity_quad8
+from pyfem.v3.fem.kinematics import strain_displacement, strain_displacement_3d
+from pyfem.v3.fem.quadrature import (
+  gauss_tensor_product_2d,
+  gauss_tensor_product_3d,
+  gauss_tria3,
+)
+from pyfem.v3.fem.shapes import (
+  bilinear_quad4,
+  linear_tria3,
+  serendipity_quad8,
+  trilinear_hex8,
+)
+from pyfem.v3.materials.isotropic import isotropic_matrix
+from pyfem.v3.materials.plane_strain import plane_strain_matrix
 from pyfem.v3.materials.plane_stress import plane_stress_matrix
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
@@ -153,6 +173,221 @@ def q8_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
       metadata=q8_descriptor_metadata(*Q8_MATERIAL_KEY),
       binding=plane_stress_matrix,
     ),
+  )
+  return {descriptor.key: descriptor for descriptor in descriptors}
+
+
+TRIA3_TOPOLOGY_KEY: RegistryKey = ("topology", "linear-tria3")
+QUAD4_TOPOLOGY_KEY: RegistryKey = ("topology", "bilinear-quad4")
+HEX8_TOPOLOGY_KEY: RegistryKey = ("topology", "trilinear-hex8")
+TRIA3_QUADRATURE_KEY: RegistryKey = ("quadrature", "gauss-tria3-1")
+QUAD4_QUADRATURE_KEY: RegistryKey = ("quadrature", "gauss-2x2")
+HEX8_QUADRATURE_KEY: RegistryKey = ("quadrature", "gauss-2x2x2")
+CONTINUUM_3D_FORMULATION_KEY: RegistryKey = (
+  "formulation",
+  "small-strain-continuum-3d",
+)
+PLANE_STRAIN_MATERIAL_KEY: RegistryKey = (
+  "material",
+  "plane-strain-linear-elastic",
+)
+ISOTROPIC_MATERIAL_KEY: RegistryKey = (
+  "material",
+  "isotropic-linear-elastic",
+)
+
+
+def breadth_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
+  """Return detached canonical metadata for one continuum breadth descriptor."""
+  key = (kind, name)
+  if key == TRIA3_TOPOLOGY_KEY:
+    return {
+      "schema": "pyfem-v3-topology-descriptor-v1",
+      "reference_topology": "triangle",
+      "parent_dimension": 2,
+      "embedding_dimension": 2,
+      "node_count": 3,
+      "parent_coordinates": ["xi", "eta"],
+      "local_node_parent_coordinates": [
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [0.0, 1.0],
+      ],
+      "shape_value_layout": ["point", "node"],
+      "parent_gradient_layout": ["point", "node", "parent_coordinate"],
+    }
+  if key == QUAD4_TOPOLOGY_KEY:
+    return {
+      "schema": "pyfem-v3-topology-descriptor-v1",
+      "reference_topology": "quadrilateral",
+      "parent_dimension": 2,
+      "embedding_dimension": 2,
+      "node_count": 4,
+      "parent_coordinates": ["xi", "eta"],
+      "local_node_parent_coordinates": [
+        [-1.0, -1.0],
+        [1.0, -1.0],
+        [1.0, 1.0],
+        [-1.0, 1.0],
+      ],
+      "shape_value_layout": ["point", "node"],
+      "parent_gradient_layout": ["point", "node", "parent_coordinate"],
+    }
+  if key == HEX8_TOPOLOGY_KEY:
+    return {
+      "schema": "pyfem-v3-topology-descriptor-v1",
+      "reference_topology": "hexahedron",
+      "parent_dimension": 3,
+      "embedding_dimension": 3,
+      "node_count": 8,
+      "parent_coordinates": ["xi", "eta", "zeta"],
+      "local_node_parent_coordinates": [
+        [-1.0, -1.0, -1.0],
+        [1.0, -1.0, -1.0],
+        [1.0, 1.0, -1.0],
+        [-1.0, 1.0, -1.0],
+        [-1.0, -1.0, 1.0],
+        [1.0, -1.0, 1.0],
+        [1.0, 1.0, 1.0],
+        [-1.0, 1.0, 1.0],
+      ],
+      "shape_value_layout": ["point", "node"],
+      "parent_gradient_layout": ["point", "node", "parent_coordinate"],
+    }
+  if key == TRIA3_QUADRATURE_KEY:
+    return {
+      "schema": "pyfem-v3-quadrature-descriptor-v1",
+      "family": "gauss-triangle",
+      "parent_coordinates": ["xi", "eta"],
+      "orders": [1],
+      "point_count": 1,
+      "binding_arguments": [1],
+    }
+  if key == QUAD4_QUADRATURE_KEY:
+    return {
+      "schema": "pyfem-v3-quadrature-descriptor-v1",
+      "family": "tensor-gauss-legendre",
+      "parent_coordinates": ["xi", "eta"],
+      "orders": [2, 2],
+      "point_count": 4,
+      "binding_arguments": [2],
+    }
+  if key == HEX8_QUADRATURE_KEY:
+    return {
+      "schema": "pyfem-v3-quadrature-descriptor-v1",
+      "family": "tensor-gauss-legendre",
+      "parent_coordinates": ["xi", "eta", "zeta"],
+      "orders": [2, 2, 2],
+      "point_count": 8,
+      "binding_arguments": [2],
+    }
+  if key == CONTINUUM_3D_FORMULATION_KEY:
+    return {
+      "schema": "pyfem-v3-formulation-descriptor-v1",
+      "field_quantity": "displacement",
+      "field_location": "node",
+      "field_components": ["x", "y", "z"],
+      "dofs_per_node": 3,
+      "kinematic_regime": "small-strain",
+      "strain_measure": "infinitesimal",
+      "strain_voigt_order": ["xx", "yy", "zz", "yz", "zx", "xy"],
+      "shear_convention": "engineering",
+      "formulation_history_width": 0,
+      "tangent_contribution": "material",
+      "tangent_symmetry": "symmetric",
+    }
+  if key == PLANE_STRAIN_MATERIAL_KEY:
+    return {
+      "schema": "pyfem-v3-material-descriptor-v1",
+      "law": "linear-elastic",
+      "stress_state": "plane-strain",
+      "parameter_names": ["youngs_modulus", "poisson_ratio"],
+      "parameter_dtype": "float64",
+      "stress_voigt_order": ["xx", "yy", "xy"],
+      "strain_shear_convention": "engineering",
+      "material_history_width": 0,
+      "tangent_class": "constant-symmetric",
+    }
+  if key == ISOTROPIC_MATERIAL_KEY:
+    return {
+      "schema": "pyfem-v3-material-descriptor-v1",
+      "law": "linear-elastic",
+      "stress_state": "three-dimensional",
+      "parameter_names": ["youngs_modulus", "poisson_ratio"],
+      "parameter_dtype": "float64",
+      "stress_voigt_order": ["xx", "yy", "zz", "yz", "zx", "xy"],
+      "strain_shear_convention": "engineering",
+      "material_history_width": 0,
+      "tangent_class": "constant-symmetric",
+    }
+  msg = "no continuum breadth descriptor metadata exists for that exact registry key"
+  raise KeyError(msg)
+
+
+def continuum_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
+  """Build the full v1 small-strain continuum registry (all landed geometries).
+
+  The superset carries every v1 continuum descriptor: the four topologies
+  (serendipity-quad8, linear-tria3, bilinear-quad4, trilinear-hex8) with their
+  pinned quadrature rules, the two-dimensional and three-dimensional
+  small-strain kinematics, and the three linear laws (plane-stress,
+  plane-strain, 3D isotropic). Snapshots capture exactly the keys a model
+  selects, so injecting this registry for a pinned Q8 model captures the same
+  descriptor bytes as the Q8-only registry.
+  """
+  bindings = {
+    Q8_TOPOLOGY_KEY: ("pyfem-v3-serendipity-quad8-v1", serendipity_quad8),
+    Q8_QUADRATURE_KEY: (
+      "pyfem-v3-gauss-tensor-product-2d-order-3-v1",
+      gauss_tensor_product_2d,
+    ),
+    Q8_FORMULATION_KEY: (
+      "pyfem-v3-small-strain-engineering-shear-v1",
+      strain_displacement,
+    ),
+    Q8_MATERIAL_KEY: (
+      "pyfem-v3-plane-stress-linear-elastic-v1",
+      plane_stress_matrix,
+    ),
+    TRIA3_TOPOLOGY_KEY: ("pyfem-v3-linear-tria3-v1", linear_tria3),
+    TRIA3_QUADRATURE_KEY: ("pyfem-v3-gauss-tria3-order-1-v1", gauss_tria3),
+    QUAD4_TOPOLOGY_KEY: ("pyfem-v3-bilinear-quad4-v1", bilinear_quad4),
+    QUAD4_QUADRATURE_KEY: (
+      "pyfem-v3-gauss-tensor-product-2d-order-2-v1",
+      gauss_tensor_product_2d,
+    ),
+    HEX8_TOPOLOGY_KEY: ("pyfem-v3-trilinear-hex8-v1", trilinear_hex8),
+    HEX8_QUADRATURE_KEY: (
+      "pyfem-v3-gauss-tensor-product-3d-order-2-v1",
+      gauss_tensor_product_3d,
+    ),
+    CONTINUUM_3D_FORMULATION_KEY: (
+      "pyfem-v3-small-strain-engineering-shear-3d-v1",
+      strain_displacement_3d,
+    ),
+    PLANE_STRAIN_MATERIAL_KEY: (
+      "pyfem-v3-plane-strain-linear-elastic-v1",
+      plane_strain_matrix,
+    ),
+    ISOTROPIC_MATERIAL_KEY: (
+      "pyfem-v3-isotropic-linear-elastic-v1",
+      isotropic_matrix,
+    ),
+  }
+  descriptors = tuple(
+    RegistryDescriptor(
+      kind=key[0],
+      name=key[1],
+      version="1",
+      implementation_id=implementation_id,
+      metadata=(
+        q8_descriptor_metadata(*key)
+        if key in Q8_REQUIRED_REGISTRY_KEYS
+        else breadth_descriptor_metadata(*key)
+      ),
+      binding=binding,
+    )
+    for key, (implementation_id, binding) in bindings.items()
   )
   return {descriptor.key: descriptor for descriptor in descriptors}
 

@@ -22,12 +22,13 @@ Deck structure (``.pro`` side):
   the v3 driver owns its own cutback schedule);
 - one element block per mesh group, named after the group, of type
   ``SmallStrainContinuum`` (with a nested ``material`` block of type
-  ``PlaneStress`` carrying ``E`` and ``nu``, or of type
-  ``IsotropicHardeningPlasticity`` carrying ``E``, ``nu``, ``syield``, and
-  ``hard`` — the linear-hardening configuration the v3 stateful law ships;
-  the legacy hardening-table (``EqPlasStrains``/``Stresses``) and power-law
-  (``q``/``K``) properties reject, citing the M25 scoping decision) or
-  ``Truss`` (carrying ``E`` and ``Area`` directly);
+  ``PlaneStress``, ``PlaneStrain``, or ``Isotropic`` carrying ``E`` and
+  ``nu``, or of type ``IsotropicHardeningPlasticity`` carrying ``E``,
+  ``nu``, ``syield``, and ``hard`` — the linear-hardening configuration the
+  v3 stateful law ships; the legacy hardening-table
+  (``EqPlasStrains``/``Stresses``) and power-law (``q``/``K``) properties
+  reject, citing the M25 scoping decision) or ``Truss`` (carrying ``E`` and
+  ``Area`` directly);
 - ``outputModules = [...]`` naming blocks whose ``type`` is a known legacy
   writer (``MeshWriter``, ``OutputWriter``, ``GraphWriter``, ``HDF5Writer``,
   ``DataDump``, ``ContourWriter``, ``ROMSnapshotWriter``). Writers do not
@@ -36,12 +37,16 @@ Deck structure (``.pro`` side):
 
 Mesh structure (``.dat`` side):
 
-- ``<Nodes>``: ``id x y;`` statements (2D decks only);
-- ``<Elements>``: ``id "Group" n1 ... nk;`` statements — eight nodes for
-  ``SmallStrainContinuum`` (serendipity quad8), two for ``Truss`` (line2);
+- ``<Nodes>``: ``id x y;`` statements on 2D decks, ``id x y z;`` on 3D
+  decks;
+- ``<Elements>``: ``id "Group" n1 ... nk;`` statements — two nodes for
+  ``Truss`` (line2); three (tria3), four (quad4), or eight (serendipity
+  quad8) nodes for 2D ``SmallStrainContinuum``; eight nodes (hex8) for 3D
+  ``SmallStrainContinuum``;
 - ``<NodeConstraints>``: prescribed DOFs ``u[i] = value;`` / ``v[i] = value;``
-  and one-master affine ties ``u[i] = offset + factor * v[j];`` (factor may be
-  omitted or follow the master: ``u[i] = v[j];``, ``u[i] = 2.0 * u[j];``);
+  (plus ``w[i] = value;`` on 3D decks) and one-master affine ties
+  ``u[i] = offset + factor * v[j];`` (factor may be omitted or follow the
+  master: ``u[i] = v[j];``, ``u[i] = 2.0 * u[j];``);
 - ``<ExternalForces>``: nodal loads ``v[i] = value;``.
 
 Semantics: every deck declares one ``load`` program coordinate. Under
@@ -49,8 +54,11 @@ Semantics: every deck declares one ``load`` program coordinate. Under
 linearly to a single full step (matching the legacy full-value application);
 under ``NonlinearSolver`` prescribed values, tie offsets, and loads all scale
 with the load coordinate, whose targets are the authored ``loadTable`` values
-or the ``dtime``/``maxCycle`` ramp. DOF types map ``u -> x``, ``v -> y`` on the
-node-supported ``displacement`` field.
+or the ``dtime``/``maxCycle`` ramp. DOF types map ``u -> x``, ``v -> y`` on
+2D decks and additionally ``w -> z`` on 3D decks, on the node-supported
+``displacement`` field. The ``PlaneStress`` and ``PlaneStrain`` laws require
+a 2D mesh; the ``Isotropic`` law requires a 3D mesh;
+``IsotropicHardeningPlasticity`` requires a 2D serendipity-quad8 mesh.
 
 Rejection codes
 ---------------
@@ -78,8 +86,11 @@ context — never a silent skip. Known legacy constructs and their codes:
 - ``missing-element-block`` — a mesh group with no same-named ``.pro`` block;
 - ``unsupported-element-groups`` — more than one element group in the mesh;
 - ``unsupported-material-model`` — material type outside
-  ``{PlaneStress, IsotropicHardeningPlasticity}`` (e.g. ``PlaneStrain``,
-  ``IsotropicKinematicHardening``);
+  ``{PlaneStress, PlaneStrain, Isotropic, IsotropicHardeningPlasticity}``
+  (e.g. ``IsotropicKinematicHardening``);
+- ``incompatible-material-geometry`` — a supported material on an
+  incompatible mesh: ``PlaneStress``/``PlaneStrain`` on a 3D mesh,
+  ``Isotropic`` on a 2D mesh;
 - ``unsupported-hardening-form`` — an ``IsotropicHardeningPlasticity``
   material carrying the legacy hardening-table (``EqPlasStrains``,
   ``Stresses``) or power-law (``q``, ``K``) properties; the v3 stateful law
@@ -88,8 +99,8 @@ context — never a silent skip. Known legacy constructs and their codes:
   the tangent, so no other hardening form ever defined plastic behavior);
 - ``unsupported-material-parameter`` / ``missing-material-parameter`` —
   extra keys in a material block, or a block without its model's required
-  properties (``E``/``nu`` for ``PlaneStress``; ``E``/``nu``/``syield``/
-  ``hard`` for ``IsotropicHardeningPlasticity``);
+  properties (``E``/``nu`` for ``PlaneStress``/``PlaneStrain``/``Isotropic``;
+  ``E``/``nu``/``syield``/``hard`` for ``IsotropicHardeningPlasticity``);
 - ``unsupported-solver-type`` — solver type outside
   ``{LinearSolver, NonlinearSolver}`` (e.g. ``RiksSolver``);
 - ``unsupported-solver-parameter`` — solver key outside the supported set;
@@ -99,10 +110,13 @@ context — never a silent skip. Known legacy constructs and their codes:
   (e.g. ``<NodeGroup>``, named ``<NodeConstraints name=...>`` tables,
   duplicate sections);
 - ``unsupported-gmsh-reference`` — ``gmsh = "file.msh";`` mesh references;
-- ``unsupported-mesh-rank`` — node coordinates that are not 2D;
+- ``unsupported-mesh-rank`` — node coordinates that are not 2D or 3D;
 - ``unsupported-cell-arity`` — cell node counts with no landed v3 geometry
-  (e.g. tri3, quad4, hex8 cells);
-- ``unsupported-dof-type`` — DOF types outside ``{u, v}``;
+  for the deck's element type and mesh rank (e.g. five-node cells, non-hex8
+  cells on a 3D mesh, non-line2 cells for ``Truss``, non-quad8 cells for the
+  stateful law), or mixed cell arities inside one mesh group;
+- ``unsupported-dof-type`` — DOF types outside ``{u, v, w}``, or ``w`` on a
+  2D mesh;
 - ``unsupported-node-group`` — named node-group references in constraint
   left- or right-hand sides (``u[name]``);
 - ``unsupported-tie-form`` — constraint right-hand sides outside the
@@ -134,6 +148,7 @@ from pyfem.v3.compile.continuum import (
   plasticity_reference_registry,
   q8_reference_registry,
 )
+from pyfem.v3.compile.contracts import continuum_reference_registry
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.compile.truss import truss_reference_registry
 from pyfem.v3.constraints import CompiledConstraintMap, compile_constraint_map
@@ -184,7 +199,7 @@ __all__ = [
 
 _LOAD_COORDINATE = "load"
 _FIELD_ID = "displacement"
-_DOF_COMPONENTS = {"u": "x", "v": "y"}
+_DOF_COMPONENTS = {"u": "x", "v": "y", "w": "z"}
 _KNOWN_OUTPUT_TYPES = frozenset(
   {
     "ContourWriter",
@@ -202,6 +217,12 @@ _NONLINEAR_SOLVER_KEYS = frozenset(
 _PLASTICITY_MODEL = "IsotropicHardeningPlasticity"
 _PLASTICITY_VALUE_KEYS = frozenset({"E", "nu", "syield", "hard"})
 _PLASTICITY_TABLE_KEYS = frozenset({"EqPlasStrains", "Stresses", "q", "K"})
+# Legacy elastic material type -> (v1 material model, required mesh rank).
+_ELASTIC_MATERIAL_MODELS = {
+  "PlaneStress": ("plane-stress-linear-elastic", 2),
+  "PlaneStrain": ("plane-strain-linear-elastic", 2),
+  "Isotropic": ("isotropic-linear-elastic", 3),
+}
 
 
 class DeckConversionError(ValueError):
@@ -1230,24 +1251,98 @@ def _parse_dat_load(
 
 
 @dataclass(frozen=True, slots=True)
-class _FamilyProfile:
+class _MaterialProfile:
+  """One validated element-block family: physics plus law, geometry deferred.
+
+  ``geometries`` lists the mesh ``(rank, cell_arity)`` pairs the family
+  accepts (its own unsupported-cell-arity rejections); ``required_rank``
+  pins the mesh rank the material law is defined on (``None`` when the
+  geometry set already pins it).
+  """
+
   formulation: str
-  quadrature: str
+  material_model: str
+  parameters: tuple[tuple[str, float, SourceContext], ...]
+  registry_kind: str
+  geometries: frozenset[tuple[int, int]]
+  required_rank: int | None
+  source: SourceContext
+
+
+@dataclass(frozen=True, slots=True)
+class _GeometryProfile:
+  """The resolved cell geometry of one deck's mesh group."""
+
   reference_topology: str
   topological_dimension: int
   embedding_dimension: int
   geometry_interpolation: str
   cell_arity: int
-  material_model: str
-  parameters: tuple[tuple[str, float, SourceContext], ...]
-  registry_kind: str
+  quadrature: str
+  field_components: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class _ElementProfile:
   name: str
-  family: _FamilyProfile | None
+  family: _MaterialProfile | None
   source: SourceContext
+
+
+_LINE2_GEOMETRY = _GeometryProfile(
+  reference_topology="line",
+  topological_dimension=1,
+  embedding_dimension=2,
+  geometry_interpolation="line2",
+  cell_arity=2,
+  quadrature="none",
+  field_components=("x", "y"),
+)
+_TRIA3_GEOMETRY = _GeometryProfile(
+  reference_topology="triangle",
+  topological_dimension=2,
+  embedding_dimension=2,
+  geometry_interpolation="linear-tria3",
+  cell_arity=3,
+  quadrature="gauss-tria3-1",
+  field_components=("x", "y"),
+)
+_QUAD4_GEOMETRY = _GeometryProfile(
+  reference_topology="quadrilateral",
+  topological_dimension=2,
+  embedding_dimension=2,
+  geometry_interpolation="bilinear-quad4",
+  cell_arity=4,
+  quadrature="gauss-2x2",
+  field_components=("x", "y"),
+)
+_QUAD8_GEOMETRY = _GeometryProfile(
+  reference_topology="quadrilateral",
+  topological_dimension=2,
+  embedding_dimension=2,
+  geometry_interpolation="serendipity-quad8",
+  cell_arity=8,
+  quadrature="gauss-3x3",
+  field_components=("x", "y"),
+)
+_HEX8_GEOMETRY = _GeometryProfile(
+  reference_topology="hexahedron",
+  topological_dimension=3,
+  embedding_dimension=3,
+  geometry_interpolation="trilinear-hex8",
+  cell_arity=8,
+  quadrature="gauss-2x2x2",
+  field_components=("x", "y", "z"),
+)
+_MESH_GEOMETRIES = {
+  (2, 2): _LINE2_GEOMETRY,
+  (2, 3): _TRIA3_GEOMETRY,
+  (2, 4): _QUAD4_GEOMETRY,
+  (2, 8): _QUAD8_GEOMETRY,
+  (3, 8): _HEX8_GEOMETRY,
+}
+_CONTINUUM_GEOMETRY_KEYS = frozenset(key for key in _MESH_GEOMETRIES if key != (2, 2))
+_SUPPORTED_MESH_RANKS = (2, 3)
 
 
 def _block_number(
@@ -1314,7 +1409,7 @@ def _block_number(
 def _continuum_family(
   block: _ProBlock,
   diagnostics: list[SpecDiagnostic],
-) -> _FamilyProfile | None:
+) -> _MaterialProfile | None:
   material_block: _ProBlock | None = None
   sound = True
   for item in block.items:
@@ -1356,12 +1451,14 @@ def _continuum_family(
       material_type = raw if type(raw) is str else None
   if material_type == _PLASTICITY_MODEL:
     return _plasticity_family(block, material_block, diagnostics)
-  if material_type != "PlaneStress":
+  elastic = _ELASTIC_MATERIAL_MODELS.get(material_type or "")
+  if elastic is None:
     diagnostics.append(
       _diagnostic(
         "unsupported-material-model",
         f"material model {material_type!r} is outside the supported deck "
-        "subset ('PlaneStress' and 'IsotropicHardeningPlasticity' only)",
+        "subset ('PlaneStress', 'PlaneStrain', 'Isotropic', and "
+        "'IsotropicHardeningPlasticity' only)",
         material_block.source,
       ),
     )
@@ -1384,24 +1481,22 @@ def _continuum_family(
       ),
     )
     sound = False
-  if not sound or material_type != "PlaneStress":
+  if not sound or elastic is None:
     return None
+  material_model, required_rank = elastic
   youngs = parameters["E"]
   poisson = parameters["nu"]
-  return _FamilyProfile(
+  return _MaterialProfile(
     formulation="small-strain-continuum",
-    quadrature="gauss-3x3",
-    reference_topology="quadrilateral",
-    topological_dimension=2,
-    embedding_dimension=2,
-    geometry_interpolation="serendipity-quad8",
-    cell_arity=8,
-    material_model="plane-stress-linear-elastic",
+    material_model=material_model,
     parameters=(
       ("youngs_modulus", youngs[0], youngs[1]),
       ("poisson_ratio", poisson[0], poisson[1]),
     ),
-    registry_kind="q8",
+    registry_kind="continuum",
+    geometries=_CONTINUUM_GEOMETRY_KEYS,
+    required_rank=required_rank,
+    source=material_block.source,
   )
 
 
@@ -1409,7 +1504,7 @@ def _plasticity_family(
   block: _ProBlock,
   material_block: _ProBlock,
   diagnostics: list[SpecDiagnostic],
-) -> _FamilyProfile | None:
+) -> _MaterialProfile | None:
   """Read the linear-hardening plasticity form into the v2 stateful descriptor.
 
   Only the ``hard`` configuration converts: the legacy law's plastic branch
@@ -1464,14 +1559,8 @@ def _plasticity_family(
   poisson = parameters["nu"]
   syield = parameters["syield"]
   hard = parameters["hard"]
-  return _FamilyProfile(
+  return _MaterialProfile(
     formulation="small-strain-continuum",
-    quadrature="gauss-3x3",
-    reference_topology="quadrilateral",
-    topological_dimension=2,
-    embedding_dimension=2,
-    geometry_interpolation="serendipity-quad8",
-    cell_arity=8,
     material_model="isotropic-hardening-plasticity",
     parameters=(
       ("youngs_modulus", youngs[0], youngs[1]),
@@ -1480,13 +1569,16 @@ def _plasticity_family(
       ("hardening_slope", hard[0], hard[1]),
     ),
     registry_kind="plasticity",
+    geometries=frozenset({(2, 8)}),
+    required_rank=2,
+    source=material_block.source,
   )
 
 
 def _truss_family(
   block: _ProBlock,
   diagnostics: list[SpecDiagnostic],
-) -> _FamilyProfile | None:
+) -> _MaterialProfile | None:
   parameters, sound = _block_number(
     block,
     "element block",
@@ -1508,20 +1600,17 @@ def _truss_family(
     return None
   youngs = parameters["E"]
   area = parameters["Area"]
-  return _FamilyProfile(
+  return _MaterialProfile(
     formulation="total-lagrangian-truss",
-    quadrature="none",
-    reference_topology="line",
-    topological_dimension=1,
-    embedding_dimension=2,
-    geometry_interpolation="line2",
-    cell_arity=2,
     material_model="uniaxial-linear-elastic",
     parameters=(
       ("youngs_modulus", youngs[0], youngs[1]),
       ("area", area[0], area[1]),
     ),
     registry_kind="truss",
+    geometries=frozenset({(2, 2)}),
+    required_rank=None,
+    source=block.source,
   )
 
 
@@ -1743,7 +1832,8 @@ def _check_mesh(
   deck: _DatDeck,
   file_source: SourceContext,
   diagnostics: list[SpecDiagnostic],
-) -> None:
+) -> int | None:
+  """Validate mesh structure and return the mesh rank (coordinate count)."""
   if not deck.nodes:
     diagnostics.append(
       _diagnostic("empty-mesh", "the mesh declares no nodes", file_source)
@@ -1775,11 +1865,11 @@ def _check_mesh(
           node.source,
         ),
       )
-  if arity is not None and arity != 2:
+  if arity is not None and arity not in _SUPPORTED_MESH_RANKS:
     diagnostics.append(
       _diagnostic(
         "unsupported-mesh-rank",
-        f"node coordinates are {arity}D; the supported deck subset is 2D",
+        f"node coordinates are {arity}D; the supported deck subset is 2D or 3D",
         deck.nodes[0].source,
       ),
     )
@@ -1803,23 +1893,30 @@ def _check_mesh(
             element.source,
           ),
         )
+  return arity
 
 
 def _check_dofs(
   deck: _DatDeck,
+  rank: int | None,
   diagnostics: list[SpecDiagnostic],
 ) -> None:
   node_ids = {node.id for node in deck.nodes}
   for item in deck.prescribed:
-    _check_dof_target(item.node_id, item.dof_type, item.source, node_ids, diagnostics)
+    _check_dof_target(
+      item.node_id, item.dof_type, item.source, node_ids, rank, diagnostics
+    )
   for item in deck.loads:
-    _check_dof_target(item.node_id, item.dof_type, item.source, node_ids, diagnostics)
+    _check_dof_target(
+      item.node_id, item.dof_type, item.source, node_ids, rank, diagnostics
+    )
   for tie in deck.ties:
     _check_dof_target(
       tie.slave_node_id,
       tie.slave_dof_type,
       tie.source,
       node_ids,
+      rank,
       diagnostics,
     )
     _check_dof_target(
@@ -1827,6 +1924,7 @@ def _check_dofs(
       tie.master_dof_type,
       tie.source,
       node_ids,
+      rank,
       diagnostics,
     )
 
@@ -1836,6 +1934,7 @@ def _check_dof_target(
   dof_type: str,
   source: SourceContext,
   node_ids: set[int],
+  rank: int | None,
   diagnostics: list[SpecDiagnostic],
 ) -> None:
   if dof_type not in _DOF_COMPONENTS:
@@ -1844,6 +1943,14 @@ def _check_dof_target(
         "unsupported-dof-type",
         f"DOF type {dof_type!r} is outside the supported deck subset "
         f"({sorted(_DOF_COMPONENTS)} only)",
+        source,
+      ),
+    )
+  elif dof_type == "w" and rank != 3:
+    diagnostics.append(
+      _diagnostic(
+        "unsupported-dof-type",
+        "DOF type 'w' requires a 3D mesh",
         source,
       ),
     )
@@ -1937,10 +2044,60 @@ def _emit_program(
   )
 
 
+def _resolve_geometry(
+  group: str,
+  rank: int,
+  family: _MaterialProfile,
+  elements: tuple[_DatElement, ...],
+  diagnostics: list[SpecDiagnostic],
+) -> _GeometryProfile | None:
+  """Resolve the single cell geometry of one mesh group.
+
+  Every element's ``(rank, arity)`` must name a geometry the deck's element
+  family accepts, and all elements of the group must resolve to the same
+  geometry. Violations record coded ``unsupported-cell-arity`` diagnostics.
+  """
+  geometry: _GeometryProfile | None = None
+  geometry_key: tuple[int, int] | None = None
+  supported = sorted(
+    {_MESH_GEOMETRIES[key].geometry_interpolation for key in family.geometries}
+  )
+  for element in elements:
+    if element.group != group:
+      continue
+    arity = len(element.node_ids)
+    key = (rank, arity)
+    if key not in family.geometries:
+      diagnostics.append(
+        _diagnostic(
+          "unsupported-cell-arity",
+          f"element {element.id} has {arity} nodes on a {rank}D mesh; the "
+          f"supported cells for this deck are {supported}",
+          element.source,
+        ),
+      )
+      continue
+    if geometry_key is None:
+      geometry_key = key
+      geometry = _MESH_GEOMETRIES[key]
+    elif key != geometry_key:
+      diagnostics.append(
+        _diagnostic(
+          "unsupported-cell-arity",
+          f"element {element.id} has {arity} nodes; the deck's geometry for "
+          f"{group!r} is {geometry.geometry_interpolation} "
+          f"({geometry.cell_arity} nodes)",
+          element.source,
+        ),
+      )
+  return geometry
+
+
 def _emit_model(
   deck: _DatDeck,
   group: str,
   profile: _ElementProfile,
+  geometry: _GeometryProfile,
   pro_source: SourceContext,
 ) -> ModelSpec:
   family = profile.family
@@ -1962,16 +2119,16 @@ def _emit_model(
   )
   block = CellBlockSpec(
     id=group,
-    reference_topology=family.reference_topology,
-    topological_dimension=family.topological_dimension,
-    embedding_dimension=family.embedding_dimension,
-    geometry_interpolation=family.geometry_interpolation,
+    reference_topology=geometry.reference_topology,
+    topological_dimension=geometry.topological_dimension,
+    embedding_dimension=geometry.embedding_dimension,
+    geometry_interpolation=geometry.geometry_interpolation,
     cells=cells,
     source=profile.source,
   )
   field = FieldSpec(
     id=_FIELD_ID,
-    components=("x", "y"),
+    components=geometry.field_components,
     location="node",
     source=profile.source,
   )
@@ -1990,7 +2147,7 @@ def _emit_model(
     field_ids=(field.id,),
     material_id=material.id,
     formulation=family.formulation,
-    quadrature=family.quadrature,
+    quadrature=geometry.quadrature,
     source=profile.source,
   )
   return ModelSpec(
@@ -2074,8 +2231,8 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
       dat_deck = _read_dat_deck(dat_text, dat_path, diagnostics)
 
   if dat_deck is not None:
-    _check_mesh(dat_deck, SourceContext(source=str(dat_path)), diagnostics)
-    _check_dofs(dat_deck, diagnostics)
+    rank = _check_mesh(dat_deck, SourceContext(source=str(dat_path)), diagnostics)
+    _check_dofs(dat_deck, rank, diagnostics)
     groups = tuple(dict.fromkeys(element.group for element in dat_deck.elements))
     if len(groups) > 1:
       diagnostics.append(
@@ -2086,6 +2243,7 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
           dat_deck.elements[0].source,
         ),
       )
+    geometries: dict[str, _GeometryProfile | None] = {}
     for group in groups:
       profile = profiles.get(group)
       if profile is None:
@@ -2098,19 +2256,31 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
         )
         continue
       if profile.family is None:
+        geometries[group] = None
         continue
-      arity = profile.family.cell_arity
-      for element in dat_deck.elements:
-        if element.group == group and len(element.node_ids) != arity:
-          diagnostics.append(
-            _diagnostic(
-              "unsupported-cell-arity",
-              f"element {element.id} has {len(element.node_ids)} nodes; the "
-              f"landed v3 geometry for {group!r} is "
-              f"{profile.family.geometry_interpolation} ({arity} nodes)",
-              element.source,
-            ),
-          )
+      geometry: _GeometryProfile | None = None
+      if rank in _SUPPORTED_MESH_RANKS:
+        geometry = _resolve_geometry(
+          group,
+          rank,
+          profile.family,
+          dat_deck.elements,
+          diagnostics,
+        )
+      geometries[group] = geometry
+      if (
+        geometry is not None
+        and profile.family.required_rank is not None
+        and profile.family.required_rank != rank
+      ):
+        diagnostics.append(
+          _diagnostic(
+            "incompatible-material-geometry",
+            f"material model {profile.family.material_model!r} requires a "
+            f"{profile.family.required_rank}D mesh; the deck mesh is {rank}D",
+            profile.family.source,
+          ),
+        )
     unused = set(profiles) - set(groups)
     for name in sorted(unused):
       diagnostics.append(
@@ -2130,8 +2300,12 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
 
   group = groups[0]
   profile = profiles[group]
+  geometry = geometries[group]
+  if profile.family is None or geometry is None:
+    msg = "conversion invariants failed without a recorded diagnostic"
+    raise ValueError(msg)
   pro_source = SourceContext(source=str(pro_path))
-  model = _emit_model(dat_deck, group, profile, pro_source)
+  model = _emit_model(dat_deck, group, profile, geometry, pro_source)
   program = _emit_program(
     dat_deck,
     ramped=settings.solver_type == "NonlinearSolver",
@@ -2139,12 +2313,18 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
     if pro_deck.solver_block is not None
     else pro_source,
   )
-  if profile.family is not None and profile.family.registry_kind == "q8":
-    registry = q8_reference_registry()
-  elif profile.family is not None and profile.family.registry_kind == "plasticity":
+  family = profile.family
+  if family.registry_kind == "plasticity":
     registry = plasticity_reference_registry()
-  else:
+  elif family.registry_kind == "truss":
     registry = truss_reference_registry()
+  elif (
+    family.material_model == "plane-stress-linear-elastic"
+    and geometry.geometry_interpolation == "serendipity-quad8"
+  ):
+    registry = q8_reference_registry()
+  else:
+    registry = continuum_reference_registry()
   return ConvertedDeck(
     name=pro_path.stem,
     pro_path=pro_path,

@@ -49,7 +49,15 @@ from pyfem.v3.spec.program import (
 ROOT = Path(__file__).resolve().parents[2]
 SKIMS = ROOT / "skims"
 
-LINEAR_SKIMS = ("patch_test8", "patch_test8_loaded", "patch_test8_mpc")
+LINEAR_SKIMS = (
+  "patch_test8",
+  "patch_test8_loaded",
+  "patch_test8_mpc",
+  "patch_test3",
+  "patch_test4",
+  "patch_test8_3d",
+  "patch_test8_plane_strain",
+)
 NONLINEAR_SKIMS = (
   "patch_test8_nonlinear",
   "patch_test8_nonlinear_prescribed",
@@ -59,14 +67,6 @@ ROUND_TRIP_SKIMS = LINEAR_SKIMS + NONLINEAR_SKIMS
 
 # code sets expected when converting the out-of-subset skims decks
 SKIM_REJECTIONS = {
-  "patch_test3": {"unsupported-cell-arity"},
-  "patch_test4": {"unsupported-cell-arity"},
-  "patch_test8_3d": {
-    "unsupported-mesh-rank",
-    "unsupported-material-model",
-    "unsupported-dof-type",
-  },
-  "patch_test8_plane_strain": {"unsupported-material-model"},
   "cantilever8": {"unsupported-element-type"},
   "shallow_truss_riks": {
     "unsupported-element-type",
@@ -240,6 +240,100 @@ def test_patch_test8_loaded_deck_reads_nodal_loads() -> None:
   assert coefficient.coefficient == pytest.approx(1000.0)
 
 
+def test_patch_test3_deck_reads_the_tri3_slice() -> None:
+  deck = read_legacy_deck(SKIMS / "patch_test3" / "skim.pro")
+  (block,) = deck.model.mesh.cell_blocks
+  assert block.reference_topology == "triangle"
+  assert block.topological_dimension == 2
+  assert block.embedding_dimension == 2
+  assert block.geometry_interpolation == "linear-tria3"
+  assert len(block.cells) == 10
+  assert all(len(cell.node_ids) == 3 for cell in block.cells)
+  (field,) = deck.model.fields
+  assert field.components == ("x", "y")
+  (material,) = deck.model.materials
+  assert material.model == "plane-stress-linear-elastic"
+  (region,) = deck.model.regions
+  assert region.formulation == "small-strain-continuum"
+  assert region.quadrature == "gauss-tria3-1"
+  assert len(deck.program.constraints) == 8
+  assert ("topology", "linear-tria3") in deck.registry
+  assert ("quadrature", "gauss-tria3-1") in deck.registry
+
+
+def test_patch_test4_deck_reads_the_quad4_slice() -> None:
+  deck = read_legacy_deck(SKIMS / "patch_test4" / "skim.pro")
+  (block,) = deck.model.mesh.cell_blocks
+  assert block.reference_topology == "quadrilateral"
+  assert block.geometry_interpolation == "bilinear-quad4"
+  assert len(block.cells) == 5
+  assert all(len(cell.node_ids) == 4 for cell in block.cells)
+  (material,) = deck.model.materials
+  assert material.model == "plane-stress-linear-elastic"
+  (region,) = deck.model.regions
+  assert region.quadrature == "gauss-2x2"
+  assert ("topology", "bilinear-quad4") in deck.registry
+  assert ("quadrature", "gauss-2x2") in deck.registry
+
+
+def test_patch_test8_3d_deck_reads_the_hex8_3d_slice() -> None:
+  deck = read_legacy_deck(SKIMS / "patch_test8_3d" / "skim.pro")
+  assert len(deck.model.mesh.nodes) == 16
+  assert deck.model.mesh.nodes[2].coordinates == (0.24, 0.12, 0.0)
+  (block,) = deck.model.mesh.cell_blocks
+  assert block.reference_topology == "hexahedron"
+  assert block.topological_dimension == 3
+  assert block.embedding_dimension == 3
+  assert block.geometry_interpolation == "trilinear-hex8"
+  assert len(block.cells) == 5
+  assert all(len(cell.node_ids) == 8 for cell in block.cells)
+  (field,) = deck.model.fields
+  assert field.components == ("x", "y", "z")
+  (material,) = deck.model.materials
+  assert material.model == "isotropic-linear-elastic"
+  parameters = {parameter.name: parameter.value for parameter in material.parameters}
+  assert parameters == {"youngs_modulus": 1.0e6, "poisson_ratio": 0.25}
+  (region,) = deck.model.regions
+  assert region.formulation == "small-strain-continuum"
+  assert region.quadrature == "gauss-2x2x2"
+  assert len(deck.program.constraints) == 24
+  w_constraints = [
+    constraint
+    for constraint in deck.program.constraints
+    if constraint.target.component == "z"
+  ]
+  assert len(w_constraints) == 8
+  assert {constraint.target.node_id for constraint in w_constraints} == {
+    0,
+    1,
+    22,
+    3,
+    14,
+    5,
+    6,
+    99,
+  }
+  assert all(constraint.value.constant == 0.0 for constraint in w_constraints)
+  assert ("topology", "trilinear-hex8") in deck.registry
+  assert ("quadrature", "gauss-2x2x2") in deck.registry
+  assert ("formulation", "small-strain-continuum-3d") in deck.registry
+  assert ("material", "isotropic-linear-elastic") in deck.registry
+
+
+def test_patch_test8_plane_strain_deck_reads_the_plane_strain_law() -> None:
+  deck = read_legacy_deck(SKIMS / "patch_test8_plane_strain" / "skim.pro")
+  (block,) = deck.model.mesh.cell_blocks
+  assert block.geometry_interpolation == "serendipity-quad8"
+  (material,) = deck.model.materials
+  assert material.model == "plane-strain-linear-elastic"
+  parameters = {parameter.name: parameter.value for parameter in material.parameters}
+  assert parameters == {"youngs_modulus": 1.0e6, "poisson_ratio": 0.25}
+  (region,) = deck.model.regions
+  assert region.formulation == "small-strain-continuum"
+  assert region.quadrature == "gauss-3x3"
+  assert ("material", "plane-strain-linear-elastic") in deck.registry
+
+
 def test_compile_deck_uses_landed_compiler_unchanged() -> None:
   deck = read_legacy_deck(SKIMS / "patch_test8" / "skim.pro")
   compiled = compile_deck(deck)
@@ -266,16 +360,43 @@ def test_mini_deck_converts(tmp_path: Path) -> None:
 # --- round-trip oracles ----------------------------------------------------------
 
 
+def _legacy_state_in_compiled_order(
+  deck: ConvertedDeck,
+  system: CompiledSystem,
+  legacy: np.ndarray,
+) -> np.ndarray:
+  """Permute a legacy state vector into the compiled coefficient order.
+
+  Legacy assigns DOFs in ``.dat`` declaration order; the compiled system
+  orders coefficients by sorted node id. The orders agree on decks with
+  sequentially declared ids (every previously landed parity deck, where this
+  mapping is the identity) and differ on the breadth decks (patch_test3,
+  patch_test4, patch_test8_3d), so the faithful per-coefficient comparison
+  maps the legacy state through the compiled ``coefficient_ids``.
+  """
+  position = {node.id: index for index, node in enumerate(deck.model.mesh.nodes)}
+  components = deck.model.fields[0].components
+  component_index = {component: index for index, component in enumerate(components)}
+  ndof = len(components)
+  state = np.empty(legacy.shape, dtype=np.float64)
+  space = system.spaces[0]
+  for row, (_field_id, node_id, component) in enumerate(space.coefficient_ids):
+    state[row] = legacy[position[node_id] * ndof + component_index[component]]
+  return state
+
+
 @pytest.mark.parametrize("skim_name", ROUND_TRIP_SKIMS)
 def test_skim_deck_round_trip_matches_legacy(skim_name: str) -> None:
   skim_dir = SKIMS / skim_name
   deck = read_legacy_deck(skim_dir / "skim.pro")
+  compiled = compile_deck(deck)
   run = run_deck(deck)
   assert run.result.status is DriverStatus.COMPLETED
   if deck.solver.solver_type == "LinearSolver":
     legacy = legacy_state(skim_dir / "skim.pro")
   else:
     legacy = legacy_nonlinear_state(skim_dir / "skim.pro")
+  legacy = _legacy_state_in_compiled_order(deck, compiled.system, legacy)
   rtol, atol = load_parity_tolerances(skim_dir)
   np.testing.assert_allclose(run.state, legacy, rtol=rtol, atol=atol)
 
@@ -615,6 +736,13 @@ def test_table_hardening_rejection_cites_the_m25_scoping(tmp_path: Path) -> None
   assert "EqPlasStrains" in diagnostic.message
 
 
+def test_plasticity_on_non_quad8_mesh_rejects_with_coded_arity(tmp_path: Path) -> None:
+  dat = _plasticity_dat().replace(_PLASTICITY_ELEMENT, ' 1 "ContElem" 1 2 3;')
+  with pytest.raises(DeckConversionError) as excinfo:
+    _convert_mini(tmp_path, _plasticity_pro(), dat)
+  assert _rejection_codes(excinfo) == {"unsupported-cell-arity"}
+
+
 # --- coded rejections ------------------------------------------------------------
 
 
@@ -626,7 +754,7 @@ def test_out_of_subset_skims_reject_with_coded_diagnostics(skim_name: str) -> No
 
 
 def test_rejections_render_source_context(tmp_path: Path) -> None:
-  dat = _mini_dat(elements=' 1 "ContElem" 0 4 1;')
+  dat = _mini_dat(elements=' 1 "ContElem" 0 4 1 5 2;')
   with pytest.raises(DeckConversionError) as excinfo:
     _convert_mini(tmp_path, _mini_pro(), dat)
   rendered = str(excinfo.value)
@@ -704,10 +832,19 @@ _PRO_REJECTIONS = {
     _mini_pro(
       element_block=_MINI_ELEMENT_BLOCK.replace(
         'type = "PlaneStress";',
-        'type = "PlaneStrain";',
+        'type = "MooneyRivlin";',
       ),
     ),
     {"unsupported-material-model"},
+  ),
+  "isotropic-on-2d-mesh": (
+    _mini_pro(
+      element_block=_MINI_ELEMENT_BLOCK.replace(
+        'type = "PlaneStress";',
+        'type = "Isotropic";',
+      ),
+    ),
+    {"incompatible-material-geometry"},
   ),
   "missing-element-block": (
     _mini_pro(
@@ -819,14 +956,24 @@ _DAT_REJECTIONS = {
         " 4 0.5 0.0 0.0; 5 1.0 0.5 0.0; 6 0.5 1.0 0.0; 7 0.0 0.5 0.0;"
       ),
     ),
-    {"unsupported-mesh-rank"},
+    {"incompatible-material-geometry"},
   ),
-  "tri3-cell": (
-    _mini_dat(elements=' 1 "ContElem" 0 4 1;'),
+  "five-node-cell": (
+    _mini_dat(elements=' 1 "ContElem" 0 4 1 5 2;'),
+    {"unsupported-cell-arity"},
+  ),
+  "mixed-cell-arities": (
+    _mini_dat(
+      elements=_MINI_ELEMENTS + '\n 2 "ContElem" 0 4 1;',
+    ),
     {"unsupported-cell-arity"},
   ),
   "unsupported-dof-type": (
     _mini_dat(constraints=_MINI_CONSTRAINTS + "\n w[1] = 0.0;"),
+    {"unsupported-dof-type"},
+  ),
+  "unknown-dof-type": (
+    _mini_dat(constraints=_MINI_CONSTRAINTS + "\n q[1] = 0.0;"),
     {"unsupported-dof-type"},
   ),
   "node-group-reference": (
