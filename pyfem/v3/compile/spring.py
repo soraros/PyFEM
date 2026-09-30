@@ -5,9 +5,12 @@ researcher authors a plain batched kernel — displacements and accepted state
 rows in, force, tangent, trial rows, and a typed evaluation status out — plus a
 small declaration of state slots and parameters. The compiler owns every
 trusted carrier, validates the kernel against its declared schema once at the
-compile boundary, and the resulting operator coexists with the zero-width Q8
-slice in one composed compiled system. Kernels never touch transactions,
-codecs, or carrier construction.
+compile boundary, and checks the kernel tangent against a central finite
+difference of its force at seeded nonzero accepted states, so a tangent wrong
+only off the virgin probe state fails compilation with a coded diagnostic
+instead of evaluating silently wrong. The resulting operator coexists with the
+zero-width Q8 slice in one composed compiled system. Kernels never touch
+transactions, codecs, or carrier construction.
 """
 
 from __future__ import annotations
@@ -56,6 +59,16 @@ from pyfem.v3.spec.diagnostics import SourceContext
 SPRING_SYSTEM_EXTENSION_SCHEMA = "pyfem-v3-compiled-system-spring-extension-v1"
 DAMAGE_ENVELOPE_STATE_SCHEMA = "pyfem-v3-spring-damage-envelope-v1"
 _FLOAT64_DTYPE = np.dtype(np.float64).str
+
+# The tangent probe draws a handful of nonzero accepted states from one
+# fixed-seed generator and central-differences the kernel force at each state
+# the kernel accepts. The seed, state count, relative tolerance, and step are
+# part of the conformance contract: the seed is recorded in every probe
+# diagnostic so a failure replays bit-for-bit.
+_TANGENT_PROBE_SEED = 20260930
+_TANGENT_PROBE_STATE_COUNT = 3
+_TANGENT_PROBE_RTOL = 1.0e-4
+_TANGENT_PROBE_STEP = float(np.cbrt(np.finfo(np.float64).eps))
 
 
 def _new[ValueT](cls: type[ValueT], /, **fields: object) -> ValueT:
@@ -299,6 +312,109 @@ def _validated_kernel_arrays(
   return result.force, result.tangent, result.trial_rows, status
 
 
+def _probe_kernel_tangent(
+  kernel: SpringKernel,
+  parameters: np.ndarray,
+  *,
+  entity_count: int,
+  row_width: int,
+  source: SourceContext,
+) -> None:
+  """Central-difference the kernel tangent at seeded nonzero accepted states.
+
+  The virgin-state probe proves array and status plumbing only, so a tangent
+  wrong solely at nonzero accepted state would compile clean and evaluate
+  silently wrong. Every seeded state the kernel accepts is checked by a
+  central finite difference of the force along each displacement component.
+  States — or stencil legs — the kernel rejects with a typed status carry no
+  channels to verify and are skipped. The draws come from one fixed-seed
+  generator and the seed is recorded in every diagnostic, so a failure
+  replays bit-for-bit.
+  """
+  generator = np.random.default_rng(_TANGENT_PROBE_SEED)
+  for state_index in range(_TANGENT_PROBE_STATE_COUNT):
+    displacements = generator.standard_normal((entity_count, 2))
+    accepted_rows = generator.standard_normal((entity_count, row_width))
+    # The probe mirrors runtime input mutability exactly, exactly as at the
+    # virgin state: every array handed to the kernel is read-only.
+    displacements.setflags(write=False)
+    accepted_rows.setflags(write=False)
+    try:
+      probed = kernel(displacements, accepted_rows, parameters)
+    except Exception:
+      _fail(
+        "kernel-probe-failed",
+        "spring kernel failed its seeded nonzero-state compile probe "
+        f"(seed {_TANGENT_PROBE_SEED}, state {state_index})",
+        source,
+      )
+    _, tangent, _, status = _validated_kernel_arrays(
+      probed,
+      entity_count=entity_count,
+      row_width=row_width,
+    )
+    if status is not EvaluationStatus.OK:
+      continue
+    for entity_index in range(entity_count):
+      for component in range(2):
+        step = _TANGENT_PROBE_STEP * max(
+          1.0,
+          abs(float(displacements[entity_index, component])),
+        )
+        plus = np.array(displacements, copy=True)
+        minus = np.array(displacements, copy=True)
+        plus[entity_index, component] += step
+        minus[entity_index, component] -= step
+        plus.setflags(write=False)
+        minus.setflags(write=False)
+        try:
+          plus_result = kernel(plus, accepted_rows, parameters)
+          minus_result = kernel(minus, accepted_rows, parameters)
+        except Exception:
+          _fail(
+            "kernel-probe-failed",
+            "spring kernel failed its seeded nonzero-state compile probe "
+            f"(seed {_TANGENT_PROBE_SEED}, state {state_index}, entity "
+            f"{entity_index}, component {component})",
+            source,
+          )
+        plus_force, _, _, plus_status = _validated_kernel_arrays(
+          plus_result,
+          entity_count=entity_count,
+          row_width=row_width,
+        )
+        minus_force, _, _, minus_status = _validated_kernel_arrays(
+          minus_result,
+          entity_count=entity_count,
+          row_width=row_width,
+        )
+        if (
+          plus_status is not EvaluationStatus.OK
+          or minus_status is not EvaluationStatus.OK
+        ):
+          continue
+        difference = (plus_force[entity_index] - minus_force[entity_index]) / (
+          2.0 * step
+        )
+        column = tangent[entity_index, :, component]
+        scale = max(
+          1.0,
+          float(np.abs(column).max()),
+          float(np.abs(difference).max()),
+        )
+        mismatch = float(np.abs(column - difference).max())
+        if mismatch > _TANGENT_PROBE_RTOL * scale:
+          _fail(
+            "inconsistent-kernel-tangent",
+            "spring kernel tangent contradicts a central finite difference of "
+            "its force at a seeded nonzero accepted state (seed "
+            f"{_TANGENT_PROBE_SEED}, state {state_index}, entity "
+            f"{entity_index}, component {component}): kernel tangent column "
+            f"{column.tolist()} vs finite difference {difference.tolist()}",
+            source,
+          )
+
+
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class SpringPayload(CompilerConstructed):
   parameters: FinalizedArray
@@ -473,6 +589,13 @@ def compile_spring_operator(
       "spring kernel must evaluate its virgin zero state successfully",
       source,
     )
+  _probe_kernel_tangent(
+    declaration.kernel,
+    parameters.values,
+    entity_count=entity_count,
+    row_width=row_width,
+    source=source,
+  )
 
   spring_block = _new(
     PointEntityBlock,
