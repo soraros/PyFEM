@@ -29,3 +29,14 @@ The `known-first-party` / `known-third-party` isort entries and the dual
 per-file-ignores patterns in those configs pin import classification and
 ignore matching under both of ruff's project-root resolutions — do not drop
 them.
+
+## Bitwise pins and the reference platform
+
+Byte-identity (raw-uint64) numerical pins are defined on one reference
+platform: the machine recorded in the bench manifests
+(`bench/results/*.json` — macOS x86_64 i9-9980HK, the pyproject-pinned
+numba/numpy, Accelerate BLAS). On any other platform the same assertions run
+through the documented tolerance branch of `assert_bitwise_pin` in
+`test/v3/conftest.py`: the platform selects the comparison, it never skips
+it, and each call site's tolerance must exceed the observed cross-platform
+deviation, with that deviation cited in a comment.
