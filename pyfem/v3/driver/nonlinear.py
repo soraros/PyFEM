@@ -34,9 +34,14 @@ Protocol summary:
   and constraint work are observed from the FULL residual at commit.
 - Program signals reach operators exclusively through the plan: each substep
   binds its fixed trial point once into per-operator ``ProgramSignalInput``
-  values (identity-bound coordinates this revision), so schedule-owned time
-  replaces any solverStat-style hidden global. Operators without declared
-  signal ports keep receiving an empty signal tuple.
+  values, so schedule-owned time replaces any solverStat-style hidden global.
+  A port either binds its program coordinate identically or derives the
+  coordinate's committed increment (``d<coordinate>``, e.g. ``dtime``): the
+  derivation subtracts the coordinate's value at the last COMMITTED point —
+  the run's base point for the first substep of a run — so a rejected attempt
+  leaves the derivation base untouched and a cut-back retry re-derives from
+  the same committed generation. Operators without declared signal ports keep
+  receiving an empty signal tuple.
 - The tangent is assembled through the compiled plan (values-only refill).
   When every Jacobian channel is compiled ``linear`` the reduced tangent is
   state-independent: it is assembled and factorized once and the
@@ -248,8 +253,13 @@ class NonlinearStaticDriver:
   def _newton_substep(
     self,
     point: ProgramPoint,
+    committed_point: ProgramPoint | None,
   ) -> tuple[bool, tuple[IterationRecord, ...], SubstepObservation | None]:
-    """Run one substep Newton loop inside one open owner transaction."""
+    """Run one substep Newton loop inside one open owner transaction.
+
+    ``committed_point`` is the last committed program point (the derivation
+    base for increment-bound signals); identity-only plans never read it.
+    """
     plan = self._plan
     workspace = self._workspace
     coordinate_map = self._map
@@ -266,7 +276,7 @@ class NonlinearStaticDriver:
         copy=True,
       )
       external = evaluate_loads(plan.loads, point).values
-      signal_inputs = evaluate_signals(plan, point)
+      signal_inputs = evaluate_signals(plan, point, committed_point)
       external_reduced = reduce_residual(coordinate_map, external).values
       reference_norm = float(np.linalg.norm(external_reduced))
       first_residual_norm: float | None = None
@@ -443,6 +453,7 @@ class NonlinearStaticDriver:
     workspace = self._workspace
     coordinate_names = self._map.coordinate_names
     committed_values = base_values
+    requires_committed_point = self._plan.requires_committed_point
     for target_index, (point, values) in enumerate(
       zip(target_points, target_values, strict=True)
     ):
@@ -457,7 +468,18 @@ class NonlinearStaticDriver:
           values,
           trial_progress,
         )
-        committed, iterations, observation = self._newton_substep(trial_point)
+        # The derivation base for increment-bound signals: the last COMMITTED
+        # point (progress zero is the previous target's or the run's base
+        # point). Identity-only plans skip the construction entirely.
+        committed_point = (
+          _interpolate(coordinate_names, committed_values, values, progress_done)
+          if requires_committed_point
+          else None
+        )
+        committed, iterations, observation = self._newton_substep(
+          trial_point,
+          committed_point,
+        )
         if committed:
           records.append(
             SubstepRecord(

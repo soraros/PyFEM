@@ -16,8 +16,12 @@ re-derived per Newton iteration.
 - Declared operator signal ports compile to coordinate-index slices: every
   port's signal and derivative coordinates are validated against the
   coordinate map at plan time, and each evaluation forwards the bound point as
-  ``ProgramSignalInput`` values (schedule-owned signals, identity-bound this
-  revision).
+  ``ProgramSignalInput`` values (schedule-owned signals). Two binding rules
+  are defined — identity binding for a signal id that exactly names a program
+  coordinate, and committed-increment derivation for a signal id of the form
+  ``d<coordinate>`` (``dtime`` binds the time increment: the bound time minus
+  the time at the previous committed point). See ``OperatorSignalPortSlice``
+  and ``evaluate_signals`` for the exact rule semantics.
 
 The plan owns no mutable buffers and no factorization; those live in the
 driver workspace. Constraint algebra is never re-implemented here: reduced
@@ -65,6 +69,10 @@ DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA = "pyfem-v3-driver-assembly-plan-v1"
 _FLOATING_DTYPE = np.dtype(np.float64)
 _INDEX_DTYPE = np.dtype(np.int64)
 
+# The two signal binding rules compiled into ``OperatorSignalPortSlice`` values.
+_IDENTITY_BINDING = "identity"
+_INCREMENT_BINDING = "increment"
+
 
 def _preparation_fail(code: str, message: str, source: SourceContext) -> NoReturn:
   raise DriverPreparationError(
@@ -95,14 +103,31 @@ class OperatorAssemblySlice:
 class OperatorSignalPortSlice:
   """One operator signal port resolved onto program coordinate indices.
 
-  This revision binds signals identically to program coordinates: the signal
-  value forwarded to the operator is the bound value of the coordinate at
-  ``signal_coordinate_index``, and each derivative channel carries
-  ``d(signal)/d(p)`` for one declared derivative coordinate — one for the
-  signal's own coordinate and zero for every other.
+  Two binding rules exist, selected at plan time by the declared
+  ``signal_id``:
+
+  - ``identity`` — the signal id exactly names a program coordinate: the
+    forwarded signal value is the bound value of the coordinate at
+    ``signal_coordinate_index``.
+  - ``increment`` — the signal id does not itself name a coordinate but is
+    ``d`` prefixed onto one that does (``dtime`` derives from ``time``): the
+    forwarded signal value is the bound value of the BASE coordinate at
+    ``signal_coordinate_index`` minus its value at the previous committed
+    program point. The rule is generic over base coordinates; the motivating
+    case is the time-increment (``dtime``) channel of rate-form laws.
+
+  Both rules forward ``d(signal)/d(p)`` per declared derivative coordinate as
+  the Kronecker delta on ``signal_coordinate_index``: under the increment
+  rule the previous committed point is constant with respect to the trial
+  point, so the derivative is one for the base coordinate and zero for every
+  other. Exact coordinate names always win over the ``d``-prefixed derivation
+  namespace: a program coordinate literally named ``dtime`` binds identically,
+  never derived.
   """
 
   port_id: str
+  signal_id: str
+  binding: str
   signal_coordinate_index: int
   derivative_coordinate_indices: tuple[int, ...]
 
@@ -165,6 +190,15 @@ class DriverAssemblyPlan:
   def csr_shape(self) -> tuple[int, int]:
     """Return the full-space tangent shape."""
     return (self.full_dof_count, self.full_dof_count)
+
+  @property
+  def requires_committed_point(self) -> bool:
+    """Whether any compiled signal port derives a committed-point increment."""
+    return any(
+      port.binding == _INCREMENT_BINDING
+      for ports in self.signal_slices
+      for port in ports
+    )
 
 
 class _LoadDofLookup:
@@ -372,7 +406,10 @@ def _compile_signal_slices(
 
   Ports reference program coordinates by name; an operator whose port binds an
   undeclared coordinate can never be driven honestly, so plan compilation
-  fails closed with coded diagnostics.
+  fails closed with coded diagnostics. A port whose signal id does not name a
+  coordinate but is ``d`` prefixed onto one declares an increment derivation
+  (see ``OperatorSignalPortSlice``); its base coordinate must resolve, again
+  fail-closed.
   """
   coordinate_indices = {name: index for index, name in enumerate(coordinate_names)}
   slices: list[tuple[OperatorSignalPortSlice, ...]] = []
@@ -392,17 +429,34 @@ def _compile_signal_slices(
           "operator signal port ids must be non-empty exact strings",
           SourceContext(),
         )
+      signal_id = port.signal_id
       signal_index = (
-        coordinate_indices.get(port.signal_id) if type(port.signal_id) is str else None
+        coordinate_indices.get(signal_id) if type(signal_id) is str else None
       )
+      binding = _IDENTITY_BINDING
       if signal_index is None:
-        _preparation_fail(
-          "unknown-signal-coordinate",
-          f"operator signal port {render_diagnostic_value(port.port_id)} binds "
-          "undeclared program coordinate "
-          f"{render_diagnostic_value(port.signal_id)}",
-          SourceContext(),
-        )
+        if type(signal_id) is str and len(signal_id) > 1 and signal_id.startswith("d"):
+          base_index = coordinate_indices.get(signal_id[1:])
+          if base_index is None:
+            _preparation_fail(
+              "unknown-derived-signal-base-coordinate",
+              f"operator signal port {render_diagnostic_value(port.port_id)} binds "
+              f"the derived increment signal {render_diagnostic_value(signal_id)} "
+              "whose base coordinate "
+              f"{render_diagnostic_value(signal_id[1:])} is not a declared "
+              "program coordinate",
+              SourceContext(),
+            )
+          signal_index = base_index
+          binding = _INCREMENT_BINDING
+        else:
+          _preparation_fail(
+            "unknown-signal-coordinate",
+            f"operator signal port {render_diagnostic_value(port.port_id)} binds "
+            "undeclared program coordinate "
+            f"{render_diagnostic_value(port.signal_id)}",
+            SourceContext(),
+          )
       derivative_indices: list[int] = []
       for coordinate in port.derivative_coordinate_ids:
         derivative_index = (
@@ -428,6 +482,8 @@ def _compile_signal_slices(
       resolved.append(
         OperatorSignalPortSlice(
           port_id=port.port_id,
+          signal_id=str(signal_id),
+          binding=binding,
           signal_coordinate_index=signal_index,
           derivative_coordinate_indices=tuple(derivative_indices),
         )
@@ -481,6 +537,36 @@ def _compile_csr_pattern(
       SourceContext(),
     )
   return permutation, segment_offsets, csr_indptr, csr_indices
+
+
+def _signal_manifest_entry(
+  port: OperatorSignalPortSlice,
+  coordinate_names: tuple[str, ...],
+) -> dict[str, object]:
+  """Serialize one resolved signal port for the plan manifest.
+
+  Identity entries keep the exact M29 shape (``port_id``,
+  ``signal_coordinate``, ``derivative_coordinates``) so identity-only plans
+  stay byte-identical; increment entries name the declared signal id, the
+  binding rule, and the base coordinate explicitly.
+  """
+  if port.binding == _INCREMENT_BINDING:
+    return {
+      "port_id": port.port_id,
+      "signal_id": port.signal_id,
+      "binding": port.binding,
+      "base_coordinate": coordinate_names[port.signal_coordinate_index],
+      "derivative_coordinates": [
+        coordinate_names[index] for index in port.derivative_coordinate_indices
+      ],
+    }
+  return {
+    "port_id": port.port_id,
+    "signal_coordinate": (coordinate_names[port.signal_coordinate_index]),
+    "derivative_coordinates": [
+      coordinate_names[index] for index in port.derivative_coordinate_indices
+    ],
+  }
 
 
 def compile_driver_plan(
@@ -550,16 +636,7 @@ def compile_driver_plan(
       {
         "block_id": slice_.block_id,
         "ports": [
-          {
-            "port_id": port.port_id,
-            "signal_coordinate": (
-              coordinate_map.coordinate_names[port.signal_coordinate_index]
-            ),
-            "derivative_coordinates": [
-              coordinate_map.coordinate_names[index]
-              for index in port.derivative_coordinate_indices
-            ],
-          }
+          _signal_manifest_entry(port, coordinate_map.coordinate_names)
           for port in ports
         ],
       }
@@ -670,15 +747,26 @@ def evaluate_loads(
 def evaluate_signals(
   plan: DriverAssemblyPlan,
   point: ProgramPoint,
+  committed_point: ProgramPoint | None = None,
 ) -> tuple[tuple[ProgramSignalInput, ...], ...]:
   """Forward one bound program point as per-operator program signal inputs.
 
-  This revision binds signals identically to program coordinates: the signal
-  value is the bound value of the port's signal coordinate, and every declared
-  derivative channel carries ``d(signal)/d(p)`` as the Kronecker delta (one
-  for the signal's own coordinate, zero otherwise). Operators without declared
-  signal ports receive an empty tuple, and a plan with no signal ports at all
-  never touches the point.
+  Identity-bound ports (the signal id names a program coordinate) forward the
+  bound value of the port's signal coordinate, and every declared derivative
+  channel carries ``d(signal)/d(p)`` as the Kronecker delta (one for the
+  signal's own coordinate, zero otherwise). Increment-bound ports (the signal
+  id is ``d`` prefixed onto a declared base coordinate — ``dtime`` on
+  ``time``) forward the bound value of the base coordinate minus its value at
+  ``committed_point``, the previous committed program point; their derivative
+  channels carry the same delta on the BASE coordinate, because the committed
+  point is constant with respect to the trial point.
+
+  The driver supplies the run's base point as the committed reference for the
+  first substep, so the first increment derives from the base; a derivation
+  requested without any committed reference fails closed with
+  ``missing-committed-point``. Operators without declared signal ports receive
+  an empty tuple, a plan with no signal ports at all never touches the point,
+  and a plan without increment bindings never touches ``committed_point``.
   """
   if type(plan) is not DriverAssemblyPlan:
     msg = "signal evaluation requires an exact DriverAssemblyPlan"
@@ -687,15 +775,38 @@ def evaluate_signals(
   if not any(slices):
     return tuple(() for _ in slices)
   values = _bound_coordinate_values(plan.loads, point)
+  committed: tuple[float, ...] | None = None
+  if plan.requires_committed_point:
+    if committed_point is None:
+      _evaluation_fail(
+        "missing-committed-point",
+        "increment-bound signal ports require the previous committed program "
+        "point; at the first substep the run's base point is that reference",
+      )
+    committed = _bound_coordinate_values(plan.loads, committed_point)
   forwarded: list[tuple[ProgramSignalInput, ...]] = []
   for ports in slices:
     operator_signals: list[ProgramSignalInput] = []
     for port in ports:
+      coordinate_index = port.signal_coordinate_index
+      signal_value = values[coordinate_index]
+      if port.binding == _INCREMENT_BINDING:
+        if committed is None:
+          _evaluation_fail(
+            "missing-committed-point",
+            "increment-bound signal ports require the previous committed program point",
+          )
+        signal_value -= committed[coordinate_index]
+        if not math.isfinite(signal_value):
+          _evaluation_fail(
+            "non-finite-coordinate-value",
+            "derived signal evaluation overflowed the finite float64 range",
+          )
       operator_signals.append(
         ProgramSignalInput(
           port_id=port.port_id,
           values=FinalizedArray(
-            np.array([values[port.signal_coordinate_index]], dtype=_FLOATING_DTYPE),
+            np.array([signal_value], dtype=_FLOATING_DTYPE),
             dtype=_FLOATING_DTYPE,
           ),
           derivatives=tuple(
