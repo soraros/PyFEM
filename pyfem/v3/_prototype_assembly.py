@@ -86,9 +86,7 @@ def _assemble_coo_system(
   chunk_size: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
   n_elems = problem.n_elems
-  internal_force = (
-    np.zeros(problem.n_dofs, dtype=np.float64) if tangent else None
-  )
+  internal_force = np.zeros(problem.n_dofs, dtype=np.float64) if tangent else None
   state_arr = None
   if tangent and state is not None:
     state_arr = np.ascontiguousarray(state, dtype=np.float64)

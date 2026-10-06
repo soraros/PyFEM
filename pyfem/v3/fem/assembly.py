@@ -309,10 +309,7 @@ def assemble_stiffness_coo(
   zero_state = (
     np.zeros(int(global_dofs.size), dtype=np.float64)
     if element_type == FINITE_STRAIN_ELEMENT
-    or (
-      group_kind is not None
-      and np.any(group_kind != GROUP_CONTINUUM)
-    )
+    or (group_kind is not None and np.any(group_kind != GROUP_CONTINUUM))
     else None
   )
   return assemble_tangent_coo(
@@ -381,5 +378,3 @@ def assemble_tangent_coo(
       row_offset=offset,
     )
   return offset
-
-

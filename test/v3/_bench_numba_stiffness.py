@@ -132,7 +132,9 @@ def main() -> None:
   gn_np, _ = _physical_gradients_numpy(batch, dN)
   gn_nb, det_nb = physical_gradients(batch, dN)
   jac_np, _ = _physical_gradients_numpy(batch, dN)
-  print(f"  physical_gradients J     max|Δ| = {_max_abs_diff(jac_np[:, :, 0, 0] * jac_np[:, :, 1, 1] - jac_np[:, :, 0, 1] * jac_np[:, :, 1, 0], det_nb):.3e}")
+  print(
+    f"  physical_gradients J     max|Δ| = {_max_abs_diff(jac_np[:, :, 0, 0] * jac_np[:, :, 1, 1] - jac_np[:, :, 0, 1] * jac_np[:, :, 1, 0], det_nb):.3e}"
+  )
   print(f"  physical_gradients gradN max|Δ| = {_max_abs_diff(gn_np, gn_nb):.3e}")
 
   print("\n=== Numba compile / cache ===")

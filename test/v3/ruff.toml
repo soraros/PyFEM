@@ -10,6 +10,10 @@ select = ["E", "F", "I", "UP", "ANN"]
 # Incompatible with indent-width = 2 and the formatter (see Ruff formatter docs).
 ignore = ["E111", "E114", "E117", "W191"]
 
+[lint.isort]
+known-first-party = ["pyfem"]
+known-third-party = ["_legacy_parity", "_bench_common", "_bench_solve_scale"]
+
 [lint.per-file-ignores]
 "*.py" = ["UP036"]
 "_bench_*.py" = ["ANN", "E501"]
