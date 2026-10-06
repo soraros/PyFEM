@@ -27,8 +27,11 @@ Deck structure (``.pro`` side):
   ``nu``, ``syield``, and ``hard`` — the linear-hardening configuration the
   v3 stateful law ships; the legacy hardening-table
   (``EqPlasStrains``/``Stresses``) and power-law (``q``/``K``) properties
-  reject, citing the M25 scoping decision) or ``Truss`` (carrying ``E`` and
-  ``Area`` directly);
+  reject, citing the M25 scoping decision), of type ``FiniteStrainContinuum``
+  (with a nested ``material`` block of type ``PlaneStress`` carrying ``E``
+  and ``nu`` — the legacy stateless Saint-Venant-Kirchhoff law the v3
+  total-Lagrangian slice ships), or ``Truss`` (carrying ``E`` and ``Area``
+  directly);
 - ``outputModules = [...]`` naming blocks whose ``type`` is a known legacy
   writer (``MeshWriter``, ``OutputWriter``, ``GraphWriter``, ``HDF5Writer``,
   ``DataDump``, ``ContourWriter``, ``ROMSnapshotWriter``). Writers do not
@@ -42,7 +45,8 @@ Mesh structure (``.dat`` side):
 - ``<Elements>``: ``id "Group" n1 ... nk;`` statements — two nodes for
   ``Truss`` (line2); three (tria3), four (quad4), or eight (serendipity
   quad8) nodes for 2D ``SmallStrainContinuum``; eight nodes (hex8) for 3D
-  ``SmallStrainContinuum``;
+  ``SmallStrainContinuum``; eight nodes (serendipity quad8) for 2D
+  ``FiniteStrainContinuum``;
 - ``<NodeConstraints>``: prescribed DOFs ``u[i] = value;`` / ``v[i] = value;``
   (plus ``w[i] = value;`` on 3D decks) and one-master affine ties
   ``u[i] = offset + factor * v[j];`` (factor may be omitted or follow the
@@ -59,6 +63,10 @@ or the ``dtime``/``maxCycle`` ramp. DOF types map ``u -> x``, ``v -> y`` on
 ``displacement`` field. The ``PlaneStress`` and ``PlaneStrain`` laws require
 a 2D mesh; the ``Isotropic`` law requires a 3D mesh;
 ``IsotropicHardeningPlasticity`` requires a 2D serendipity-quad8 mesh.
+``FiniteStrainContinuum`` requires a 2D serendipity-quad8 mesh and a
+``NonlinearSolver`` block (the legacy ``LinearSolver`` assembles the
+zero-state tangent once, while the v3 driver integrates the finite-strain
+residual by Newton iteration — the combination has no faithful mapping).
 
 Rejection codes
 ---------------
@@ -79,7 +87,7 @@ context — never a silent skip. Known legacy constructs and their codes:
 - ``unsupported-output-module`` — an ``outputModules`` entry without a block,
   or a block ``type`` outside the known writer set;
 - ``unsupported-element-type`` — element block type outside
-  ``{SmallStrainContinuum, Truss}`` (e.g. ``FiniteStrainContinuum``,
+  ``{SmallStrainContinuum, FiniteStrainContinuum, Truss}`` (e.g.
   ``Spring``);
 - ``unsupported-element-parameter`` / ``missing-element-parameter`` —
   extra keys in an element block, or a ``Truss`` block without ``E``/``Area``;
@@ -87,7 +95,12 @@ context — never a silent skip. Known legacy constructs and their codes:
 - ``unsupported-element-groups`` — more than one element group in the mesh;
 - ``unsupported-material-model`` — material type outside
   ``{PlaneStress, PlaneStrain, Isotropic, IsotropicHardeningPlasticity}``
-  (e.g. ``IsotropicKinematicHardening``);
+  on a ``SmallStrainContinuum`` block, or outside ``{PlaneStress}`` on a
+  ``FiniteStrainContinuum`` block (e.g. ``IsotropicKinematicHardening``);
+- ``incompatible-solver-type`` — a ``FiniteStrainContinuum`` deck whose
+  solver block is a ``LinearSolver`` (legacy assembles the zero-state
+  tangent once; the v3 driver only integrates the finite-strain residual by
+  Newton iteration, so the combination has no faithful mapping);
 - ``incompatible-material-geometry`` — a supported material on an
   incompatible mesh: ``PlaneStress``/``PlaneStrain`` on a 3D mesh,
   ``Isotropic`` on a 2D mesh;
@@ -114,7 +127,8 @@ context — never a silent skip. Known legacy constructs and their codes:
 - ``unsupported-cell-arity`` — cell node counts with no landed v3 geometry
   for the deck's element type and mesh rank (e.g. five-node cells, non-hex8
   cells on a 3D mesh, non-line2 cells for ``Truss``, non-quad8 cells for the
-  stateful law), or mixed cell arities inside one mesh group;
+  stateful law or the finite-strain family), or mixed cell arities inside
+  one mesh group;
 - ``unsupported-dof-type`` — DOF types outside ``{u, v, w}``, or ``w`` on a
   2D mesh;
 - ``unsupported-node-group`` — named node-group references in constraint
@@ -148,7 +162,10 @@ from pyfem.v3.compile.continuum import (
   plasticity_reference_registry,
   q8_reference_registry,
 )
-from pyfem.v3.compile.contracts import continuum_reference_registry
+from pyfem.v3.compile.contracts import (
+  continuum_reference_registry,
+  finite_strain_reference_registry,
+)
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.compile.truss import truss_reference_registry
 from pyfem.v3.constraints import CompiledConstraintMap, compile_constraint_map
@@ -1575,6 +1592,104 @@ def _plasticity_family(
   )
 
 
+def _finite_strain_family(
+  block: _ProBlock,
+  diagnostics: list[SpecDiagnostic],
+) -> _MaterialProfile | None:
+  """Read a FiniteStrainContinuum block: the total-Lagrangian Q8 slice.
+
+  The legacy element pairs with any ``getStress`` law, but the only
+  configuration the supported deck subset ships is the stateless
+  Saint-Venant-Kirchhoff form: a ``PlaneStress`` material block (``E``,
+  ``nu``), whose constant matrix the total-Lagrangian formulation contracts
+  with the Green-Lagrange strain into the second Piola-Kirchhoff stress.
+  Every other material model rejects with a coded diagnostic.
+  """
+  material_block: _ProBlock | None = None
+  sound = True
+  for item in block.items:
+    if type(item) is _ProBlock:
+      if item.name == "material" and material_block is None:
+        material_block = item
+        continue
+      diagnostics.append(
+        _diagnostic(
+          "unsupported-element-parameter",
+          f"unsupported nested block {item.name!r} in element block {block.name!r}",
+          item.source,
+        ),
+      )
+      sound = False
+    elif item.name != "type":
+      diagnostics.append(
+        _diagnostic(
+          "unsupported-element-parameter",
+          f"unsupported key {item.name!r} in element block {block.name!r}",
+          item.source,
+        ),
+      )
+      sound = False
+  if material_block is None:
+    diagnostics.append(
+      _diagnostic(
+        "missing-material-parameter",
+        f"element block {block.name!r} has no material block",
+        block.source,
+      ),
+    )
+    return None
+
+  material_type: str | None = None
+  for item in material_block.items:
+    if type(item) is _ProAssignment and item.name == "type":
+      raw = item.value.value
+      material_type = raw if type(raw) is str else None
+  if material_type != "PlaneStress":
+    diagnostics.append(
+      _diagnostic(
+        "unsupported-material-model",
+        f"material model {material_type!r} on a FiniteStrainContinuum element "
+        "is outside the supported deck subset ('PlaneStress' only)",
+        material_block.source,
+      ),
+    )
+    return None
+  parameters, params_sound = _block_number(
+    material_block,
+    "material",
+    extra_code="unsupported-material-parameter",
+    allowed=frozenset({"type", "E", "nu"}),
+    diagnostics=diagnostics,
+  )
+  sound = sound and params_sound
+  missing = {"E", "nu"} - set(parameters)
+  if missing:
+    diagnostics.append(
+      _diagnostic(
+        "missing-material-parameter",
+        f"material block in {block.name!r} misses {sorted(missing)}",
+        material_block.source,
+      ),
+    )
+    sound = False
+  if not sound:
+    return None
+  youngs = parameters["E"]
+  poisson = parameters["nu"]
+  return _MaterialProfile(
+    formulation="total-lagrangian-continuum",
+    material_model="plane-stress-saint-venant-kirchhoff",
+    parameters=(
+      ("youngs_modulus", youngs[0], youngs[1]),
+      ("poisson_ratio", poisson[0], poisson[1]),
+    ),
+    registry_kind="finite-strain",
+    geometries=frozenset({(2, 8)}),
+    required_rank=2,
+    source=material_block.source,
+  )
+
+
 def _truss_family(
   block: _ProBlock,
   diagnostics: list[SpecDiagnostic],
@@ -1625,6 +1740,8 @@ def _element_profile(
       element_type = raw if type(raw) is str else None
   if element_type == "SmallStrainContinuum":
     family = _continuum_family(block, diagnostics)
+  elif element_type == "FiniteStrainContinuum":
+    family = _finite_strain_family(block, diagnostics)
   elif element_type == "Truss":
     family = _truss_family(block, diagnostics)
   else:
@@ -1632,7 +1749,7 @@ def _element_profile(
       _diagnostic(
         "unsupported-element-type",
         f"element type {element_type!r} is outside the supported deck subset "
-        "('SmallStrainContinuum' and 'Truss' only)",
+        "('SmallStrainContinuum', 'FiniteStrainContinuum', and 'Truss' only)",
         block.source,
       ),
     )
@@ -2291,6 +2408,27 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
         ),
       )
 
+  if settings is not None and settings.solver_type == "LinearSolver":
+    for profile in profiles.values():
+      if (
+        profile.family is not None
+        and profile.family.formulation == "total-lagrangian-continuum"
+      ):
+        diagnostics.append(
+          _diagnostic(
+            "incompatible-solver-type",
+            "a FiniteStrainContinuum deck requires a NonlinearSolver block: "
+            "the legacy LinearSolver assembles the zero-state tangent once, "
+            "while the v3 driver integrates the finite-strain residual by "
+            "Newton iteration — the combination has no faithful mapping",
+            (
+              pro_deck.solver_block.source
+              if pro_deck.solver_block is not None
+              else profile.source
+            ),
+          ),
+        )
+
   if diagnostics:
     raise DeckConversionError(tuple(diagnostics))
 
@@ -2318,6 +2456,8 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
     registry = plasticity_reference_registry()
   elif family.registry_kind == "truss":
     registry = truss_reference_registry()
+  elif family.registry_kind == "finite-strain":
+    registry = finite_strain_reference_registry()
   elif (
     family.material_model == "plane-stress-linear-elastic"
     and geometry.geometry_interpolation == "serendipity-quad8"

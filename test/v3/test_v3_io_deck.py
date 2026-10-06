@@ -2,7 +2,8 @@
 
 """Legacy-deck converter: subset reading, coded rejections, round-trip oracles.
 
-The round-trip oracles convert every in-subset ``skims/patch_test*`` deck,
+The round-trip oracles convert every in-subset ``skims/`` deck (the
+``patch_test*`` small-strain family plus the finite-strain ``cantilever8``),
 compile the emitted specs with the landed compiler unchanged, drive them with
 the landed M18 driver, and compare against the landed legacy oracle states
 within each skim's ``parity.toml`` tolerances.
@@ -62,12 +63,12 @@ NONLINEAR_SKIMS = (
   "patch_test8_nonlinear",
   "patch_test8_nonlinear_prescribed",
   "patch_test8_nonlinear_ramp",
+  "cantilever8",
 )
 ROUND_TRIP_SKIMS = LINEAR_SKIMS + NONLINEAR_SKIMS
 
 # code sets expected when converting the out-of-subset skims decks
 SKIM_REJECTIONS = {
-  "cantilever8": {"unsupported-element-type"},
   "shallow_truss_riks": {
     "unsupported-element-type",
     "unsupported-element-groups",
@@ -332,6 +333,31 @@ def test_patch_test8_plane_strain_deck_reads_the_plane_strain_law() -> None:
   assert region.formulation == "small-strain-continuum"
   assert region.quadrature == "gauss-3x3"
   assert ("material", "plane-strain-linear-elastic") in deck.registry
+
+
+def test_cantilever8_deck_reads_the_finite_strain_slice() -> None:
+  deck = read_legacy_deck(SKIMS / "cantilever8" / "skim.pro")
+  assert len(deck.model.mesh.nodes) == 43
+  (block,) = deck.model.mesh.cell_blocks
+  assert block.geometry_interpolation == "serendipity-quad8"
+  assert len(block.cells) == 8
+  (material,) = deck.model.materials
+  assert material.model == "plane-stress-saint-venant-kirchhoff"
+  parameters = {parameter.name: parameter.value for parameter in material.parameters}
+  assert parameters == {"youngs_modulus": 100.0, "poisson_ratio": 0.3}
+  (region,) = deck.model.regions
+  assert region.formulation == "total-lagrangian-continuum"
+  assert region.quadrature == "gauss-3x3"
+  assert ("formulation", "total-lagrangian-continuum") in deck.registry
+  assert ("material", "plane-stress-saint-venant-kirchhoff") in deck.registry
+  assert deck.solver.solver_type == "NonlinearSolver"
+  assert deck.solver.load_factors == tuple(float(k) for k in range(1, 21))
+  assert deck.solver.tolerance == pytest.approx(1.0e-3)
+  assert deck.solver.max_iterations == 10
+  assert [note.code for note in deck.not_converted] == [
+    "not-converted-output-module",
+    "not-converted-solver-option",
+  ]
 
 
 def test_compile_deck_uses_landed_compiler_unchanged() -> None:
@@ -740,6 +766,144 @@ def test_plasticity_on_non_quad8_mesh_rejects_with_coded_arity(tmp_path: Path) -
   dat = _plasticity_dat().replace(_PLASTICITY_ELEMENT, ' 1 "ContElem" 1 2 3;')
   with pytest.raises(DeckConversionError) as excinfo:
     _convert_mini(tmp_path, _plasticity_pro(), dat)
+  assert _rejection_codes(excinfo) == {"unsupported-cell-arity"}
+
+
+# --- finite-strain (total-Lagrangian) decks --------------------------------------
+
+_FINITE_STRAIN_ELEMENT_BLOCK = """ContElem =
+{
+  type = "FiniteStrainContinuum";
+  material =
+  {
+    type = "PlaneStress";
+    E = 100.0;
+    nu = 0.3;
+  };
+};
+"""
+
+_FINITE_STRAIN_SOLVER_BLOCK = """solver =
+{
+  type = "NonlinearSolver";
+  tol = 1.0e-10;
+  iterMax = 25;
+  loadTable = [1.0];
+};
+"""
+
+
+def _finite_strain_pro(
+  *,
+  element_block: str = _FINITE_STRAIN_ELEMENT_BLOCK,
+  solver_block: str = _FINITE_STRAIN_SOLVER_BLOCK,
+) -> str:
+  return _mini_pro(element_block=element_block, solver_block=solver_block)
+
+
+def test_finite_strain_mini_deck_converts_and_drives(tmp_path: Path) -> None:
+  # The drive uses u[3] = 0.0 (not the stock mini deck's v[3] = 0.0): the
+  # stock constraint set leaves the rotation about node 0 unconstrained.
+  deck = _convert_mini(
+    tmp_path,
+    _finite_strain_pro(),
+    _mini_dat(constraints=" u[0] = 0.0;\n v[0] = 0.0;\n u[3] = 0.0;"),
+  )
+  (material,) = deck.model.materials
+  assert material.model == "plane-stress-saint-venant-kirchhoff"
+  parameters = {parameter.name: parameter.value for parameter in material.parameters}
+  assert parameters == {"youngs_modulus": 100.0, "poisson_ratio": 0.3}
+  (region,) = deck.model.regions
+  assert region.formulation == "total-lagrangian-continuum"
+  assert ("formulation", "total-lagrangian-continuum") in deck.registry
+  assert deck.solver.load_factors == (1.0,)
+
+  run = run_deck(deck)
+  assert run.result.status is DriverStatus.COMPLETED
+  # A genuinely nonlinear path: more corrections than committed substeps.
+  statistics = run.result.statistics
+  assert statistics.committed_substep_count == 1
+  assert statistics.factorization_reuse_count == 0
+  assert statistics.factorization_count > 1
+
+
+_FINITE_STRAIN_REJECTIONS = {
+  "plane-strain-material": (
+    _finite_strain_pro(
+      element_block=_FINITE_STRAIN_ELEMENT_BLOCK.replace(
+        'type = "PlaneStress";',
+        'type = "PlaneStrain";',
+      ),
+    ),
+    {"unsupported-material-model"},
+  ),
+  "plasticity-material": (
+    _finite_strain_pro(
+      element_block=_FINITE_STRAIN_ELEMENT_BLOCK.replace(
+        'type = "PlaneStress";',
+        'type = "IsotropicHardeningPlasticity";',
+      ),
+    ),
+    {"unsupported-material-model"},
+  ),
+  "missing-youngs-modulus": (
+    _finite_strain_pro(
+      element_block=_FINITE_STRAIN_ELEMENT_BLOCK.replace("    E = 100.0;\n", ""),
+    ),
+    {"missing-material-parameter"},
+  ),
+  "extra-material-key": (
+    _finite_strain_pro(
+      element_block=_FINITE_STRAIN_ELEMENT_BLOCK.replace(
+        "    nu = 0.3;\n",
+        "    nu = 0.3;\n    rho = 7850.0;\n",
+      ),
+    ),
+    {"unsupported-material-parameter"},
+  ),
+  "extra-element-key": (
+    _finite_strain_pro(
+      element_block=_FINITE_STRAIN_ELEMENT_BLOCK.replace(
+        '  type = "FiniteStrainContinuum";\n',
+        '  type = "FiniteStrainContinuum";\n  rho = 7850.0;\n',
+      ),
+    ),
+    {"unsupported-element-parameter"},
+  ),
+  "missing-material-block": (
+    _finite_strain_pro(
+      element_block='ContElem = { type = "FiniteStrainContinuum"; };\n',
+    ),
+    {"missing-material-parameter"},
+  ),
+  "linear-solver": (
+    _finite_strain_pro(solver_block=_MINI_SOLVER_BLOCK),
+    {"incompatible-solver-type"},
+  ),
+}
+
+
+@pytest.mark.parametrize(
+  ("pro_text", "expected"),
+  [
+    pytest.param(text, codes, id=name)
+    for name, (text, codes) in _FINITE_STRAIN_REJECTIONS.items()
+  ],
+)
+def test_finite_strain_construct_rejections(
+  tmp_path: Path,
+  pro_text: str,
+  expected: set[str],
+) -> None:
+  with pytest.raises(DeckConversionError) as excinfo:
+    _convert_mini(tmp_path, pro_text, _mini_dat())
+  assert expected == _rejection_codes(excinfo)
+
+
+def test_finite_strain_on_non_quad8_mesh_rejects(tmp_path: Path) -> None:
+  dat = _mini_dat(elements=' 1 "ContElem" 0 1 2 3;')
+  with pytest.raises(DeckConversionError) as excinfo:
+    _convert_mini(tmp_path, _finite_strain_pro(), dat)
   assert _rejection_codes(excinfo) == {"unsupported-cell-arity"}
 
 

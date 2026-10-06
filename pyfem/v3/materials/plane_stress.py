@@ -12,6 +12,11 @@ def plane_stress_matrix(youngs_modulus: float, poisson_ratio: float) -> F64:
   Plane-stress elasticity tensor C (Voigt: ε = [ε_xx, ε_yy, γ_xy]ᵀ).
 
   Matches legacy ``PlaneStress.H`` with :math:`\gamma_{xy} = 2\varepsilon_{xy}`.
+  The same constant matrix serves the small-strain law (C contracts the
+  infinitesimal strain into the Cauchy stress) and the finite-strain
+  Saint-Venant-Kirchhoff law (C contracts the Green-Lagrange strain into the
+  second Piola-Kirchhoff stress) — the legacy material's single law behind
+  both elements.
   """
   nu = poisson_ratio
   e = youngs_modulus

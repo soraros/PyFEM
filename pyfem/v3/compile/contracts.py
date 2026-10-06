@@ -9,6 +9,16 @@ plane-stress v1 idiom. :func:`continuum_reference_registry` assembles the
 full v1 continuum set; snapshots capture exactly the keys a model selects,
 so the superset leaves existing pinned snapshots byte-identical.
 
+The finite-strain (total-Lagrangian) continuum slice extends the same v1
+idiom: one ``total-lagrangian-continuum`` formulation descriptor binding the
+landed batched Q8 TL element kernel (``pyfem.v3.fem.tl_element``) and one
+``plane-stress-saint-venant-kirchhoff`` material descriptor binding the
+landed plane-stress matrix (the legacy ``PlaneStress.H`` law, evaluated on
+the Green-Lagrange strain into the second Piola-Kirchhoff stress — stateless,
+so a v1 descriptor). :func:`finite_strain_reference_registry` assembles the
+slice as a standalone registry; it shares the Q8 topology and quadrature
+descriptors byte-identically and leaves every other registry untouched.
+
 Also hosts the permanent stateful-material descriptor ABI (schema
 ``pyfem-v3-material-descriptor-v2``): typed per-entity state slots declared as
 canonical metadata, their compile-time resolution into ``OperatorStateLayout``
@@ -43,6 +53,7 @@ from pyfem.v3.fem.shapes import (
   serendipity_quad8,
   trilinear_hex8,
 )
+from pyfem.v3.fem.tl_element import quad8_tl_tangent_batched
 from pyfem.v3.materials.isotropic import isotropic_matrix
 from pyfem.v3.materials.plane_strain import plane_strain_matrix
 from pyfem.v3.materials.plane_stress import plane_stress_matrix
@@ -392,6 +403,99 @@ def continuum_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
   return {descriptor.key: descriptor for descriptor in descriptors}
 
 
+TL_FORMULATION_KEY: RegistryKey = ("formulation", "total-lagrangian-continuum")
+TL_MATERIAL_KEY: RegistryKey = ("material", "plane-stress-saint-venant-kirchhoff")
+
+
+def finite_strain_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
+  """Return detached canonical metadata for one finite-strain descriptor key.
+
+  The total-Lagrangian formulation descriptor binds the landed batched Q8 TL
+  element kernel (reference-configuration Green-Lagrange kinematics with the
+  material and geometric tangent parts); the material descriptor binds the
+  landed plane-stress matrix, read as the Saint-Venant-Kirchhoff law
+  ``S = C : E`` mapping the Green-Lagrange strain to the second
+  Piola-Kirchhoff stress — exactly the legacy ``PlaneStress.H`` law the
+  ``FiniteStrainContinuum`` element consumes.
+  """
+  key = (kind, name)
+  if key == TL_FORMULATION_KEY:
+    return {
+      "schema": "pyfem-v3-formulation-descriptor-v1",
+      "field_quantity": "displacement",
+      "field_location": "node",
+      "field_components": ["x", "y"],
+      "dofs_per_node": 2,
+      "kinematic_regime": "finite-strain",
+      "strain_measure": "green-lagrange",
+      "stress_measure": "second-piola-kirchhoff",
+      "reference_frame": "total-lagrangian",
+      "strain_voigt_order": ["xx", "yy", "xy"],
+      "shear_convention": "engineering",
+      "formulation_history_width": 0,
+      "tangent_contribution": "material-geometric",
+      "tangent_symmetry": "symmetric",
+    }
+  if key == TL_MATERIAL_KEY:
+    return {
+      "schema": "pyfem-v3-material-descriptor-v1",
+      "law": "saint-venant-kirchhoff",
+      "stress_state": "plane-stress",
+      "parameter_names": ["youngs_modulus", "poisson_ratio"],
+      "parameter_dtype": "float64",
+      "stress_voigt_order": ["xx", "yy", "xy"],
+      "strain_shear_convention": "engineering",
+      "material_history_width": 0,
+      "tangent_class": "constant-symmetric",
+    }
+  msg = "no finite-strain descriptor metadata exists for that exact registry key"
+  raise KeyError(msg)
+
+
+def finite_strain_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
+  """Build the injectable registry for the finite-strain Q8 continuum slice.
+
+  The slice shares the Q8 topology and quadrature descriptors with the
+  small-strain convention (byte-identical metadata) and adds exactly the
+  total-Lagrangian formulation descriptor (binding the landed batched TL
+  kernel) and the plane-stress Saint-Venant-Kirchhoff material descriptor
+  (binding the landed plane-stress matrix). Snapshots capture exactly the
+  keys a model selects, so the registry leaves every pinned small-strain
+  snapshot byte-identical.
+  """
+  bindings = {
+    Q8_TOPOLOGY_KEY: ("pyfem-v3-serendipity-quad8-v1", serendipity_quad8),
+    Q8_QUADRATURE_KEY: (
+      "pyfem-v3-gauss-tensor-product-2d-order-3-v1",
+      gauss_tensor_product_2d,
+    ),
+    TL_FORMULATION_KEY: (
+      "pyfem-v3-total-lagrangian-quad8-v1",
+      quad8_tl_tangent_batched,
+    ),
+    TL_MATERIAL_KEY: (
+      "pyfem-v3-plane-stress-saint-venant-kirchhoff-v1",
+      plane_stress_matrix,
+    ),
+  }
+  descriptors = tuple(
+    RegistryDescriptor(
+      kind=key[0],
+      name=key[1],
+      version="1",
+      implementation_id=implementation_id,
+      metadata=(
+        q8_descriptor_metadata(*key)
+        if key in (Q8_TOPOLOGY_KEY, Q8_QUADRATURE_KEY)
+        else finite_strain_descriptor_metadata(*key)
+      ),
+      binding=binding,
+    )
+    for key, (implementation_id, binding) in bindings.items()
+  )
+  return {descriptor.key: descriptor for descriptor in descriptors}
+
+
 STATEFUL_MATERIAL_DESCRIPTOR_SCHEMA = "pyfem-v3-material-descriptor-v2"
 
 _STATE_SLOT_DTYPES = ("float64",)
@@ -564,9 +668,15 @@ class MaterialSignalPort:
 
   ``port_id`` names the operator-facing port emitted onto the compiled
   ``SignalPortBinding``; ``signal_id`` names the program signal the driver
-  binds to the port (this ABI revision binds declared program coordinates by
-  name); ``derivative_coordinate_ids`` names the program coordinates whose
-  ``d(signal)/d(coordinate)`` channels the driver forwards alongside the value.
+  binds to the port. The driver defines two binding rules: identity binding,
+  where the signal id exactly names a program coordinate, and
+  committed-increment derivation, where a ``d<coordinate>`` signal id binds
+  the base coordinate's increment over the previous committed point
+  (``dtime`` derives the time increment of rate-form laws).
+  ``derivative_coordinate_ids`` names the program coordinates whose
+  ``d(signal)/d(coordinate)`` channels the driver forwards alongside the
+  value — the Kronecker delta on the bound coordinate index under either
+  rule.
   """
 
   port_id: str
