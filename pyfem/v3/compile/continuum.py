@@ -41,6 +41,18 @@ material slot), wires the descriptor's initial-state rows into the layout, and
 marks every channel nonlinear per the declared tangent class. The first such
 law is ``isotropic-hardening-plasticity`` (J2, 19-float rows).
 
+- ``total-lagrangian-continuum``: the finite-strain slice (serendipity-quad8
+  only): one node displacement field and the plane-stress
+  Saint-Venant-Kirchhoff law. The formulation descriptor binds the landed
+  batched Q8 total-Lagrangian element kernel
+  (``pyfem.v3.fem.tl_element.quad8_tl_tangent_batched``), which the compiler
+  probes at compile time against a qualified reference assembly built from
+  the validated quadrature/topology/material ingredients — at the zero state
+  (where the response is the small-strain stiffness and an exactly-zero
+  internal force) and at a fixed uniform displacement-gradient probe state.
+  The operator carries a zero-width state layout and nonlinear, symmetric
+  channels (material and geometric tangent parts).
+
 A stateful descriptor may additionally declare the optional ``signal_ports``
 field: typed program-signal ports emitted as ``SignalPortBinding`` values on
 the operator header. The compiled operator then accepts one bound
@@ -62,6 +74,7 @@ from __future__ import annotations
 
 import math
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import NoReturn
@@ -76,6 +89,8 @@ from pyfem.v3.compile.contracts import (
   PLANE_STRAIN_MATERIAL_KEY,
   QUAD4_QUADRATURE_KEY,
   QUAD4_TOPOLOGY_KEY,
+  TL_FORMULATION_KEY,
+  TL_MATERIAL_KEY,
   TRIA3_QUADRATURE_KEY,
   TRIA3_TOPOLOGY_KEY,
   StatefulContinuumKernel,
@@ -85,6 +100,7 @@ from pyfem.v3.compile.contracts import (
   StatefulContinuumSignalKernel,
   breadth_descriptor_metadata,
   build_material_state_layout,
+  finite_strain_descriptor_metadata,
   resolve_material_signal_ports,
   resolve_material_state_slots,
   stateful_tangent_channel_flags,
@@ -187,13 +203,16 @@ _FORMULATION_CONTRACTS = {
   Q8_FORMULATION_KEY[1]: (_DISPLACEMENT_ROLE,),
   THERMAL_FORMULATION_KEY[1]: (_TEMPERATURE_ROLE,),
   THERMO_FORMULATION_KEY[1]: (_DISPLACEMENT_ROLE, _TEMPERATURE_ROLE),
+  TL_FORMULATION_KEY[1]: (_DISPLACEMENT_ROLE,),
 }
 # The small-strain formulation is the open stateful seam (any captured v2
 # stateful material descriptor may bind); the thermal formulations keep their
-# closed material sets.
+# closed material sets, and so does the finite-strain slice (the plane-stress
+# Saint-Venant-Kirchhoff law the legacy FiniteStrainContinuum deck ships).
 _FORMULATION_MATERIAL_MODELS = {
   THERMAL_FORMULATION_KEY[1]: THERMAL_MATERIAL_KEY[1],
   THERMO_FORMULATION_KEY[1]: THERMO_MATERIAL_KEY[1],
+  TL_FORMULATION_KEY[1]: TL_MATERIAL_KEY[1],
 }
 
 
@@ -309,6 +328,8 @@ _FORMULATION_GEOMETRIES = {
   ),
   THERMAL_FORMULATION_KEY[1]: frozenset((_Q8_GEOMETRY.geometry_interpolation,)),
   THERMO_FORMULATION_KEY[1]: frozenset((_Q8_GEOMETRY.geometry_interpolation,)),
+  # The landed TL kernel is the two-dimensional serendipity-quad8 slice only.
+  TL_FORMULATION_KEY[1]: frozenset((_Q8_GEOMETRY.geometry_interpolation,)),
 }
 _BREADTH_DESCRIPTOR_KEYS = frozenset(
   (
@@ -475,6 +496,164 @@ class Q8ContinuumOperator(CompilerConstructed):
     if request.residual_channel_ids:
       residual = np.einsum("eij,ej->ei", tangent, values, optimize=True)
       residual_values = (FinalizedArray(residual, dtype=np.float64),)
+    jacobian_values = (
+      (FinalizedArray(tangent, dtype=np.float64),)
+      if request.jacobian_channel_ids
+      else ()
+    )
+    return _new(
+      OperatorEvaluation,
+      residual_values=residual_values,
+      jacobian_values=jacobian_values,
+      trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+    )
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Q8FiniteStrainPayload(CompilerConstructed):
+  """Scale-normalized payload of the finite-strain (TL) Q8 continuum slice.
+
+  ``normalized_node_coordinates`` carries the translation-free reference
+  coordinates (per cell relative to the cell's first node, divided by the
+  cell geometry scale); :meth:`physical_node_coordinates` rescales them for
+  the TL kernel. The dropped translation leaves the kernel output invariant:
+  the kernel differentiates coordinates through the shape gradients, which
+  sum to zero.
+  """
+
+  quadrature_points: FinalizedArray
+  quadrature_weights: FinalizedArray
+  shape_values: FinalizedArray
+  parent_gradients: FinalizedArray
+  geometry_scales: FinalizedArray
+  normalized_node_coordinates: FinalizedArray
+  constitutive: FinalizedArray
+  material_parameters: FinalizedArray
+
+  def physical_node_coordinates(self) -> FinalizedArray:
+    values = (
+      self.normalized_node_coordinates.values
+      * self.geometry_scales.values[:, None, None]
+    )
+    return FinalizedArray(values, dtype=np.float64)
+
+
+def _tl_evaluation_array(
+  value: object,
+  *,
+  shape: tuple[int, ...],
+  label: str,
+) -> np.ndarray:
+  if (
+    type(value) is not np.ndarray
+    or value.shape != shape
+    or value.dtype.metadata is not None
+    or value.dtype.kind not in "iuf"
+  ):
+    msg = f"{label} must return a metadata-free numeric array {shape!r}"
+    raise TypeError(msg)
+  captured = np.array(value, dtype=np.float64, order="C", copy=True, subok=False)
+  if not bool(np.isfinite(captured).all()):
+    msg = "finite-strain evaluation response is not representable as finite float64"
+    raise ValueError(msg)
+  return captured
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class Q8FiniteStrainOperator(CompilerConstructed):
+  """Finite-strain total-Lagrangian continuum operator (Q8, plane stress).
+
+  Evaluation is pure and stateless: element displacement batches in, internal
+  force and the consistent (material + geometric) tangent out, computed by
+  the descriptor-bound landed TL kernel on the physical reference
+  coordinates. Both channels are nonlinear; the tangent is symmetric.
+  """
+
+  header: OperatorHeader
+  entity_block: IncidenceEntityBlock
+  payload: Q8FiniteStrainPayload
+  content_manifest: CanonicalManifest
+  kernel: Callable[[np.ndarray, np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
+
+  def evaluate(
+    self,
+    inputs: OperatorEvaluationInput,
+  ) -> OperatorEvaluation:
+    """Evaluate internal force and consistent tangent from compiled meaning."""
+    if type(inputs) is not OperatorEvaluationInput:
+      msg = "finite-strain evaluation requires an exact immutable evaluation input"
+      raise TypeError(msg)
+    if type(inputs.port_values) is not tuple or len(inputs.port_values) != 1:
+      msg = "finite-strain evaluation requires exactly one displacement port batch"
+      raise TypeError(msg)
+    values = inputs.port_values[0].values
+    expected = self.header.ports[0].coefficient_map.values.shape
+    if (
+      values.dtype != np.dtype(np.float64)
+      or values.dtype.metadata is not None
+      or values.shape != expected
+      or not bool(np.isfinite(values).all())
+    ):
+      msg = (
+        "finite-strain displacement port values must be a finite metadata-free "
+        "float64 batch"
+      )
+      raise TypeError(msg)
+    layout = self.header.state_layout
+    accepted_state = inputs.accepted_state.values
+    if (
+      accepted_state.dtype != np.dtype(np.float64)
+      or accepted_state.dtype.metadata is not None
+      or accepted_state.shape != layout.row_shape
+      or not bool(np.isfinite(accepted_state).all())
+    ):
+      msg = "finite-strain accepted state must match the compiled zero-width layout"
+      raise TypeError(msg)
+    if inputs.signals or self.header.signal_ports:
+      msg = "finite-strain model operator does not accept program signal inputs"
+      raise ValueError(msg)
+    residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
+    jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    request = inputs.request
+    if (
+      type(request) is not ChannelRequest
+      or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
+      or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or not set(request.residual_channel_ids).issubset(residual_ids)
+      or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+    ):
+      msg = "finite-strain evaluation request contains an unavailable channel"
+      raise ValueError(msg)
+
+    coordinates = self.payload.physical_node_coordinates().values
+    try:
+      raw_response = self.kernel(
+        coordinates,
+        np.array(values, dtype=np.float64, order="C", copy=True),
+        self.payload.constitutive.values,
+      )
+    except Exception:
+      msg = "finite-strain formulation binding failed during evaluation"
+      raise ValueError(msg) from None
+    if type(raw_response) is not tuple or len(raw_response) != 2:
+      msg = (
+        "finite-strain formulation binding must return exactly the tangent "
+        "and the internal force"
+      )
+      raise TypeError(msg)
+    tangent = _tl_evaluation_array(
+      raw_response[0],
+      shape=(expected[0], expected[1], expected[1]),
+      label="finite-strain tangent binding",
+    )
+    force = _tl_evaluation_array(
+      raw_response[1],
+      shape=expected,
+      label="finite-strain internal force binding",
+    )
+    residual_values = (
+      (FinalizedArray(force, dtype=np.float64),) if request.residual_channel_ids else ()
+    )
     jacobian_values = (
       (FinalizedArray(tangent, dtype=np.float64),)
       if request.jacobian_channel_ids
@@ -1360,6 +1539,8 @@ def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
     return thermal_descriptor_metadata(*key)
   if key in (THERMO_FORMULATION_KEY, THERMO_MATERIAL_KEY):
     return thermo_elastic_descriptor_metadata(*key)
+  if key in (TL_FORMULATION_KEY, TL_MATERIAL_KEY):
+    return finite_strain_descriptor_metadata(*key)
   if key == PLASTIC_MATERIAL_KEY:
     return isotropic_hardening_plasticity_metadata()
   if key in _BREADTH_DESCRIPTOR_KEYS:
@@ -1751,7 +1932,10 @@ def _required_keys(selection: ContinuumSelection) -> tuple[RegistryKey, ...]:
     keys.add(profile.topology_key)
     keys.add(profile.quadrature_key)
     formulation = region_selection.region.formulation
-    if formulation == Q8_FORMULATION_KEY[1]:
+    if formulation == TL_FORMULATION_KEY[1]:
+      keys.add(TL_FORMULATION_KEY)
+      keys.add(("material", region_selection.material.model))
+    elif formulation == Q8_FORMULATION_KEY[1]:
       keys.add(profile.formulation_key)
       keys.add(("material", region_selection.material.model))
     elif formulation == THERMAL_FORMULATION_KEY[1]:
@@ -1781,7 +1965,12 @@ def capture_registry(
     sources.setdefault(profile.topology_key, region_selection.block.source)
     sources.setdefault(profile.quadrature_key, region_selection.region.source)
     formulation = region_selection.region.formulation
-    if formulation == Q8_FORMULATION_KEY[1]:
+    if formulation == TL_FORMULATION_KEY[1]:
+      selected = (
+        TL_FORMULATION_KEY,
+        ("material", region_selection.material.model),
+      )
+    elif formulation == Q8_FORMULATION_KEY[1]:
       selected = (
         profile.formulation_key,
         ("material", region_selection.material.model),
@@ -1914,6 +2103,30 @@ def _corresponds(actual: np.ndarray, expected: np.ndarray) -> bool:
   ulps = 16.0 * np.abs(np.spacing(expected))
   tolerance = np.where(expected == 0.0, zero_tolerance, ulps)
   return bool(np.all(np.abs(actual - expected) <= tolerance))
+
+
+def _tl_probe_corresponds(actual: np.ndarray, expected: np.ndarray) -> bool:
+  """Scale-relative correspondence for the TL formulation-binding probe.
+
+  The probe compares a full element response (tangent and internal force)
+  computed two ways — the descriptor-bound kernel and the qualified reference
+  assembly — whose summation orders differ, so analytically-vanishing entries
+  carry cancellation noise at the ``eps * scale`` level. A per-entry ulp
+  envelope (``_corresponds``) would reject exactly that noise; the probe
+  therefore uses the scale-relative tolerance idiom of the landed symmetry
+  checks (64 eps on the response scale). Structural errors in a binding (a
+  wrong B row, a dropped geometric term) are O(scale) and never pass.
+  """
+  scale = float(np.max(np.abs(expected)))
+  if scale == 0.0:
+    return bool(np.array_equal(actual, expected))
+  tolerance = 64.0 * float(np.finfo(np.float64).eps) * scale
+  return bool(
+    np.all(
+      np.abs(actual - expected)
+      <= tolerance + 64.0 * float(np.finfo(np.float64).eps) * np.abs(expected)
+    )
+  )
 
 
 def _qualified_constitutive(
@@ -2713,6 +2926,16 @@ def compile_operator(
     )
   if formulation == THERMO_FORMULATION_KEY[1]:
     return _compile_coupled(
+      selection,
+      coordinates=coordinates,
+      node_dense=node_dense,
+      spaces=spaces,
+      snapshot=snapshot,
+      index_dtype=index_dtype,
+      geometry_relative_tolerance=geometry_relative_tolerance,
+    )
+  if formulation == TL_FORMULATION_KEY[1]:
+    return _compile_mechanical_tl(
       selection,
       coordinates=coordinates,
       node_dense=node_dense,
@@ -3706,10 +3929,14 @@ def _compile_mechanical_stateful(
 
   # The virgin probe mirrors runtime input mutability exactly: read-only
   # accepted rows and fresh writable port values, over the initial state.
-  # Ported descriptors probe with zero-valued scalar signals; the derivative
-  # channels carry the identity-binding delta the driver forwards at runtime
-  # (d(signal)/d(p) is one for the signal's own coordinate, zero otherwise),
-  # so a time-like law sees its no-elapsed-time evaluation at the origin.
+  # Ported descriptors probe with zero-valued scalar signals and synthesize
+  # identity-style derivative deltas (one where a declared derivative
+  # coordinate equals the signal id, zero otherwise) regardless of the port's
+  # runtime binding rule: the driver forwards the Kronecker delta keyed on the
+  # bound coordinate (identity rule) or on the base coordinate
+  # (committed-increment ``d<coordinate>`` rule), and a zero signal with
+  # identity-style deltas is a legal input either way, so a time-like law
+  # sees its no-elapsed-time evaluation at the origin.
   probe_state = (
     layout.initial_rows
     if layout.initial_rows is not None
@@ -3794,6 +4021,384 @@ def _compile_mechanical_stateful(
         selection.material.source,
       )
   return entity_block, operator
+
+
+_TL_PROBE_GRADIENT = ((0.04, 0.02), (0.03, 0.07))
+
+
+def _tl_probe_states(coordinates: np.ndarray) -> np.ndarray:
+  """Fixed formulation-binding probes: zero, then one uniform displacement gradient.
+
+  The nonzero probe applies the affine field ``u(X) = H X`` per cell, which
+  the Q8 isoparametric map reproduces exactly, so the binding and the
+  qualified reference assembly meet at a genuinely deformed finite-strain
+  state (uniform ``F = I + H`` per cell).
+  """
+  count = coordinates.shape[0]
+  gradient = np.array(_TL_PROBE_GRADIENT, dtype=np.float64)
+  states = np.zeros((2 * count, _LOCAL_COEFFICIENT_COUNT), dtype=np.float64)
+  states[count:] = (coordinates @ gradient.T).reshape(count, _LOCAL_COEFFICIENT_COUNT)
+  return states
+
+
+def _tl_reference_response(
+  gradients: np.ndarray,
+  integration_weights: np.ndarray,
+  geometry_scales: np.ndarray,
+  constitutive: np.ndarray,
+  states: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+  """Qualified TL element response assembled from the validated recipes.
+
+  The compiler's independent reference for the formulation-binding probe, in
+  the idiom of the truss family's ``_expected_kinematics``: physical shape
+  gradients (normalized gradients rescaled), deformation gradient,
+  Green-Lagrange strain, PK2 stress, and the material + geometric tangent
+  accumulated point by point from the trusted ingredients.
+  """
+  probe_count = states.shape[0]
+  cell_count = gradients.shape[0]
+  tangent = np.zeros(
+    (probe_count, _LOCAL_COEFFICIENT_COUNT, _LOCAL_COEFFICIENT_COUNT),
+    dtype=np.float64,
+  )
+  force = np.zeros((probe_count, _LOCAL_COEFFICIENT_COUNT), dtype=np.float64)
+  for probe in range(probe_count):
+    cell = probe % cell_count
+    scale = geometry_scales[cell]
+    displacement = states[probe].reshape(_NODE_COUNT, 2)
+    for point in range(_POINT_COUNT):
+      gradient = gradients[cell, point] / scale
+      weight = integration_weights[cell, point] * scale * scale
+      deformation = np.eye(2) + displacement.T @ gradient
+      right_cauchy_green = deformation.T @ deformation
+      strain = np.array(
+        [
+          0.5 * (right_cauchy_green[0, 0] - 1.0),
+          0.5 * (right_cauchy_green[1, 1] - 1.0),
+          right_cauchy_green[0, 1],
+        ],
+        dtype=np.float64,
+      )
+      stress = constitutive @ strain
+      b_matrix = np.zeros((3, _LOCAL_COEFFICIENT_COUNT), dtype=np.float64)
+      b_matrix[0, 0::2] = gradient[:, 0] * deformation[0, 0]
+      b_matrix[0, 1::2] = gradient[:, 0] * deformation[1, 0]
+      b_matrix[1, 0::2] = gradient[:, 1] * deformation[0, 1]
+      b_matrix[1, 1::2] = gradient[:, 1] * deformation[1, 1]
+      b_matrix[2, 0::2] = (
+        gradient[:, 1] * deformation[0, 0] + gradient[:, 0] * deformation[0, 1]
+      )
+      b_matrix[2, 1::2] = (
+        gradient[:, 0] * deformation[1, 1] + gradient[:, 1] * deformation[1, 0]
+      )
+      b_nl = np.zeros((4, _LOCAL_COEFFICIENT_COUNT), dtype=np.float64)
+      b_nl[0, 0::2] = gradient[:, 0]
+      b_nl[1, 0::2] = gradient[:, 1]
+      b_nl[2, 1::2] = gradient[:, 0]
+      b_nl[3, 1::2] = gradient[:, 1]
+      stress_matrix = np.array(
+        [
+          [stress[0], stress[2], 0.0, 0.0],
+          [stress[2], stress[1], 0.0, 0.0],
+          [0.0, 0.0, stress[0], stress[2]],
+          [0.0, 0.0, stress[2], stress[1]],
+        ],
+        dtype=np.float64,
+      )
+      tangent[probe] += weight * (
+        b_matrix.T @ (constitutive @ b_matrix) + b_nl.T @ (stress_matrix @ b_nl)
+      )
+      force[probe] += weight * (b_matrix.T @ stress)
+  return tangent, force
+
+
+def _compile_mechanical_tl(
+  selection: RegionSelection,
+  *,
+  coordinates: FinalizedArray,
+  node_dense: dict[SpecId, int],
+  spaces: dict[SpecId, DiscreteSpace],
+  snapshot: RegistrySnapshot,
+  index_dtype: np.dtype,
+  geometry_relative_tolerance: float,
+) -> tuple[IncidenceEntityBlock, Q8FiniteStrainOperator]:
+  """Compile the finite-strain (total-Lagrangian) Q8 plane-stress slice.
+
+  The payload keeps the reference geometry scale-normalized (translation-free
+  node coordinates plus the per-cell scale); evaluation rescales them and
+  calls the descriptor-bound landed TL kernel. The kernel is probed at
+  compile time against :func:`_tl_reference_response` — at the zero state and
+  at one fixed uniform displacement-gradient state — so a binding whose
+  response contradicts the qualified reference never escapes compilation.
+  """
+  space = spaces[selection.fields[0].id]
+  connectivity, entity_block = _element_block(selection, node_dense, index_dtype)
+  points, weights, shape_values, parent_gradients = _recipes(snapshot, selection)
+  gradients, determinants, geometry_scales = _geometry(
+    coordinates.values,
+    connectivity.values,
+    parent_gradients,
+    selection.cells,
+    geometry_relative_tolerance,
+    selection.geometry,
+  )
+  expected_b = np.zeros(
+    (len(selection.cells), _POINT_COUNT, 3, _LOCAL_COEFFICIENT_COUNT),
+    dtype=np.float64,
+  )
+  expected_b[..., 0, 0::2] = gradients[..., :, 0]
+  expected_b[..., 1, 1::2] = gradients[..., :, 1]
+  expected_b[..., 2, 0::2] = gradients[..., :, 1]
+  expected_b[..., 2, 1::2] = gradients[..., :, 0]
+  youngs_modulus, poisson_ratio = _parameters(selection, selection.geometry)
+  exact_constitutive, binary64_route = _qualified_constitutive(
+    youngs_modulus,
+    poisson_ratio,
+    selection.material.source,
+  )
+  material = snapshot.resolve("material", selection.material.model).binding
+  try:
+    with warnings.catch_warnings():
+      warnings.simplefilter("error", RuntimeWarning)
+      raw_constitutive = material(youngs_modulus, poisson_ratio)
+  except Exception:
+    _fail(
+      "material-binding-failed",
+      "total-Lagrangian material binding failed",
+      selection.material.source,
+    )
+  constitutive = _binding_array(
+    raw_constitutive,
+    shape=(3, 3),
+    code="invalid-material-binding-output",
+    label="total-Lagrangian material binding",
+    source=selection.material.source,
+  )
+  if not bool(np.array_equal(constitutive, constitutive.T)):
+    _fail(
+      "nonsymmetric-material-binding",
+      "total-Lagrangian material tangent must be symmetric",
+      selection.material.source,
+    )
+  if not _constitutive_corresponds(
+    constitutive,
+    exact_constitutive,
+    binary64_route,
+  ):
+    _fail(
+      "incompatible-material-binding-output",
+      "total-Lagrangian material output contradicts the qualified plane-stress "
+      "Saint-Venant-Kirchhoff law",
+      selection.material.source,
+    )
+  integration_weights = determinants * weights[None, :]
+  _validate_physical_recovery(
+    gradients,
+    expected_b,
+    integration_weights,
+    geometry_scales,
+    selection.cells,
+    selection.geometry,
+  )
+  normalized_nodes = np.empty((len(selection.cells), _NODE_COUNT, 2), dtype=np.float64)
+  for cell_index, cell in enumerate(selection.cells):
+    normalized_nodes[cell_index] = _normalized_coordinates(
+      coordinates.values[connectivity.values[cell_index]],
+      cell,
+    )[0]
+  physical_nodes = normalized_nodes * geometry_scales[:, None, None]
+  if not bool(np.isfinite(physical_nodes).all()):
+    _fail(
+      "non-finite-reference-geometry",
+      "total-Lagrangian physical reference geometry is non-finite",
+      selection.region.source,
+    )
+
+  formulation = snapshot.resolve(*TL_FORMULATION_KEY).binding
+  if not callable(formulation):
+    _fail(
+      "malformed-registry-descriptor",
+      "the total-Lagrangian formulation binding must be callable",
+      selection.region.source,
+    )
+  probe_states = _tl_probe_states(physical_nodes)
+  probe_coordinates = np.concatenate((physical_nodes, physical_nodes))
+  try:
+    raw_probe = formulation(probe_coordinates, probe_states, constitutive)
+  except Exception:
+    _fail(
+      "formulation-binding-failed",
+      "total-Lagrangian formulation binding failed",
+      selection.region.source,
+    )
+  if type(raw_probe) is not tuple or len(raw_probe) != 2:
+    _fail(
+      "invalid-formulation-binding-output",
+      "total-Lagrangian formulation must return exactly the tangent and the "
+      "internal force",
+      selection.region.source,
+    )
+  probe_tangent = _binding_array(
+    raw_probe[0],
+    shape=(
+      2 * len(selection.cells),
+      _LOCAL_COEFFICIENT_COUNT,
+      _LOCAL_COEFFICIENT_COUNT,
+    ),
+    code="invalid-formulation-binding-output",
+    label="total-Lagrangian tangent binding",
+    source=selection.region.source,
+  )
+  probe_force = _binding_array(
+    raw_probe[1],
+    shape=(2 * len(selection.cells), _LOCAL_COEFFICIENT_COUNT),
+    code="invalid-formulation-binding-output",
+    label="total-Lagrangian internal force binding",
+    source=selection.region.source,
+  )
+  reference_tangent, reference_force = _tl_reference_response(
+    gradients,
+    integration_weights,
+    geometry_scales,
+    constitutive,
+    probe_states,
+  )
+  if not _tl_probe_corresponds(probe_tangent, reference_tangent):
+    _fail(
+      "incompatible-formulation-binding-output",
+      "total-Lagrangian formulation tangent contradicts the qualified "
+      "total-Lagrangian reference assembly",
+      selection.region.source,
+    )
+  if not _tl_probe_corresponds(probe_force, reference_force):
+    _fail(
+      "incompatible-formulation-binding-output",
+      "total-Lagrangian formulation internal force contradicts the qualified "
+      "total-Lagrangian reference assembly",
+      selection.region.source,
+    )
+  tangent_scale = float(np.max(np.abs(probe_tangent)))
+  symmetry_tolerance = 64.0 * max(
+    float(np.finfo(np.float64).eps) * tangent_scale,
+    abs(tangent_scale - math.nextafter(tangent_scale, 0.0)),
+  )
+  if not bool(
+    np.allclose(
+      probe_tangent,
+      probe_tangent.transpose(0, 2, 1),
+      rtol=0.0,
+      atol=symmetry_tolerance,
+    )
+  ):
+    _fail(
+      "nonsymmetric-element-operator",
+      "total-Lagrangian element operator is not symmetric",
+      selection.region.source,
+    )
+
+  gather = FinalizedArray(
+    _gather_map(space, connectivity.values, node_dense).reshape(
+      len(selection.cells), -1
+    ),
+    dtype=index_dtype,
+  )
+  block_id = selection.block.id, selection.region.id
+  state_layout = _zero_width_state_layout(block_id, len(selection.cells), index_dtype)
+  port = _new(
+    PortBinding,
+    port_id="displacement",
+    space_id=space.space_id,
+    mode=PortMode.COEFFICIENTS,
+    coefficient_map=gather,
+  )
+  residual_channel = _new(
+    ResidualChannel,
+    channel_id="internal-force",
+    target_port_id=port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=False,
+  )
+  jacobian_channel = _new(
+    JacobianChannel,
+    channel_id="material-tangent",
+    residual_channel_id=residual_channel.channel_id,
+    target_port_id=port.port_id,
+    source_port_id=port.port_id,
+    balance_role=BalanceRole.INTERNAL,
+    linear=False,
+    symmetric=True,
+  )
+  header = _new(
+    OperatorHeader,
+    block_id=block_id,
+    entity_block_id=entity_block.block_id,
+    implementations=_identities(snapshot),
+    ports=(port,),
+    signal_ports=(),
+    residual_channels=(residual_channel,),
+    jacobian_channels=(jacobian_channel,),
+    state_layout=state_layout,
+    coupling_policy=CouplingPolicy.FIXED,
+  )
+  payload = _new(
+    Q8FiniteStrainPayload,
+    quadrature_points=FinalizedArray(points, dtype=np.float64),
+    quadrature_weights=FinalizedArray(weights, dtype=np.float64),
+    shape_values=FinalizedArray(shape_values, dtype=np.float64),
+    parent_gradients=FinalizedArray(parent_gradients, dtype=np.float64),
+    geometry_scales=FinalizedArray(geometry_scales, dtype=np.float64),
+    normalized_node_coordinates=FinalizedArray(normalized_nodes, dtype=np.float64),
+    constitutive=FinalizedArray(constitutive, dtype=np.float64),
+    material_parameters=FinalizedArray(
+      [[youngs_modulus, poisson_ratio]], dtype=np.float64
+    ),
+  )
+  manifest = CanonicalManifest(
+    {
+      "block_id": block_id,
+      "entity_block_id": entity_block.block_id,
+      "entity_ids": entity_block.entity_ids,
+      "implementations": [
+        {
+          "kind": item.kind,
+          "name": item.name,
+          "version": item.version,
+          "implementation_id": item.implementation_id,
+        }
+        for item in header.implementations
+      ],
+      "port": {
+        "port_id": port.port_id,
+        "space_id": port.space_id,
+        "coefficient_map": port.coefficient_map.values,
+      },
+      "channels": ["internal-force", "material-tangent"],
+      "state": {
+        "schema": state_layout.schema,
+        "row_width": 0,
+        "entity_offsets": state_layout.entity_offsets.values,
+      },
+      "payload": {
+        "quadrature_points": payload.quadrature_points.values,
+        "quadrature_weights": payload.quadrature_weights.values,
+        "shape_values": payload.shape_values.values,
+        "parent_gradients": payload.parent_gradients.values,
+        "geometry_scales": payload.geometry_scales.values,
+        "normalized_node_coordinates": payload.normalized_node_coordinates.values,
+        "constitutive": payload.constitutive.values,
+        "material_parameters": payload.material_parameters.values,
+      },
+    }
+  )
+  return entity_block, _new(
+    Q8FiniteStrainOperator,
+    header=header,
+    entity_block=entity_block,
+    payload=payload,
+    content_manifest=manifest,
+    kernel=formulation,
+  )
 
 
 def _element_block(
