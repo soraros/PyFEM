@@ -1,7 +1,7 @@
 name: CI
 
 # Triggers:
-#   push (any branch): test, build, docs on every branch push (fork or upstream)
+#   push (any branch): lint, test, build, docs on every branch push (fork or upstream)
 #   pull_request → main: same checks when a PR is opened/updated
 #   push → main only: upload Pages artifact + deploy-docs (see job if: filters)
 #   workflow_dispatch: manual run on the selected ref
@@ -22,6 +22,41 @@ env:
   DEFAULT_PYTHON: "3.13"
 
 jobs:
+  lint:
+    name: Ruff gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          enable-cache: true
+          cache-suffix: lint
+      # Dev group only (skips the v3 scientific stack); ruff resolves from the
+      # pyproject dev-group floor (ruff>=0.15.22). --no-sync keeps uv run from
+      # re-adding the default groups after the lean sync.
+      - name: Install dev tools
+        run: |
+          uv sync --no-default-groups --group dev
+          uv run --no-sync ruff --version
+      # Gates per AGENTS.md "Ruff gates" / .agents/v3/conventions.md: explicit
+      # --config under each per-tree config, plus format --check.
+      - name: Ruff check (pyfem/v3 config)
+        run: uv run --no-sync ruff check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+      - name: Ruff check (test/v3 config)
+        run: uv run --no-sync ruff check test/v3 --config test/v3/ruff.toml
+      - name: Ruff check (bench config)
+        run: uv run --no-sync ruff check bench --config bench/ruff.toml
+      - name: Ruff check (notebooks/v3 config)
+        run: uv run --no-sync ruff check notebooks/v3 --config notebooks/v3/ruff.toml
+      - name: Ruff format check
+        run: |
+          uv run --no-sync ruff format --check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+          uv run --no-sync ruff format --check test/v3 --config test/v3/ruff.toml
+          uv run --no-sync ruff format --check bench --config bench/ruff.toml
+          uv run --no-sync ruff format --check notebooks/v3 --config notebooks/v3/ruff.toml
+
   test:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
