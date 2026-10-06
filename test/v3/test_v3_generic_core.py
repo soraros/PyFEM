@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -272,7 +273,9 @@ def test_factory_outputs_are_detached_owning_and_read_only() -> None:
     fixture.loads.payload.magnitudes.values[0] = 1.0
 
 
-def test_exact_constrained_solution_and_attributed_balance() -> None:
+def test_exact_constrained_solution_and_attributed_balance(
+  bitwise_pin: Callable[..., None],
+) -> None:
   fixture = _fixture()
   zero = np.zeros(len(fixture.space.coefficient_ids), dtype=np.float64)
   zero_result = assemble(fixture.prepared, zero)
@@ -303,9 +306,17 @@ def test_exact_constrained_solution_and_attributed_balance() -> None:
     np.array([-1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
     2.0e-15,
   )
-  np.testing.assert_array_equal(
+  # Byte-identity pin (conftest platform contract): the spring term lands
+  # exactly on ±1.0 on the reference platform. The LAPACK solve feeding it
+  # rounds differently off it — observed ubuntu-latest deviation 8.9e-16
+  # (4 ulps at 1.0; CI runs 37440534665 and 37441926273) — so off the
+  # reference platform the pin asserts within 2.0e-15 (~2.2x the observed
+  # deviation).
+  bitwise_pin(
     _residual_term(result, "20-spring", "link-1").values.values,
     np.array([-1.0, 1.0]),
+    rtol=0.0,
+    atol=2.0e-15,
   )
 
   applied_x = -sum(

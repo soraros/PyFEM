@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import ast
 import io
+import platform
 import sys
 import tokenize
 from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 _V3_TEST = Path(__file__).resolve().parent
@@ -303,3 +305,92 @@ def _numba_cache_policy_canary(
       + "\n".join(f"  - {violation}" for violation in violations),
       pytrace=False,
     )
+
+
+# ---------------------------------------------------------------------------
+# Reference-platform contract for bitwise numerical pins.
+#
+# Byte-identity pins (raw-uint64 equality, signed-zero distinctions included)
+# are defined on ONE reference platform: the machine the bench manifests
+# record (bench/manifest.py collect_manifest, bench/results/*.json) — macOS
+# on x86_64 (Intel i9-9980HK), Python 3.13, the pyproject-pinned numba
+# (>=0.62.1,<0.63) and numpy, Accelerate BLAS. Off that platform the same
+# physics holds but the bits need not: numpy's non-macOS wheels bundle
+# OpenBLAS instead of Accelerate, and LLVM lowers numba kernels per target,
+# so BLAS path selection and codegen round differently at ulp level.
+# Observed on ubuntu-latest CI (Python 3.13, numba 0.62.1, numpy 2.3.5; runs
+# 37440534665 and 37441926273): the generic-core spring residual term landed
+# 4 ulps off ±1.0 (8.9e-16), and the M30 plasticity kernel's stresses drifted
+# up to 32 ulps (~7.1e-15 relative) from the M25 reference.
+#
+# The contract: a bitwise pin asserts raw-uint64 identity on the reference
+# platform and a documented tight tolerance everywhere else. BOTH branches
+# always assert — the platform selects the comparison, it never skips it.
+# Each call site's tolerance must exceed the observed cross-platform
+# deviation, with that deviation cited in a comment at the call site.
+
+REFERENCE_PLATFORM = (
+  "macOS x86_64 (bench-manifest reference: Intel i9-9980HK, numba 0.62.1, "
+  "pinned numpy, Accelerate BLAS)"
+)
+"""Human-readable description of the bitwise-reference platform."""
+
+
+def on_reference_platform() -> bool:
+  """True on the bitwise-reference platform (see the contract above).
+
+  Reads ``sys.platform``/``platform.machine()`` at call time so tests can
+  force either branch with ``monkeypatch``.
+  """
+  return sys.platform == "darwin" and platform.machine() == "x86_64"
+
+
+def assert_bitwise_pin(
+  actual: np.ndarray,
+  expected: np.ndarray,
+  *,
+  rtol: float,
+  atol: float,
+) -> None:
+  """Assert the bitwise-pin contract for float64 arrays.
+
+  On the reference platform: raw-uint64 identity (signed-zero distinctions
+  included). Anywhere else: ``assert_allclose`` with the call site's
+  documented tolerance. Both branches always assert.
+  """
+  if on_reference_platform():
+    np.testing.assert_array_equal(
+      np.asarray(actual, dtype=np.float64).view(np.uint64),
+      np.asarray(expected, dtype=np.float64).view(np.uint64),
+      err_msg=(
+        f"byte-identity pin failed on the reference platform ({REFERENCE_PLATFORM})"
+      ),
+    )
+  else:
+    np.testing.assert_allclose(
+      actual,
+      expected,
+      rtol=rtol,
+      atol=atol,
+      err_msg=(
+        "bitwise pin exceeded its documented cross-platform tolerance "
+        f"({sys.platform}/{platform.machine()}, rtol={rtol}, atol={atol}; "
+        f"reference: {REFERENCE_PLATFORM})"
+      ),
+    )
+
+
+@pytest.fixture(scope="session")
+def bitwise_pin() -> Callable[..., None]:
+  """The ``assert_bitwise_pin`` contract assert (see its docstring)."""
+  return assert_bitwise_pin
+
+
+@pytest.fixture(scope="session")
+def reference_platform_probe() -> Callable[[], bool]:
+  """The ``on_reference_platform`` probe as a function, not a bool.
+
+  Tests monkeypatch ``sys.platform``/``platform.machine()`` and then call the
+  probe to prove the gate follows — a resolved bool could not.
+  """
+  return on_reference_platform

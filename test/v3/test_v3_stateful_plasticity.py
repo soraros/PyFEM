@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import contextlib
 import io
+import platform
 import sys
 import warnings
+from collections.abc import Callable
 from types import SimpleNamespace
 
 import numpy as np
@@ -77,6 +79,15 @@ _HARD = 1000.0
 _YIELD_STRAIN = _SYIELD * (1.0 + _NU) / _E  # plane-strain deviatoric bound
 _PARITY_RTOL = 1.0e-12
 _PARITY_ATOL = 1.0e-12
+# Cross-platform tolerance for the optimized-vs-reference bitwise pin (the
+# conftest platform contract): the worst observed ubuntu-latest deviation is
+# 32 ulps (~7.1e-15 relative) on stresses — 83/3072 entries in CI run
+# 37440534665, 133/3072 entries at 8 ulps in run 37441926273. The tangent and
+# trial-row asserts never ran there (the stresses assert fired first); they
+# share the same predictor-stage BLAS path selection, so they carry the same
+# bound. 1e-12 is ~140x the worst observed deviation.
+_CROSS_PLATFORM_RTOL = 1.0e-12
+_CROSS_PLATFORM_ATOL = 1.0e-12
 
 _UNIT_COORDINATES = (
   (0.0, 0.0),
@@ -574,12 +585,18 @@ def test_compiled_plasticity_system_fingerprint_is_deterministic() -> None:
   assert np.all(layout.initial_rows.values == 0.0)
 
 
-def test_optimized_kernel_matches_reference_bitwise() -> None:
+def test_optimized_kernel_matches_reference_bitwise(
+  monkeypatch: pytest.MonkeyPatch,
+  bitwise_pin: Callable[..., None],
+  reference_platform_probe: Callable[[], bool],
+) -> None:
   """The M30 optimized kernel reproduces the M25 reference bit for bit.
 
   Deterministic and seeded batches over virgin, stepped, and rejecting
-  states: statuses agree and stresses, tangents, and trial rows compare
-  equal as raw uint64 (signed-zero distinctions included).
+  states: statuses agree everywhere, and stresses, tangents, and trial rows
+  compare equal as raw uint64 (signed-zero distinctions included) on the
+  reference platform; off it they hold to the documented cross-platform
+  tolerance instead (the conftest platform contract).
   """
   calibration = isotropic_hardening_calibration(_E, _NU, _SYIELD, _HARD)
 
@@ -588,15 +605,26 @@ def test_optimized_kernel_matches_reference_bitwise() -> None:
       strains, rows, calibration
     )
     optimized = isotropic_hardening_plasticity_kernel(strains, rows, calibration)
+    # Status identity is discrete and platform-independent: strict on both
+    # branches (it held in the failing ubuntu-latest runs; only bits moved).
     assert optimized.status is reference.status
-    np.testing.assert_array_equal(
-      optimized.stresses.view(np.uint64), reference.stresses.view(np.uint64)
+    bitwise_pin(
+      optimized.stresses,
+      reference.stresses,
+      rtol=_CROSS_PLATFORM_RTOL,
+      atol=_CROSS_PLATFORM_ATOL,
     )
-    np.testing.assert_array_equal(
-      optimized.tangents.view(np.uint64), reference.tangents.view(np.uint64)
+    bitwise_pin(
+      optimized.tangents,
+      reference.tangents,
+      rtol=_CROSS_PLATFORM_RTOL,
+      atol=_CROSS_PLATFORM_ATOL,
     )
-    np.testing.assert_array_equal(
-      optimized.trial_rows.view(np.uint64), reference.trial_rows.view(np.uint64)
+    bitwise_pin(
+      optimized.trial_rows,
+      reference.trial_rows,
+      rtol=_CROSS_PLATFORM_RTOL,
+      atol=_CROSS_PLATFORM_ATOL,
     )
 
   # Deterministic documented ramp magnitudes, every third entity in mixed
@@ -628,3 +656,25 @@ def test_optimized_kernel_matches_reference_bitwise() -> None:
   nonfinite = np.zeros((8, 6))
   nonfinite[5, 4] = np.inf
   assert_bitwise(nonfinite, np.zeros((8, 19)))
+
+  # Platform-gate proof (conftest contract): force each branch and require
+  # the assert to keep biting — the gate selects the comparison, it never
+  # skips. The forcings are host-independent; both branches must assert.
+  one = np.array([1.0])
+  one_ulp_off = np.nextafter(one, 2.0)
+  monkeypatch.setattr(sys, "platform", "darwin")
+  monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+  assert reference_platform_probe()
+  with pytest.raises(AssertionError):  # the byte-identity branch sees 1 ulp
+    bitwise_pin(one_ulp_off, one, rtol=_CROSS_PLATFORM_RTOL, atol=_CROSS_PLATFORM_ATOL)
+  monkeypatch.setattr(sys, "platform", "linux")
+  assert not reference_platform_probe()
+  # One ulp is within the cross-platform tolerance; a real gap still fails.
+  bitwise_pin(one_ulp_off, one, rtol=_CROSS_PLATFORM_RTOL, atol=_CROSS_PLATFORM_ATOL)
+  with pytest.raises(AssertionError):
+    bitwise_pin(
+      np.array([1.1]), one, rtol=_CROSS_PLATFORM_RTOL, atol=_CROSS_PLATFORM_ATOL
+    )
+  # The tolerance branch end-to-end with real kernel outputs (on the
+  # reference machine bitwise-equal outputs are within any tolerance).
+  assert_bitwise(strains[:8], np.zeros((8, 19)))
