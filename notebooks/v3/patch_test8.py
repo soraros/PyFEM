@@ -28,13 +28,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 if sys.version_info < (3, 13):
-    raise RuntimeError("This notebook requires Python 3.13+")
+  raise RuntimeError("This notebook requires Python 3.13+")
 
 from pyfem.v3 import load_problem, solve_linear
 
 ROOT = Path.cwd()
 if not (ROOT / "skims").exists():
-    ROOT = ROOT.parents[1]
+  ROOT = ROOT.parents[1]
 
 loaded = load_problem(ROOT / "skims/patch_test8/problem.toml")
 state = solve_linear(loaded)
@@ -45,16 +45,16 @@ v = state[problem.global_dofs[:, 1]]
 
 # %% tags=["parameters"]
 try:
-    get_ipython().run_line_magic("matplotlib", "widget")
+  get_ipython().run_line_magic("matplotlib", "widget")
 except Exception:
-    plt.switch_backend("Agg")
+  plt.switch_backend("Agg")
 
 fig, ax = plt.subplots(figsize=(6, 5))
 sc = ax.tripcolor(
-    problem.coords[:, 0],
-    problem.coords[:, 1],
-    u,
-    shading="gouraud",
+  problem.coords[:, 0],
+  problem.coords[:, 1],
+  u,
+  shading="gouraud",
 )
 fig.colorbar(sc, ax=ax, label="u")
 ax.set_aspect("equal")

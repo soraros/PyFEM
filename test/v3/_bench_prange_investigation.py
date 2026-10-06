@@ -204,16 +204,28 @@ VARIANTS = {
     kin_parallel=True, int_parallel=True, kin_prange=True, int_prange=False, fused=False
   ),
   "range_both_parallel": _make_stiffness_kernel(
-    kin_parallel=True, int_parallel=True, kin_prange=False, int_prange=False, fused=False
+    kin_parallel=True,
+    int_parallel=True,
+    kin_prange=False,
+    int_prange=False,
+    fused=False,
   ),
   "serial_both": _make_stiffness_kernel(
-    kin_parallel=False, int_parallel=False, kin_prange=False, int_prange=False, fused=False
+    kin_parallel=False,
+    int_parallel=False,
+    kin_prange=False,
+    int_prange=False,
+    fused=False,
   ),
   "fused_prange": _make_stiffness_kernel(
     kin_parallel=True, int_parallel=True, kin_prange=True, int_prange=True, fused=True
   ),
   "fused_range": _make_stiffness_kernel(
-    kin_parallel=False, int_parallel=False, kin_prange=False, int_prange=False, fused=True
+    kin_parallel=False,
+    int_parallel=False,
+    kin_prange=False,
+    int_prange=False,
+    fused=True,
   ),
 }
 
@@ -277,7 +289,9 @@ def _bench_sizes(
   return rows
 
 
-def _print_table(title: str, header: str, rows: dict[str, list[TimedRow]], baseline: str) -> None:
+def _print_table(
+  title: str, header: str, rows: dict[str, list[TimedRow]], baseline: str
+) -> None:
   sizes = rows[baseline]
   n_list = [r.n_elems for r in sizes]
   print(f"\n=== {title} ===")
@@ -307,7 +321,9 @@ def _legacy_element_setup():
   return element, template, n_dof, globdat
 
 
-def _legacy_stiffness_one(element, template, coords_2d: np.ndarray, globdat) -> np.ndarray:
+def _legacy_stiffness_one(
+  element, template, coords_2d: np.ndarray, globdat
+) -> np.ndarray:
   element.globdat = globdat
   template.coords = coords_2d
   template.stiff.fill(0.0)
@@ -318,7 +334,9 @@ def _legacy_stiffness_one(element, template, coords_2d: np.ndarray, globdat) -> 
   return template.stiff.copy()
 
 
-def _legacy_stiffness_batch(element, template, coords: np.ndarray, globdat) -> list[np.ndarray]:
+def _legacy_stiffness_batch(
+  element, template, coords: np.ndarray, globdat
+) -> list[np.ndarray]:
   out = []
   for e in range(coords.shape[0]):
     out.append(_legacy_stiffness_one(element, template, coords[e], globdat))
@@ -392,11 +410,15 @@ def main() -> None:
 
   # Relative to serial_both at n=200 and n=5000
   for n_ref in (200, 5000):
-    idx = next(i for i, r in enumerate(variant_rows["prod_prange_both"]) if r.n_elems == n_ref)
+    idx = next(
+      i for i, r in enumerate(variant_rows["prod_prange_both"]) if r.n_elems == n_ref
+    )
     serial_ms = variant_rows["serial_both"][idx].ms
     prod_ms = variant_rows["prod_prange_both"][idx].ms
-    print(f"\n  At n={n_ref}: serial={serial_ms:.3f} ms  prod={prod_ms:.3f} ms  "
-          f"speedup={serial_ms / prod_ms:.2f}x")
+    print(
+      f"\n  At n={n_ref}: serial={serial_ms:.3f} ms  prod={prod_ms:.3f} ms  "
+      f"speedup={serial_ms / prod_ms:.2f}x"
+    )
 
   # Q2 kinematics-only micro-benchmark
   print("\n=== Q2 supplement: physical_gradients only (ms/call) ===")
@@ -407,7 +429,9 @@ def main() -> None:
     ("pg range", _pg_range),
     ("pg serial", _pg_serial),
   ]
-  print(f"{'n_elems':>8}  {'prod prange':>14}  {'range':>14}  {'serial':>14}  {'prange/range':>12}")
+  print(
+    f"{'n_elems':>8}  {'prod prange':>14}  {'range':>14}  {'serial':>14}  {'prange/range':>12}"
+  )
   for n in [5, 50, 200, 1000, 5000]:
     batch = _make_coords(n, rng)
     for _, fn in kin_labels:
@@ -464,7 +488,9 @@ def main() -> None:
 
   # Q8 PatchTest8 end-to-end-ish (n=5 batch)
   print("\n=== Q8: PatchTest8 batch (n=5) prod vs serial ===")
-  idx5 = next(i for i, r in enumerate(variant_rows["prod_prange_both"]) if r.n_elems == 5)
+  idx5 = next(
+    i for i, r in enumerate(variant_rows["prod_prange_both"]) if r.n_elems == 5
+  )
   prod5 = variant_rows["prod_prange_both"][idx5].ms
   ser5 = variant_rows["serial_both"][idx5].ms
   print(f"  prod prange both: {prod5:.3f} ms")

@@ -90,12 +90,7 @@ def build_uniform_q8_patch(
   constraints: list[PrescribedDof] = []
   for node_id in node_ids:
     x, y = coords[int(node_id)]
-    on_boundary = (
-      x <= tol
-      or y <= tol
-      or x >= width - tol
-      or y >= height - tol
-    )
+    on_boundary = x <= tol or y <= tol or x >= width - tol or y >= height - tol
     if not on_boundary:
       continue
     u, v = patch_displacement(float(x), float(y))

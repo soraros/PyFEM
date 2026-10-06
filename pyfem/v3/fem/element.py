@@ -155,10 +155,7 @@ def continuum_stiffness_batched(
       return _hex8_stiffness_from_coords_batched(nodal_coords, constitutive)
     if n_nodes == 4:
       return _tet4_stiffness_from_coords_batched(nodal_coords, constitutive)
-  msg = (
-    f"Unsupported element with {n_nodes} nodes per element "
-    f"in {spatial_dim}D"
-  )
+  msg = f"Unsupported element with {n_nodes} nodes per element in {spatial_dim}D"
   raise ValueError(msg)
 
 

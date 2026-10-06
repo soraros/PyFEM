@@ -169,7 +169,7 @@ def test_tet4_stiffness_matches_legacy_on_unit_tet(tmp_path: Path) -> None:
         "    nu   = 0.25;",
         "  };",
         "};",
-        "solver = { type = \"LinearSolver\"; };",
+        'solver = { type = "LinearSolver"; };',
       ]
     ),
     encoding="utf-8",
