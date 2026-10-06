@@ -1,0 +1,1043 @@
+{
+  "schema": 1,
+  "kind": "benchmark-baseline",
+  "source": "M3 performance baseline (agent-g1p survey-summary, message 2376cb97-0fdd-4ce0-9971-151eb0315be3, 2026-09-29). Values are the reported means; legacy 32x32/64x64 carry +/-50% run-to-run variance per the report. e2e-ratio-only rows are intentionally absent (no absolute times published).",
+  "manifest": {
+    "created_utc": "2026-09-29T19:40:00+00:00",
+    "git_revision": "candidate 2f6f972eef5a4c5f633478b1effecba834ca5fd4; legacy 5eb8d39 (byte-identical diff)",
+    "cpu": "Intel Core i9-9980HK @ 2.40GHz (8C/16T)",
+    "machine": "x86_64",
+    "os": "macOS 26.7.1 (Darwin 25.6.0)",
+    "python": "3.13.11",
+    "numpy": "2.3.5",
+    "scipy": "1.18.0",
+    "numba": "0.62.1",
+    "linalg_backend": {
+      "blas": {
+        "name": "unknown (not reported by M3)"
+      }
+    },
+    "thread_env": {
+      "NUMBA_NUM_THREADS": "16 (numba default)"
+    },
+    "numba_threads_default": 16
+  },
+  "records": [
+    {
+      "category": "scale",
+      "workload": "q8patch/2x2/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 4,
+      "n_dofs": 42,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 0.39,
+          "median_ms": 0.39,
+          "mean_ms": 0.39,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/2x2/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 4,
+      "n_dofs": 42,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 0.26,
+          "median_ms": 0.26,
+          "mean_ms": 0.26,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/2x2/PlaneStress",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 4,
+      "n_dofs": 42,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 5.39,
+          "median_ms": 5.39,
+          "mean_ms": 5.39,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy scale cell: gate threshold 1.6 (declared +/-50% M3 variance at >=32; +/-30% same-day cross-process flap observed at 16x16)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/4x4/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 16,
+      "n_dofs": 130,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 0.5,
+          "median_ms": 0.5,
+          "mean_ms": 0.5,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/4x4/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 16,
+      "n_dofs": 130,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 0.66,
+          "median_ms": 0.66,
+          "mean_ms": 0.66,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/4x4/PlaneStress",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 16,
+      "n_dofs": 130,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 20.16,
+          "median_ms": 20.16,
+          "mean_ms": 20.16,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy scale cell: gate threshold 1.6 (declared +/-50% M3 variance at >=32; +/-30% same-day cross-process flap observed at 16x16)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/8x8/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 64,
+      "n_dofs": 450,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 0.88,
+          "median_ms": 0.88,
+          "mean_ms": 0.88,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/8x8/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 64,
+      "n_dofs": 450,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 2.36,
+          "median_ms": 2.36,
+          "mean_ms": 2.36,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/8x8/PlaneStress",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 64,
+      "n_dofs": 450,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 102.4,
+          "median_ms": 102.4,
+          "mean_ms": 102.4,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy scale cell: gate threshold 1.6 (declared +/-50% M3 variance at >=32; +/-30% same-day cross-process flap observed at 16x16)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/16x16/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 256,
+      "n_dofs": 1666,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 2.23,
+          "median_ms": 2.23,
+          "mean_ms": 2.23,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/16x16/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 256,
+      "n_dofs": 1666,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 9.51,
+          "median_ms": 9.51,
+          "mean_ms": 9.51,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/16x16/PlaneStress",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 256,
+      "n_dofs": 1666,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 693.0,
+          "median_ms": 693.0,
+          "mean_ms": 693.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy scale cell: gate threshold 1.6 (declared +/-50% M3 variance at >=32; +/-30% same-day cross-process flap observed at 16x16)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/32x32/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 1024,
+      "n_dofs": 6402,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 7.37,
+          "median_ms": 7.37,
+          "mean_ms": 7.37,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/32x32/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 1024,
+      "n_dofs": 6402,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 35.9,
+          "median_ms": 35.9,
+          "mean_ms": 35.9,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/32x32/PlaneStress",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 1024,
+      "n_dofs": 6402,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 9107.0,
+          "median_ms": 9107.0,
+          "mean_ms": 9107.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy superlinear cell: gate threshold 1.6 (M3 declared +/-50% run-to-run variance)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/64x64/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 4096,
+      "n_dofs": 25090,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 29.1,
+          "median_ms": 29.1,
+          "mean_ms": 29.1,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/64x64/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 4096,
+      "n_dofs": 25090,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 138.1,
+          "median_ms": 138.1,
+          "mean_ms": 138.1,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/64x64/PlaneStress",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 4096,
+      "n_dofs": 25090,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 162447.0,
+          "median_ms": 162447.0,
+          "mean_ms": 162447.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy superlinear cell: gate threshold 1.6 (M3 declared +/-50% run-to-run variance)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/32x32/PlaneStrain",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 1024,
+      "n_dofs": 6402,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 6.6,
+          "median_ms": 6.6,
+          "mean_ms": 6.6,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/32x32/PlaneStrain",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 1024,
+      "n_dofs": 6402,
+      "metrics": {
+        "assemble_coo": {
+          "min_ms": 13800.0,
+          "median_ms": 13800.0,
+          "mean_ms": 13800.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy superlinear cell: gate threshold 1.6 (M3 declared +/-50% run-to-run variance)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/64x64/PlaneStress",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 4096,
+      "n_dofs": 25090,
+      "metrics": {
+        "solve": {
+          "min_ms": 633.0,
+          "median_ms": 633.0,
+          "mean_ms": 633.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        },
+        "backsolve": {
+          "min_ms": 14.5,
+          "median_ms": 14.5,
+          "mean_ms": 14.5,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        },
+        "load": {
+          "min_ms": 3380.0,
+          "median_ms": 3380.0,
+          "mean_ms": 3380.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "scale",
+      "workload": "q8patch/64x64/PlaneStress",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 4096,
+      "n_dofs": 25090,
+      "metrics": {
+        "solve": {
+          "min_ms": 597.0,
+          "median_ms": 597.0,
+          "mean_ms": 597.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy superlinear cell: gate threshold 1.6 (M3 declared +/-50% run-to-run variance)",
+          "gate_threshold": 1.6
+        },
+        "load": {
+          "min_ms": 970.0,
+          "median_ms": 970.0,
+          "mean_ms": 970.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy superlinear cell: gate threshold 1.6 (M3 declared +/-50% run-to-run variance)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "skim",
+      "workload": "skim/patch_test8",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 5,
+      "n_dofs": 40,
+      "metrics": {
+        "e2e": {
+          "min_ms": 1.32,
+          "median_ms": 1.32,
+          "mean_ms": 1.32,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "skim",
+      "workload": "skim/patch_test8",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 5,
+      "n_dofs": 40,
+      "metrics": {
+        "e2e": {
+          "min_ms": 13.3,
+          "median_ms": 13.3,
+          "mean_ms": 13.3,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy skim e2e cell: gate threshold 1.6 (same interpreter-bookkeeping variance class as the legacy scale cells: >=20% same-session, 1.35x cross-day flap on byte-identical code, reviewer-reproduced r1)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "skim",
+      "workload": "skim/patch_test8_plane_strain",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 5,
+      "n_dofs": 40,
+      "metrics": {
+        "e2e": {
+          "min_ms": 1.32,
+          "median_ms": 1.32,
+          "mean_ms": 1.32,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "skim",
+      "workload": "skim/patch_test8_plane_strain",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 5,
+      "n_dofs": 40,
+      "metrics": {
+        "e2e": {
+          "min_ms": 12.8,
+          "median_ms": 12.8,
+          "mean_ms": 12.8,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy skim e2e cell: gate threshold 1.6 (same interpreter-bookkeeping variance class as the legacy scale cells: >=20% same-session, 1.35x cross-day flap on byte-identical code, reviewer-reproduced r1)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "skim",
+      "workload": "skim/patch_test8_nonlinear",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 5,
+      "n_dofs": 40,
+      "metrics": {
+        "e2e": {
+          "min_ms": 1.56,
+          "median_ms": 1.56,
+          "mean_ms": 1.56,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "skim",
+      "workload": "skim/patch_test8_nonlinear",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 5,
+      "n_dofs": 40,
+      "metrics": {
+        "e2e": {
+          "min_ms": 13.6,
+          "median_ms": 13.6,
+          "mean_ms": 13.6,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy skim e2e cell: gate threshold 1.6 (same interpreter-bookkeeping variance class as the legacy scale cells: >=20% same-session, 1.35x cross-day flap on byte-identical code, reviewer-reproduced r1)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "skim",
+      "workload": "skim/cantilever8",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 8,
+      "n_dofs": 86,
+      "metrics": {
+        "e2e": {
+          "min_ms": 128.0,
+          "median_ms": 128.0,
+          "mean_ms": 128.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "skim",
+      "workload": "skim/cantilever8",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 8,
+      "n_dofs": 86,
+      "metrics": {
+        "e2e": {
+          "min_ms": 1514.0,
+          "median_ms": 1514.0,
+          "mean_ms": 1514.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy skim e2e cell: gate threshold 1.6 (same interpreter-bookkeeping variance class as the legacy scale cells: >=20% same-session, 1.35x cross-day flap on byte-identical code, reviewer-reproduced r1)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "skim",
+      "workload": "skim/shallow_truss_riks",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 3,
+      "n_dofs": 8,
+      "metrics": {
+        "e2e": {
+          "min_ms": 81.1,
+          "median_ms": 81.1,
+          "mean_ms": 81.1,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "skim",
+      "workload": "skim/shallow_truss_riks",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 3,
+      "n_dofs": 8,
+      "metrics": {
+        "e2e": {
+          "min_ms": 83.7,
+          "median_ms": 83.7,
+          "mean_ms": 83.7,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup); legacy skim e2e cell: gate threshold 1.6 (same interpreter-bookkeeping variance class as the legacy scale cells: >=20% same-session, 1.35x cross-day flap on byte-identical code, reviewer-reproduced r1)",
+          "gate_threshold": 1.6
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "cold",
+      "workload": "skim/patch_test8",
+      "side": "v3",
+      "mode": "cold",
+      "threads": 16,
+      "n_elems": 5,
+      "n_dofs": 40,
+      "metrics": {
+        "wall": {
+          "min_ms": 1200.0,
+          "median_ms": 1200.0,
+          "mean_ms": 1200.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "cold",
+      "workload": "skim/patch_test8",
+      "side": "legacy",
+      "mode": "cold",
+      "threads": 1,
+      "n_elems": 5,
+      "n_dofs": 40,
+      "metrics": {
+        "wall": {
+          "min_ms": 490.0,
+          "median_ms": 490.0,
+          "mean_ms": 490.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "cold",
+      "workload": "skim/cantilever8",
+      "side": "v3",
+      "mode": "cold",
+      "threads": 16,
+      "n_elems": 8,
+      "n_dofs": 86,
+      "metrics": {
+        "wall": {
+          "min_ms": 1220.0,
+          "median_ms": 1220.0,
+          "mean_ms": 1220.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "cold",
+      "workload": "skim/cantilever8",
+      "side": "legacy",
+      "mode": "cold",
+      "threads": 1,
+      "n_elems": 8,
+      "n_dofs": 86,
+      "metrics": {
+        "wall": {
+          "min_ms": 2140.0,
+          "median_ms": 2140.0,
+          "mean_ms": 2140.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "cold",
+      "workload": "q8patch/32x32/PlaneStress",
+      "side": "v3",
+      "mode": "cold",
+      "threads": 16,
+      "n_elems": 1024,
+      "n_dofs": 6402,
+      "metrics": {
+        "wall": {
+          "min_ms": 1760.0,
+          "median_ms": 1760.0,
+          "mean_ms": 1760.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "cold",
+      "workload": "q8patch/32x32/PlaneStress",
+      "side": "legacy",
+      "mode": "cold",
+      "threads": 1,
+      "n_elems": 1024,
+      "n_dofs": 6402,
+      "metrics": {
+        "wall": {
+          "min_ms": 17700.0,
+          "median_ms": 17700.0,
+          "mean_ms": 17700.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    },
+    {
+      "category": "cold",
+      "workload": "skim/patch_test8",
+      "side": "v3",
+      "mode": "truecold",
+      "threads": 16,
+      "n_elems": 5,
+      "n_dofs": 40,
+      "metrics": {
+        "wall": {
+          "min_ms": 11700.0,
+          "median_ms": 11700.0,
+          "mean_ms": 11700.0,
+          "reps": 0,
+          "samples_ms": [],
+          "rss_delta_mb": 0.0,
+          "note": "M3 report value (agent-g1p, 2026-09-29; adaptive reps 2-30 with warmup)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "note": "M3: 11/11 cross-side state comparisons pass (max rel diff 8.5e-14)"
+      }
+    }
+  ]
+}
