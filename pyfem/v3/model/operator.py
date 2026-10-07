@@ -98,13 +98,18 @@ class SignalPortBinding(CompilerConstructed):
   """One declared program-signal port of a compiled operator.
 
   ``port_id`` is the operator-local name evaluation inputs bind by;
-  ``signal_id`` names the program signal the driver binds to the port (the
-  landed driver revision binds declared program coordinates by name);
-  ``derivative_coordinate_ids`` names the program coordinates whose
-  ``d(signal)/d(coordinate)`` channels the driver forwards alongside the
-  value. Operators with no declared ports reject every signal input, and an
-  evaluation input naming an undeclared port is rejected fail-closed: schedule
-  values reach operators exclusively through declared ports.
+  ``signal_id`` names the program signal the driver binds to the port under
+  one of two binding rules: identity binding, where the signal id exactly
+  names a declared program coordinate, and committed-increment derivation,
+  where a ``d<coordinate>`` signal id binds the base coordinate's increment
+  over the previous committed point (``dtime`` derives the time increment of
+  rate-form laws). ``derivative_coordinate_ids`` names the program coordinates
+  whose ``d(signal)/d(coordinate)`` channels the driver forwards alongside the
+  value — the Kronecker delta on the bound coordinate under identity binding
+  and on the base coordinate under increment derivation. Operators with no
+  declared ports reject every signal input, and an evaluation input naming an
+  undeclared port is rejected fail-closed: schedule values reach operators
+  exclusively through declared ports.
   """
 
   port_id: str

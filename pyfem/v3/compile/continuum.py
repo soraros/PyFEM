@@ -39,7 +39,12 @@ emits nonzero-width ``OperatorStateLayout`` values from descriptor
 ``state_slots`` with the entity axis flattened (element x integration point x
 material slot), wires the descriptor's initial-state rows into the layout, and
 marks every channel nonlinear per the declared tangent class. The first such
-law is ``isotropic-hardening-plasticity`` (J2, 19-float rows).
+law is ``isotropic-hardening-plasticity`` (J2, 19-float rows); the second is
+``plane-strain-damage`` (the legacy isotropic damage law, 1-float kappa
+envelope rows), the first ``algorithmic-nonsymmetric`` tangent-class witness:
+its progressive-branch rank-1 correction tangent honestly drives the Jacobian
+channel flags ``linear=False, symmetric=False``, which the driver consumes
+through the general splu path with no symmetry assumption.
 
 - ``total-lagrangian-continuum``: the finite-strain slice (serendipity-quad8
   only): one node displacement field and the plane-stress
@@ -125,6 +130,10 @@ from pyfem.v3.materials.isotropic_hardening_plasticity import (
   isotropic_hardening_plasticity_metadata,
 )
 from pyfem.v3.materials.plane_strain import plane_strain_matrix
+from pyfem.v3.materials.plane_strain_damage import (
+  PLANE_STRAIN_DAMAGE_BINDING,
+  plane_strain_damage_metadata,
+)
 from pyfem.v3.materials.plane_stress import plane_stress_matrix
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
@@ -183,6 +192,7 @@ THERMO_FORMULATION_KEY: RegistryKey = (
 )
 THERMO_MATERIAL_KEY: RegistryKey = ("material", "linear-thermo-elastic")
 PLASTIC_MATERIAL_KEY: RegistryKey = ("material", "isotropic-hardening-plasticity")
+DAMAGE_MATERIAL_KEY: RegistryKey = ("material", "plane-strain-damage")
 _PARAMETER_NAMES = ("youngs_modulus", "poisson_ratio")
 _THERMAL_PARAMETER_NAMES = ("conductivity",)
 _THERMO_PARAMETER_NAMES = (
@@ -1543,6 +1553,8 @@ def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
     return finite_strain_descriptor_metadata(*key)
   if key == PLASTIC_MATERIAL_KEY:
     return isotropic_hardening_plasticity_metadata()
+  if key == DAMAGE_MATERIAL_KEY:
+    return plane_strain_damage_metadata()
   if key in _BREADTH_DESCRIPTOR_KEYS:
     return breadth_descriptor_metadata(*key)
   return q8_descriptor_metadata(*key)
@@ -1686,6 +1698,27 @@ def plasticity_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
     implementation_id="pyfem-v3-isotropic-hardening-plasticity-v1",
     metadata=isotropic_hardening_plasticity_metadata(),
     binding=ISOTROPIC_HARDENING_PLASTICITY_BINDING,
+  )
+  registry[descriptor.key] = descriptor
+  return registry
+
+
+def damage_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
+  """Build the Q8 reference registry plus the second stateful law descriptor.
+
+  The plane-strain damage law is the first ``algorithmic-nonsymmetric``
+  tangent-class witness of the frozen v2 descriptor ABI: its descriptor pins
+  the qualified damage convention, and the compiled operator's Jacobian
+  channel carries ``linear=False, symmetric=False``.
+  """
+  registry = dict(q8_reference_registry())
+  descriptor = RegistryDescriptor(
+    kind=DAMAGE_MATERIAL_KEY[0],
+    name=DAMAGE_MATERIAL_KEY[1],
+    version="1",
+    implementation_id="pyfem-v3-plane-strain-damage-v1",
+    metadata=plane_strain_damage_metadata(),
+    binding=PLANE_STRAIN_DAMAGE_BINDING,
   )
   registry[descriptor.key] = descriptor
   return registry
