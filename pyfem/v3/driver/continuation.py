@@ -11,11 +11,16 @@ outcome and is reported through the typed
 stable.
 
 The continuation baseline is the committed Scope-A channel of the two-scope
-continuation design: it is owned by one driver run, written only on the
-substep commit path immediately after the owner commit, never touched by
-reject paths, and returned in the result. Per-attempt candidates (the
-anchored predictor, the trial load parameter, the cutback identity, the
-iteration trail) are step-routine locals discarded on reject.
+continuation design: it lives in the request-owned
+:class:`pyfem.v3.state.evolution.ContinuationEvolutionStore`, is written only
+on the substep commit path immediately after the owner commit, is never
+touched by reject paths, and is returned in the result. Per-attempt
+candidates (the anchored predictor, the trial load parameter, the cutback
+identity, the iteration trail) are step-routine locals discarded on reject.
+The adapters below convert between the driver-surface
+:class:`ArcLengthContinuationState` and the store's codec-backed
+:class:`pyfem.v3.state.evolution.ContinuationEvolutionState`; the two types
+share one field set and semantics.
 """
 
 from __future__ import annotations
@@ -34,6 +39,7 @@ from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import StateGeneration
 from pyfem.v3.model.operator import EvaluationStatus
 from pyfem.v3.spec.program import ProgramPoint
+from pyfem.v3.state.evolution import ContinuationEvolutionState
 
 
 class ArcLengthTermination(Enum):
@@ -144,6 +150,52 @@ class ArcLengthContinuationState:
   factor: float
   total_factor: float
   cycle: int
+
+
+def arc_length_continuation_from_evolution(
+  state: ContinuationEvolutionState,
+) -> ArcLengthContinuationState:
+  """Adapt one store snapshot into the driver result surface.
+
+  The two types share one field set and semantics; the immutable
+  ``da_prev`` carrier passes through without copying.
+  """
+  if type(state) is not ContinuationEvolutionState:
+    msg = (
+      "arc-length continuation adaptation requires an exact ContinuationEvolutionState"
+    )
+    raise TypeError(msg)
+  return ArcLengthContinuationState(
+    lam=state.lam,
+    da_prev=state.da_prev,
+    dlam_prev=state.dlam_prev,
+    factor=state.factor,
+    total_factor=state.total_factor,
+    cycle=state.cycle,
+  )
+
+
+def continuation_evolution_from_arc_length(
+  state: ArcLengthContinuationState,
+) -> ContinuationEvolutionState:
+  """Adapt one driver-surface continuation state into the codec state.
+
+  The two types share one field set and semantics; the immutable
+  ``da_prev`` carrier passes through without copying.
+  """
+  if type(state) is not ArcLengthContinuationState:
+    msg = (
+      "continuation evolution adaptation requires an exact ArcLengthContinuationState"
+    )
+    raise TypeError(msg)
+  return ContinuationEvolutionState(
+    lam=state.lam,
+    da_prev=state.da_prev,
+    dlam_prev=state.dlam_prev,
+    factor=state.factor,
+    total_factor=state.total_factor,
+    cycle=state.cycle,
+  )
 
 
 @dataclass(frozen=True, slots=True, eq=False)

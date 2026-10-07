@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Riks arc-length driver protocol: continuation baseline, cutback, counters.
+"""Riks arc-length driver protocol: continuation baseline, cutback, counters, restart.
 
 The oracles pin the two-scope continuation discipline directly: the committed
 baseline (lam, da_prev, dlam_prev, factor, total_factor, cycle) advances only
@@ -13,6 +13,10 @@ single deterministic float expression; converged-state comparisons carry
 tolerances. The scripted-spring tests key runtime kernel calls the same way
 as the nonlinear-driver suite: the compile boundary probes the kernel, and
 ``mark_runtime`` anchors the runtime call count after driver construction.
+The restart oracle pins the request-owned evolution store: a cycle-cap-cut
+run resumed one cycle at a time continues the uninterrupted trajectory
+bitwise, resume validation fails closed, and reject/cutback paths leave the
+store's encoded bytes untouched.
 """
 
 from __future__ import annotations
@@ -48,8 +52,10 @@ from pyfem.v3.driver import (
   DriverStatus,
   RiksDriver,
   SubstepStatus,
+  arc_length_continuation_from_evolution,
 )
 from pyfem.v3.driver.diagnostics import DriverPreparationError
+from pyfem.v3.model.identity import GenerationMismatchError, require_same_generation
 from pyfem.v3.model.operator import EvaluationStatus
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec import (
@@ -76,7 +82,12 @@ from pyfem.v3.spec.program import (
   ProgramCoordinateValue,
   ProgramPoint,
 )
-from pyfem.v3.state import StateTransactionOwner
+from pyfem.v3.state import (
+  ContinuationEvolutionLayout,
+  ContinuationEvolutionStore,
+  StateCodecError,
+  StateTransactionOwner,
+)
 
 _BASE_POINT = ProgramPoint()
 
@@ -1000,3 +1011,214 @@ def test_mpc_tie_run_converges_and_equilibrates() -> None:
   # has no closed form. The supports still carry genuine reaction load.
   assert observation.reduced_residual_norm <= 1.0e-10 * (100.0 * final.lam)
   assert float(reactions[1] + reactions[3]) != 0.0
+
+
+def _assert_records_bitwise(actual: list, expected: list) -> None:
+  """Pin two record traces equal value-by-value, floats bitwise."""
+  assert len(actual) == len(expected)
+  for got, want in zip(actual, expected, strict=True):
+    assert got.cycle == want.cycle
+    assert got.status is want.status
+    assert got.lam == want.lam
+    assert got.factor == want.factor
+    assert got.cutback_level == want.cutback_level
+    assert got.point == want.point
+    assert got.committed_ordinal == want.committed_ordinal
+    if want.committed_coefficients is None:
+      assert got.committed_coefficients is None
+    else:
+      assert got.committed_coefficients is not None
+      assert (
+        got.committed_coefficients.values.tobytes()
+        == want.committed_coefficients.values.tobytes()
+      )
+    assert len(got.iterations) == len(want.iterations)
+    for got_iteration, want_iteration in zip(
+      got.iterations,
+      want.iterations,
+      strict=True,
+    ):
+      assert got_iteration.iteration == want_iteration.iteration
+      assert got_iteration.status is want_iteration.status
+      assert got_iteration.residual_norm == want_iteration.residual_norm
+      assert got_iteration.increment_norm == want_iteration.increment_norm
+      assert got_iteration.load_parameter == want_iteration.load_parameter
+      assert got_iteration.delta_lam == want_iteration.delta_lam
+    if want.observation is None:
+      assert got.observation is None
+    else:
+      assert got.observation is not None
+      assert (
+        got.observation.reactions.values.tobytes()
+        == want.observation.reactions.values.tobytes()
+      )
+      assert got.observation.constraint_work == want.observation.constraint_work
+      assert got.observation.full_residual_norm == want.observation.full_residual_norm
+      assert (
+        got.observation.reduced_residual_norm == want.observation.reduced_residual_norm
+      )
+
+
+def test_resume_bitwise_continues_the_trajectory() -> None:
+  # THE RESTART ORACLE — converging fixed-step paths only (the M32 risk note:
+  # beyond-parity cutback changes trajectories on diverging paths). An
+  # uninterrupted run and a cycle-cap-cut run resumed one cycle at a time
+  # through the request-owned store trace the same trajectory bitwise.
+  reference_driver = _truss_driver(_settings())
+  reference = reference_driver.run(base_point=_BASE_POINT)
+  assert reference.status is DriverStatus.COMPLETED
+  assert reference.termination_reason is ArcLengthTermination.LOAD_PARAMETER_LIMIT
+
+  driver = _truss_driver(_settings(cycle_cap=2))
+  store = ContinuationEvolutionStore.virgin(
+    driver.evolution_layout,
+    driver.owner.generation,
+  )
+  segments = [driver.run(base_point=_BASE_POINT, resume=store)]
+  # cycle_cap = 2 commits cycles 1..3 (legacy cycle > cap termination); every
+  # resumed segment commits exactly one more cycle before the same cap fires,
+  # continuing the cumulative cycle numbering from the store.
+  assert [record.cycle for record in segments[0].records] == [1, 2, 3]
+  assert segments[0].termination_reason is ArcLengthTermination.CYCLE_LIMIT
+  while segments[-1].termination_reason is ArcLengthTermination.CYCLE_LIMIT:
+    segments.append(driver.run(base_point=_BASE_POINT, resume=store))
+  assert segments[-1].status is DriverStatus.COMPLETED
+  assert segments[-1].termination_reason is ArcLengthTermination.LOAD_PARAMETER_LIMIT
+  assert all(len(segment.records) == 1 for segment in segments[1:])
+
+  # A run resumed from an explicit virgin store traces the default
+  # fresh-baseline run bitwise.
+  plain = _truss_driver(_settings(cycle_cap=2)).run(base_point=_BASE_POINT)
+  _assert_records_bitwise(list(plain.records), list(segments[0].records))
+
+  records = [record for segment in segments for record in segment.records]
+  _assert_records_bitwise(records, list(reference.records))
+
+  # The store ends exactly where the uninterrupted baseline ended.
+  assert _continuation_snapshot(
+    arc_length_continuation_from_evolution(store.snapshot())
+  ) == _continuation_snapshot(reference.final_continuation)
+  assert (
+    store.encode()
+    == ContinuationEvolutionStore.decode(
+      driver.evolution_layout,
+      store.generation,
+      store.encode(),
+    ).encode()
+  )
+  # The owner ends byte-identical with an equal generation ordinal, and the
+  # store's live generation IS the owner's.
+  assert (
+    driver.owner.accepted_physical().values.tobytes()
+    == reference_driver.owner.accepted_physical().values.tobytes()
+  )
+  assert driver.owner.block_ids == reference_driver.owner.block_ids
+  for block_id in driver.owner.block_ids:
+    assert driver.owner.encode_state(block_id) == reference_driver.owner.encode_state(
+      block_id
+    )
+  assert driver.owner.generation.ordinal == reference_driver.owner.generation.ordinal
+  require_same_generation(store.generation, driver.owner.generation)
+  # The per-segment counter deltas sum exactly to the uninterrupted counters.
+  zero = tuple(0 for _ in dataclasses.astuple(reference.statistics))
+  totals = [0] * len(zero)
+  previous = zero
+  for segment in segments:
+    current = dataclasses.astuple(segment.statistics)
+    for index, (after, before) in enumerate(zip(current, previous, strict=True)):
+      totals[index] += after - before
+    previous = current
+  assert tuple(totals) == dataclasses.astuple(reference.statistics)
+
+
+def test_resume_requires_exact_store_layout_and_current_generation() -> None:
+  driver = _truss_driver(_settings())
+  with pytest.raises(TypeError, match="exact ContinuationEvolutionStore"):
+    driver.run(base_point=_BASE_POINT, resume=object())  # type: ignore[arg-type]
+
+  layout = driver.evolution_layout
+  foreign_fingerprint = ContinuationEvolutionLayout(
+    schema=layout.schema,
+    reduced_dof_count=layout.reduced_dof_count,
+    map_fingerprint="f" * 64,
+  )
+  with pytest.raises(StateCodecError, match="contradicts"):
+    driver.run(
+      base_point=_BASE_POINT,
+      resume=ContinuationEvolutionStore.virgin(
+        foreign_fingerprint,
+        driver.owner.generation,
+      ),
+    )
+  foreign_width = ContinuationEvolutionLayout(
+    schema=layout.schema,
+    reduced_dof_count=layout.reduced_dof_count + 1,
+    map_fingerprint=layout.map_fingerprint,
+  )
+  with pytest.raises(StateCodecError, match="contradicts"):
+    driver.run(
+      base_point=_BASE_POINT,
+      resume=ContinuationEvolutionStore.virgin(
+        foreign_width,
+        driver.owner.generation,
+      ),
+    )
+
+  # A store rooted at a stale generation of this owner, or at a foreign
+  # lineage with an equal ordinal, is not a resume candidate: in-process
+  # resume is a live-generation identity check.
+  stale_generation = driver.owner.generation
+  first_store = ContinuationEvolutionStore.virgin(layout, stale_generation)
+  first = driver.run(base_point=_BASE_POINT, resume=first_store)
+  assert first.status is DriverStatus.COMPLETED
+  assert driver.owner.generation.ordinal > stale_generation.ordinal
+  stale_store = ContinuationEvolutionStore.virgin(layout, stale_generation)
+  with pytest.raises(GenerationMismatchError, match="exact accepted-state generation"):
+    driver.run(base_point=_BASE_POINT, resume=stale_store)
+  other_driver = _truss_driver(_settings())
+  foreign_lineage = ContinuationEvolutionStore.virgin(
+    layout,
+    other_driver.owner.generation,
+  )
+  with pytest.raises(GenerationMismatchError, match="exact accepted-state generation"):
+    driver.run(base_point=_BASE_POINT, resume=foreign_lineage)
+
+
+def test_reject_and_cutback_leave_store_bytes_unchanged() -> None:
+  # Mirror of the baseline byte-identity oracle, one level down: with every
+  # cycle-2 evaluation rejected, the cutback budget exhausts after one
+  # committed cycle and the store must equal the reference store captured
+  # right after that same committed cycle.
+  reference, _reference_calls, reference_mark = _scripted_truss_driver(
+    {},
+    _settings(max_lam=0.5),
+  )
+  reference_mark()
+  reference_store = ContinuationEvolutionStore.virgin(
+    reference.evolution_layout,
+    reference.owner.generation,
+  )
+  reference_result = reference.run(base_point=_BASE_POINT, resume=reference_store)
+  assert len(_committed(reference_result)) == 1
+  reference_bytes = reference_store.encode()
+
+  cycle2_first_call = len(reference_result.records[0].iterations) + 1
+  reject_map = {
+    cycle2_first_call + index: EvaluationStatus.REJECT_STEP for index in range(50)
+  }
+  driver, _calls, mark_runtime = _scripted_truss_driver(
+    reject_map,
+    _settings(max_lam=10.0, max_cutbacks=2),
+  )
+  mark_runtime()
+  assert driver.evolution_layout == reference.evolution_layout
+  store = ContinuationEvolutionStore.virgin(
+    driver.evolution_layout,
+    driver.owner.generation,
+  )
+  result = driver.run(base_point=_BASE_POINT, resume=store)
+  assert result.status is DriverStatus.STEP_FAILED
+  assert result.failed_cycle == 2
+  assert result.statistics.rejected_substep_count == 3
+  assert store.encode() == reference_bytes
+  assert store.generation.ordinal == reference_store.generation.ordinal == 1

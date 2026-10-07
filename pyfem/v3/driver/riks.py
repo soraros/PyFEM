@@ -6,18 +6,23 @@ same landed machinery as the M18 nonlinear static driver. It is forbidden
 from owning authoritative state — committed physical coefficients and
 operator state rows live only in the M12 :class:`StateTransactionOwner`;
 the reduced coordinates are derivable scratch (``q = u[free_dofs]``); the
-continuation bookkeeping is local to one ``run`` and returned in the result.
+continuation bookkeeping lives in the request-owned
+:class:`pyfem.v3.state.evolution.ContinuationEvolutionStore` and is
+snapshotted into the result.
 
 Two-scope continuation discipline (D3 risk #5 made concrete):
 
 - Scope A — the committed continuation baseline ``{lam, da_prev, dlam_prev,
-  factor, total_factor, cycle}`` — is driver-run-owned typed data written
-  ONLY on the substep commit path immediately after ``owner.commit()`` and
-  snapshotted into the result. Reject paths never touch it, so a rejected or
-  cut-back attempt leaves both the owner's committed state and the baseline
-  byte-identical; commit atomicity is procedural and total (the owner
-  validates-then-writes and cannot fail after staging, and the baseline
-  field writes cannot fail).
+  factor, total_factor, cycle}`` — is one ``ContinuationEvolutionStore``
+  seeded virgin per run at the owner's current generation, or RESUMED from a
+  previous run's store through the exact-typed ``resume`` argument gated on
+  live-generation identity. It is written ONLY on the substep commit path
+  immediately after ``owner.commit()`` via the store's infallible
+  ``advance()`` and snapshotted into the result. Reject paths never touch
+  it, so a rejected or cut-back attempt leaves both the owner's committed
+  state and the store byte-identical; commit atomicity is procedural and
+  total (the owner validates-then-writes and cannot fail after staging, and
+  the store advance is field writes that cannot fail).
 - Scope B — the per-attempt candidate (the anchored predictor ``(da1,
   dlam1)``, the trial ``lam``, the cutback identity, the iteration trail) —
   lives in step-routine locals discarded on reject. Cutback retries the same
@@ -112,12 +117,12 @@ from pyfem.v3.constraints.compile import (
   reduce_tangent,
 )
 from pyfem.v3.driver.continuation import (
-  ArcLengthContinuationState,
   ArcLengthIterationRecord,
   ArcLengthResult,
   ArcLengthSettings,
   ArcLengthStepRecord,
   ArcLengthTermination,
+  arc_length_continuation_from_evolution,
 )
 from pyfem.v3.driver.contracts import (
   _NORM_REFERENCE_FLOOR,
@@ -139,6 +144,7 @@ from pyfem.v3.driver.plan import (
   refill_tangent,
 )
 from pyfem.v3.model.arrays import FinalizedArray
+from pyfem.v3.model.identity import require_same_generation
 from pyfem.v3.model.operator import (
   ChannelRequest,
   EvaluationStatus,
@@ -153,55 +159,25 @@ from pyfem.v3.spec.program import (
   ProgramCoordinateValue,
   ProgramPoint,
 )
-from pyfem.v3.state import StateTransaction, StateTransactionOwner
+from pyfem.v3.state import (
+  CONTINUATION_EVOLUTION_STATE_SCHEMA,
+  ContinuationEvolutionLayout,
+  ContinuationEvolutionStore,
+  StateCodecError,
+  StateTransaction,
+  StateTransactionOwner,
+)
 
-# Legacy continuation initial values (RiksSolver.__init__): the first cycle
-# solves at lam0 = 1.0, and the lazy Dlamprev starts at 1.0. Ported verbatim,
-# not redesigned; the initial dlam_prev is consumed only if a run's first
-# cycle were skipped, which the schedule never does.
+# Legacy continuation initial value (RiksSolver.__init__): the first cycle
+# solves at lam0 = 1.0, and the run preamble probes the program at the same
+# value. Ported verbatim, not redesigned.
 _INITIAL_LOAD_PARAMETER = 1.0
-_INITIAL_INCREMENT = 1.0
 
 
 def _preparation_fail(code: str, message: str) -> NoReturn:
   raise DriverPreparationError(
     (DriverDiagnostic(code=code, message=message, source=SourceContext()),)
   )
-
-
-class _ContinuationBaseline:
-  """Mutable run-local Scope-A baseline; written only on the commit path."""
-
-  __slots__ = (
-    "cycle",
-    "da_prev",
-    "dlam_prev",
-    "factor",
-    "lam",
-    "total_factor",
-  )
-
-  def __init__(self, reduced_dof_count: int) -> None:
-    self.lam = _INITIAL_LOAD_PARAMETER
-    self.da_prev = np.zeros(reduced_dof_count, dtype=np.float64)
-    self.dlam_prev = _INITIAL_INCREMENT
-    self.factor = 1.0
-    self.total_factor = 1.0
-    self.cycle = 0
-
-  def snapshot(self) -> ArcLengthContinuationState:
-    """Return the immutable typed view of the current baseline."""
-    return ArcLengthContinuationState(
-      lam=self.lam,
-      da_prev=FinalizedArray(
-        np.array(self.da_prev, dtype=np.float64, order="C", copy=True),
-        dtype=np.float64,
-      ),
-      dlam_prev=self.dlam_prev,
-      factor=self.factor,
-      total_factor=self.total_factor,
-      cycle=self.cycle,
-    )
 
 
 class _RiksWorkspace:
@@ -286,6 +262,11 @@ class RiksDriver:
     self._settings = settings
     self._plan = compile_driver_plan(system, coordinate_map, loads)
     self._owner = StateTransactionOwner(system)
+    self._evolution_layout = ContinuationEvolutionLayout(
+      schema=CONTINUATION_EVOLUTION_STATE_SCHEMA,
+      reduced_dof_count=coordinate_map.reduced_dof_count,
+      map_fingerprint=coordinate_map.content_fingerprint.digest,
+    )
     self._workspace = _RiksWorkspace()
     self._requests = tuple(
       ChannelRequest(
@@ -327,6 +308,16 @@ class RiksDriver:
   def settings(self) -> ArcLengthSettings:
     """Return the exact numeric policy."""
     return self._settings
+
+  @property
+  def evolution_layout(self) -> ContinuationEvolutionLayout:
+    """Return the continuation evolution codec authority for this driver.
+
+    Resume stores are built against this layout — it pins the arc-length
+    evolution schema, this map's reduced DOF count, and its content
+    fingerprint.
+    """
+    return self._evolution_layout
 
   @property
   def statistics(self) -> DriverStatistics:
@@ -447,7 +438,7 @@ class RiksDriver:
 
   def _cycle_attempt(
     self,
-    baseline: _ContinuationBaseline,
+    baseline: ContinuationEvolutionStore,
     base_values: tuple[ProgramCoordinateValue, ...],
     attempt_factor: float,
   ) -> _AttemptOutcome:
@@ -603,18 +594,25 @@ class RiksDriver:
           corrections = iteration - 1
           # Scope-A baseline advance: commit path only, immediately after the
           # owner commit. The adaptive factor and the totalFactor reset quirk
-          # are the legacy formulas, verbatim.
-          baseline.lam = lam
-          baseline.da_prev = np.array(da, dtype=np.float64, order="C", copy=True)
-          baseline.dlam_prev = dlam
-          baseline.cycle += 1
+          # are the legacy formulas, verbatim; the store advance itself is
+          # infallible field writes, so owner commit and baseline advance
+          # cannot separate.
+          factor = baseline.factor
+          total_factor = baseline.total_factor
           if not settings.fixed_step:
-            baseline.factor = float(
-              0.5 ** (0.25 * (corrections - settings.optimal_iterations))
-            )
-            baseline.total_factor *= baseline.factor
-          if baseline.total_factor > settings.max_factor:
-            baseline.factor = 1.0
+            factor = float(0.5 ** (0.25 * (corrections - settings.optimal_iterations)))
+            total_factor *= factor
+          if total_factor > settings.max_factor:
+            factor = 1.0
+          baseline.advance(
+            lam=lam,
+            da_prev=np.array(da, dtype=np.float64, order="C", copy=True),
+            dlam_prev=dlam,
+            factor=factor,
+            total_factor=total_factor,
+            cycle=baseline.cycle + 1,
+            generation=self._owner.generation,
+          )
           return _AttemptOutcome(
             committed=True,
             iterations=tuple(iterations),
@@ -694,13 +692,29 @@ class RiksDriver:
         transaction.reject()
       raise
 
-  def run(self, *, base_point: ProgramPoint) -> ArcLengthResult:
+  def run(
+    self,
+    *,
+    base_point: ProgramPoint,
+    resume: ContinuationEvolutionStore | None = None,
+  ) -> ArcLengthResult:
     """Advance the committed state along the autonomous arc-length schedule.
 
     ``base_point`` binds every declared program coordinate EXCEPT the load
     coordinate of kind ``'load'`` — the continuation owns the load parameter
     and binds it per attempt as a coordinate value. Binding the load
     coordinate in ``base_point`` is a contract error.
+
+    ``resume`` continues a previous run's committed continuation baseline:
+    pass the exact :class:`ContinuationEvolutionStore` that run advanced
+    (virgin stores are seeded against :attr:`evolution_layout`). Without it
+    the run starts a fresh virgin baseline at the owner's current
+    generation. A resume store must match this driver's evolution layout
+    (schema, reduced DOF count, and constraint-map fingerprint) and its
+    generation must be the owner's CURRENT live generation: in-process
+    resume is a live-generation identity check; cross-process lineage
+    restore is the checkpoint-bundle follow-up's boundary, not this
+    driver's.
     """
     if type(base_point) is not ProgramPoint:
       msg = "the Riks driver base point must be an exact ProgramPoint value"
@@ -725,8 +739,27 @@ class RiksDriver:
     settings = self._settings
     workspace = self._workspace
     initial_generation = self._owner.generation
-    baseline = _ContinuationBaseline(self._map.reduced_dof_count)
-    initial_continuation = baseline.snapshot()
+    if resume is None:
+      baseline = ContinuationEvolutionStore.virgin(
+        self._evolution_layout,
+        initial_generation,
+      )
+    else:
+      if type(resume) is not ContinuationEvolutionStore:
+        msg = "the Riks driver resume state must be an exact ContinuationEvolutionStore"
+        raise TypeError(msg)
+      if resume.layout != self._evolution_layout:
+        msg = (
+          "the Riks driver resume store layout contradicts the driver's constraint map"
+        )
+        raise StateCodecError(msg)
+      require_same_generation(
+        resume.generation,
+        initial_generation,
+        context="Riks driver resume",
+      )
+      baseline = resume
+    initial_continuation = arc_length_continuation_from_evolution(baseline.snapshot())
     records: list[ArcLengthStepRecord] = []
     while True:
       cycle = baseline.cycle + 1
@@ -761,7 +794,9 @@ class RiksDriver:
             initial_generation=initial_generation,
             final_generation=self._owner.generation,
             initial_continuation=initial_continuation,
-            final_continuation=baseline.snapshot(),
+            final_continuation=arc_length_continuation_from_evolution(
+              baseline.snapshot()
+            ),
             failed_cycle=cycle,
           )
         records.append(
@@ -810,6 +845,6 @@ class RiksDriver:
       initial_generation=initial_generation,
       final_generation=self._owner.generation,
       initial_continuation=initial_continuation,
-      final_continuation=baseline.snapshot(),
+      final_continuation=arc_length_continuation_from_evolution(baseline.snapshot()),
       failed_cycle=None,
     )
