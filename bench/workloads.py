@@ -124,3 +124,94 @@ MATERIAL_KERNEL_CASES: tuple[MaterialKernelCase, ...] = (
 def material_cases() -> list[MaterialKernelCase]:
   """All registered material-kernel batch workloads."""
   return list(MATERIAL_KERNEL_CASES)
+
+
+@dataclass(frozen=True)
+class FiniteStrainWorkload:
+  """Refined cantilever8 strip through the finite-strain TL deck stack.
+
+  The generated deck is the shipped ``skims/cantilever8`` case refined to
+  ``nx x ny`` serendipity-quad8 cells over the same 8.0 x 0.5 strip: same
+  clamped left edge, same 0.01 tip load, same NonlinearSolver ramp. The v3
+  side drives the landed finite-strain family (deck conversion + compilation
+  + ``NonlinearStaticDriver``), not the prototype solver the skim times; the
+  gate is legacy parity per the landed F4 oracle (final state plus tangent
+  and internal force at the converged state), within
+  ``skims/cantilever8/parity.toml``.
+  """
+
+  nx: int
+  ny: int
+  rtol: float
+  atol: float
+
+  @property
+  def name(self) -> str:
+    return f"tl-cantilever/{self.nx}x{self.ny}"
+
+  @property
+  def n_elems(self) -> int:
+    return self.nx * self.ny
+
+  @property
+  def n_nodes(self) -> int:
+    return (self.ny + 1) * (2 * self.nx + 1) + self.ny * (self.nx + 1)
+
+  @property
+  def n_dofs(self) -> int:
+    return 2 * self.n_nodes
+
+
+# Documented family sizes: 2x and 4x refinements of the shipped 8x1 skim in
+# each direction. The 32x4 legacy side is ~24 s per nonlinear run on the
+# reference machine (16x the skim's ~1.5 s), inside the harness's legacy
+# budget at the standard 3-rep nonlinear envelope.
+FINITE_STRAIN_SIZES: tuple[tuple[int, int], ...] = ((16, 2), (32, 4))
+
+
+def finite_strain_cases() -> list[FiniteStrainWorkload]:
+  """All registered finite-strain TL family workloads (cantilever8-derived)."""
+  rtol, atol = _parity_tolerances("cantilever8")
+  return [FiniteStrainWorkload(nx, ny, rtol, atol) for nx, ny in FINITE_STRAIN_SIZES]
+
+
+@dataclass(frozen=True)
+class RiksFanWorkload:
+  """Truss-only shallow-truss fan through the landed Riks arc-length driver.
+
+  ``n_rays`` truss members from fully constrained base nodes on
+  ``[-span/2, span/2]`` (span 20) to a loaded apex (0, 0.5, v = -100);
+  ``n_rays=2`` reproduces the ch.4 ShallowtrussRiks truss-only geometry of
+  the landed M33 oracle. The fan drops the skim's spring on both sides
+  exactly like that oracle — the point-spring family is declaration-routed
+  and not ModelSpec-expressible. The gate is legacy parity per the oracle:
+  exact cycle-count equality and per-cycle (lam, state, correction-count)
+  parity within ``skims/shallow_truss_riks/parity.toml``.
+  """
+
+  n_rays: int
+  rtol: float
+  atol: float
+
+  @property
+  def name(self) -> str:
+    return f"riks-fan/{self.n_rays}"
+
+  @property
+  def n_elems(self) -> int:
+    return self.n_rays
+
+  @property
+  def n_dofs(self) -> int:
+    return 2 * (self.n_rays + 1)
+
+
+# Documented fan sizes, mirroring the landed structural scale bench
+# (test/v3/_bench_structural_scale.py): 8/32/128 rays.
+RIKS_FAN_RAYS: tuple[int, ...] = (8, 32, 128)
+
+
+def riks_fan_cases() -> list[RiksFanWorkload]:
+  """All registered Riks arc-length family workloads (shallow-truss-derived)."""
+  rtol, atol = _parity_tolerances("shallow_truss_riks")
+  return [RiksFanWorkload(n, rtol, atol) for n in RIKS_FAN_RAYS]
