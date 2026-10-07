@@ -45,6 +45,13 @@ class NonlinearStaticSettings:
   corrections and operator retry-iteration outcomes together per substep.
   ``max_cutbacks`` bounds the halving cascade per target point; exhausting it
   is the typed ``STEP_FAILED`` outcome, not an exception.
+  ``min_substep_size`` floors the substep size as a fraction of the target
+  interval: rejecting a substep already at or below the floor means the
+  schedule cannot advance by any meaningful increment, which is the same
+  typed ``STEP_FAILED`` outcome. Consecutive-rejection sizes bottom out at
+  ``cutback_factor ** max_cutbacks`` of the initial size, far above any
+  honest floor, so the floor can only trip after micro-commits that make no
+  real progress — never on a converging trajectory.
   """
 
   tolerance: float = 1.0e-10
@@ -53,6 +60,7 @@ class NonlinearStaticSettings:
   cutback_factor: float = 0.5
   growth_factor: float = 2.0
   divergence_ratio: float = 1.0e8
+  min_substep_size: float = 1.0e-12
 
   def __post_init__(self) -> None:
     tolerance = self.tolerance
@@ -88,6 +96,14 @@ class NonlinearStaticSettings:
       or divergence_ratio <= 1.0
     ):
       msg = "nonlinear static divergence_ratio must exceed one"
+      raise ValueError(msg)
+    min_substep_size = self.min_substep_size
+    if (
+      type(min_substep_size) is not float
+      or not math.isfinite(min_substep_size)
+      or not 0.0 < min_substep_size < 1.0
+    ):
+      msg = "nonlinear static min_substep_size must lie strictly between zero and one"
       raise ValueError(msg)
 
 

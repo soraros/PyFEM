@@ -21,11 +21,17 @@ Protocol summary:
   exhausted iteration budget) halves the substep in program-coordinate
   progress and retries from the SAME committed generation; a committed
   substep regrows the size by ``growth_factor`` capped at the remaining
-  progress. Exhausting ``max_cutbacks`` yields the typed ``STEP_FAILED``
-  run status, never an exception. Operators that leave the finite float64
-  envelope raise their own contract error; the driver still rejects the
-  open transaction first, so committed state survives even that path
-  byte-identical.
+  progress. Exhausting ``max_cutbacks`` — or rejecting a substep whose size
+  is already at or below ``min_substep_size`` of the target interval, where
+  no further refinement can advance the schedule meaningfully — yields the
+  typed ``STEP_FAILED`` run status, never an exception. The floor is the
+  termination guard for limit-point trajectories: a target past a limit
+  load commits ever-smaller substeps that each reset the consecutive-rejection
+  budget, so without it the schedule asymptotes to the limit point and
+  burns unbounded CPU without tripping ``max_cutbacks``. Operators that
+  leave the finite float64 envelope raise their own contract error; the
+  driver still rejects the open transaction first, so committed state
+  survives even that path byte-identical.
 - Operator ``REJECT_ITERATION`` retries from the same accepted state with a
   damped iterate (half the last Newton increment), budgeted against
   ``max_iterations``; without a previous increment it escalates to cutback.
@@ -500,7 +506,7 @@ class NonlinearStaticDriver:
           size = min(settings.growth_factor * size, 1.0 - progress_done)
           continue
         cutback_level += 1
-        if cutback_level > settings.max_cutbacks:
+        if cutback_level > settings.max_cutbacks or size <= settings.min_substep_size:
           records.append(
             SubstepRecord(
               target_index=target_index,

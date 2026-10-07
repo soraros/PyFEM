@@ -176,6 +176,7 @@ def _points(*values: float) -> tuple[ProgramPoint, ...]:
 def _truss_driver(
   settings: NonlinearStaticSettings | None = None,
   *,
+  apex_factor: float = -1.0,
   with_damage_spring: float | None = None,
   scripted_kernel: SpringKernel | None = None,
 ) -> NonlinearStaticDriver:
@@ -215,9 +216,10 @@ def _truss_driver(
     )
     system = compose_system(system, block, spring)
   coordinate_map = _fixed_truss_map(system)
+  loads = _apex_loads(factor=apex_factor)
   if settings is None:
-    return NonlinearStaticDriver(system, coordinate_map, _apex_loads())
-  return NonlinearStaticDriver(system, coordinate_map, _apex_loads(), settings)
+    return NonlinearStaticDriver(system, coordinate_map, loads)
+  return NonlinearStaticDriver(system, coordinate_map, loads, settings)
 
 
 def _run_ramp(
@@ -254,6 +256,10 @@ def test_settings_validation() -> None:
     NonlinearStaticSettings(growth_factor=0.5)
   with pytest.raises(ValueError, match="divergence_ratio"):
     NonlinearStaticSettings(divergence_ratio=1.0)
+  with pytest.raises(ValueError, match="min_substep_size"):
+    NonlinearStaticSettings(min_substep_size=0.0)
+  with pytest.raises(ValueError, match="min_substep_size"):
+    NonlinearStaticSettings(min_substep_size=1.0)
 
 
 def test_driver_requires_exact_types() -> None:
@@ -474,6 +480,51 @@ def test_diverging_step_fails_typed_and_leaves_state_byte_identical() -> None:
   assert failed.records[-1].committed_ordinal is None
   assert failed.final_generation.ordinal == snapshot[1]
   assert _owner_snapshot(driver.owner) == snapshot
+
+
+def test_beyond_limit_load_fails_typed_at_the_substep_floor() -> None:
+  # The reviewer-c5 finding's deck: with default deck settings the ramp
+  # crosses the post-snap limit load (near load coordinate 2.399), and the
+  # unguarded schedule spun forever — micro-commits asymptoting to the limit
+  # each reset the consecutive cutback budget, so neither the iteration
+  # budget nor max_cutbacks ever tripped. The substep floor types the
+  # failure in bounded work instead.
+  settings = NonlinearStaticSettings(tolerance=1.0e-3, max_iterations=10)
+  driver = _truss_driver(settings, apex_factor=-100.0)
+  result = _run_ramp(driver, 1.0, 2.0, 3.0)
+  assert result.status is DriverStatus.STEP_FAILED
+  assert result.failed_target_index == 2
+  # Bounded work: the unguarded protocol burned tens of thousands of
+  # evaluations per minute without terminating.
+  assert result.statistics.evaluation_count < 2_000
+  assert (
+    len(result.records)
+    == result.statistics.committed_substep_count
+    + result.statistics.rejected_substep_count
+  )
+  assert result.statistics.rejected_substep_count == result.statistics.cutback_count + 1
+  failed = result.records[-1]
+  assert failed.status is SubstepStatus.FAILED
+  assert failed.committed_ordinal is None
+  assert len(failed.iterations) == settings.max_iterations
+  committed = [
+    record for record in result.records if record.status is SubstepStatus.COMMITTED
+  ]
+  assert [record.committed_ordinal for record in committed] == list(
+    range(1, len(committed) + 1)
+  )
+  # The trajectory shows WHY: many micro-commits asymptote the third target
+  # short of full progress, and the terminal attempt — rejected well inside
+  # the consecutive cutback budget — is at or below the substep floor.
+  assert len(committed) > 4
+  last = committed[-1]
+  assert last.target_index == 2
+  assert last.progress < 1.0
+  assert failed.cutback_level <= settings.max_cutbacks
+  assert failed.progress - last.progress <= settings.min_substep_size
+  # The terminal rejection never touched committed state: the final
+  # generation is exactly the last micro-commit's.
+  assert result.final_generation.ordinal == last.committed_ordinal
 
 
 def test_singular_reduced_tangent_cuts_back_and_fails_typed() -> None:
