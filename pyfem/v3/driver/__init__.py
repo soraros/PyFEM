@@ -7,6 +7,8 @@ from pyfem.v3.driver.continuation import (
   ArcLengthSettings,
   ArcLengthStepRecord,
   ArcLengthTermination,
+  arc_length_continuation_from_evolution,
+  continuation_evolution_from_arc_length,
 )
 from pyfem.v3.driver.contracts import (
   DriverStatistics,
@@ -65,8 +67,10 @@ __all__ = [
   "SubstepObservation",
   "SubstepRecord",
   "SubstepStatus",
+  "arc_length_continuation_from_evolution",
   "assemble_internal_force",
   "compile_driver_plan",
+  "continuation_evolution_from_arc_length",
   "evaluate_loads",
   "evaluate_signals",
   "refill_tangent",
