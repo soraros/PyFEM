@@ -3,14 +3,19 @@
 """Legacy-deck converter: subset reading, coded rejections, round-trip oracles.
 
 The round-trip oracles convert every in-subset ``skims/`` deck (the
-``patch_test*`` small-strain family plus the finite-strain ``cantilever8``),
-compile the emitted specs with the landed compiler unchanged, drive them with
-the landed M18 driver, and compare against the landed legacy oracle states
-within each skim's ``parity.toml`` tolerances.
+``patch_test*`` small-strain family, the finite-strain ``cantilever8``, and
+the multi-group ``shallow_truss_riks``), compile the emitted specs with the
+landed compiler unchanged, drive them with the landed drivers, and compare
+against the landed legacy oracle states within each skim's ``parity.toml``
+tolerances. ``shallow_truss_riks`` is the M32 stretch-path oracle: the full
+deck — truss group plus its ``SpringElem`` group — runs end-to-end through
+the landed ``RiksDriver``, matching the legacy-instrumented per-cycle
+``(lam, u)`` trajectory with exact integer cycle-count equality.
 """
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -26,7 +31,13 @@ from _legacy_parity import (
   load_parity_tolerances,
 )
 
-from pyfem.v3.driver import DriverStatus, NonlinearStaticDriver, NonlinearStaticSettings
+from pyfem.v3.driver import (
+  ArcLengthTermination,
+  DriverStatus,
+  NonlinearStaticDriver,
+  NonlinearStaticSettings,
+  SubstepStatus,
+)
 from pyfem.v3.io.legacy_deck import (
   ConvertedDeck,
   DeckConversionError,
@@ -34,6 +45,7 @@ from pyfem.v3.io.legacy_deck import (
   read_legacy_deck,
   run_deck,
 )
+from pyfem.v3.io.solver_pro import parse_riks_solver_settings
 from pyfem.v3.materials.isotropic_hardening_plasticity import (
   isotropic_hardening_calibration,
   isotropic_hardening_plasticity_kernel,
@@ -66,15 +78,6 @@ NONLINEAR_SKIMS = (
   "cantilever8",
 )
 ROUND_TRIP_SKIMS = LINEAR_SKIMS + NONLINEAR_SKIMS
-
-# code sets expected when converting the out-of-subset skims decks
-SKIM_REJECTIONS = {
-  "shallow_truss_riks": {
-    "unsupported-element-type",
-    "unsupported-element-groups",
-    "unsupported-solver-type",
-  },
-}
 
 _MINI_NODES = (
   " 0 0.0 0.0; 1 1.0 0.0; 2 1.0 1.0; 3 0.0 1.0;\n"
@@ -500,6 +503,415 @@ def test_truss_deck_round_trip_matches_legacy(tmp_path: Path) -> None:
   np.testing.assert_allclose(run.state, legacy, rtol=1.0e-8, atol=1.0e-10)
 
 
+# --- multi-group spring decks and the Riks dispatch -------------------------------
+
+# The M32 stretch path: the full shallow_truss_riks skim — the truss group
+# (region-routed base ModelSpec) plus its SpringElem group (one
+# SpringDeclaration through compile_system's springs channel) — converts and
+# runs end-to-end through the landed RiksDriver.
+
+
+def test_shallow_truss_riks_deck_reads_multi_group_model_and_riks_settings() -> None:
+  deck = read_legacy_deck(SKIMS / "shallow_truss_riks" / "skim.pro")
+  model = deck.model
+  assert len(model.mesh.nodes) == 4
+  (block,) = model.mesh.cell_blocks
+  assert block.id == "TrussElem"
+  assert block.geometry_interpolation == "line2"
+  assert [cell.id for cell in block.cells] == [1, 2]
+  (material,) = model.materials
+  assert material.model == "uniaxial-linear-elastic"
+  (region,) = model.regions
+  assert region.formulation == "total-lagrangian-truss"
+  # The SpringElem group is declaration-routed: no cell block or material in
+  # the base spec, exactly one SpringDeclaration with the grounded apex
+  # spring's stiffness and unit chord direction (0, 1).
+  (declaration,) = deck.springs
+  assert declaration.block_id == "SpringElem"
+  assert declaration.space_id == "displacement"
+  assert declaration.spring_ids == (3,)
+  assert declaration.node_ids == (4,)
+  assert declaration.parameters == (100.0, 0.0, 1.0)
+  assert declaration.state_slots == ()
+  assert declaration.kernel_name == "legacy-axial-point-spring"
+  # RiksSolver settings: the legacy defaults where the block is silent.
+  solver = deck.solver
+  assert solver.solver_type == "RiksSolver"
+  assert solver.load_factors == ()
+  assert solver.tolerance == pytest.approx(1.0e-5)
+  assert solver.max_iterations == 10
+  assert solver.optimal_iterations == 5
+  assert solver.fixed_step is True
+  assert solver.max_lam == pytest.approx(10.0)
+  assert solver.max_factor == pytest.approx(1.0e20)
+  assert solver.cycle_cap == 1000
+  # Under RiksSolver prescribed values stay constant (the legacy solver never
+  # scales constraints); only the loads ride the arc-length parameter.
+  for constraint in deck.program.constraints:
+    assert type(constraint) is PrescribedDofSpec
+    assert constraint.value.coefficients == ()
+    assert type(constraint.value.constant) is float
+  (load,) = deck.program.loads
+  assert load.target.node_id == 4
+  assert load.target.component == "y"
+  (coefficient,) = load.value.coefficients
+  assert coefficient.coordinate == "load"
+  assert coefficient.coefficient == pytest.approx(-100.0)
+  assert [note.code for note in deck.not_converted] == ["not-converted-output-module"]
+
+
+def _legacy_riks_cycles(pro_path: Path) -> list[tuple[float, int, np.ndarray]]:
+  """Legacy ``RiksSolver`` run cycle by cycle, capturing committed points."""
+  from pyfem.io.InputReader import InputRead
+  from pyfem.solvers.RiksSolver import RiksSolver
+
+  props, globdat = InputRead(str(pro_path))
+  solver = RiksSolver(props, globdat)
+  settings = parse_riks_solver_settings(pro_path.read_text(encoding="utf-8"))
+  assert settings is not None
+  solver.tol = settings.tol
+  solver.iterMax = settings.iter_max
+  solver.optiter = settings.opt_iter
+  solver.fixedStep = settings.fixed_step
+  solver.maxLam = settings.max_lam
+  solver.maxFactor = settings.max_factor
+  cycles: list[tuple[float, int, np.ndarray]] = []
+  while globdat.active:
+    solver.run(props, globdat)
+    cycles.append(
+      (
+        float(globdat.lam),
+        globdat.solverStatus.iiter,
+        np.asarray(globdat.state).copy(),
+      )
+    )
+  return cycles
+
+
+def test_shallow_truss_riks_deck_matches_legacy_per_cycle() -> None:
+  """The full skim deck, SpringElem included, through the RiksDriver.
+
+  The converted multi-group deck — the truss region plus the grounded apex
+  spring declaration — matches the legacy-instrumented per-cycle trajectory:
+  exact integer cycle-count equality (``fixedStep`` makes the path
+  deterministic), the committed ``(lam_k, u_k)`` points, and the per-cycle
+  correction counts. The deck's constraint map is homogeneous, so the
+  reduced-space Riks dots equal the legacy full-space dots (the documented
+  M33 MPC note does not apply here).
+  """
+  skim_dir = SKIMS / "shallow_truss_riks"
+  pro_path = skim_dir / "skim.pro"
+  legacy = _legacy_riks_cycles(pro_path)
+  rtol, atol = load_parity_tolerances(skim_dir)
+
+  deck = read_legacy_deck(pro_path)
+  compiled = compile_deck(deck)
+  assert [type(operator).__name__ for operator in compiled.system.operators] == [
+    "TrussOperator",
+    "SpringOperator",
+  ]
+  run = run_deck(deck)
+  result = run.result
+  assert result.status is DriverStatus.COMPLETED
+  assert result.termination_reason is ArcLengthTermination.LOAD_PARAMETER_LIMIT
+  committed = [
+    record for record in result.records if record.status is SubstepStatus.COMMITTED
+  ]
+  # Exact integer cycle-count equality: fixedStep makes the path deterministic.
+  assert len(committed) == len(legacy)
+  for record, (legacy_lam, legacy_iiter, legacy_cycle_state) in zip(
+    committed,
+    legacy,
+    strict=True,
+  ):
+    np.testing.assert_allclose(record.lam, legacy_lam, rtol=rtol, atol=atol)
+    assert record.committed_coefficients is not None
+    np.testing.assert_allclose(
+      record.committed_coefficients.values,
+      _legacy_state_in_compiled_order(deck, compiled.system, legacy_cycle_state),
+      rtol=rtol,
+      atol=atol,
+    )
+    assert len(record.iterations) - 1 == legacy_iiter
+  # Final state equality (implied per-cycle, pinned explicitly).
+  np.testing.assert_allclose(
+    run.state,
+    _legacy_state_in_compiled_order(deck, compiled.system, legacy[-1][2]),
+    rtol=rtol,
+    atol=atol,
+  )
+  # The grounded spring relieves the supports: the v3 declaration grounds the
+  # spring absolutely, so the anchor node carries no reaction and each truss
+  # support carries half of (lam * 100 - k * |v_apex|) by symmetry.
+  observation = result.records[-1].observation
+  assert observation is not None
+  reactions = observation.reactions.values
+  lam_final = result.final_continuation.lam
+  apex_vertical = float(run.state[7])
+  assert apex_vertical < 0.0
+  assert reactions[1] == pytest.approx(0.0, abs=1.0e-10)
+  np.testing.assert_allclose(
+    reactions[[3, 5]],
+    [0.5 * (100.0 * lam_final + 100.0 * apex_vertical)] * 2,
+    rtol=1.0e-9,
+    atol=1.0e-8,
+  )
+  assert float(reactions[2] + reactions[4]) == pytest.approx(0.0, abs=1.0e-8)
+
+
+# A shallow-truss-with-spring mini deck (the skim's shape, renumbered) for the
+# spring/riks rejection battery and the multi-spring-group reading test.
+_SPRING_TRUSS_DAT = """<Nodes>
+ 0 -10.0 0.0 ;
+ 1  10.0 0.0 ;
+ 2   0.0 0.5 ;
+ 3   0.0 0.0 ;
+</Nodes>
+
+<Elements>
+ 1 'TrussElem' 0 2 ;
+ 2 'TrussElem' 1 2 ;
+ 3 'SpringElem' 3 2 ;
+</Elements>
+
+<NodeConstraints>
+ u[0] = 0.0;
+ v[0] = 0.0;
+ u[1] = 0.0;
+ v[1] = 0.0;
+ u[3] = 0.0;
+ v[3] = 0.0;
+</NodeConstraints>
+
+<ExternalForces>
+ v[2] = -100.0 ;
+</ExternalForces>
+"""
+
+_SPRING_TRUSS_BLOCKS = """TrussElem =
+{
+  type = "Truss";
+  E    = 5e6;
+  Area = 1.0;
+};
+
+SpringElem =
+{
+  type = "Spring";
+  k    = 100.0;
+};
+"""
+
+_SPRING_RIKS_SOLVER_BLOCK = """solver =
+{
+  type = "RiksSolver";
+
+  fixedStep = true;
+  maxLam    = 10.0;
+};
+"""
+
+
+def _spring_truss_pro(
+  *,
+  element_blocks: str = _SPRING_TRUSS_BLOCKS,
+  solver_block: str = _SPRING_RIKS_SOLVER_BLOCK,
+) -> str:
+  return _mini_pro(element_block=element_blocks, solver_block=solver_block)
+
+
+def test_riks_solver_block_reads_authored_keys(tmp_path: Path) -> None:
+  pro = _spring_truss_pro(
+    solver_block="""solver =
+{
+  type = "RiksSolver";
+  tol = 1.0e-8;
+  iterMax = 25;
+  optiter = 3;
+  maxLam = 5.0;
+  maxFactor = 2.0;
+};
+""",
+  )
+  deck = _convert_mini(tmp_path, pro, _SPRING_TRUSS_DAT)
+  solver = deck.solver
+  assert solver.solver_type == "RiksSolver"
+  assert solver.load_factors == ()
+  assert solver.tolerance == pytest.approx(1.0e-8)
+  assert solver.max_iterations == 25
+  assert solver.optimal_iterations == 3
+  assert solver.fixed_step is False
+  assert solver.max_lam == pytest.approx(5.0)
+  assert solver.max_factor == pytest.approx(2.0)
+  assert solver.cycle_cap == 1000
+  assert deck.not_converted == ()
+
+
+def test_multiple_spring_groups_emit_one_declaration_each(tmp_path: Path) -> None:
+  # A second spring group anchored at the grounded node 0, plus a second
+  # spring inside the first group anchored at node 1: per-group declarations
+  # pack each spring's own chord direction.
+  dat = _SPRING_TRUSS_DAT.replace(
+    " 3 'SpringElem' 3 2 ;",
+    " 3 'SpringElem' 3 2 ;\n 4 'SpringElem2' 0 2 ;\n 5 'SpringElem' 1 2 ;",
+  )
+  blocks = (
+    _SPRING_TRUSS_BLOCKS
+    + """SpringElem2 =
+{
+  type = "Spring";
+  k    = 50.0;
+};
+"""
+  )
+  deck = _convert_mini(tmp_path, _spring_truss_pro(element_blocks=blocks), dat)
+  first, second = deck.springs
+  assert first.block_id == "SpringElem"
+  assert first.spring_ids == (3, 5)
+  assert first.node_ids == (2, 2)
+  # Element 3: chord (0,0)->(0,0.5) gives d = (0,1); element 5: chord
+  # (10,0)->(0,0.5) gives d = (-10,0.5)/sqrt(100.25).
+  length = math.sqrt(100.25)
+  assert first.parameters == pytest.approx(
+    (100.0, 0.0, 1.0, -10.0 / length, 0.5 / length)
+  )
+  assert second.block_id == "SpringElem2"
+  assert second.spring_ids == (4,)
+  assert second.node_ids == (2,)
+  # Element 4: chord (-10,0)->(0,0.5).
+  assert second.parameters == pytest.approx((50.0, 10.0 / length, 0.5 / length))
+  compiled = compile_deck(deck)
+  assert [type(operator).__name__ for operator in compiled.system.operators] == [
+    "TrussOperator",
+    "SpringOperator",
+    "SpringOperator",
+  ]
+
+
+_SPRING_DAT_REJECTIONS = {
+  "both-ends-free": (
+    _SPRING_TRUSS_DAT.replace(" u[3] = 0.0;\n v[3] = 0.0;\n", ""),
+    {"unsupported-spring-support"},
+  ),
+  "both-ends-grounded": (
+    _SPRING_TRUSS_DAT.replace(
+      "</NodeConstraints>",
+      " u[2] = 0.0;\n v[2] = 0.0;\n</NodeConstraints>",
+    ),
+    {"unsupported-spring-support"},
+  ),
+  "anchor-nonzero-prescription": (
+    _SPRING_TRUSS_DAT.replace(" u[3] = 0.0;", " u[3] = 0.5;"),
+    {"unsupported-spring-support"},
+  ),
+  "anchor-partial-prescription": (
+    _SPRING_TRUSS_DAT.replace(" v[3] = 0.0;\n", ""),
+    {"unsupported-spring-support"},
+  ),
+  "spring-wrong-arity": (
+    _SPRING_TRUSS_DAT.replace(" 3 'SpringElem' 3 2 ;", " 3 'SpringElem' 3 2 1 ;"),
+    {"unsupported-cell-arity"},
+  ),
+  "spring-on-3d-mesh": (
+    _SPRING_TRUSS_DAT.replace(
+      " 0 -10.0 0.0 ;\n 1  10.0 0.0 ;\n 2   0.0 0.5 ;\n 3   0.0 0.0 ;",
+      " 0 -10.0 0.0 0.0 ;\n 1  10.0 0.0 0.0 ;\n 2   0.0 0.5 0.0 ;\n 3   0.0 0.0 0.0 ;",
+    ),
+    {"unsupported-cell-arity"},
+  ),
+  "springs-only-deck": (
+    _SPRING_TRUSS_DAT.replace(
+      " 1 'TrussElem' 0 2 ;\n 2 'TrussElem' 1 2 ;\n",
+      "",
+    ),
+    {"unsupported-element-groups", "unsupported-pro-construct"},
+  ),
+}
+
+_SPRING_PRO_REJECTIONS = {
+  "spring-linear-solver": (
+    _spring_truss_pro(solver_block=_MINI_SOLVER_BLOCK),
+    {"incompatible-solver-type"},
+  ),
+  "spring-missing-k": (
+    _spring_truss_pro(
+      element_blocks=_SPRING_TRUSS_BLOCKS.replace("  k    = 100.0;\n", ""),
+    ),
+    {"missing-element-parameter"},
+  ),
+  "spring-extra-key": (
+    _spring_truss_pro(
+      element_blocks=_SPRING_TRUSS_BLOCKS.replace(
+        "  k    = 100.0;\n",
+        "  k    = 100.0;\n  rho  = 1.0;\n",
+      ),
+    ),
+    {"unsupported-element-parameter"},
+  ),
+  "riks-unknown-key": (
+    _spring_truss_pro(
+      solver_block=_SPRING_RIKS_SOLVER_BLOCK.replace(
+        "  maxLam    = 10.0;\n",
+        "  maxLam    = 10.0;\n  maxCycle  = 5;\n",
+      ),
+    ),
+    {"unsupported-solver-parameter"},
+  ),
+  "riks-fixedstep-not-bool": (
+    _spring_truss_pro(
+      solver_block=_SPRING_RIKS_SOLVER_BLOCK.replace(
+        "  fixedStep = true;",
+        "  fixedStep = 1;",
+      ),
+    ),
+    {"deck-pro-syntax"},
+  ),
+  "riks-tol-not-a-number": (
+    _spring_truss_pro(
+      solver_block=_SPRING_RIKS_SOLVER_BLOCK.replace(
+        "  maxLam    = 10.0;",
+        '  maxLam    = 10.0;\n  tol       = "tight";',
+      ),
+    ),
+    {"deck-pro-syntax"},
+  ),
+}
+
+
+@pytest.mark.parametrize(
+  ("dat_text", "expected"),
+  [
+    pytest.param(text, codes, id=name)
+    for name, (text, codes) in _SPRING_DAT_REJECTIONS.items()
+  ],
+)
+def test_spring_dat_construct_rejections(
+  tmp_path: Path,
+  dat_text: str,
+  expected: set[str],
+) -> None:
+  with pytest.raises(DeckConversionError) as excinfo:
+    _convert_mini(tmp_path, _spring_truss_pro(), dat_text)
+  assert expected <= _rejection_codes(excinfo)
+
+
+@pytest.mark.parametrize(
+  ("pro_text", "expected"),
+  [
+    pytest.param(text, codes, id=name)
+    for name, (text, codes) in _SPRING_PRO_REJECTIONS.items()
+  ],
+)
+def test_spring_pro_construct_rejections(
+  tmp_path: Path,
+  pro_text: str,
+  expected: set[str],
+) -> None:
+  with pytest.raises(DeckConversionError) as excinfo:
+    _convert_mini(tmp_path, pro_text, _SPRING_TRUSS_DAT)
+  assert expected <= _rejection_codes(excinfo)
+
+
 # --- plasticity material decks --------------------------------------------------
 
 # The documented M25 parity configuration (test_v3_stateful_plasticity.py):
@@ -910,13 +1322,6 @@ def test_finite_strain_on_non_quad8_mesh_rejects(tmp_path: Path) -> None:
 # --- coded rejections ------------------------------------------------------------
 
 
-@pytest.mark.parametrize("skim_name", sorted(SKIM_REJECTIONS))
-def test_out_of_subset_skims_reject_with_coded_diagnostics(skim_name: str) -> None:
-  with pytest.raises(DeckConversionError) as excinfo:
-    read_legacy_deck(SKIMS / skim_name / "skim.pro")
-  assert _rejection_codes(excinfo) == SKIM_REJECTIONS[skim_name]
-
-
 def test_rejections_render_source_context(tmp_path: Path) -> None:
   dat = _mini_dat(elements=' 1 "ContElem" 0 4 1 5 2;')
   with pytest.raises(DeckConversionError) as excinfo:
@@ -975,7 +1380,7 @@ _PRO_REJECTIONS = {
   ),
   "unsupported-element-type": (
     _mini_pro(
-      element_block='ContElem = { type = "Spring"; k = 100.0; };\n',
+      element_block='ContElem = { type = "Beam"; E = 1.0; };\n',
     ),
     {"unsupported-element-type"},
   ),
@@ -1034,8 +1439,8 @@ _PRO_REJECTIONS = {
     ),
     {"unsupported-cell-arity"},
   ),
-  "riks-solver": (
-    _mini_pro(solver_block='solver = { type = "RiksSolver"; maxLam = 1.0; };'),
+  "unknown-solver-type": (
+    _mini_pro(solver_block='solver = { type = "WeirdSolver"; maxLam = 1.0; };'),
     {"unsupported-solver-type"},
   ),
   "linear-solver-extra-key": (

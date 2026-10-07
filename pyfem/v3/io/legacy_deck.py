@@ -2,11 +2,14 @@
 
 This module reads the legacy input deck subset used by the ``skims/`` parity
 cases and emits authored v3 values — a :class:`~pyfem.v3.spec.model.ModelSpec`
-plus a :class:`~pyfem.v3.spec.program.ProgramSpec` — through the landed spec
-contracts only. The emitted specs compile with the landed compiler unchanged:
-:func:`compile_deck` composes ``compile_system`` and ``compile_constraint_map``
-and :func:`run_deck` drives the landed ``NonlinearStaticDriver``; nothing here
-re-implements evaluation or reaches into builder internals.
+plus a :class:`~pyfem.v3.spec.program.ProgramSpec`, and one
+:class:`~pyfem.v3.compile.spring.SpringDeclaration` per spring group —
+through the landed spec contracts only. The emitted specs compile with the
+landed compiler unchanged: :func:`compile_deck` composes ``compile_system``
+(with the ``springs`` channel) and ``compile_constraint_map``, and
+:func:`run_deck` drives the landed ``NonlinearStaticDriver`` or, for
+``RiksSolver`` decks, the landed ``RiksDriver``; nothing here re-implements
+evaluation or reaches into builder internals.
 
 Supported subset
 ----------------
@@ -15,11 +18,14 @@ Deck structure (``.pro`` side):
 
 - exactly one ``input = "<mesh>.dat";`` reference, resolved relative to the
   ``.pro`` file;
-- one ``solver = { ... };`` block of type ``LinearSolver`` or
-  ``NonlinearSolver``; the nonlinear block may carry ``tol``, ``iterMax``,
-  ``maxCycle``, ``dtime``, ``loadTable = [...]``, ``loadFunc`` (only the
-  identity ramp ``t``), and ``fixedStep`` (parsed, recorded as not converted —
-  the v3 driver owns its own cutback schedule);
+- one ``solver = { ... };`` block of type ``LinearSolver``,
+  ``NonlinearSolver``, or ``RiksSolver``; the nonlinear block may carry
+  ``tol``, ``iterMax``, ``maxCycle``, ``dtime``, ``loadTable = [...]``,
+  ``loadFunc`` (only the identity ramp ``t``), and ``fixedStep`` (parsed,
+  recorded as not converted — the v3 driver owns its own cutback schedule);
+  the riks block may carry ``tol``, ``iterMax``, ``optiter``, ``fixedStep``,
+  ``maxLam``, and ``maxFactor`` (all converted into the arc-length settings;
+  the legacy cycle cap of 1000 is fixed);
 - one element block per mesh group, named after the group, of type
   ``SmallStrainContinuum`` (with a nested ``material`` block of type
   ``PlaneStress``, ``PlaneStrain``, or ``Isotropic`` carrying ``E`` and
@@ -30,8 +36,19 @@ Deck structure (``.pro`` side):
   reject, citing the M25 scoping decision), of type ``FiniteStrainContinuum``
   (with a nested ``material`` block of type ``PlaneStress`` carrying ``E``
   and ``nu`` — the legacy stateless Saint-Venant-Kirchhoff law the v3
-  total-Lagrangian slice ships), or ``Truss`` (carrying ``E`` and ``Area``
-  directly);
+  total-Lagrangian slice ships), ``Truss`` (carrying ``E`` and ``Area``
+  directly), or ``Spring`` (carrying ``k`` directly);
+- exactly one region-routed element group (``SmallStrainContinuum``,
+  ``FiniteStrainContinuum``, or ``Truss``) plus any number of ``Spring``
+  groups; the region-routed group forms the base ``ModelSpec`` and each
+  spring group emits one
+  :class:`~pyfem.v3.compile.spring.SpringDeclaration`, composed through
+  ``compile_system``'s ``springs`` channel. Each two-node spring element
+  must have exactly one end with every component prescribed to zero (the
+  grounded end): it then reduces exactly to the v3 grounded point spring at
+  the other node along the element chord, the consistent axial form the H1
+  decision pins (the legacy isotropic spring tangent is not the oracle — its
+  axial residual is);
 - ``outputModules = [...]`` naming blocks whose ``type`` is a known legacy
   writer (``MeshWriter``, ``OutputWriter``, ``GraphWriter``, ``HDF5Writer``,
   ``DataDump``, ``ContourWriter``, ``ROMSnapshotWriter``). Writers do not
@@ -43,10 +60,10 @@ Mesh structure (``.dat`` side):
 - ``<Nodes>``: ``id x y;`` statements on 2D decks, ``id x y z;`` on 3D
   decks;
 - ``<Elements>``: ``id "Group" n1 ... nk;`` statements — two nodes for
-  ``Truss`` (line2); three (tria3), four (quad4), or eight (serendipity
-  quad8) nodes for 2D ``SmallStrainContinuum``; eight nodes (hex8) for 3D
-  ``SmallStrainContinuum``; eight nodes (serendipity quad8) for 2D
-  ``FiniteStrainContinuum``;
+  ``Truss`` (line2) and ``Spring``; three (tria3), four (quad4), or eight
+  (serendipity quad8) nodes for 2D ``SmallStrainContinuum``; eight nodes
+  (hex8) for 3D ``SmallStrainContinuum``; eight nodes (serendipity quad8)
+  for 2D ``FiniteStrainContinuum``;
 - ``<NodeConstraints>``: prescribed DOFs ``u[i] = value;`` / ``v[i] = value;``
   (plus ``w[i] = value;`` on 3D decks) and one-master affine ties
   ``u[i] = offset + factor * v[j];`` (factor may be omitted or follow the
@@ -58,7 +75,12 @@ Semantics: every deck declares one ``load`` program coordinate. Under
 linearly to a single full step (matching the legacy full-value application);
 under ``NonlinearSolver`` prescribed values, tie offsets, and loads all scale
 with the load coordinate, whose targets are the authored ``loadTable`` values
-or the ``dtime``/``maxCycle`` ramp. DOF types map ``u -> x``, ``v -> y`` on
+or the ``dtime``/``maxCycle`` ramp. Under ``RiksSolver`` prescribed values
+and tie offsets are constant (the legacy solver never scales constraints)
+while loads scale with the arc-length parameter the continuation owns;
+``run_deck`` routes the deck to the landed ``RiksDriver`` and terminates on
+the legacy conditions (``lam > maxLam`` or more than 1000 committed cycles,
+checked after each commit). DOF types map ``u -> x``, ``v -> y`` on
 2D decks and additionally ``w -> z`` on 3D decks, on the node-supported
 ``displacement`` field. The ``PlaneStress`` and ``PlaneStrain`` laws require
 a 2D mesh; the ``Isotropic`` law requires a 3D mesh;
@@ -67,6 +89,11 @@ a 2D mesh; the ``Isotropic`` law requires a 3D mesh;
 ``NonlinearSolver`` block (the legacy ``LinearSolver`` assembles the
 zero-state tangent once, while the v3 driver integrates the finite-strain
 residual by Newton iteration — the combination has no faithful mapping).
+``Spring`` groups require a 2D mesh and a Newton-based solver block
+(``NonlinearSolver`` or ``RiksSolver``): the legacy ``LinearSolver``
+assembles the legacy isotropic spring tangent once, while the v3 spring
+family ships the consistent axial tangent, so the single linear solve has no
+faithful mapping.
 
 Rejection codes
 ---------------
@@ -87,12 +114,20 @@ context — never a silent skip. Known legacy constructs and their codes:
 - ``unsupported-output-module`` — an ``outputModules`` entry without a block,
   or a block ``type`` outside the known writer set;
 - ``unsupported-element-type`` — element block type outside
-  ``{SmallStrainContinuum, FiniteStrainContinuum, Truss}`` (e.g.
-  ``Spring``);
+  ``{SmallStrainContinuum, FiniteStrainContinuum, Truss, Spring}`` (e.g.
+  ``Beam``);
 - ``unsupported-element-parameter`` / ``missing-element-parameter`` —
-  extra keys in an element block, or a ``Truss`` block without ``E``/``Area``;
+  extra keys in an element block, or a ``Truss`` block without ``E``/``Area``
+  or a ``Spring`` block without ``k``;
 - ``missing-element-block`` — a mesh group with no same-named ``.pro`` block;
-- ``unsupported-element-groups`` — more than one element group in the mesh;
+- ``unsupported-element-groups`` — the mesh declares anything but exactly
+  one region-routed element group: several region-routed groups, or none
+  (a springs-only deck); ``Spring`` groups are auxiliary and unrestricted in
+  number;
+- ``unsupported-spring-support`` — a ``Spring`` element whose support
+  pattern has no faithful grounded point-spring mapping: both ends free, both
+  ends fully prescribed, an anchor end with a nonzero or partial
+  prescription, or coincident endpoints;
 - ``unsupported-material-model`` — material type outside
   ``{PlaneStress, PlaneStrain, Isotropic, IsotropicHardeningPlasticity}``
   on a ``SmallStrainContinuum`` block, or outside ``{PlaneStress}`` on a
@@ -100,7 +135,11 @@ context — never a silent skip. Known legacy constructs and their codes:
 - ``incompatible-solver-type`` — a ``FiniteStrainContinuum`` deck whose
   solver block is a ``LinearSolver`` (legacy assembles the zero-state
   tangent once; the v3 driver only integrates the finite-strain residual by
-  Newton iteration, so the combination has no faithful mapping);
+  Newton iteration, so the combination has no faithful mapping), or a deck
+  with ``Spring`` groups whose solver block is a ``LinearSolver`` (legacy
+  assembles its isotropic spring tangent once — not the oracle per the H1
+  decision — while the v3 spring family ships the consistent axial tangent,
+  so the single linear solve has no faithful mapping);
 - ``incompatible-material-geometry`` — a supported material on an
   incompatible mesh: ``PlaneStress``/``PlaneStrain`` on a 3D mesh,
   ``Isotropic`` on a 2D mesh;
@@ -115,7 +154,7 @@ context — never a silent skip. Known legacy constructs and their codes:
   properties (``E``/``nu`` for ``PlaneStress``/``PlaneStrain``/``Isotropic``;
   ``E``/``nu``/``syield``/``hard`` for ``IsotropicHardeningPlasticity``);
 - ``unsupported-solver-type`` — solver type outside
-  ``{LinearSolver, NonlinearSolver}`` (e.g. ``RiksSolver``);
+  ``{LinearSolver, NonlinearSolver, RiksSolver}``;
 - ``unsupported-solver-parameter`` — solver key outside the supported set;
 - ``unsupported-load-func`` — ``loadFunc`` other than the identity ramp ``t``;
 - ``unsupported-load-table`` — an empty or malformed ``loadTable``;
@@ -142,9 +181,10 @@ context — never a silent skip. Known legacy constructs and their codes:
 Two further codes are non-fatal acknowledgments, collected in
 :attr:`ConvertedDeck.not_converted` instead of raising:
 ``not-converted-output-module`` (a known legacy writer block — output does not
-affect the computed state) and ``not-converted-solver-option`` (``fixedStep``
-and a ``maxCycle``/``dtime`` ramp overridden by ``loadTable`` — the v3 driver
-owns its own substep schedule).
+affect the computed state) and ``not-converted-solver-option``
+(``fixedStep`` on a ``NonlinearSolver`` block, and a ``maxCycle``/``dtime``
+ramp overridden by ``loadTable`` — the v3 driver owns its own substep
+schedule; on a ``RiksSolver`` block every parsed key converts).
 """
 
 from __future__ import annotations
@@ -166,14 +206,19 @@ from pyfem.v3.compile.contracts import (
   continuum_reference_registry,
   finite_strain_reference_registry,
 )
+from pyfem.v3.compile.spring import SpringDeclaration, SpringKernelResult
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.compile.truss import truss_reference_registry
 from pyfem.v3.constraints import CompiledConstraintMap, compile_constraint_map
 from pyfem.v3.driver import (
+  ArcLengthResult,
+  ArcLengthSettings,
   NonlinearStaticDriver,
   NonlinearStaticResult,
   NonlinearStaticSettings,
+  RiksDriver,
 )
+from pyfem.v3.model.operator import EvaluationStatus
 from pyfem.v3.model.registry import RegistryDescriptor, RegistryKey
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec.diagnostics import SourceContext, SpecDiagnostic
@@ -231,6 +276,23 @@ _KNOWN_OUTPUT_TYPES = frozenset(
 _NONLINEAR_SOLVER_KEYS = frozenset(
   {"type", "tol", "iterMax", "maxCycle", "dtime", "loadTable", "loadFunc", "fixedStep"}
 )
+_RIKS_SOLVER_KEYS = frozenset(
+  {"type", "tol", "iterMax", "optiter", "fixedStep", "maxLam", "maxFactor"}
+)
+# Legacy ``RiksSolver`` defaults (pyfem/solvers/RiksSolver.py): the cycle cap
+# is hard-coded on the legacy side (``cycle > 1000`` terminates the schedule).
+_RIKS_DEFAULT_TOLERANCE = 1.0e-5
+_RIKS_DEFAULT_MAX_ITERATIONS = 10
+_RIKS_DEFAULT_OPTIMAL_ITERATIONS = 5
+_RIKS_DEFAULT_MAX_LAM = 1.0e20
+_RIKS_DEFAULT_MAX_FACTOR = 1.0e20
+_RIKS_CYCLE_CAP = 1000
+# A legacy ``Spring`` group converts to the grounded point-spring family:
+# two-node cells on a 2D mesh, exactly one end prescribed to zero.
+_SPRING_GEOMETRIES = frozenset({(2, 2)})
+_SPRING_STATE_SCHEMA = "legacy-deck-spring-state-v1"
+_SPRING_KERNEL_NAME = "legacy-axial-point-spring"
+_SPRING_IMPLEMENTATION_ID = "legacy-axial-point-spring-v1"
 _PLASTICITY_MODEL = "IsotropicHardeningPlasticity"
 _PLASTICITY_VALUE_KEYS = frozenset({"E", "nu", "syield", "hard"})
 _PLASTICITY_TABLE_KEYS = frozenset({"EqPlasStrains", "Stresses", "q", "K"})
@@ -261,23 +323,36 @@ class DeckSolverSettings:
 
   ``load_factors`` holds the absolute target values of the ``load`` program
   coordinate in schedule order (the single full step ``(1.0,)`` for
-  ``LinearSolver`` decks). ``tolerance`` and ``max_iterations`` follow the
-  legacy ``NonlinearSolver`` defaults when the deck leaves them unset.
+  ``LinearSolver`` decks); it is empty for ``RiksSolver`` decks, whose
+  continuation owns the load parameter autonomously. ``tolerance`` and
+  ``max_iterations`` follow the legacy ``NonlinearSolver`` defaults when the
+  deck leaves them unset. The remaining fields carry the ``RiksSolver``
+  arc-length policy — the legacy defaults when the riks block leaves them
+  unset, and the fixed legacy cycle cap of 1000 — and are inert on
+  ``LinearSolver``/``NonlinearSolver`` decks.
   """
 
   solver_type: str
   load_factors: tuple[float, ...]
   tolerance: float
   max_iterations: int
+  optimal_iterations: int = 5
+  fixed_step: bool = False
+  max_lam: float = 1.0e20
+  max_factor: float = 1.0e20
+  cycle_cap: int = 1000
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class ConvertedDeck:
   """One converted legacy deck: authored specs plus their execution context.
 
-  ``model`` and ``program`` are plain authored spec values;
-  ``not_converted`` lists the acknowledged non-physics constructs (output
-  writers, subsumed solver policy flags) with their source contexts.
+  ``model`` and ``program`` are plain authored spec values; ``springs``
+  holds one :class:`~pyfem.v3.compile.spring.SpringDeclaration` per parsed
+  spring group (empty on single-group decks), composed through
+  ``compile_system``'s ``springs`` channel; ``not_converted`` lists the
+  acknowledged non-physics constructs (output writers, subsumed solver
+  policy flags) with their source contexts.
   """
 
   name: str
@@ -288,6 +363,7 @@ class ConvertedDeck:
   registry: dict[RegistryKey, RegistryDescriptor]
   solver: DeckSolverSettings
   not_converted: tuple[SpecDiagnostic, ...]
+  springs: tuple[SpringDeclaration, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -302,10 +378,15 @@ class CompiledDeck:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class DeckRun:
-  """One finished driver execution of a converted deck."""
+  """One finished driver execution of a converted deck.
 
-  driver: NonlinearStaticDriver
-  result: NonlinearStaticResult
+  ``LinearSolver`` and ``NonlinearSolver`` decks run through the landed
+  ``NonlinearStaticDriver``; ``RiksSolver`` decks run through the landed
+  ``RiksDriver`` and return its :class:`ArcLengthResult`.
+  """
+
+  driver: NonlinearStaticDriver | RiksDriver
+  result: NonlinearStaticResult | ArcLengthResult
 
   @property
   def state(self) -> np.ndarray:
@@ -1300,9 +1381,33 @@ class _GeometryProfile:
 
 
 @dataclass(frozen=True, slots=True)
+class _SpringProfile:
+  """One validated ``Spring`` element block: the legacy grounded axial spring.
+
+  ``stiffness`` is the block's ``k``; the per-element chord directions and
+  support pattern resolve later, against the mesh and constraints.
+  """
+
+  stiffness: float
+  stiffness_source: SourceContext
+  source: SourceContext
+
+
+@dataclass(frozen=True, slots=True)
 class _ElementProfile:
+  """One parsed element block: its declared type plus the validated payload.
+
+  Exactly one of ``family`` (a region-routed group) or ``spring`` (a
+  declaration-routed ``Spring`` group) is set on success; both are ``None``
+  when the block's diagnostics already record the failure. ``element_type``
+  keeps the declared type either way, so group classification follows the
+  authored intent even for unsound blocks.
+  """
+
   name: str
+  element_type: str | None
   family: _MaterialProfile | None
+  spring: _SpringProfile | None
   source: SourceContext
 
 
@@ -1729,6 +1834,37 @@ def _truss_family(
   )
 
 
+def _spring_profile(
+  block: _ProBlock,
+  diagnostics: list[SpecDiagnostic],
+) -> _SpringProfile | None:
+  """Read a ``Spring`` block: the legacy grounded axial spring's ``k``."""
+  parameters, sound = _block_number(
+    block,
+    "element block",
+    extra_code="unsupported-element-parameter",
+    allowed=frozenset({"type", "k"}),
+    diagnostics=diagnostics,
+  )
+  if "k" not in parameters:
+    diagnostics.append(
+      _diagnostic(
+        "missing-element-parameter",
+        f"Spring block {block.name!r} misses ['k']",
+        block.source,
+      ),
+    )
+    sound = False
+  if not sound:
+    return None
+  stiffness, stiffness_source = parameters["k"]
+  return _SpringProfile(
+    stiffness=stiffness,
+    stiffness_source=stiffness_source,
+    source=block.source,
+  )
+
+
 def _element_profile(
   block: _ProBlock,
   diagnostics: list[SpecDiagnostic],
@@ -1738,23 +1874,33 @@ def _element_profile(
     if type(item) is _ProAssignment and item.name == "type":
       raw = item.value.value
       element_type = raw if type(raw) is str else None
+  family: _MaterialProfile | None = None
+  spring: _SpringProfile | None = None
   if element_type == "SmallStrainContinuum":
     family = _continuum_family(block, diagnostics)
   elif element_type == "FiniteStrainContinuum":
     family = _finite_strain_family(block, diagnostics)
   elif element_type == "Truss":
     family = _truss_family(block, diagnostics)
+  elif element_type == "Spring":
+    spring = _spring_profile(block, diagnostics)
   else:
     diagnostics.append(
       _diagnostic(
         "unsupported-element-type",
         f"element type {element_type!r} is outside the supported deck subset "
-        "('SmallStrainContinuum', 'FiniteStrainContinuum', and 'Truss' only)",
+        "('SmallStrainContinuum', 'FiniteStrainContinuum', 'Truss', and "
+        "'Spring' only)",
         block.source,
       ),
     )
-    family = None
-  return _ElementProfile(name=block.name, family=family, source=block.source)
+  return _ElementProfile(
+    name=block.name,
+    element_type=element_type,
+    family=family,
+    spring=spring,
+    source=block.source,
+  )
 
 
 def _solver_settings(
@@ -1779,20 +1925,22 @@ def _solver_settings(
       raw = item.value.value
       solver_type = raw if type(raw) is str else None
 
-  if solver_type not in ("LinearSolver", "NonlinearSolver"):
+  if solver_type not in ("LinearSolver", "NonlinearSolver", "RiksSolver"):
     diagnostics.append(
       _diagnostic(
         "unsupported-solver-type",
         f"solver type {solver_type!r} is outside the supported deck subset "
-        "('LinearSolver' and 'NonlinearSolver' only)",
+        "('LinearSolver', 'NonlinearSolver', and 'RiksSolver' only)",
         block.source,
       ),
     )
     return None
 
-  allowed = (
-    frozenset({"type"}) if solver_type == "LinearSolver" else _NONLINEAR_SOLVER_KEYS
-  )
+  allowed = frozenset({"type"})
+  if solver_type == "NonlinearSolver":
+    allowed = _NONLINEAR_SOLVER_KEYS
+  elif solver_type == "RiksSolver":
+    allowed = _RIKS_SOLVER_KEYS
   sound = True
   for name, value in assignments.items():
     if name not in allowed:
@@ -1813,6 +1961,9 @@ def _solver_settings(
       tolerance=1.0e-10,
       max_iterations=25,
     )
+
+  if solver_type == "RiksSolver":
+    return _riks_solver_settings(assignments, sound, diagnostics)
 
   tol = _solver_number(assignments, "tol", 1.0e-3, diagnostics)
   iter_max = _solver_number(assignments, "iterMax", 10, diagnostics, integer=True)
@@ -1879,6 +2030,65 @@ def _solver_settings(
     load_factors=factors,
     tolerance=float(tol),
     max_iterations=int(iter_max),
+  )
+
+
+def _riks_solver_settings(
+  assignments: dict[str, _ProValue],
+  sound: bool,
+  diagnostics: list[SpecDiagnostic],
+) -> DeckSolverSettings | None:
+  """Translate a ``RiksSolver`` block into the arc-length policy.
+
+  Every parsed key converts (the legacy defaults stand in when unset);
+  ``load_factors`` stays empty because the continuation owns the load
+  parameter autonomously, and the cycle cap is the legacy hard-coded 1000.
+  """
+  tol = _solver_number(assignments, "tol", _RIKS_DEFAULT_TOLERANCE, diagnostics)
+  iter_max = _solver_number(
+    assignments, "iterMax", _RIKS_DEFAULT_MAX_ITERATIONS, diagnostics, integer=True
+  )
+  opt_iter = _solver_number(
+    assignments,
+    "optiter",
+    _RIKS_DEFAULT_OPTIMAL_ITERATIONS,
+    diagnostics,
+    integer=True,
+  )
+  max_lam = _solver_number(assignments, "maxLam", _RIKS_DEFAULT_MAX_LAM, diagnostics)
+  max_factor = _solver_number(
+    assignments, "maxFactor", _RIKS_DEFAULT_MAX_FACTOR, diagnostics
+  )
+  if None in (tol, iter_max, opt_iter, max_lam, max_factor):
+    sound = False
+
+  fixed_step_value = assignments.get("fixedStep")
+  fixed_step = False
+  if fixed_step_value is not None:
+    if type(fixed_step_value.value) is not bool:
+      diagnostics.append(
+        _diagnostic(
+          "deck-pro-syntax",
+          "fixedStep must be a boolean",
+          fixed_step_value.source,
+        ),
+      )
+      sound = False
+    else:
+      fixed_step = fixed_step_value.value
+
+  if not sound:
+    return None
+  return DeckSolverSettings(
+    solver_type="RiksSolver",
+    load_factors=(),
+    tolerance=float(tol),
+    max_iterations=int(iter_max),
+    optimal_iterations=int(opt_iter),
+    fixed_step=fixed_step,
+    max_lam=float(max_lam),
+    max_factor=float(max_factor),
+    cycle_cap=_RIKS_CYCLE_CAP,
   )
 
 
@@ -2164,27 +2374,28 @@ def _emit_program(
 def _resolve_geometry(
   group: str,
   rank: int,
-  family: _MaterialProfile,
+  geometries: frozenset[tuple[int, int]],
   elements: tuple[_DatElement, ...],
   diagnostics: list[SpecDiagnostic],
 ) -> _GeometryProfile | None:
   """Resolve the single cell geometry of one mesh group.
 
-  Every element's ``(rank, arity)`` must name a geometry the deck's element
-  family accepts, and all elements of the group must resolve to the same
-  geometry. Violations record coded ``unsupported-cell-arity`` diagnostics.
+  Every element's ``(rank, arity)`` must name one of the geometry keys the
+  deck's group accepts, and all elements of the group must resolve to the
+  same geometry. Violations record coded ``unsupported-cell-arity``
+  diagnostics.
   """
   geometry: _GeometryProfile | None = None
   geometry_key: tuple[int, int] | None = None
   supported = sorted(
-    {_MESH_GEOMETRIES[key].geometry_interpolation for key in family.geometries}
+    {_MESH_GEOMETRIES[key].geometry_interpolation for key in geometries}
   )
   for element in elements:
     if element.group != group:
       continue
     arity = len(element.node_ids)
     key = (rank, arity)
-    if key not in family.geometries:
+    if key not in geometries:
       diagnostics.append(
         _diagnostic(
           "unsupported-cell-arity",
@@ -2208,6 +2419,117 @@ def _resolve_geometry(
         ),
       )
   return geometry
+
+
+def _legacy_spring_kernel(
+  displacements: np.ndarray,
+  accepted_rows: np.ndarray,
+  parameters: np.ndarray,
+) -> SpringKernelResult:
+  """The legacy ``Spring`` residual as a network of grounded point springs.
+
+  ``parameters`` is ``(k, d0_x, d0_y, d1_x, d1_y, ...)``: the group's shared
+  stiffness plus each spring's unit chord direction. The response is the
+  consistent axial pair ``k (u.d) d`` / ``k d d^T`` the H1 decision pins —
+  the legacy element's residual restricted to a grounded end (the legacy
+  isotropic tangent is not the oracle). The spring is stateless, so the
+  trial rows echo the accepted rows.
+  """
+  stiffness = parameters[0]
+  directions = parameters[1:].reshape(-1, 2)
+  axial = (displacements * directions).sum(axis=1)
+  force = stiffness * axial[:, None] * directions
+  tangent = stiffness * directions[:, :, None] * directions[:, None, :]
+  return SpringKernelResult(
+    force=force,
+    tangent=tangent,
+    trial_rows=np.array(accepted_rows, copy=True),
+    status=EvaluationStatus.OK,
+  )
+
+
+def _spring_declaration(
+  group: str,
+  profile: _SpringProfile,
+  deck: _DatDeck,
+  diagnostics: list[SpecDiagnostic],
+) -> SpringDeclaration | None:
+  """Build one spring group's declaration, validating the support pattern.
+
+  Each element must have exactly one grounded end — every displacement
+  component prescribed to zero — so the two-node legacy spring reduces
+  exactly to a grounded point spring at the other node along the element
+  chord (the H1 consistent axial form). Every other support pattern records
+  a coded ``unsupported-spring-support`` diagnostic.
+  """
+  prescribed: dict[int, dict[str, float]] = {}
+  for item in deck.prescribed:
+    prescribed.setdefault(item.node_id, {})[item.dof_type] = item.value
+
+  def grounded(node_id: int) -> bool:
+    values = prescribed.get(node_id)
+    if values is None:
+      return False
+    return all(values.get(dof_type) == 0.0 for dof_type in ("u", "v"))
+
+  coordinates = {node.id: node.coordinates for node in deck.nodes}
+  spring_ids: list[int] = []
+  node_ids: list[int] = []
+  directions: list[float] = []
+  sound = True
+  for element in deck.elements:
+    if element.group != group:
+      continue
+    first, second = element.node_ids
+    first_grounded = grounded(first)
+    second_grounded = grounded(second)
+    if first_grounded == second_grounded:
+      diagnostics.append(
+        _diagnostic(
+          "unsupported-spring-support",
+          f"Spring element {element.id} must have exactly one end with every "
+          "component prescribed to zero (the grounded point-spring form); "
+          f"node {first} is {'grounded' if first_grounded else 'not grounded'} "
+          f"and node {second} is "
+          f"{'grounded' if second_grounded else 'not grounded'}",
+          element.source,
+        ),
+      )
+      sound = False
+      continue
+    chord_x = coordinates[second][0] - coordinates[first][0]
+    chord_y = coordinates[second][1] - coordinates[first][1]
+    length = math.hypot(chord_x, chord_y)
+    if length == 0.0:
+      diagnostics.append(
+        _diagnostic(
+          "unsupported-spring-support",
+          f"Spring element {element.id} has coincident endpoints; the chord "
+          "direction is undefined",
+          element.source,
+        ),
+      )
+      sound = False
+      continue
+    spring_ids.append(element.id)
+    node_ids.append(second if first_grounded else first)
+    directions.extend((chord_x / length, chord_y / length))
+  if not sound:
+    return None
+  return SpringDeclaration(
+    block_id=group,
+    space_id=_FIELD_ID,
+    spring_ids=tuple(spring_ids),
+    node_ids=tuple(node_ids),
+    state_schema=_SPRING_STATE_SCHEMA,
+    state_slots=(),
+    kernel_name=_SPRING_KERNEL_NAME,
+    kernel_version="1",
+    implementation_id=_SPRING_IMPLEMENTATION_ID,
+    parameters=(profile.stiffness, *directions),
+    kernel=_legacy_spring_kernel,
+    source=profile.source,
+  )
 
 
 def _emit_model(
@@ -2351,16 +2673,25 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
     rank = _check_mesh(dat_deck, SourceContext(source=str(dat_path)), diagnostics)
     _check_dofs(dat_deck, rank, diagnostics)
     groups = tuple(dict.fromkeys(element.group for element in dat_deck.elements))
-    if len(groups) > 1:
+    spring_groups = tuple(
+      group
+      for group in groups
+      if (group_profile := profiles.get(group)) is not None
+      and group_profile.element_type == "Spring"
+    )
+    region_groups = tuple(group for group in groups if group not in spring_groups)
+    if dat_deck.elements and len(region_groups) != 1:
       diagnostics.append(
         _diagnostic(
           "unsupported-element-groups",
-          f"the mesh declares {len(groups)} element groups {groups}; the "
-          "supported deck subset covers exactly one",
+          f"the mesh declares {len(region_groups)} region-routed element groups "
+          f"{region_groups}; the supported deck subset covers exactly one "
+          "region-routed group plus any number of 'Spring' groups",
           dat_deck.elements[0].source,
         ),
       )
     geometries: dict[str, _GeometryProfile | None] = {}
+    spring_declarations: dict[str, SpringDeclaration] = {}
     for group in groups:
       profile = profiles.get(group)
       if profile is None:
@@ -2372,6 +2703,26 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
           ),
         )
         continue
+      if profile.spring is not None:
+        if rank in _SUPPORTED_MESH_RANKS:
+          recorded = len(diagnostics)
+          _resolve_geometry(
+            group,
+            rank,
+            _SPRING_GEOMETRIES,
+            dat_deck.elements,
+            diagnostics,
+          )
+          if len(diagnostics) == recorded:
+            declaration = _spring_declaration(
+              group,
+              profile.spring,
+              dat_deck,
+              diagnostics,
+            )
+            if declaration is not None:
+              spring_declarations[group] = declaration
+        continue
       if profile.family is None:
         geometries[group] = None
         continue
@@ -2380,7 +2731,7 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
         geometry = _resolve_geometry(
           group,
           rank,
-          profile.family,
+          profile.family.geometries,
           dat_deck.elements,
           diagnostics,
         )
@@ -2428,6 +2779,22 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
             ),
           ),
         )
+    if dat_deck is not None and spring_groups:
+      diagnostics.append(
+        _diagnostic(
+          "incompatible-solver-type",
+          "a deck with 'Spring' groups requires a NonlinearSolver or "
+          "RiksSolver block: the legacy LinearSolver assembles the legacy "
+          "isotropic spring tangent once — not the oracle per the H1 "
+          "decision — while the v3 spring family ships the consistent axial "
+          "tangent, so the single linear solve has no faithful mapping",
+          (
+            pro_deck.solver_block.source
+            if pro_deck.solver_block is not None
+            else SourceContext(source=str(pro_path))
+          ),
+        ),
+      )
 
   if diagnostics:
     raise DeckConversionError(tuple(diagnostics))
@@ -2436,7 +2803,7 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
     msg = "conversion invariants failed without a recorded diagnostic"
     raise ValueError(msg)
 
-  group = groups[0]
+  group = region_groups[0]
   profile = profiles[group]
   geometry = geometries[group]
   if profile.family is None or geometry is None:
@@ -2451,6 +2818,7 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
     if pro_deck.solver_block is not None
     else pro_source,
   )
+  springs = tuple(spring_declarations[name] for name in spring_groups)
   family = profile.family
   if family.registry_kind == "plasticity":
     registry = plasticity_reference_registry()
@@ -2474,6 +2842,7 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
     registry=registry,
     solver=settings,
     not_converted=tuple(not_converted),
+    springs=springs,
   )
 
 
@@ -2482,7 +2851,7 @@ def compile_deck(deck: ConvertedDeck) -> CompiledDeck:
   if type(deck) is not ConvertedDeck:
     msg = "compile_deck requires an exact ConvertedDeck"
     raise TypeError(msg)
-  system = compile_system(deck.model, deck.registry)
+  system = compile_system(deck.model, deck.registry, springs=deck.springs)
   constraint_map = compile_constraint_map(
     system,
     constraints=deck.program.constraints,
@@ -2497,8 +2866,32 @@ def compile_deck(deck: ConvertedDeck) -> CompiledDeck:
 
 
 def run_deck(deck: ConvertedDeck) -> DeckRun:
-  """Compile and drive a converted deck through the landed nonlinear driver."""
+  """Compile and drive a converted deck through the landed drivers.
+
+  ``RiksSolver`` decks route to the landed ``RiksDriver``: the deck's riks
+  settings become the exact :class:`ArcLengthSettings` and the continuation
+  owns the ``load`` coordinate autonomously (the base point binds nothing).
+  Every other deck keeps the landed ``NonlinearStaticDriver`` schedule (a
+  ``LinearSolver`` deck's single full step).
+  """
   compiled = compile_deck(deck)
+  if deck.solver.solver_type == "RiksSolver":
+    riks_driver = RiksDriver(
+      compiled.system,
+      compiled.constraint_map,
+      compiled.loads,
+      ArcLengthSettings(
+        tolerance=deck.solver.tolerance,
+        max_iterations=deck.solver.max_iterations,
+        optimal_iterations=deck.solver.optimal_iterations,
+        fixed_step=deck.solver.fixed_step,
+        max_lam=deck.solver.max_lam,
+        max_factor=deck.solver.max_factor,
+        cycle_cap=deck.solver.cycle_cap,
+      ),
+    )
+    riks_result = riks_driver.run(base_point=ProgramPoint())
+    return DeckRun(driver=riks_driver, result=riks_result)
   settings = NonlinearStaticSettings(
     tolerance=deck.solver.tolerance,
     max_iterations=deck.solver.max_iterations,
