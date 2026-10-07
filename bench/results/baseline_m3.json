@@ -1,7 +1,7 @@
 {
  "kind": "benchmark-baseline",
  "schema": 1,
- "source": "Regenerated 2026-10-06 on the reference machine (i9-9980HK) from run_20261006T090327Z.json (full bench.run all at v3 30545dc). Supersedes the M3-era baseline (baseline_m3_20260929.json, kept as history): the N2 mission (cc14783) intentionally set documented cache=False on the six cross-module continuum kernels, which raises fresh-subprocess cold walls ~5-7.6x; the four regressed cells are that accepted compile cost, not a timing regression. Adds the M21/M33/M34 skim workloads and the M30 material/j2 cells.",
+ "source": "Regenerated 2026-10-06 on the reference machine (i9-9980HK) from run_20261006T090327Z.json (full bench.run all at v3 30545dc). Supersedes the M3-era baseline (baseline_m3_20260929.json, kept as history): the N2 mission (cc14783) intentionally set documented cache=False on the six cross-module continuum kernels, which raises fresh-subprocess cold walls ~5-7.6x; the four regressed cells are that accepted compile cost, not a timing regression. Adds the M21/M33/M34 skim workloads and the M30 material/j2 cells. Per-cell gate_threshold overrides (1.6 variance classes, 14 cells) restored from the 2026-09-29 baseline after the regeneration dropped them.",
  "manifest": {
   "created_utc": "2026-10-06T09:03:27+00:00",
   "git_revision": "30545dc8dcb46d40f69a513f8c9b4248cb69a110",
@@ -687,7 +687,8 @@
       15.48188494052738
      ],
      "rss_delta_mb": 0.0,
-     "note": "solver loop only; per-rep load excluded (M3 envelope)"
+     "note": "solver loop only; per-rep load excluded (M3 envelope)",
+     "gate_threshold": 1.6
     }
    },
    "logical_bytes": {},
@@ -3131,7 +3132,8 @@
       12.658838066272438
      ],
      "rss_delta_mb": 0.0,
-     "note": "solver loop only; per-rep load excluded (M3 envelope)"
+     "note": "solver loop only; per-rep load excluded (M3 envelope)",
+     "gate_threshold": 1.6
     }
    },
    "logical_bytes": {},
@@ -4351,7 +4353,8 @@
       14.155615004710853
      ],
      "rss_delta_mb": 0.0,
-     "note": "solver loop only; per-rep load excluded (M3 envelope)"
+     "note": "solver loop only; per-rep load excluded (M3 envelope)",
+     "gate_threshold": 1.6
     }
    },
    "logical_bytes": {},
@@ -4835,7 +4838,8 @@
       1485.6910050148144
      ],
      "rss_delta_mb": 0.0,
-     "note": "solver loop only; per-rep load excluded (M3 envelope)"
+     "note": "solver loop only; per-rep load excluded (M3 envelope)",
+     "gate_threshold": 1.6
     }
    },
    "logical_bytes": {},
@@ -5334,7 +5338,8 @@
       80.29207296203822
      ],
      "rss_delta_mb": 0.0,
-     "note": "solver loop only; per-rep load excluded (M3 envelope)"
+     "note": "solver loop only; per-rep load excluded (M3 envelope)",
+     "gate_threshold": 1.6
     }
    },
    "logical_bytes": {},
@@ -6027,7 +6032,8 @@
       4.519272944889963
      ],
      "rss_delta_mb": 0.0,
-     "note": ""
+     "note": "",
+     "gate_threshold": 1.6
     },
     "solve": {
      "min_ms": 0.4531199811026454,
@@ -9073,7 +9079,8 @@
       21.178451948799193
      ],
      "rss_delta_mb": 0.0,
-     "note": ""
+     "note": "",
+     "gate_threshold": 1.6
     },
     "solve": {
      "min_ms": 0.6534750573337078,
@@ -12119,7 +12126,8 @@
       100.89495591819286
      ],
      "rss_delta_mb": 0.0,
-     "note": ""
+     "note": "",
+     "gate_threshold": 1.6
     },
     "solve": {
      "min_ms": 1.9230879843235016,
@@ -15165,7 +15173,8 @@
       702.4563510203734
      ],
      "rss_delta_mb": 0.0,
-     "note": ""
+     "note": "",
+     "gate_threshold": 1.6
     },
     "solve": {
      "min_ms": 7.284571998752654,
@@ -18209,7 +18218,8 @@
       8377.271719044074
      ],
      "rss_delta_mb": 0.0,
-     "note": "reduced reps: legacy superlinear cost (M3 used 2-3 here)"
+     "note": "reduced reps: legacy superlinear cost (M3 used 2-3 here)",
+     "gate_threshold": 1.6
     },
     "solve": {
      "min_ms": 45.663167955353856,
@@ -19517,7 +19527,8 @@
       8177.809451939538
      ],
      "rss_delta_mb": 0.0,
-     "note": "reduced reps: legacy superlinear cost (M3 used 2-3 here)"
+     "note": "reduced reps: legacy superlinear cost (M3 used 2-3 here)",
+     "gate_threshold": 1.6
     },
     "solve": {
      "min_ms": 50.21404894068837,
@@ -20809,7 +20820,8 @@
       1044.1654089372605
      ],
      "rss_delta_mb": 0.0,
-     "note": ""
+     "note": "",
+     "gate_threshold": 1.6
     },
     "assemble_coo": {
      "min_ms": 141462.9809060134,
@@ -20820,7 +20832,8 @@
       141462.9809060134
      ],
      "rss_delta_mb": 0.0,
-     "note": "single rep: legacy superlinear cost (M3 envelope)"
+     "note": "single rep: legacy superlinear cost (M3 envelope)",
+     "gate_threshold": 1.6
     },
     "solve": {
      "min_ms": 738.9983849134296,
@@ -20835,7 +20848,8 @@
       802.8280439320952
      ],
      "rss_delta_mb": 0.07421875,
-     "note": ""
+     "note": "",
+     "gate_threshold": 1.6
     }
    },
    "logical_bytes": {},
