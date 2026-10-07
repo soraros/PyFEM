@@ -6,6 +6,10 @@ The rollback oracles assert the D3 Case A discipline directly: a rejected or
 failed attempt leaves the M12 owner's committed state byte-identical, and
 cutback retries restart from the same committed generation (ordinals advance
 exactly once per committed substep; rejections never advance them).
+
+The budget-exhaust classification (SLOW_CONVERGENCE near-miss versus
+NON_CONVERGENT failing) is pinned against the M48 finding's J2 cantilever
+deck and the M50 snap-through guard deck.
 """
 
 from __future__ import annotations
@@ -19,6 +23,8 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
+from pyfem.v3 import authoring
+from pyfem.v3.compile.continuum import plasticity_reference_registry
 from pyfem.v3.compile.spring import (
   SpringDeclaration,
   SpringKernel,
@@ -36,6 +42,7 @@ from pyfem.v3.constraints import (
   compile_constraint_map,
 )
 from pyfem.v3.driver import (
+  BudgetExhaustionTrend,
   DriverStatus,
   NonlinearStaticDriver,
   NonlinearStaticResult,
@@ -793,3 +800,142 @@ def test_operator_reject_step_budget_exhaustion_fails_typed() -> None:
   assert _owner_snapshot(driver.owner) == snapshot
   operator = driver.owner.system.operators[-1]
   assert isinstance(operator, SpringOperator)
+
+
+def _j2_cantilever_driver(settings: NonlinearStaticSettings) -> NonlinearStaticDriver:
+  """The M48 finding's deck: a load-controlled J2 cantilever on a Q8 patch."""
+  mesh = authoring.quad8_patch(4, 1, width=4.0, height=1.0)
+  material = authoring.plasticity(210000.0, 0.3, 250.0, 1000.0, id="steel")
+  model = authoring.small_strain_continuum(mesh, material=material)
+  system = compile_system(model, plasticity_reference_registry())
+  left = tuple(node.id for node in mesh.nodes if node.coordinates[0] == 0.0)
+  right = tuple(
+    sorted(
+      (node for node in mesh.nodes if node.coordinates[0] == 4.0),
+      key=lambda node: node.coordinates[1],
+    )
+  )
+  coordinate_map = compile_constraint_map(
+    system,
+    constraints=authoring.fixed(left, ("x", "y")),
+    coordinates=(ProgramCoordinateSpec(name="load", kind="load"),),
+  )
+  loads = tuple(
+    authoring.nodal_load(node.id, "y", fraction)
+    for node, fraction in zip(right, (1.0 / 6.0, 2.0 / 3.0, 1.0 / 6.0), strict=True)
+  )
+  return NonlinearStaticDriver(system, coordinate_map, loads, settings)
+
+
+def test_budget_exhaustion_surfaces_slow_convergence_on_the_j2_near_miss() -> None:
+  """The M48 finding: a slow-but-working Newton reads 'budget too small'.
+
+  The load-controlled J2 cantilever converges linearly (near-yield tangent
+  chatter) and needs 33 iterations at tolerance 1e-12, so the default
+  25-iteration budget rejects every full-size attempt; at default settings
+  the cutback machinery amplifies that into 294 records / 7270 evaluations.
+  Bounded to max_cutbacks=2 the same deck fails typed in bounded work with
+  the SLOW_CONVERGENCE near-miss typed on every budget-exhausted record,
+  and the documented remedy completes the same solve in one substep.
+  """
+  settings = NonlinearStaticSettings(tolerance=1.0e-12, max_cutbacks=2)
+  driver = _j2_cantilever_driver(settings)
+  result = _run_ramp(driver, 20.0)
+  assert result.status is DriverStatus.STEP_FAILED
+  assert result.statistics.evaluation_count < 1_000  # measured: 495
+  exhausted = [
+    record for record in result.records if record.status is not SubstepStatus.COMMITTED
+  ]
+  assert len(exhausted) >= 3  # measured: 16 rejected/failed records
+  for record in exhausted:
+    observation = record.budget_exhaustion
+    assert observation is not None
+    assert observation.trend is BudgetExhaustionTrend.SLOW_CONVERGENCE
+    assert observation.measured_step_count == settings.max_iterations
+    # Chatter permits rare single-step upticks (23/24 decreasing measured);
+    # the net contraction over the budget is ~1e-9, pinned with 1e3 margin.
+    assert observation.decreasing_step_count >= observation.measured_step_count - 3
+    assert observation.final_residual_norm <= 1.0e-6 * observation.first_residual_norm
+  committed = [
+    record for record in result.records if record.status is SubstepStatus.COMMITTED
+  ]
+  assert all(record.budget_exhaustion is None for record in committed)
+  # The typed failure leaves committed state at the last micro-commit.
+  assert result.final_generation.ordinal == committed[-1].committed_ordinal
+
+  # The documented remedy: the same deck at max_iterations=50 completes in
+  # one substep — the budget, not the convergence, was the constraint.
+  remedy = _j2_cantilever_driver(
+    NonlinearStaticSettings(tolerance=1.0e-12, max_iterations=50)
+  )
+  remedy_result = _run_ramp(remedy, 20.0)
+  assert remedy_result.status is DriverStatus.COMPLETED
+  (record,) = remedy_result.records
+  assert record.status is SubstepStatus.COMMITTED
+  assert record.budget_exhaustion is None
+  # 33 iterations measured on the reference platform; the bound only needs
+  # to prove the default budget was binding.
+  assert settings.max_iterations < len(record.iterations) <= 50
+  assert remedy_result.statistics.evaluation_count == len(record.iterations)
+  observation = record.observation
+  assert observation is not None
+  # Reactions observed from the full residual balance the applied traction.
+  np.testing.assert_allclose(
+    observation.reactions.values[1::2].sum(),
+    -20.0,
+    rtol=0.0,
+    atol=_REACTION_ATOL,
+  )
+
+
+def test_snap_through_failures_type_non_convergent_at_budget_exhaustion() -> None:
+  """The M50 guard deck: failing trajectories never type as near-misses.
+
+  Past the limit load every budget-exhausted attempt oscillates instead of
+  contracting, so the classification is NON_CONVERGENT on every rejected
+  and failed record (59 measured), and the substep floor still trips the
+  typed failure in bounded work — decisions identical to before the
+  classification existed.
+  """
+  settings = NonlinearStaticSettings(tolerance=1.0e-3, max_iterations=10)
+  driver = _truss_driver(settings, apex_factor=-100.0)
+  result = _run_ramp(driver, 1.0, 2.0, 3.0)
+  assert result.status is DriverStatus.STEP_FAILED
+  assert result.failed_target_index == 2
+  assert result.statistics.evaluation_count < 2_000  # measured: 640
+  failing = [
+    record for record in result.records if record.status is not SubstepStatus.COMMITTED
+  ]
+  assert len(failing) > 20  # measured: 59
+  for record in failing:
+    observation = record.budget_exhaustion
+    assert observation is not None
+    assert observation.trend is BudgetExhaustionTrend.NON_CONVERGENT
+  failed = result.records[-1]
+  assert failed.status is SubstepStatus.FAILED
+  assert failed.budget_exhaustion is not None
+  # The terminal attempt's residual GREW over its exhausted budget — the
+  # exact opposite of a near-miss.
+  assert (
+    failed.budget_exhaustion.final_residual_norm
+    > failed.budget_exhaustion.first_residual_norm
+  )
+  committed = [
+    record for record in result.records if record.status is SubstepStatus.COMMITTED
+  ]
+  assert result.final_generation.ordinal == committed[-1].committed_ordinal
+
+
+def test_divergence_trip_rejection_carries_no_budget_exhaustion() -> None:
+  """Rejections with another typed cause never carry the observation."""
+  driver = _truss_driver(
+    NonlinearStaticSettings(tolerance=1.0e-10, max_cutbacks=3),
+  )
+  first = _run_ramp(driver, 100.0)
+  assert first.status is DriverStatus.COMPLETED
+  failed = driver.run(
+    base_point=_points(100.0)[0],
+    target_points=_points(1.0e8),
+  )
+  assert failed.status is DriverStatus.STEP_FAILED
+  assert all(record.budget_exhaustion is None for record in failed.records)

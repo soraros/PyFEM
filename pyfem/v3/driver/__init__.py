@@ -11,6 +11,8 @@ from pyfem.v3.driver.continuation import (
   continuation_evolution_from_arc_length,
 )
 from pyfem.v3.driver.contracts import (
+  BudgetExhaustionObservation,
+  BudgetExhaustionTrend,
   DriverStatistics,
   DriverStatus,
   IterationRecord,
@@ -49,6 +51,8 @@ __all__ = [
   "ArcLengthSettings",
   "ArcLengthStepRecord",
   "ArcLengthTermination",
+  "BudgetExhaustionObservation",
+  "BudgetExhaustionTrend",
   "CompiledLoadProgram",
   "DriverAssemblyPlan",
   "DriverDiagnostic",
