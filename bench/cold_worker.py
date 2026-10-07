@@ -125,10 +125,91 @@ def _run_legacy_skim(name: str) -> dict[str, float]:
   return {"load_ms": load_ms, "solve_ms": solve_ms}
 
 
+def _run_v3_family(spec: str) -> tuple[dict[str, float], int, int]:
+  """One cold family case (v3 side): deck-stack or Riks-driver load + solve."""
+  from bench.family_v3 import (
+    cantilever_family_load,
+    cantilever_family_solve,
+    riks_fan_load,
+    riks_fan_solve,
+  )
+  from bench.legacy_cases import cantilever_pro_path_for
+
+  name, _, size = spec.partition(":")
+  if name == "tl-cantilever":
+    nx_str, _, ny_str = size.partition("x")
+    nx, ny = int(nx_str), int(ny_str)
+    pro_path = cantilever_pro_path_for(nx, ny)
+    if not pro_path.exists():
+      msg = f"generated case missing: {pro_path} (run the gates/warm phase first)"
+      raise SystemExit(msg)
+    t0 = time.perf_counter()
+    prepared = cantilever_family_load(pro_path)
+    load_ms = (time.perf_counter() - t0) * 1e3
+    t0 = time.perf_counter()
+    cantilever_family_solve(prepared)
+    solve_ms = (time.perf_counter() - t0) * 1e3
+    n_elems = nx * ny
+    n_dofs = 2 * ((ny + 1) * (2 * nx + 1) + ny * (nx + 1))
+    return {"load_ms": load_ms, "solve_ms": solve_ms}, n_elems, n_dofs
+  if name == "riks-fan":
+    n_rays = int(size)
+    t0 = time.perf_counter()
+    prepared = riks_fan_load(n_rays)
+    load_ms = (time.perf_counter() - t0) * 1e3
+    t0 = time.perf_counter()
+    riks_fan_solve(prepared)
+    solve_ms = (time.perf_counter() - t0) * 1e3
+    return {"load_ms": load_ms, "solve_ms": solve_ms}, n_rays, 2 * (n_rays + 1)
+  msg = f"Unknown family case {spec!r}"
+  raise SystemExit(msg)
+
+
+def _run_legacy_family(spec: str) -> tuple[dict[str, float], int, int]:
+  """One cold family case (legacy side): load + full solver loop."""
+  from bench.legacy_cases import (
+    cantilever_pro_path_for,
+    fan_pro_path_for,
+    legacy_load,
+    legacy_nonlinear_solver,
+    legacy_riks_solver,
+  )
+
+  name, _, size = spec.partition(":")
+  if name == "tl-cantilever":
+    nx_str, _, ny_str = size.partition("x")
+    nx, ny = int(nx_str), int(ny_str)
+    pro_path = cantilever_pro_path_for(nx, ny)
+    solver = legacy_nonlinear_solver
+    n_elems = nx * ny
+    n_dofs = 2 * ((ny + 1) * (2 * nx + 1) + ny * (nx + 1))
+  elif name == "riks-fan":
+    n_rays = int(size)
+    pro_path = fan_pro_path_for(n_rays)
+    solver = legacy_riks_solver
+    n_elems = n_rays
+    n_dofs = 2 * (n_rays + 1)
+  else:
+    msg = f"Unknown family case {spec!r}"
+    raise SystemExit(msg)
+  if not pro_path.exists():
+    msg = f"generated case missing: {pro_path} (run the gates/warm phase first)"
+    raise SystemExit(msg)
+  t0 = time.perf_counter()
+  props, globdat = legacy_load(pro_path)
+  load_ms = (time.perf_counter() - t0) * 1e3
+  t0 = time.perf_counter()
+  solver(props, globdat, pro_path)
+  solve_ms = (time.perf_counter() - t0) * 1e3
+  return {"load_ms": load_ms, "solve_ms": solve_ms}, n_elems, n_dofs
+
+
 def main() -> None:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument(
-    "--case", required=True, help="q8patch:<n>:<material> or skim:<name>"
+    "--case",
+    required=True,
+    help="q8patch:<n>:<material>, skim:<name>, or family:<name>:<size>",
   )
   parser.add_argument("--side", choices=("v3", "legacy"), required=True)
   args = parser.parse_args()
@@ -154,6 +235,10 @@ def main() -> None:
   elif kind == "skim":
     timings = _run_v3_skim(rest) if args.side == "v3" else _run_legacy_skim(rest)
     n_elems, n_dofs = 0, 0
+  elif kind == "family":
+    timings, n_elems, n_dofs = (
+      _run_v3_family(rest) if args.side == "v3" else _run_legacy_family(rest)
+    )
   else:
     msg = f"Unknown case kind {kind!r}"
     raise SystemExit(msg)

@@ -42,12 +42,20 @@ from bench.common import (
   write_run,
 )
 from bench.db import DEFAULT_THRESHOLD, compare
+from bench.family_v3 import (
+  cantilever_family_load,
+  cantilever_family_solve,
+  riks_fan_load,
+  riks_fan_solve,
+)
 from bench.gates import (
   CANONICAL_LEGACY_MAX_SIZE,
   GateResult,
   check_fast_reference_selftest,
+  gate_finite_strain,
   gate_material,
   gate_q8,
+  gate_riks_fan,
   gate_skim,
   material_kernel_batch,
 )
@@ -59,18 +67,24 @@ from bench.legacy_cases import (
   legacy_solve,
   quiet_legacy,
   silence_legacy_logging,
+  write_legacy_cantilever,
   write_legacy_q8_patch,
+  write_legacy_truss_fan,
 )
 from bench.manifest import check_cache_coherence, collect_manifest
 from bench.v3_pipeline import V3Q8Pipeline
 from bench.workloads import (
   Q8_MATERIALS,
   Q8_SIZES,
+  FiniteStrainWorkload,
   MaterialKernelCase,
   Q8Workload,
+  RiksFanWorkload,
   SkimCase,
+  finite_strain_cases,
   material_cases,
   q8_workloads,
+  riks_fan_cases,
   skim_cases,
 )
 
@@ -95,6 +109,7 @@ COLD_V3_THREADS = (1, 16)
 COLD_LEGACY_THREADS = (1,)
 DEFAULT_COLD_Q8 = ((8, "PlaneStress"), (32, "PlaneStress"))
 DEFAULT_COLD_SKIMS = ("patch_test8", "cantilever8", "shallow_truss_riks")
+DEFAULT_COLD_FAMILY = ("family:tl-cantilever:16x2", "family:riks-fan:32")
 TRUE_COLD_CASE = "skim:patch_test8"
 
 BLAS_ENV_VARS = (
@@ -434,11 +449,136 @@ def run_material_case(
   return records, gate
 
 
+def run_finite_strain_case(
+  case: FiniteStrainWorkload,
+  *,
+  threads: list[int],
+  budget_s: float,
+) -> tuple[list[BenchRecord], GateResult]:
+  """Gate one refined cantilever, then time the F4 deck stack vs legacy."""
+  records: list[BenchRecord] = []
+  pro_path = write_legacy_cantilever(case.nx, case.ny)
+  gate = gate_finite_strain(case)
+  if not gate.passed:
+    for side in ("v3", "legacy"):
+      records.append(_failed_record("family", case.name, side, "warm", gate))
+    return records, gate
+
+  prepared = cantilever_family_load(pro_path)
+  for thread_count in threads:
+    _set_numba_threads(thread_count)
+    with _threadpool_limits(thread_count):
+      load_stats = measure(
+        lambda: cantilever_family_load(pro_path), warmup=1, budget_s=budget_s
+      )
+      e2e_stats = measure(
+        lambda: cantilever_family_solve(prepared), warmup=1, budget_s=budget_s
+      )
+    records.append(
+      BenchRecord(
+        category="family",
+        workload=case.name,
+        side="v3",
+        mode="warm",
+        threads=thread_count,
+        n_elems=case.n_elems,
+        n_dofs=case.n_dofs,
+        metrics={"load": load_stats, "e2e": e2e_stats},
+        correctness=gate.to_json(),
+      )
+    )
+
+  load_stats = measure(lambda: legacy_load(pro_path), warmup=1, budget_s=budget_s)
+  legacy_e2e = _per_rep_solver_loop(
+    lambda: legacy_load(pro_path),
+    lambda handle: legacy_nonlinear_solver(handle[0], handle[1], pro_path),
+    warmup=1,
+    reps=3,
+  )
+  records.append(
+    BenchRecord(
+      category="family",
+      workload=case.name,
+      side="legacy",
+      mode="warm",
+      threads=1,
+      n_elems=case.n_elems,
+      n_dofs=case.n_dofs,
+      metrics={"load": load_stats, "e2e": legacy_e2e},
+      correctness=gate.to_json(),
+    )
+  )
+  return records, gate
+
+
+def run_riks_fan_case(
+  case: RiksFanWorkload,
+  *,
+  threads: list[int],
+  budget_s: float,
+) -> tuple[list[BenchRecord], GateResult]:
+  """Gate one truss-only fan, then time the M33 Riks driver vs legacy."""
+  records: list[BenchRecord] = []
+  pro_path = write_legacy_truss_fan(case.n_rays)
+  gate = gate_riks_fan(case)
+  if not gate.passed:
+    for side in ("v3", "legacy"):
+      records.append(_failed_record("family", case.name, side, "warm", gate))
+    return records, gate
+
+  prepared = riks_fan_load(case.n_rays)
+  for thread_count in threads:
+    _set_numba_threads(thread_count)
+    with _threadpool_limits(thread_count):
+      load_stats = measure(
+        lambda: riks_fan_load(case.n_rays), warmup=1, budget_s=budget_s
+      )
+      e2e_stats = measure(lambda: riks_fan_solve(prepared), warmup=1, budget_s=budget_s)
+    records.append(
+      BenchRecord(
+        category="family",
+        workload=case.name,
+        side="v3",
+        mode="warm",
+        threads=thread_count,
+        n_elems=case.n_elems,
+        n_dofs=case.n_dofs,
+        metrics={"load": load_stats, "e2e": e2e_stats},
+        correctness=gate.to_json(),
+      )
+    )
+
+  load_stats = measure(lambda: legacy_load(pro_path), warmup=1, budget_s=budget_s)
+  legacy_e2e = _per_rep_solver_loop(
+    lambda: legacy_load(pro_path),
+    lambda handle: legacy_riks_solver(handle[0], handle[1], pro_path),
+    warmup=1,
+    reps=5,
+  )
+  records.append(
+    BenchRecord(
+      category="family",
+      workload=case.name,
+      side="legacy",
+      mode="warm",
+      threads=1,
+      n_elems=case.n_elems,
+      n_dofs=case.n_dofs,
+      metrics={"load": load_stats, "e2e": legacy_e2e},
+      correctness=gate.to_json(),
+    )
+  )
+  return records, gate
+
+
 def _cold_workload_name(case: str) -> str:
   kind, _, rest = case.partition(":")
   if kind == "q8patch":
     n_str, _, material_type = rest.partition(":")
     return f"q8patch/{n_str}x{n_str}/{material_type}"
+  if kind == "family":
+    name, _, size = rest.partition(":")
+    return f"{name}/{size}"
   return f"skim/{rest}"
 
 
@@ -549,6 +689,22 @@ def do_gates(
       print(
         f"[{'PASS' if gate.passed else 'FAIL'}] {gate.workload} max_rel={worst:.3e}"
       )
+  for case in finite_strain_cases():
+    gate = gate_finite_strain(case)
+    failures += 0 if gate.passed else 1
+    if verbose:
+      worst = max(c.max_rel_diff for c in gate.checks)
+      print(
+        f"[{'PASS' if gate.passed else 'FAIL'}] {gate.workload} max_rel={worst:.3e}"
+      )
+  for case in riks_fan_cases():
+    gate = gate_riks_fan(case)
+    failures += 0 if gate.passed else 1
+    if verbose:
+      worst = max(c.max_rel_diff for c in gate.checks)
+      print(
+        f"[{'PASS' if gate.passed else 'FAIL'}] {gate.workload} max_rel={worst:.3e}"
+      )
   return failures
 
 
@@ -602,6 +758,24 @@ def do_warm(args: argparse.Namespace) -> list[BenchRecord]:
       f"({time.perf_counter() - t0:.1f}s)"
     )
 
+  for case in finite_strain_cases():
+    t0 = time.perf_counter()
+    recs, gate = run_finite_strain_case(case, threads=threads, budget_s=args.budget_s)
+    records.extend(recs)
+    print(
+      f"[{'PASS' if gate.passed else 'FAIL'}] {case.name} "
+      f"({time.perf_counter() - t0:.1f}s)"
+    )
+
+  for case in riks_fan_cases():
+    t0 = time.perf_counter()
+    recs, gate = run_riks_fan_case(case, threads=threads, budget_s=args.budget_s)
+    records.extend(recs)
+    print(
+      f"[{'PASS' if gate.passed else 'FAIL'}] {case.name} "
+      f"({time.perf_counter() - t0:.1f}s)"
+    )
+
   for workload in q8_workloads(sizes, materials):
     t0 = time.perf_counter()
     recs, gate = run_q8_workload(workload, threads=threads, budget_s=args.budget_s)
@@ -629,9 +803,20 @@ def do_cold(args: argparse.Namespace) -> list[BenchRecord]:
     gate = gate_skim(skim_by_name[name])
     gate_by_workload[gate.workload] = gate.passed
     print(f"[{'PASS' if gate.passed else 'FAIL'}] gate {gate.workload}")
+  finite_strain_by_name = {c.name: c for c in finite_strain_cases()}
+  riks_fan_by_name = {c.name: c for c in riks_fan_cases()}
+  for spec in DEFAULT_COLD_FAMILY:
+    workload = _cold_workload_name(spec)
+    if workload in finite_strain_by_name:
+      gate = gate_finite_strain(finite_strain_by_name[workload])
+    else:
+      gate = gate_riks_fan(riks_fan_by_name[workload])
+    gate_by_workload[gate.workload] = gate.passed
+    print(f"[{'PASS' if gate.passed else 'FAIL'}] gate {gate.workload}")
 
   cases = [f"q8patch:{n}:{mat}" for n, mat in cold_q8]
   cases += [f"skim:{name}" for name in DEFAULT_COLD_SKIMS]
+  cases += list(DEFAULT_COLD_FAMILY)
   for case in cases:
     passed = gate_by_workload.get(_cold_workload_name(case), False)
     for threads in COLD_V3_THREADS:

@@ -32,9 +32,10 @@ numpy, scipy are already in it; the harness adds no dependencies):
 .venv/bin/python -m bench.run manifest   # print the environment manifest
 ```
 
-A full run takes roughly 15–25 minutes on the reference machine, dominated by
-the legacy side's superlinear assembly cost at 64x64 (that cost is exactly
-what the harness quantifies). The warm phase runs skims **before** the scale
+A full run takes roughly 20–30 minutes on the reference machine, dominated by
+the legacy side's superlinear assembly cost at 64x64 and the refined-
+cantilever legacy nonlinear runs (those costs are exactly what the harness
+quantifies). The warm phase runs skims **before** the scale
 sweep: skim milliseconds degrade under thermal throttling once sustained
 all-core load has heated the machine (measured 2.9x on cantilever8 after
 13 minutes of load on the reference laptop), while the scale ratios are far
@@ -105,6 +106,34 @@ predictor) before any timing is recorded. The reference side is timed once
 (single-threaded pure-NumPy per-entity loop, reduced fixed reps like the slow
 legacy cells); the optimized side sweeps the thread counts like the other
 threaded stages.
+
+**Family cases (`family/tl-cantilever/<nx>x<ny>`, `family/riks-fan/<n>`).**
+The M47 breadth cases for the landed compile+driver families, which the
+skims do not exercise (skims drive the prototype `solver/` path):
+`tl-cantilever` is the shipped `cantilever8` skim refined to nx x ny
+serendipity-quad8 cells over the same 8.0 x 0.5 strip (same clamp, tip load,
+and NonlinearSolver ramp; sizes 16x2 and 32x4 — 2x and 4x per direction),
+driven through the F4 finite-strain deck stack
+(`read_legacy_deck`/`compile_deck` + `NonlinearStaticDriver`);
+`riks-fan` is the truss-only shallow-truss fan (n_rays = 8/32/128, mirroring
+the landed structural scale bench; n_rays=2 reproduces the ch.4 geometry),
+driven through the M33 `RiksDriver` over a programmatic ModelSpec (the deck
+converter rejects RiksSolver decks; the fan drops the skim's spring on both
+sides like the landed oracle, since the point-spring family is
+declaration-routed). Both sides solve the identical discretization — the
+legacy side reads the generated deck (`bench/legacy_cases.py` writers, the
+q8patch same-files idiom). Gates are legacy parity per the landed oracles:
+for `tl-cantilever`, final state plus assembled tangent and internal force
+at the converged state within `skims/cantilever8/parity.toml`; for
+`riks-fan`, exact committed cycle-count equality plus per-cycle (lam, state)
+parity within `skims/shallow_truss_riks/parity.toml` and exact per-cycle
+correction-count equality. Timing follows the skim envelope: v3 `load`
+(deck conversion + compilation, resp. system/constraint-map/load
+compilation) and `e2e` (a fresh driver run from the virgin state) swept over
+the thread counts; legacy `load` and the solve-only per-rep loop (3 reps
+nonlinear, 5 riks). One cold case per family (`family:tl-cantilever:16x2`,
+`family:riks-fan:32`) records the fresh-process load/first-solve costs —
+including the cache=False TL kernel's per-process JIT recompile.
 
 ## What is measured
 
@@ -214,12 +243,13 @@ old file; baselines are history).
 bench/
   run.py             CLI: gates | warm | cold | all | check | manifest
   v3_pipeline.py     stage-decomposed v3 timed callables (uniform Q8)
+  family_v3.py       v3 family case drivers (finite-strain deck stack, Riks fan)
   legacy_cases.py    generated legacy .dat/.pro writer + legacy drivers (numba-free)
   legacy_settings.py numba-free replica of the v3 skim solver-settings parsers
   gates.py           correctness gates (legacy parity + analytic patch field)
   cold_worker.py     one fresh-subprocess cold measurement, JSON on stdout
   db.py              cell flattening + ratio-gate comparison
-  workloads.py       workload registry (Q8 sizes/materials, skim cases)
+  workloads.py       workload registry (Q8 sizes/materials, skim, material, family)
   manifest.py        environment manifest
   common.py          timing core (adaptive reps, stats, RSS), run JSON IO
   results/           committed regression DB (baseline_m3.json + runs)
