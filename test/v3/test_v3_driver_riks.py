@@ -1098,11 +1098,14 @@ def test_resume_bitwise_continues_the_trajectory() -> None:
   assert _continuation_snapshot(
     arc_length_continuation_from_evolution(store.snapshot())
   ) == _continuation_snapshot(reference.final_continuation)
-  assert store.encode() == ContinuationEvolutionStore.decode(
-    driver.evolution_layout,
-    store.generation,
-    store.encode(),
-  ).encode()
+  assert (
+    store.encode()
+    == ContinuationEvolutionStore.decode(
+      driver.evolution_layout,
+      store.generation,
+      store.encode(),
+    ).encode()
+  )
   # The owner ends byte-identical with an equal generation ordinal, and the
   # store's live generation IS the owner's.
   assert (

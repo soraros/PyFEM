@@ -168,12 +168,10 @@ from pyfem.v3.state import (
   StateTransactionOwner,
 )
 
-# Legacy continuation initial values (RiksSolver.__init__): the first cycle
-# solves at lam0 = 1.0, and the lazy Dlamprev starts at 1.0. Ported verbatim,
-# not redesigned; the initial dlam_prev is consumed only if a run's first
-# cycle were skipped, which the schedule never does.
+# Legacy continuation initial value (RiksSolver.__init__): the first cycle
+# solves at lam0 = 1.0, and the run preamble probes the program at the same
+# value. Ported verbatim, not redesigned.
 _INITIAL_LOAD_PARAMETER = 1.0
-_INITIAL_INCREMENT = 1.0
 
 
 def _preparation_fail(code: str, message: str) -> NoReturn:
