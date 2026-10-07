@@ -50,7 +50,7 @@ at constant relaxation factor a = 0.5 versus increments (0.25, 1.59375) at
 a_1 = 0.25, a_2 = 0.6 both land on ``{eps_i = 0.75, sigma = 2.75}`` with
 committed totals 2.0 versus 1.84375). The ``epsilon`` slot internalizes the
 committed-strain channel the legacy element supplied — the width is
-6*(n + 1) + 7 - 6 = 6n + 13, one committed-strain slot beyond the F3
+6*n + 7 + 6 = 6n + 13, one committed-strain slot beyond the F3
 inventory (escalated to the tower on the M49 clarify-request; the
 parameterized-width machinery covers it with no ABI or schema change).
 
