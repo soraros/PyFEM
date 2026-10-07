@@ -44,7 +44,12 @@ law is ``isotropic-hardening-plasticity`` (J2, 19-float rows); the second is
 envelope rows), the first ``algorithmic-nonsymmetric`` tangent-class witness:
 its progressive-branch rank-1 correction tangent honestly drives the Jacobian
 channel flags ``linear=False, symmetric=False``, which the driver consumes
-through the general splu path with no symmetry assumption.
+through the general splu path with no symmetry assumption. The third is
+``prony-viscoelasticity`` (the legacy generalized-Maxwell Prony law, 6*n + 13
+rows with a parameterized per-term internal-strain slot), the first
+signal-consuming production law: it declares the optional ``signal_ports``
+field below and consumes the schedule-owned time coordinate through its
+identity port.
 
 - ``total-lagrangian-continuum``: the finite-strain slice (serendipity-quad8
   only): one node displacement field and the plane-stress
@@ -135,6 +140,10 @@ from pyfem.v3.materials.plane_strain_damage import (
   plane_strain_damage_metadata,
 )
 from pyfem.v3.materials.plane_stress import plane_stress_matrix
+from pyfem.v3.materials.prony_viscoelasticity import (
+  PRONY_VISCOELASTICITY_BINDING,
+  prony_viscoelasticity_metadata,
+)
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
   BalanceRole,
@@ -193,6 +202,7 @@ THERMO_FORMULATION_KEY: RegistryKey = (
 THERMO_MATERIAL_KEY: RegistryKey = ("material", "linear-thermo-elastic")
 PLASTIC_MATERIAL_KEY: RegistryKey = ("material", "isotropic-hardening-plasticity")
 DAMAGE_MATERIAL_KEY: RegistryKey = ("material", "plane-strain-damage")
+VISCOELASTIC_MATERIAL_KEY: RegistryKey = ("material", "prony-viscoelasticity")
 _PARAMETER_NAMES = ("youngs_modulus", "poisson_ratio")
 _THERMAL_PARAMETER_NAMES = ("conductivity",)
 _THERMO_PARAMETER_NAMES = (
@@ -1555,6 +1565,8 @@ def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
     return isotropic_hardening_plasticity_metadata()
   if key == DAMAGE_MATERIAL_KEY:
     return plane_strain_damage_metadata()
+  if key == VISCOELASTIC_MATERIAL_KEY:
+    return prony_viscoelasticity_metadata()
   if key in _BREADTH_DESCRIPTOR_KEYS:
     return breadth_descriptor_metadata(*key)
   return q8_descriptor_metadata(*key)
@@ -1719,6 +1731,29 @@ def damage_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
     implementation_id="pyfem-v3-plane-strain-damage-v1",
     metadata=plane_strain_damage_metadata(),
     binding=PLANE_STRAIN_DAMAGE_BINDING,
+  )
+  registry[descriptor.key] = descriptor
+  return registry
+
+
+def viscoelasticity_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
+  """Build the Q8 reference registry plus the first signal-consuming law.
+
+  The Prony-series viscoelastic law is the first descriptor declaring the
+  optional ``signal_ports`` field on a production law: its compiled operator
+  carries one ``SignalPortBinding`` for the identity time port, and its
+  ``eps_i`` state slot resolves through the parameterized-width declaration
+  ``{"parameter": "prony_term_count", "scale": 6}`` — the frozen v2 schema
+  covers both, so no contracts change accompanies this registration.
+  """
+  registry = dict(q8_reference_registry())
+  descriptor = RegistryDescriptor(
+    kind=VISCOELASTIC_MATERIAL_KEY[0],
+    name=VISCOELASTIC_MATERIAL_KEY[1],
+    version="1",
+    implementation_id="pyfem-v3-prony-viscoelasticity-v1",
+    metadata=prony_viscoelasticity_metadata(),
+    binding=PRONY_VISCOELASTICITY_BINDING,
   )
   registry[descriptor.key] = descriptor
   return registry
