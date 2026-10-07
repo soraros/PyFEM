@@ -136,6 +136,9 @@ class DissipatedEnergySolver( BaseModule ):
 
       self.printIteration( stat.iiter , error )
 
+      if error > self.tol and stat.iiter >= self.iterMax:
+        raise RuntimeError('Newton-Raphson iterations did not converge!')
+
     # If converged, calculate the amount of energy that has been dissipated in the \
     # previous step.
 
