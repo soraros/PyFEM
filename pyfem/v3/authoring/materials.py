@@ -128,6 +128,65 @@ def plasticity(
   )
 
 
+def damage(
+  E: float,
+  nu: float,
+  kappa0: float,
+  kappac: float,
+  k: float,
+  *,
+  id: SpecId = "material",
+  source: str = "authoring.damage",
+) -> MaterialSpec:
+  """Author plane-strain isotropic damage parameters for a continuum region.
+
+  ``E`` is Young's modulus, ``nu`` Poisson's ratio, ``kappa0`` the damage
+  onset threshold, ``kappac`` the failure equivalent strain, and ``k`` the
+  de Vree compressive-to-tensile strength ratio; they map onto the qualified
+  ``youngs_modulus``/``poisson_ratio``/``kappa_0``/``kappa_c``/
+  ``strength_ratio`` parameter convention of the v2 stateful descriptor.
+  Domain checks (positive modulus and thresholds, ``-1 < nu < 0.5``,
+  ``kappa_c > kappa_0``) run at compile time with coded diagnostics.
+  """
+  youngs_modulus = _finite_scalar(E, label="damage E")
+  poisson_ratio = _finite_scalar(nu, label="damage nu")
+  kappa_0 = _finite_scalar(kappa0, label="damage kappa0")
+  kappa_c = _finite_scalar(kappac, label="damage kappac")
+  strength_ratio = _finite_scalar(k, label="damage k")
+  return MaterialSpec(
+    id=_material_id(id),
+    model="plane-strain-damage",
+    parameters=(
+      MaterialParameterSpec(
+        "youngs_modulus",
+        youngs_modulus,
+        _source(f"{source}:youngs_modulus"),
+      ),
+      MaterialParameterSpec(
+        "poisson_ratio",
+        poisson_ratio,
+        _source(f"{source}:poisson_ratio"),
+      ),
+      MaterialParameterSpec(
+        "kappa_0",
+        kappa_0,
+        _source(f"{source}:kappa_0"),
+      ),
+      MaterialParameterSpec(
+        "kappa_c",
+        kappa_c,
+        _source(f"{source}:kappa_c"),
+      ),
+      MaterialParameterSpec(
+        "strength_ratio",
+        strength_ratio,
+        _source(f"{source}:strength_ratio"),
+      ),
+    ),
+    source=_source(source),
+  )
+
+
 def uniaxial_elastic(
   E: float,
   area: float,

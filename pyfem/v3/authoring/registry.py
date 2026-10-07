@@ -14,11 +14,13 @@ from collections.abc import Callable
 
 from pyfem.v3.authoring.diagnostics import raise_descriptor_mismatch
 from pyfem.v3.compile.continuum import (
+  DAMAGE_MATERIAL_KEY,
   PLASTIC_MATERIAL_KEY,
   Q8_FORMULATION_KEY,
   Q8_MATERIAL_KEY,
   Q8_QUADRATURE_KEY,
   Q8_TOPOLOGY_KEY,
+  damage_reference_registry,
   plasticity_reference_registry,
   q8_descriptor_metadata,
   q8_reference_registry,
@@ -34,6 +36,7 @@ from pyfem.v3.compile.truss import (
 from pyfem.v3.materials.isotropic_hardening_plasticity import (
   isotropic_hardening_plasticity_metadata,
 )
+from pyfem.v3.materials.plane_strain_damage import plane_strain_damage_metadata
 from pyfem.v3.model.provenance import CanonicalManifest
 from pyfem.v3.model.registry import RegistryDescriptor, RegistryKey
 from pyfem.v3.spec.diagnostics import SourceContext
@@ -112,6 +115,36 @@ def plasticity_law(
     version=version,
     implementation_id=implementation_id,
     metadata=isotropic_hardening_plasticity_metadata(),
+    binding=binding,
+  )
+
+
+def damage_law(
+  binding: StatefulContinuumBinding,
+  *,
+  implementation_id: str,
+  version: str = "1",
+) -> RegistryDescriptor:
+  """Bind a stateful plane-strain damage binding to the qualified convention.
+
+  ``binding`` implements the v2 stateful continuum binding protocol: a
+  calibration call receiving ``(youngs_modulus, poisson_ratio, kappa_0,
+  kappa_c, strength_ratio)`` and returning the law's flat float64 calibration
+  vector, a batched kernel over total 6-Voigt strains and accepted 1-float
+  kappa state rows, and an optional ``initial_state``. The descriptor pins
+  the qualified plane-strain-damage convention — the ``envelope-max`` kappa
+  slot and the ``algorithmic-nonsymmetric`` tangent class included (metadata
+  the user never has to copy); compilation re-declares the binding's metadata
+  and validates it byte-wise against the captured descriptor, so equivalent
+  kernels are accepted and contradictory ones rejected with coded
+  diagnostics.
+  """
+  return RegistryDescriptor(
+    kind=DAMAGE_MATERIAL_KEY[0],
+    name=DAMAGE_MATERIAL_KEY[1],
+    version=version,
+    implementation_id=implementation_id,
+    metadata=plane_strain_damage_metadata(),
     binding=binding,
   )
 
@@ -211,6 +244,8 @@ def _continuum_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
   """Resolve the qualified continuum metadata, including the stateful seam."""
   if (kind, name) == PLASTIC_MATERIAL_KEY:
     return isotropic_hardening_plasticity_metadata()
+  if (kind, name) == DAMAGE_MATERIAL_KEY:
+    return plane_strain_damage_metadata()
   return q8_descriptor_metadata(kind, name)
 
 
@@ -242,6 +277,38 @@ def plasticity_registry(
     family="plasticity",
     metadata_for=_continuum_descriptor_metadata,
     source="authoring.plasticity_registry",
+  )
+  return registry
+
+
+def damage_registry(
+  *,
+  topology: RegistryDescriptor | None = None,
+  quadrature: RegistryDescriptor | None = None,
+  formulation: RegistryDescriptor | None = None,
+  material: RegistryDescriptor | None = None,
+) -> dict[RegistryKey, RegistryDescriptor]:
+  """Compose a damage registry: reference implementations plus replacements.
+
+  Mirrors :func:`plasticity_registry` for the qualified plane-strain-damage
+  convention: the Q8 reference implementations plus the nonsymmetric-tangent
+  damage law. Replacements keep the qualified registry key and metadata
+  convention; only the implementation (its id, version, and binding) is
+  yours. A mismatching key or metadata field fails here with a field-level
+  diff, not later with a bare compile error.
+  """
+  registry = damage_reference_registry()
+  _replace(
+    registry,
+    (
+      (Q8_TOPOLOGY_KEY, topology),
+      (Q8_QUADRATURE_KEY, quadrature),
+      (Q8_FORMULATION_KEY, formulation),
+      (DAMAGE_MATERIAL_KEY, material),
+    ),
+    family="damage",
+    metadata_for=_continuum_descriptor_metadata,
+    source="authoring.damage_registry",
   )
   return registry
 
@@ -286,9 +353,9 @@ def check_registry(
   if family == "Q8":
     # The small-strain formulation is the open stateful seam: the compiler
     # selects the material descriptor by the spec's model name. Only the
-    # pinned Q8 and plasticity conventions carry a qualified metadata
-    # contract here; other stateful keys defer to the landed compiler's
-    # binding re-declaration validation.
+    # pinned Q8, plasticity, and damage conventions carry a qualified
+    # metadata contract here; other stateful keys defer to the landed
+    # compiler's binding re-declaration validation.
     material_key: RegistryKey = ("material", material.model)
     keys = (
       Q8_TOPOLOGY_KEY,

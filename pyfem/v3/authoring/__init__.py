@@ -54,12 +54,19 @@ owner internals::
 
 from pyfem.v3.authoring.compile import compile
 from pyfem.v3.authoring.evaluate import evaluate, trial_vector
-from pyfem.v3.authoring.materials import linear_elastic, plasticity, uniaxial_elastic
+from pyfem.v3.authoring.materials import (
+  damage,
+  linear_elastic,
+  plasticity,
+  uniaxial_elastic,
+)
 from pyfem.v3.authoring.mesh import line2_mesh, quad8_mesh, quad8_patch
 from pyfem.v3.authoring.models import small_strain_continuum, truss
 from pyfem.v3.authoring.program import fixed, nodal_load
 from pyfem.v3.authoring.registry import (
   check_registry,
+  damage_law,
+  damage_registry,
   plane_stress_law,
   plasticity_law,
   plasticity_registry,
@@ -98,7 +105,10 @@ __all__ = [
   "SubstepStatus",
   "check_registry",
   "compile",
+  "damage",
   "damage_envelope_spring",
+  "damage_law",
+  "damage_registry",
   "evaluate",
   "fixed",
   "line2_mesh",
