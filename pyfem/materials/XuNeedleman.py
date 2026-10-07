@@ -100,6 +100,9 @@ class XuNeedleman( BaseMaterial ):
           
     if deformation.g < 0.0:
       deformation.g = 0.
+      self.setHistoryParameter(
+        'dissipation', self.getHistoryParameter('dissipation')
+      )
     else:
       self.setHistoryParameter( 'dissipation', totalDiss )
       deformation.dgdstrain = 0.5 * ( stress - dot( deformation.strain , tang ) )
