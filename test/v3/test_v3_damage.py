@@ -3,21 +3,26 @@
 """PlaneStrainDamage: legacy parity oracles and the G4 tangent-class proofs.
 
 The legacy law ``pyfem/materials/PlaneStrainDamage.py`` is the numerical
-reference (AGENTS.md) for the v3 damage kernel. Stresses and the kappa
-envelope must match it bit for bit on the documented paths. The tangent
-matches bit for bit on elastic and unloading branches and diverges on
-progressive branches: legacy ``getEquivStrain`` returns the never-assigned
-``depsdstrain = zeros(3)`` (PlaneStrainDamage.py:99,133), so the legacy
-rank-1 correction vanishes identically and its tangent stays the symmetric
-``(1 - omega) * De``. (The discarded legacy derivative expression also halves
-its shear component — ``dexydstrain = 0.5 * O3`` against ``J2 = ... + exy**2``
-— so the v3 kernel differentiates the legacy-returned equivalent strain
-exactly instead of porting that expression verbatim.) The parity battery pins
-the divergence structurally (the v3-minus-legacy difference is exactly rank-1
-with the effective-stress left vector) instead of duplicating kernel
-arithmetic, and a finite-difference check pins the v3 tangent as the
-algorithmically consistent one — the legacy tangent fails the same check
-materially.
+reference (AGENTS.md) for the v3 damage kernel. Stresses, the kappa
+envelope, and the tangent match it bit for bit on every documented
+branch — elastic, progressive, and unloading. That full parity is the
+repaired state: legacy ``getEquivStrain`` used to return the
+never-assigned ``depsdstrain = zeros(3)`` (killing the rank-1 tangent
+correction, so the legacy tangent stayed the symmetric
+``(1 - omega) * De`` on progressive branches) and its discarded
+derivative expression halved the shear component
+(``dexydstrain = 0.5 * O3`` against ``J2 = ... + exy**2``) — two
+correctness bugs (finding 20261007-agent-g4) that this battery pinned as
+a structural divergence (v3-minus-legacy exactly rank-1 with the
+effective-stress left vector, the legacy tangent failing the
+finite-difference check materially). M55 repaired both defects in the
+legacy law (commits bad3512 / 5b1bee2, "correctness bug"); the v3
+kernel, which had deliberately inherited neither, is unchanged, and the
+relationship is now parity-where-repaired: the pins below assert
+bitwise tangent equality on progressive branches, with the shared
+tangent still witnessed as the nonsymmetric rank-1-corrected one, and a
+finite-difference check pins both tangents as the algorithmically
+consistent derivative of the shared stress response.
 
 Documented oracle configuration (the landed chapter-6 deck
 ``examples/ch06/ContDamExample.pro``): E = 100, nu = 0.3, k = 1.0,
@@ -192,25 +197,25 @@ def _mixed_shear_path() -> list[np.ndarray]:
   return [np.array([4.0e-6, 0.0, gamma]) for gamma in (1.0e-6, 2.0e-6, 3.0e-6, 4.0e-6)]
 
 
-def _assert_progressive_divergence(
+def _assert_progressive_parity(
   tang_l: np.ndarray,
   tang_v: np.ndarray,
   de: np.ndarray,
   strain3: np.ndarray,
   kappa: float,
 ) -> None:
-  """Pin the documented progressive-branch tangent divergence structurally.
+  """Pin the repaired progressive-branch tangent parity.
 
-  The legacy tangent is exactly the symmetric ``(1 - omega) * De`` (the
-  zero-return divergence kills its rank-1 correction); the v3 tangent adds
-  the rank-1 correction ``-domegadkappa * outer(effStress, detadstrain)``,
-  so the difference is exactly rank-1 (up to rounding) with the effective
-  stress as its left vector, and the v3 tangent is materially nonsymmetric.
+  The repaired legacy tangent equals the v3 tangent bit for bit (M55: the
+  legacy zero-return and shear-halving defects are repaired, and the v3
+  kernel had inherited neither). The shared tangent is witnessed as the
+  rank-1-corrected one: its difference from the symmetric secant
+  ``(1 - omega) * De`` is exactly rank-1 (up to rounding) with the
+  effective stress as its left vector, and it is materially nonsymmetric.
   """
   assert kappa > _KAPPA0
-  assert np.array_equal(tang_l, tang_l.T)
-  assert np.array_equal(tang_l, (1.0 - _omega(kappa)) * de)
-  difference = tang_v - tang_l
+  assert np.array_equal(tang_l, tang_v)
+  difference = tang_v - (1.0 - _omega(kappa)) * de
   u, s, vt = np.linalg.svd(difference)
   assert s[0] > 0.0
   assert s[1] <= 1.0e-9 * s[0]
@@ -238,7 +243,7 @@ def test_elastic_ramp_matches_legacy_bitwise() -> None:
   assert rows_v[0, 0] < _KAPPA0
 
 
-def test_progressive_ramp_stress_kappa_bitwise_tangent_diverges_rank1() -> None:
+def test_progressive_ramp_stress_kappa_bitwise_tangent_parity_rank1() -> None:
   calibration = plane_strain_damage_calibration(_E, _NU, _KAPPA0, _KAPPAC, _K)
   de = calibration[7:16].reshape(3, 3)
   legacy = _legacy_law()
@@ -248,10 +253,10 @@ def test_progressive_ramp_stress_kappa_bitwise_tangent_diverges_rank1() -> None:
     sigma_v, tang_v, rows_v = _v3_step(calibration, rows_v, strain)
     assert np.array_equal(sigma_l, sigma_v)
     assert float(kappa_l) == float(rows_v[0, 0])
-    _assert_progressive_divergence(tang_l, tang_v, de, strain, kappa_l)
+    _assert_progressive_parity(tang_l, tang_v, de, strain, kappa_l)
 
 
-def test_mixed_shear_path_stress_kappa_bitwise_tangent_diverges_rank1() -> None:
+def test_mixed_shear_path_stress_kappa_bitwise_tangent_parity_rank1() -> None:
   calibration = plane_strain_damage_calibration(_E, _NU, _KAPPA0, _KAPPAC, _K)
   de = calibration[7:16].reshape(3, 3)
   legacy = _legacy_law()
@@ -261,7 +266,7 @@ def test_mixed_shear_path_stress_kappa_bitwise_tangent_diverges_rank1() -> None:
     sigma_v, tang_v, rows_v = _v3_step(calibration, rows_v, strain)
     assert np.array_equal(sigma_l, sigma_v)
     assert float(kappa_l) == float(rows_v[0, 0])
-    _assert_progressive_divergence(tang_l, tang_v, de, strain, kappa_l)
+    _assert_progressive_parity(tang_l, tang_v, de, strain, kappa_l)
 
 
 def test_unload_reload_keeps_kappa_envelope_and_tangent_parity() -> None:
@@ -292,7 +297,7 @@ def test_unload_reload_keeps_kappa_envelope_and_tangent_parity() -> None:
   assert np.array_equal(sigma_l, sigma_v)
   assert float(kappa_l) == float(rows_v[0, 0])
   assert float(kappa_l) > kappa_loaded
-  _assert_progressive_divergence(tang_l, tang_v, de, reload_strain, kappa_l)
+  _assert_progressive_parity(tang_l, tang_v, de, reload_strain, kappa_l)
 
 
 def test_full_softening_zeros_the_response_bitwise() -> None:
@@ -325,12 +330,13 @@ def test_progressive_tangent_matches_stress_finite_difference() -> None:
       down = _v3_step(calibration, rows, strain - delta)[0]
       fd[:, column] = (up - down) / (2.0 * step)
     np.testing.assert_allclose(fd, tang_v, rtol=_FD_RTOL, atol=_FD_ATOL)
-    # The legacy symmetric tangent fails the same check materially: it is not
-    # the algorithmic tangent of the shared stress response.
+    # Repair confirmed: the legacy tangent passes the same check — it is the
+    # algorithmic tangent of the shared stress response (the pre-repair
+    # symmetric secant failed this materially; M55 commits bad3512/5b1bee2).
     legacy = _legacy_law()
     _, tang_l, _ = _legacy_step(legacy, strain)
-    scale = float(np.max(np.abs(fd)))
-    assert float(np.max(np.abs(tang_l - fd))) > 1.0e-3 * scale
+    np.testing.assert_allclose(fd, tang_l, rtol=_FD_RTOL, atol=_FD_ATOL)
+    assert np.array_equal(tang_l, tang_v)
 
 
 def test_kernel_reports_typed_failures() -> None:

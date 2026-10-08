@@ -102,8 +102,8 @@ class IsotropicHardeningPlasticity( BaseMaterial ):
       eplas[:3] +=  1.5 * flow[:3] * deqpl
       eelas[:3] += -1.5 * flow[:3] * deqpl
 
-      eplas[3:] +=  3.0 * flow[:3] * deqpl
-      eelas[3:] += -3.0 * flow[:3] * deqpl
+      eplas[3:] +=  3.0 * flow[3:] * deqpl
+      eelas[3:] += -3.0 * flow[3:] * deqpl
 
       sigma = flow * syield
       sigma[:3] += shydro * np.ones(3)
@@ -116,13 +116,13 @@ class IsotropicHardeningPlasticity( BaseMaterial ):
       effg2  = 2.0*effg
       effg3  = 3.0*effg
       efflam = 1.0/3.0 * ( self.ebulk3-effg2 )
-      effhdr = self.eg3 * self.hard/(self.eg3+self.hard)-effg3
+      effhdr = self.eg3 * hard/(self.eg3+hard)-effg3
      
       tang[:3,:3] = efflam
     
       for i in range(3):
         tang[i,i]     += effg2
-        tang[i+3,i+3] += effg
+        tang[i+3,i+3] =  effg
 
       tang += effhdr*np.outer(flow,flow)
  

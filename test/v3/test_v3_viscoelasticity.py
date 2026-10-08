@@ -10,12 +10,20 @@ state slot — and sets ``solverStat.time`` per committed step, the hidden
 channel the v3 law replaces with the declared identity signal port. Because
 the kernel replicates the legacy ``getStress`` arithmetic statement for
 statement and both sides run identical NumPy operations in identical order,
-every law-level comparison is bitwise on every platform. The one deliberate
-divergence is the tangent: the legacy accumulation (ViscoElasticity.py:213-214)
-contradicts the legacy stress update, so the v3 kernel writes the true
-algorithmic tangent ``Cinf * (1 + sum f_i a_i)`` and this battery pins the
-divergence explicitly (the module docstring carries the finite-difference and
-Newton-convergence evidence).
+every law-level comparison is bitwise on every platform — the tangent
+included. That full parity is the repaired state: the legacy accumulation
+used to carry ``factor * (1 - exp_factor)`` (ViscoElasticity.py:213-214),
+contradicting the legacy stress update whose derivative is
+``factor * exp_factor`` — an a <-> (1-a) swap (M49 review, deviation 2:
+0.7295 relative error against the finite difference of the legacy law's
+own response, Newton contraction 2.6975 > 1 at dtime = 0.05). M55 repaired
+the legacy tangent to the true algorithmic ``Cinf * (1 + sum f_i a_i)``
+(commit 3a20cae, "correctness bug"); the v3 kernel is unchanged, the
+relationship is now parity-where-repaired, and this battery pins the
+shared tangent bitwise (the module docstring of
+``pyfem/v3/materials/prony_viscoelasticity.py`` carries the
+finite-difference and Newton-convergence evidence of the pre-repair
+divergence).
 
 Documented time-dependent paths: a relaxation jump-then-hold schedule, a
 creep-like strain-time ramp over six strain components, a stepped ramp with
@@ -182,6 +190,19 @@ def _legacy_step(
   return np.array(sigma, copy=True), np.array(tangent, copy=True)
 
 
+def _legacy_probe(
+  mat: ViscoElasticity,
+  dstrain: np.ndarray,
+  time_new: float,
+) -> tuple[np.ndarray, np.ndarray]:
+  """Evaluate the legacy oracle without committing (finite-difference probe)."""
+  mat.solverStat = SimpleNamespace(time=time_new)
+  with contextlib.redirect_stdout(io.StringIO()):
+    with warnings.catch_warnings(action="ignore", category=DeprecationWarning):
+      sigma, tangent = mat.getStress(SimpleNamespace(dstrain=dstrain))
+  return np.array(sigma, copy=True), np.array(tangent, copy=True)
+
+
 def _legacy_eps_i(mat: ViscoElasticity, term_count: int) -> np.ndarray:
   return np.concatenate(
     [
@@ -227,27 +248,24 @@ def _v3_step(
   return result
 
 
-def _expected_tangents(
+def _expected_true_tangent(
   calibration: np.ndarray, term_count: int, dtime: float
-) -> tuple[np.ndarray, np.ndarray]:
-  """Hand-derived tangents in each law's own arithmetic, per-term order.
+) -> np.ndarray:
+  """The hand-derived true algorithmic tangent, per-term order.
 
-  The v3 kernel accumulates the true algorithmic tangent ``Cinf * (1 + sum
-  f_i a_i)``; the legacy oracle accumulates ``Cinf * (1 + sum f_i (1 - a_i))``
-  (ViscoElasticity.py:213-214) — the pinned, deliberate divergence (module
-  docstring): both are exact Cinf when dtime <= 0.
+  Both laws now accumulate ``Cinf * (1 + sum f_i a_i)`` — the v3 kernel
+  from the start, the legacy oracle since the M55 repair of its a <-> (1-a)
+  swap (module docstring) — exact Cinf when dtime <= 0.
   """
   cinf = calibration[1 + 2 * term_count :].reshape(6, 6)
   factors = calibration[1 : 1 + term_count]
   times = calibration[1 + term_count : 1 + 2 * term_count]
   true_tangent = cinf.copy()
-  legacy_tangent = cinf.copy()
   if dtime > 0.0:
     for term in range(term_count):
       exp_factor = np.exp(-dtime / times[term])
       true_tangent += (factors[term] * exp_factor) * cinf
-      legacy_tangent += (factors[term] * (1.0 - exp_factor)) * cinf
-  return true_tangent, legacy_tangent
+  return true_tangent
 
 
 def _run_path_parity(term_count: int, path: list) -> tuple[np.ndarray, list]:
@@ -266,17 +284,15 @@ def _run_path_parity(term_count: int, path: list) -> tuple[np.ndarray, list]:
     sigma_l, tangent_l = _legacy_step(legacy, dstrain, time_new)
     result = _v3_step(calibration, rows_v, strain_total, time_new)
     assert np.array_equal(result.stresses[0], sigma_l)
-    true_tangent, legacy_tangent = _expected_tangents(
+    true_tangent = _expected_true_tangent(
       calibration, term_count, time_new - previous_time
     )
     # Stress and state bookkeeping are bitwise-identical to legacy; the
-    # tangent pins the documented divergence: v3 is the true algorithmic
-    # tangent, legacy carries its own (1 - a) arithmetic, and the two differ
-    # materially on every time-advancing substep.
+    # tangent is full parity since the M55 repair of the legacy a <-> (1-a)
+    # swap: both laws accumulate the true algorithmic tangent, bitwise.
     assert np.array_equal(result.tangents[0], true_tangent)
-    assert np.array_equal(tangent_l, legacy_tangent)
-    if time_new - previous_time > 0.0:
-      assert not np.array_equal(result.tangents[0], tangent_l)
+    assert np.array_equal(tangent_l, true_tangent)
+    assert np.array_equal(result.tangents[0], tangent_l)
     row = result.trial_rows[0]
     assert np.array_equal(row[: 6 * term_count], _legacy_eps_i(legacy, term_count))
     assert np.array_equal(
@@ -379,9 +395,10 @@ def test_constant_time_and_backward_time_branches_match_legacy_bitwise() -> None
 
 def test_tangent_is_the_exact_algorithmic_derivative_by_fd() -> None:
   # Given the committed state, the response is affine in the trial strain, so
-  # the finite difference is exact up to rounding. This is the property the
-  # legacy tangent fails (module docstring: 0.73 relative error against the
-  # same finite difference on the legacy law at dtime = 0.05).
+  # the finite difference is exact up to rounding. The pre-repair legacy
+  # tangent failed this property (module docstring: 0.73 relative error
+  # against the same finite difference at dtime = 0.05); since the M55
+  # repair both laws pass it, bitwise-sharing the same tangent.
   term_count = 3
   calibration = prony_viscoelasticity_calibration(
     _E, _NU, _EINF, float(term_count), _T_FIRST, _T_LAST
@@ -396,6 +413,20 @@ def test_tangent_is_the_exact_algorithmic_derivative_by_fd() -> None:
     np.testing.assert_allclose(
       (moved.stresses[0] - base.stresses[0]) / step,
       base.tangents[0][:, component],
+      rtol=1.0e-6,
+      atol=1.0e-6,
+    )
+  # Repair confirmed: the legacy tangent is bitwise the v3 tangent on this
+  # state and passes the same finite difference of its own stress update.
+  legacy = _legacy_law(term_count)
+  _legacy_step(legacy, 0.5 * eps0, 0.2)
+  sigma_l0, tangent_l = _legacy_probe(legacy, 0.5 * eps0, 0.7)
+  assert np.array_equal(tangent_l, base.tangents[0])
+  for component in range(6):
+    moved_l, _ = _legacy_probe(legacy, 0.5 * eps0 + step * np.eye(6)[component], 0.7)
+    np.testing.assert_allclose(
+      (moved_l - sigma_l0) / step,
+      tangent_l[:, component],
       rtol=1.0e-6,
       atol=1.0e-6,
     )

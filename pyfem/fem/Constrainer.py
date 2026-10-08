@@ -106,7 +106,14 @@ class Constrainer:
                         tempFac: List[float] = []
 
                         # Recursive loop until masterDofID not a list, but prescribed value
+                        visited = set()
                         while masterDofID in self.constrainData:
+                            if masterDofID in visited:
+                                raise RuntimeError(
+                                    "ERROR - Cyclic tying relation detected for DOF "
+                                    + str(masterDofID)
+                                )
+                            visited.add(masterDofID)
                             master = self.constrainData[masterDofID][0]
                             if type(master) is list and len(master) == 3:
                                 masterDofID = master[1][0]
@@ -116,8 +123,10 @@ class Constrainer:
                                 masterFin = master
                                 masterDofID = -1
 
+                        # Compose the chain backwards: each hop contributes
+                        # its value plus its factor times the master's value
                         for iVal, iFac in reversed(list(zip(tempVal, tempFac))):
-                            masterFin += iVal + master * iFac
+                            masterFin = iVal + iFac * masterFin
 
                         self.addConstraint(dofInd, valSlave + masterFin * facSlave, label)
 

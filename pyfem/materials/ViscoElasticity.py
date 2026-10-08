@@ -209,8 +209,8 @@ class ViscoElasticity(BaseMaterial):
                 sigma += stress_contribution
 
                 # Update tangent: add contribution from this Maxwell element
-                # C_eff = C_inf * (1 + sum_i E_i/Einf * (1 - exp(-dt/tau_i)))
-                tang_factor = factor * (1.0 - exp_factor)
+                # C_eff = C_inf * (1 + sum_i E_i/Einf * exp(-dt/tau_i))
+                tang_factor = factor * exp_factor
                 tang += tang_factor * self.Cinf
 
                 # Store updated internal strain
