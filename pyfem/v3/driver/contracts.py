@@ -18,6 +18,7 @@ from pyfem.v3.model.operator import EvaluationStatus
 from pyfem.v3.spec.program import ProgramPoint
 
 _NORM_REFERENCE_FLOOR = 1.0e-16
+_SLOW_CONVERGENCE_CONTRACTION = 0.5
 
 
 class DriverStatus(Enum):
@@ -33,6 +34,22 @@ class SubstepStatus(Enum):
   COMMITTED = "committed"
   REJECTED = "rejected"
   FAILED = "failed"
+
+
+class BudgetExhaustionTrend(Enum):
+  """Measured residual-trajectory classification at iteration-budget exhaustion.
+
+  ``SLOW_CONVERGENCE`` is the near-miss: the exhausted attempt's measured
+  residual shows sustained contraction, so the substep plausibly ran out of
+  iteration budget rather than failing — raising ``max_iterations`` is the
+  documented remedy. ``NON_CONVERGENT`` covers every other trajectory shape
+  (oscillation, stagnation, growth below the ``divergence_ratio`` trip, or
+  too few measured iterations to establish a trend): the substep is
+  genuinely failing.
+  """
+
+  SLOW_CONVERGENCE = "slow-convergence"
+  NON_CONVERGENT = "non-convergent"
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,8 +157,36 @@ class SubstepObservation:
 
 
 @dataclass(frozen=True, slots=True, eq=False)
+class BudgetExhaustionObservation:
+  """Measured residual trend behind one iteration-budget exhaustion.
+
+  ``first_residual_norm`` and ``final_residual_norm`` are the first and last
+  measured reduced residual norms of the exhausted attempt;
+  ``decreasing_step_count`` of the ``measured_step_count - 1`` steps
+  decreased the norm. The classification rule is fixed:
+  ``SLOW_CONVERGENCE`` when the final measured norm contracts to at most
+  ``_SLOW_CONVERGENCE_CONTRACTION`` of the first AND a strict majority of
+  measured steps decrease; ``NON_CONVERGENT`` otherwise (including fewer
+  than two measured norms, where no trend exists). The fields carry the
+  complete evidence behind the classification.
+  """
+
+  trend: BudgetExhaustionTrend
+  first_residual_norm: float
+  final_residual_norm: float
+  decreasing_step_count: int
+  measured_step_count: int
+
+
+@dataclass(frozen=True, slots=True, eq=False)
 class SubstepRecord:
-  """One attempted substep: typed status, protocol trace, and observation."""
+  """One attempted substep: typed status, protocol trace, and observation.
+
+  ``budget_exhaustion`` is non-``None`` exactly when the attempt ended by
+  exhausting the iteration budget — never on ``COMMITTED`` records, and
+  never on rejections with another typed cause (operator reject, singular
+  or non-finite solve, non-finite iterate, or the divergence trip).
+  """
 
   target_index: int
   progress: float
@@ -151,6 +196,7 @@ class SubstepRecord:
   iterations: tuple[IterationRecord, ...]
   committed_ordinal: int | None
   observation: SubstepObservation | None
+  budget_exhaustion: BudgetExhaustionObservation | None
 
 
 @dataclass(frozen=True, slots=True, eq=False)

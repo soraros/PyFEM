@@ -32,6 +32,23 @@ Protocol summary:
   leave the finite float64 envelope raise their own contract error; the
   driver still rejects the open transaction first, so committed state
   survives even that path byte-identical.
+- Iteration-budget exhaustion is classified, never silent: the exhausted
+  attempt's measured residual trend is typed on the REJECTED or FAILED
+  record as a ``BudgetExhaustionObservation``. ``SLOW_CONVERGENCE`` — the
+  final measured residual contracts to at most half the first with a
+  strict majority of decreasing steps — is the near-miss: the substep ran
+  out of budget, not of convergence, and the documented remedy is a larger
+  ``max_iterations`` (the load-controlled J2 cantilever with near-yield
+  tangent chatter converges in one 33-iteration substep at
+  ``max_iterations=50`` where the default 25 thrashes it into 294
+  records / 7270 evaluations of cutback). The classification is
+  observation-only by policy — the driver never extends the budget itself:
+  a past-limit-load trajectory can net-decrease over a budget window
+  without converging (5 of 59 failing attempts on the snap-through truss
+  do), so trend-keyed continuation would burn extra work inside the very
+  limit-point trap the substep floor guards against and would alter the
+  failure trail. REJECT, cutback, and FAILED decisions are numerically
+  identical with or without the observation.
 - Operator ``REJECT_ITERATION`` retries from the same accepted state with a
   damped iterate (half the last Newton increment), budgeted against
   ``max_iterations``; without a previous increment it escalates to cutback.
@@ -70,6 +87,9 @@ from pyfem.v3.constraints.compile import (
 )
 from pyfem.v3.driver.contracts import (
   _NORM_REFERENCE_FLOOR,
+  _SLOW_CONVERGENCE_CONTRACTION,
+  BudgetExhaustionObservation,
+  BudgetExhaustionTrend,
   DriverStatistics,
   DriverStatus,
   IterationRecord,
@@ -152,6 +172,37 @@ def _interpolate(
         strict=True,
       )
     )
+  )
+
+
+def _classify_budget_exhaustion(
+  iterations: tuple[IterationRecord, ...],
+) -> BudgetExhaustionObservation:
+  """Classify the measured residual trend of one budget-exhausted attempt.
+
+  A budget-exhausted attempt always carries at least one measured residual:
+  the first iteration either measures one or rejects the substep outright.
+  """
+  measured = [
+    iteration.residual_norm
+    for iteration in iterations
+    if iteration.residual_norm is not None
+  ]
+  pair_count = len(measured) - 1
+  decreasing = sum(1 for first, second in zip(measured, measured[1:]) if second < first)
+  trend = (
+    BudgetExhaustionTrend.SLOW_CONVERGENCE
+    if pair_count > 0
+    and measured[-1] <= _SLOW_CONVERGENCE_CONTRACTION * measured[0]
+    and 2 * decreasing > pair_count
+    else BudgetExhaustionTrend.NON_CONVERGENT
+  )
+  return BudgetExhaustionObservation(
+    trend=trend,
+    first_residual_norm=measured[0],
+    final_residual_norm=measured[-1],
+    decreasing_step_count=decreasing,
+    measured_step_count=len(measured),
   )
 
 
@@ -260,11 +311,18 @@ class NonlinearStaticDriver:
     self,
     point: ProgramPoint,
     committed_point: ProgramPoint | None,
-  ) -> tuple[bool, tuple[IterationRecord, ...], SubstepObservation | None]:
+  ) -> tuple[
+    bool,
+    tuple[IterationRecord, ...],
+    SubstepObservation | None,
+    BudgetExhaustionObservation | None,
+  ]:
     """Run one substep Newton loop inside one open owner transaction.
 
     ``committed_point`` is the last committed program point (the derivation
     base for increment-bound signals); identity-only plans never read it.
+    The fourth return is non-``None`` only on the iteration-budget-exhaust
+    exit, carrying the measured residual-trend classification.
     """
     plan = self._plan
     workspace = self._workspace
@@ -326,7 +384,7 @@ class NonlinearStaticDriver:
           transaction.reject()
           closed = True
           workspace.rejected_substep_count += 1
-          return False, tuple(iterations), None
+          return False, tuple(iterations), None, None
         if EvaluationStatus.REJECT_ITERATION in statuses:
           iterations.append(
             IterationRecord(iteration, EvaluationStatus.REJECT_ITERATION, None, None)
@@ -335,7 +393,7 @@ class NonlinearStaticDriver:
             transaction.reject()
             closed = True
             workspace.rejected_substep_count += 1
-            return False, tuple(iterations), None
+            return False, tuple(iterations), None, None
           increment = 0.5 * increment
           reduced = anchor + increment
           increment_norm = float(np.linalg.norm(increment))
@@ -385,7 +443,7 @@ class NonlinearStaticDriver:
             full_residual_norm=float(np.linalg.norm(full_residual)),
             reduced_residual_norm=residual_norm,
           )
-          return True, tuple(iterations), observation
+          return True, tuple(iterations), observation, None
         if first_residual_norm is None:
           first_residual_norm = max(residual_norm, _NORM_REFERENCE_FLOOR)
         elif residual_norm > settings.divergence_ratio * first_residual_norm:
@@ -395,7 +453,7 @@ class NonlinearStaticDriver:
           transaction.reject()
           closed = True
           workspace.rejected_substep_count += 1
-          return False, tuple(iterations), None
+          return False, tuple(iterations), None, None
         correction = self._solve_reduced(jacobian_batches, rhs_reduced)
         if correction is None:
           iterations.append(
@@ -404,7 +462,7 @@ class NonlinearStaticDriver:
           transaction.reject()
           closed = True
           workspace.rejected_substep_count += 1
-          return False, tuple(iterations), None
+          return False, tuple(iterations), None, None
         increment = correction
         increment_norm = float(np.linalg.norm(increment))
         trial_reduced = reduced + increment
@@ -420,7 +478,7 @@ class NonlinearStaticDriver:
           transaction.reject()
           closed = True
           workspace.rejected_substep_count += 1
-          return False, tuple(iterations), None
+          return False, tuple(iterations), None, None
         reduced = trial_reduced
         iterations.append(
           IterationRecord(
@@ -433,7 +491,8 @@ class NonlinearStaticDriver:
       transaction.reject()
       closed = True
       workspace.rejected_substep_count += 1
-      return False, tuple(iterations), None
+      exhausted = tuple(iterations)
+      return False, exhausted, None, _classify_budget_exhaustion(exhausted)
     except BaseException:
       if not closed:
         transaction.reject()
@@ -482,7 +541,7 @@ class NonlinearStaticDriver:
           if requires_committed_point
           else None
         )
-        committed, iterations, observation = self._newton_substep(
+        committed, iterations, observation, budget_exhaustion = self._newton_substep(
           trial_point,
           committed_point,
         )
@@ -497,6 +556,7 @@ class NonlinearStaticDriver:
               iterations=iterations,
               committed_ordinal=self._owner.generation.ordinal,
               observation=observation,
+              budget_exhaustion=None,
             )
           )
           progress_done = trial_progress
@@ -517,6 +577,7 @@ class NonlinearStaticDriver:
               iterations=iterations,
               committed_ordinal=None,
               observation=None,
+              budget_exhaustion=budget_exhaustion,
             )
           )
           return NonlinearStaticResult(
@@ -539,6 +600,7 @@ class NonlinearStaticDriver:
             iterations=iterations,
             committed_ordinal=None,
             observation=None,
+            budget_exhaustion=budget_exhaustion,
           )
         )
         workspace.cutback_count += 1
