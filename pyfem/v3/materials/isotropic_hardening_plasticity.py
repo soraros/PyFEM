@@ -45,10 +45,12 @@ Numerical contract with the legacy oracle (exercised by
   statement (same NumPy operation order, including ``0.333333333333333``
   hydrostatic scaling, the ``1.0 / smises`` reciprocal multiply, the
   ``(1.0 + 1.0e-6) * syield`` yield shift, and the ``1.0e-6 * syield0``
-  Newton convergence test). Stress, tangent, and kappa match the legacy law
-  bit for bit on the documented proportional normal-strain paths; paths
-  mixing plastic shear agree to a 1e-12 relative tolerance, the drift being
-  rounding-level accumulation through the strain-split identity.
+  Newton convergence test). Stress and kappa match the legacy law bit for
+  bit on the documented proportional normal-strain paths, and the tangent
+  matches on elastic steps; paths mixing plastic shear agree to a 1e-12
+  relative tolerance, the drift being rounding-level accumulation through
+  the strain-split identity. The plastic-branch tangent diverges from legacy
+  by exactly the pinned mechanism of the shear-block bullet below.
 - One legacy statement is deliberately NOT replicated:
   ``IsotropicHardeningPlasticity.py:105-106`` transfers ``flow[:3]`` (the
   normal deviatoric direction) into the shear slots of ``epsilon_p`` and
@@ -58,6 +60,32 @@ Numerical contract with the legacy oracle (exercised by
   writes ``flow[3:]``; the parity battery pins the divergence (legacy shear
   bookkeeping is nonzero on plastic normal paths, v3 is exactly zero) instead
   of inheriting it.
+- A second legacy construction is deliberately NOT replicated: the
+  plastic-branch tangent accumulates the shear block on top of the aliased
+  elastic tangent (``IsotropicHardeningPlasticity.py:62`` aliases
+  ``tang = self.ctang``; :121 assigns the normal block, wiping its elastic
+  entries, but :123-125 accumulate ``effg`` onto the shear diagonals, whose
+  elastic ``eg`` survives). The legacy shear-shear diagonals therefore carry
+  the elastic G one time too many — ``eg + effg + effhdr*flow_k^2`` instead
+  of ``effg + effhdr*flow_k^2`` — up to ~31% of max|tang| at plastic
+  integration points (finding 20261007-agent-a3). Converged solutions are
+  unaffected (Newton finds R = 0 with any consistent-enough Jacobian, which
+  is why the bug survived), but the returned tangent is not the derivative
+  of the law's own stress map: global Newton degrades from quadratic to
+  linear (41 vs 5 iterations to 1e-12 on the load-controlled J2 bending
+  protocol case of ``test/v3/test_v3_j2_tangent.py``; the finding measured
+  33 on its own 6/36-plastic configuration), and every
+  derivative-as-tangent consumer (IFT sensitivities, bifurcation, arc-length
+  quality) inherits the error. The v3 kernels assign the shear block exactly
+  like the normal block, so the returned tangent is the exact algorithmic
+  derivative of the stress map (central finite differences of the kernel's
+  own stress update agree to 3.9e-10 relative of max|tang| over every
+  plastic step of the documented paths). The parity battery pins the
+  divergence against the legacy oracle AT THE FORK BASE: entries outside the
+  shear diagonal still reproduce the legacy arithmetic bit for bit, and the
+  shear diagonals differ by the elastic G up to rounding. The L2 mission
+  repairs the legacy side of the same construction in parallel; when it
+  lands, the divergence pin flips to parity-where-repaired.
 - The legacy law aliases ``tang = self.ctang`` and mutates the elastic
   tangent in the plastic branch, so its later elastic predictors depend on
   evaluation history. That is an impurity the pure v3 contract (accepted rows
@@ -383,11 +411,14 @@ def isotropic_hardening_plasticity_kernel_reference(
 
       # The legacy law aliases and mutates its elastic tangent here; the pure
       # v3 kernel writes the algorithmic tangent into a fresh copy instead.
+      # Every block is assigned, not accumulated: the legacy shear block adds
+      # effg on top of the elastic eg, an excess G the v3 law drops (the
+      # pinned divergence of the module docstring).
       tang = np.array(ctang, copy=True)
       tang[:3, :3] = efflam
       for i in range(3):
         tang[i, i] += effg2
-        tang[i + 3, i + 3] += effg
+        tang[i + 3, i + 3] = effg
       tang += effhdr * np.outer(flow, flow)
     else:
       tang = ctang
@@ -537,9 +568,12 @@ def _return_map_batched(
       for i in range(3):
         for j in range(3):
           tang[i, j] = efflam
+      # Every block is assigned, not accumulated: the reference kernel's
+      # plastic branch carries the same assignments (the legacy +G shear
+      # excess is dropped in both kernels alike).
       for i in range(3):
         tang[i, i] += effg2
-        tang[i + 3, i + 3] += effg
+        tang[i + 3, i + 3] = effg
       for i in range(6):
         for j in range(6):
           tang[i, j] += effhdr * (flow[i] * flow[j])
