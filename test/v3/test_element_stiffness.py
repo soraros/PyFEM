@@ -231,3 +231,33 @@ def test_tria3_stiffness_patch_test3_batch_matches_numpy(
   k_np = _stiffness_numpy_t3(coords, constitutive)
   k_nb = tria3_plane_stress_stiffness(coords, constitutive)
   np.testing.assert_allclose(k_nb, k_np, rtol=0.0, atol=_STIFFNESS_ATOL)
+
+
+def test_batched_stiffness_bitwise_identical_across_thread_counts(
+  constitutive: np.ndarray,
+) -> None:
+  """1T vs nT raw-uint64 identity on a 64-element batch (prange race canary).
+
+  Each element's accumulation is independent and reduction-free, so the
+  batched kernels must produce the same bits at any thread count; a scratch
+  privatization race would break this mechanically (M5/D2 verification
+  pattern). Covers Q8, Quad4, and Tria3 through the public wrappers.
+  """
+  import numba
+
+  previous = numba.get_num_threads()
+  n_threads = max(2, min(16, previous))
+  try:
+    for make_coords, stiffness in (
+      (_make_coords_q8, quad8_plane_stress_stiffness),
+      (_make_coords_q4, quad4_plane_stress_stiffness),
+      (_make_coords_t3, tria3_plane_stress_stiffness),
+    ):
+      coords = make_coords(64, np.random.default_rng(11))
+      numba.set_num_threads(1)
+      k_1t = stiffness(coords, constitutive)
+      numba.set_num_threads(n_threads)
+      k_nt = stiffness(coords, constitutive)
+      np.testing.assert_array_equal(k_1t.view(np.uint64), k_nt.view(np.uint64))
+  finally:
+    numba.set_num_threads(previous)
