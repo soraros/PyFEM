@@ -44,7 +44,7 @@ Protocol summary:
   records / 7270 evaluations of cutback). The classification is
   observation-only by policy — the driver never extends the budget itself:
   a past-limit-load trajectory can net-decrease over a budget window
-  without converging (6 of 59 failing attempts on the snap-through truss
+  without converging (5 of 59 failing attempts on the snap-through truss
   do), so trend-keyed continuation would burn extra work inside the very
   limit-point trap the substep floor guards against and would alter the
   failure trail. REJECT, cutback, and FAILED decisions are numerically
