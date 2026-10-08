@@ -123,8 +123,10 @@ class Constrainer:
                                 masterFin = master
                                 masterDofID = -1
 
+                        # Compose the chain backwards: each hop contributes
+                        # its value plus its factor times the master's value
                         for iVal, iFac in reversed(list(zip(tempVal, tempFac))):
-                            masterFin += iVal + master * iFac
+                            masterFin = iVal + iFac * masterFin
 
                         self.addConstraint(dofInd, valSlave + masterFin * facSlave, label)
 
