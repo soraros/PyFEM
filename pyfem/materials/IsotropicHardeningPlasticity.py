@@ -116,7 +116,7 @@ class IsotropicHardeningPlasticity( BaseMaterial ):
       effg2  = 2.0*effg
       effg3  = 3.0*effg
       efflam = 1.0/3.0 * ( self.ebulk3-effg2 )
-      effhdr = self.eg3 * self.hard/(self.eg3+self.hard)-effg3
+      effhdr = self.eg3 * hard/(self.eg3+hard)-effg3
      
       tang[:3,:3] = efflam
     
