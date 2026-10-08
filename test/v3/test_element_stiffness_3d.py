@@ -175,3 +175,31 @@ def test_tet4_stiffness_single_element_matches_numpy(
   k_np = _stiffness_numpy_tet4(coords, constitutive_3d)
   k_nb = tet4_stiffness(coords, constitutive_3d)
   np.testing.assert_allclose(k_nb, k_np, rtol=0.0, atol=_STIFFNESS_ATOL)
+
+
+def test_batched_stiffness_3d_bitwise_identical_across_thread_counts(
+  constitutive_3d: np.ndarray,
+) -> None:
+  """1T vs nT raw-uint64 identity on a 64-element batch (prange race canary).
+
+  Same thread-determinism contract as the 2D kernels: per-element work is
+  independent and reduction-free, so Hex8 and Tet4 results must not depend
+  on the thread count.
+  """
+  import numba
+
+  previous = numba.get_num_threads()
+  n_threads = max(2, min(16, previous))
+  try:
+    for make_coords, stiffness in (
+      (_make_coords_hex8, hex8_stiffness),
+      (_make_coords_tet4, tet4_stiffness),
+    ):
+      coords = make_coords(64, np.random.default_rng(12))
+      numba.set_num_threads(1)
+      k_1t = stiffness(coords, constitutive_3d)
+      numba.set_num_threads(n_threads)
+      k_nt = stiffness(coords, constitutive_3d)
+      np.testing.assert_array_equal(k_1t.view(np.uint64), k_nt.view(np.uint64))
+  finally:
+    numba.set_num_threads(previous)
