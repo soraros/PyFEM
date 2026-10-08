@@ -853,7 +853,7 @@ def test_budget_exhaustion_surfaces_slow_convergence_on_the_j2_near_miss() -> No
   exhausted = [
     record for record in result.records if record.status is not SubstepStatus.COMMITTED
   ]
-  assert len(exhausted) >= 3  # measured: 9 rejected/failed records
+  assert len(exhausted) >= 3  # measured: 8 rejected/failed records
   for record in exhausted:
     observation = record.budget_exhaustion
     assert observation is not None
