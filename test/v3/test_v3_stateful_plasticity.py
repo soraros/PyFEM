@@ -6,25 +6,29 @@ The legacy law ``pyfem/materials/IsotropicHardeningPlasticity.py`` is the
 numerical reference (AGENTS.md). The parity harness drives it with the
 ``dstrain = eps_total - (eelas + eplas)`` identity the v3 kernel uses and
 repairs the ``tang = self.ctang`` aliasing impurity with a pristine elastic
-predictor before each step; single-step paths need no repair. The deliberate
-``flow[3:]`` shear-transfer fix is pinned by asserting the legacy shear
-bookkeeping slots drift from zero while the v3 slots stay exactly zero on
-normal plastic paths. Documented tolerance for mixed shear paths: 1e-12
-relative (observed drift is rounding-level, <= a few ulps).
+predictor before each step; single-step paths need no repair. The
+``flow[3:]`` shear-transfer divergence is repaired on the legacy side
+(M55): the legacy law transferred ``flow[:3]`` into the shear bookkeeping
+slots where ``flow[3:]`` belongs (finding 20260930-agent-s1), so its
+shear slots drifted from zero on normal plastic paths while the v3 slots
+stayed exactly zero; after the repair the slots are pinned to parity
+(exactly zero on normal paths, true shear flow on mixed paths).
+Documented tolerance for mixed shear paths: 1e-12 relative (observed
+drift is rounding-level, <= a few ulps).
 
-The second deliberate divergence is the plastic-branch tangent: the legacy
-construction accumulates the shear block on top of the elastic ctang alias,
-carrying the elastic G one time too many on the shear-shear diagonals
-(IsotropicHardeningPlasticity.py:62,121-127; finding 20261007-agent-a3 —
-~31% of max|tang| at plastic integration points, global Newton degrading
-from quadratic to linear). The v3 kernels assign the shear block like the
-normal block, so their tangent is the exact derivative of the kernel's own
-stress map (finite-difference pinned in test_v3_j2_tangent.py). The pins
-below reproduce the legacy arithmetic bit for bit on every entry outside
-the shear diagonal and assert the shear diagonals differ by exactly the
-elastic G (rounding-level), against legacy AT THE FORK BASE: the parallel
-L2 mission repairs the legacy side of the same construction and flips these
-pins to parity-where-repaired when it lands.
+The second repaired divergence is the plastic-branch tangent: the legacy
+construction accumulated the shear block on top of the elastic ctang
+alias, carrying the elastic G one time too many on the shear-shear
+diagonals (IsotropicHardeningPlasticity.py:62,121-127; finding
+20261007-agent-a3 — ~31% of max|tang| at plastic integration points,
+global Newton degrading from quadratic to linear). The v3 kernels (M54)
+and the legacy law (M55) now both assign the shear block like the normal
+block, so both tangents are the exact derivative of their own stress map
+(finite-difference pinned in test_v3_j2_tangent.py) and the pins below
+assert full parity-where-repaired: bitwise on the proportional paths
+(with the shear diagonals getting their own named parity leg, so a
+regression to the +G mechanism is convicted by name), 1e-12 on the mixed
+shear paths.
 """
 
 from __future__ import annotations
@@ -84,21 +88,14 @@ from pyfem.v3.spec.program import (
 from pyfem.v3.state import StateCodecError
 
 # Documented oracle configuration: linear hardening, the only configuration
-# the legacy law ever defined on the plastic path (its tangent reads the
-# `hard` property; IsotropicHardeningPlasticity.py:119).
+# the legacy law ever defined on the plastic path before M55 (its tangent
+# read the `hard` property; IsotropicHardeningPlasticity.py:119 — repaired
+# to the local table slope, a no-op on this configuration).
 _E = 210000.0
 _NU = 0.3
 _SYIELD = 250.0
 _HARD = 1000.0
 _YIELD_STRAIN = _SYIELD * (1.0 + _NU) / _E  # plane-strain deviatoric bound
-# The elastic shear modulus of the documented configuration (the calibration
-# vector's slot 0; the legacy constructor's expression order).
-_EG = 0.5 * (_E / (1.0 + _NU))
-# The pinned shear-tangent divergence (module docstring): at plastic steps
-# legacy exceeds the corrected v3 tangent by _EG on the shear-shear diagonal
-# entries. 1e-9 relative is orders above the observed rounding/drift-level
-# gap and orders below the O(G) signature any other tangent bug would print.
-_DIVERGENCE_RTOL = 1.0e-9
 _PARITY_RTOL = 1.0e-12
 _PARITY_ATOL = 1.0e-12
 # Cross-platform tolerance for the optimized-vs-reference bitwise pin (the
@@ -218,28 +215,27 @@ def _assert_tangent_parity(
   rtol: float | None = None,
   atol: float | None = None,
 ) -> None:
-  """Pin the tangent comparison, including the +G shear divergence.
+  """Pin the tangent comparison — full parity since the M54+M55 repairs.
 
   Elastic steps reproduce the legacy tangent arithmetic bit for bit (or
   within ``rtol``/``atol`` when the path drift requires it). Plastic steps
-  diverge by exactly the elastic G on the three shear-shear diagonals — the
-  legacy construction accumulates ``effg`` onto the aliased elastic ``eg``
-  there (module docstring; finding 20261007-agent-a3) — while every other
-  entry still reproduces the legacy arithmetic: the off-diagonal comparison
-  is the legacy record, and the diagonal pin convicts any divergence beyond
-  the pinned mechanism.
+  used to diverge by exactly the elastic G on the three shear-shear
+  diagonals (the legacy construction accumulated ``effg`` onto the aliased
+  elastic ``eg`` there; finding 20261007-agent-a3). Both sides assign the
+  shear block now (v3 in M54, legacy in M55), so plastic steps get the
+  shear diagonals as their own named parity leg — a regression to the +G
+  mechanism is convicted by name — and then the whole-matrix comparison.
   """
   shear_diagonal = np.zeros((6, 6), dtype=bool)
   for index in (3, 4, 5):
     shear_diagonal[index, index] = True
   if plastic:
-    diagonal_l = tangent_l[shear_diagonal]
-    diagonal_v = tangent_v[shear_diagonal]
-    tangent_l = tangent_l[~shear_diagonal]
-    tangent_v = tangent_v[~shear_diagonal]
-    np.testing.assert_allclose(
-      diagonal_l - diagonal_v, _EG, rtol=_DIVERGENCE_RTOL, atol=0.0
-    )
+    if rtol is None:
+      assert np.array_equal(tangent_l[shear_diagonal], tangent_v[shear_diagonal])
+    else:
+      np.testing.assert_allclose(
+        tangent_l[shear_diagonal], tangent_v[shear_diagonal], rtol=rtol, atol=atol
+      )
   if rtol is None:
     assert np.array_equal(tangent_l, tangent_v)
   else:
@@ -275,8 +271,8 @@ def test_single_step_paths_match_legacy_bitwise_without_repair() -> None:
     sigma_v, tangent_v, rows_v = _v3_step(calibration, np.zeros((1, 19)), strain)
     assert np.array_equal(sigma_l, sigma_v)
     assert bool(rows_v[0, 18] > 0.0) is plastic
-    # Stress and kappa match bitwise everywhere; the tangent pins the +G
-    # shear divergence on plastic steps (module docstring).
+    # Stress and kappa match bitwise everywhere; the tangent is full parity
+    # on plastic steps too since the M54+M55 shear-block repairs.
     _assert_tangent_parity(tangent_l, tangent_v, plastic=plastic)
     assert row_l[18] == rows_v[0, 18]
     # The virgin-predictor equivalence holds with and without the repair.
@@ -311,21 +307,22 @@ def test_uniaxial_plastic_ramp_matches_legacy_bitwise() -> None:
     sigma_l, tangent_l, row_l = _legacy_step(legacy, strain)
     sigma_v, tangent_v, rows_v = _v3_step(calibration, rows_v, strain)
     assert np.array_equal(sigma_l, sigma_v)
-    # Stress and state stay bitwise; the tangent matches bitwise on elastic
-    # steps and pins the +G shear divergence on plastic ones.
+    # Stress and state stay bitwise; the tangent is full parity since the
+    # M54+M55 shear-block repairs (module docstring).
     _assert_tangent_parity(tangent_l, tangent_v, plastic=bool(rows_v[0, 18] > 0.0))
     assert row_l[18] == rows_v[0, 18]
-    # The strain-split normal slots agree bitwise; the shear slots pin the
-    # documented flow[3:] fix: legacy pollutes them (its flow[:3] transfer),
-    # v3 keeps them exactly zero on a normal plastic path.
+    # The strain-split slots agree bitwise everywhere: the shear slots are
+    # parity since the M55 flow[3:] repair — both laws keep them exactly
+    # zero on a normal plastic path (pre-repair legacy polluted them with
+    # the normal flow, the divergence this battery used to pin).
     assert np.array_equal(row_l[6:9], rows_v[0, 6:9])
+    assert np.array_equal(row_l[9:12], rows_v[0, 9:12])
     assert np.array_equal(row_l[12:15], rows_v[0, 12:15])
+    assert np.array_equal(row_l[15:18], rows_v[0, 15:18])
     assert np.all(rows_v[0, 9:12] == 0.0)
     assert np.all(rows_v[0, 15:18] == 0.0)
     went_plastic |= bool(rows_v[0, 18] > 0.0)
   assert went_plastic
-  assert np.any(row_l[9:12] != 0.0)
-  assert np.any(row_l[15:18] != 0.0)
 
 
 def test_mixed_shear_ramp_matches_legacy_within_documented_tolerance() -> None:
@@ -336,8 +333,8 @@ def test_mixed_shear_ramp_matches_legacy_within_documented_tolerance() -> None:
     sigma_l, tangent_l, row_l = _legacy_step(legacy, strain)
     sigma_v, tangent_v, rows_v = _v3_step(calibration, rows_v, strain)
     np.testing.assert_allclose(sigma_l, sigma_v, rtol=_PARITY_RTOL, atol=_PARITY_ATOL)
-    # Off the shear diagonal the tangent holds the documented 1e-12 drift;
-    # the shear diagonal pins the +G divergence (module docstring).
+    # The tangent holds the documented 1e-12 drift everywhere, shear
+    # diagonal included (parity since the M54+M55 repairs).
     _assert_tangent_parity(
       tangent_l,
       tangent_v,
@@ -345,20 +342,29 @@ def test_mixed_shear_ramp_matches_legacy_within_documented_tolerance() -> None:
       rtol=_PARITY_RTOL,
       atol=_PARITY_ATOL,
     )
-    # The shear split slots (9:12, 15:18) are the pinned flow[3:] divergence:
-    # legacy pollutes them with the normal flow, v3 carries the true shear
-    # plastic flow, so they differ materially rather than at rounding level.
+    # The shear split slots (9:12, 15:18) are parity since the M55 flow[3:]
+    # repair: both laws carry the true shear plastic flow now (pre-repair
+    # legacy polluted them with the normal flow and they differed
+    # materially — the divergence this battery used to pin).
     np.testing.assert_allclose(
       row_l[6:9], rows_v[0, 6:9], rtol=_PARITY_RTOL, atol=_PARITY_ATOL
+    )
+    np.testing.assert_allclose(
+      row_l[9:12], rows_v[0, 9:12], rtol=_PARITY_RTOL, atol=_PARITY_ATOL
     )
     np.testing.assert_allclose(
       row_l[12:15], rows_v[0, 12:15], rtol=_PARITY_RTOL, atol=_PARITY_ATOL
     )
     np.testing.assert_allclose(
+      row_l[15:18], rows_v[0, 15:18], rtol=_PARITY_RTOL, atol=_PARITY_ATOL
+    )
+    np.testing.assert_allclose(
       row_l[18], rows_v[0, 18], rtol=_PARITY_RTOL, atol=_PARITY_ATOL
     )
-  # The shear plastic flow is real state, not the legacy bookkeeping bug.
+  # The shear plastic flow is real state on both sides, not the pre-repair
+  # legacy bookkeeping bug.
   assert np.any(rows_v[0, 15:18] != 0.0)
+  assert np.any(row_l[15:18] != 0.0)
 
 
 def test_unload_reload_keeps_kappa_and_returns_to_the_surface() -> None:
@@ -384,8 +390,8 @@ def test_unload_reload_keeps_kappa_and_returns_to_the_surface() -> None:
   sigma_l, tangent_l, row_l = _legacy_step(legacy, reload_strain)
   sigma_v, tangent_v, rows_v = _v3_step(calibration, rows_v, reload_strain)
   np.testing.assert_allclose(sigma_l, sigma_v, rtol=_PARITY_RTOL, atol=_PARITY_ATOL)
-  # The reload is plastic: off the shear diagonal the tangent holds the
-  # documented drift; the shear diagonal pins the +G divergence.
+  # The reload is plastic: the tangent holds the documented drift
+  # everywhere, shear diagonal included (parity since the M54+M55 repairs).
   _assert_tangent_parity(
     tangent_l, tangent_v, plastic=True, rtol=_PARITY_RTOL, atol=_PARITY_ATOL
   )
