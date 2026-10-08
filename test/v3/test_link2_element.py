@@ -141,8 +141,8 @@ def test_spring_tangent_matches_closed_form(coords: np.ndarray) -> None:
   """Pin the axial spring semantics: ``K = k * b b^T``, ``b = (c, s, -c, -s)``.
 
   This tangent is the exact derivative of the axial residual
-  ``f = -k * (b.a) * b``. The legacy Spring element's isotropic tangent is
-  explicitly NOT the oracle - see ``test_spring_legacy_tangent_is_not_the_oracle``.
+  ``f = -k * (b.a) * b``. The legacy Spring element now shares these
+  semantics — see ``test_spring_legacy_tangent_repaired_matches_v3``.
   """
   ke, _ = link2_tangent_single(coords, PROBE_STATE, GROUP_SPRING, SPRING_K, 0.0)
   b = _unit_axial_vector(coords)
@@ -158,32 +158,37 @@ def test_spring_transverse_motion_is_unresisted(coords: np.ndarray) -> None:
 
 
 @pytest.mark.parametrize("coords", ANGLED_COORDS, ids=ANGLED_IDS)
-def test_spring_legacy_tangent_is_not_the_oracle(
+def test_spring_legacy_tangent_repaired_matches_v3(
   legacy_spring_element: LegacySpring,
   coords: np.ndarray,
 ) -> None:
-  """State explicitly which legacy Spring behavior is (not) the v3 oracle.
+  """Repair confirmed: the legacy Spring tangent now matches v3 exactly.
 
-  Legacy ``pyfem/elements/Spring.py`` assembles an isotropic tangent
+  Legacy ``pyfem/elements/Spring.py`` used to assemble an isotropic tangent
   ``k * [[I, -I], [-I, I]]`` (stiffness ``k`` in the axial AND transverse
-  directions, rotation-invariant) while its internal force is purely axial.
-  That tangent is not the derivative of its own residual, so the legacy
-  spring TANGENT is not a valid oracle for v3: v3 pins the consistent axial
-  tangent ``k * b b^T``, and the legacy tangent differs from it by exactly
-  the transverse projector ``k * t t^T``. The legacy spring RESIDUAL remains
-  authoritative: internal-force parity holds.
+  directions, rotation-invariant) while its internal force is purely axial —
+  a tangent that was not the derivative of its own residual (finding
+  20260929-agent-b3), so the legacy spring TANGENT was not a valid oracle
+  and differed from the consistent axial tangent by exactly the transverse
+  projector ``k * t t^T`` (M24 pinned that divergence here as
+  ``test_spring_legacy_tangent_is_not_the_oracle``). M55 repaired the legacy
+  element to the axial-only tangent ``k * b b^T`` — the exact derivative of
+  its unchanged axial residual (commit 5b9f964, "correctness bug") — so the
+  relationship is now parity: legacy tangent == v3 tangent, and the legacy
+  RESIDUAL stays authoritative (internal-force parity holds, as before).
   """
   k_legacy, f_legacy = _legacy_spring_response(
     legacy_spring_element, coords, PROBE_STATE
   )
   ke, fe = link2_tangent_single(coords, PROBE_STATE, GROUP_SPRING, SPRING_K, 0.0)
-  isotropic = SPRING_K * np.block([[np.eye(2), -np.eye(2)], [-np.eye(2), np.eye(2)]])
-  np.testing.assert_allclose(k_legacy, isotropic, rtol=1.0e-12, atol=1.0e-10)
+  b = _unit_axial_vector(coords)
+  np.testing.assert_allclose(
+    k_legacy, SPRING_K * np.outer(b, b), rtol=1.0e-12, atol=1.0e-10
+  )
+  np.testing.assert_allclose(k_legacy, ke, rtol=1.0e-12, atol=1.0e-10)
   np.testing.assert_allclose(f_legacy, fe, rtol=1.0e-10, atol=1.0e-8)
   t_perp = _unit_transverse_vector(coords)
-  np.testing.assert_allclose(
-    k_legacy - ke, SPRING_K * np.outer(t_perp, t_perp), rtol=1.0e-12, atol=1.0e-10
-  )
+  np.testing.assert_allclose(k_legacy @ t_perp, np.zeros(4), atol=1.0e-10)
 
 
 @pytest.mark.parametrize("coords", ANGLED_COORDS, ids=ANGLED_IDS)
