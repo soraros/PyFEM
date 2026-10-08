@@ -96,8 +96,6 @@ class PlaneStrainDamage( BaseMaterial ):
     dexydstrain = 0.5*self.O3
     dezzdstrain = self.c*(dexxdstrain+deyydstrain)
 
-    depsdstrain = zeros(3)
-
     dI1dstrain = dexxdstrain+deyydstrain+dezzdstrain
 
     dJ2dstrain  = self.sc*(2.*exx-eyy-ezz)*dexxdstrain
@@ -130,7 +128,7 @@ class PlaneStrainDamage( BaseMaterial ):
 
       detadstrain = detadI1*dI1dstrain + detadJ2*dJ2dstrain
 
-    return eps , depsdstrain
+    return eps , detadstrain
 
 #------------------------------------------------------------------------------
 #  pre:  equivalent strain term kappa
