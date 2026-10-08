@@ -122,7 +122,7 @@ class IsotropicHardeningPlasticity( BaseMaterial ):
     
       for i in range(3):
         tang[i,i]     += effg2
-        tang[i+3,i+3] += effg
+        tang[i+3,i+3] =  effg
 
       tang += effhdr*np.outer(flow,flow)
  
