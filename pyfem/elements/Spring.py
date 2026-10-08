@@ -4,7 +4,7 @@
 from .Element import Element
 from pyfem.util.transformations import toElementCoordinates, toGlobalCoordinates
 
-from numpy import zeros, eye, array
+from numpy import zeros, array
 
 class Spring ( Element ):
 
@@ -31,14 +31,15 @@ class Spring ( Element ):
     #Compute the element internal force vector in the element coordinate system
     elFint = array([-Fs,0.,Fs,0])
 
-    #Determine the element tangent stiffness in the element coordinate system
+    #Determine the element tangent stiffness in the element coordinate system.
+    #Axial-only: the exact derivative of the axial residual above (stiffness k
+    #along the element axis, no transverse stiffness).
     elKbar = zeros( (4,4) )
 
-    elKbar[:2,:2] =  elemdat.props.k*eye(2)
-    elKbar[:2,2:] = -elemdat.props.k*eye(2)
-
-    elKbar[2:,:2] = elKbar[:2,2:]
-    elKbar[2:,2:] = elKbar[:2,:2]
+    elKbar[0,0] =  elemdat.props.k
+    elKbar[0,2] = -elemdat.props.k
+    elKbar[2,0] = -elemdat.props.k
+    elKbar[2,2] =  elemdat.props.k
 
     #Rotate element tangent stiffness to the global coordinate system
     elemdat.stiff = toGlobalCoordinates( elKbar, elemdat.coords )
