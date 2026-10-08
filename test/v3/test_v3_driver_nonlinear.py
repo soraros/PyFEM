@@ -830,32 +830,40 @@ def _j2_cantilever_driver(settings: NonlinearStaticSettings) -> NonlinearStaticD
 def test_budget_exhaustion_surfaces_slow_convergence_on_the_j2_near_miss() -> None:
   """The M48 finding: a slow-but-working Newton reads 'budget too small'.
 
-  The load-controlled J2 cantilever converges linearly (near-yield tangent
-  chatter) and needs 33 iterations at tolerance 1e-12, so the default
-  25-iteration budget rejects every full-size attempt; at default settings
-  the cutback machinery amplifies that into 294 records / 7270 evaluations.
-  Bounded to max_cutbacks=2 the same deck fails typed in bounded work with
-  the SLOW_CONVERGENCE near-miss typed on every budget-exhausted record,
-  and the documented remedy completes the same solve in one substep.
+  Re-based vehicle (M54): this is the finding's exact deck, but its
+  33-iteration signature was the pre-fix J2 tangent's — the shear-tangent
+  fix restores quadratic convergence, so the load-controlled cantilever
+  now completes in 7 iterations at tolerance 1e-12 and the default budget
+  no longer thrashes (the 294 records / 7270 evaluations were the tangent
+  bug's amplification). Per M52's handoff note the near-miss vehicle
+  re-bases the starved budget: at max_iterations=4 every full-size plastic
+  attempt still needs 7 and exhausts its budget while contracting —
+  SLOW_CONVERGENCE typed on every budget-exhausted record — while the
+  elastic micro-substeps commit, until two consecutive exhausts fail the
+  target typed in bounded work. The documented remedy completes the same
+  solve in one substep.
   """
-  settings = NonlinearStaticSettings(tolerance=1.0e-12, max_cutbacks=2)
+  settings = NonlinearStaticSettings(
+    tolerance=1.0e-12, max_iterations=4, max_cutbacks=2
+  )
   driver = _j2_cantilever_driver(settings)
   result = _run_ramp(driver, 20.0)
   assert result.status is DriverStatus.STEP_FAILED
-  assert result.statistics.evaluation_count < 1_000  # measured: 495
+  assert result.statistics.evaluation_count < 1_000  # measured: 40
   exhausted = [
     record for record in result.records if record.status is not SubstepStatus.COMMITTED
   ]
-  assert len(exhausted) >= 3  # measured: 16 rejected/failed records
+  assert len(exhausted) >= 3  # measured: 9 rejected/failed records
   for record in exhausted:
     observation = record.budget_exhaustion
     assert observation is not None
     assert observation.trend is BudgetExhaustionTrend.SLOW_CONVERGENCE
     assert observation.measured_step_count == settings.max_iterations
-    # Chatter permits rare single-step upticks (23/24 decreasing measured);
-    # the net contraction over the budget is ~1e-9, pinned with 1e3 margin.
-    assert observation.decreasing_step_count >= observation.measured_step_count - 3
-    assert observation.final_residual_norm <= 1.0e-6 * observation.first_residual_norm
+    # Chatter permits rare single-step upticks (2/4 decreasing measured at
+    # worst); the worst net contraction over the budget is 0.13, pinned
+    # with ~2x margin against the 0.5 classification bound.
+    assert observation.decreasing_step_count >= observation.measured_step_count - 2
+    assert observation.final_residual_norm <= 0.3 * observation.first_residual_norm
   committed = [
     record for record in result.records if record.status is SubstepStatus.COMMITTED
   ]
@@ -873,8 +881,9 @@ def test_budget_exhaustion_surfaces_slow_convergence_on_the_j2_near_miss() -> No
   (record,) = remedy_result.records
   assert record.status is SubstepStatus.COMMITTED
   assert record.budget_exhaustion is None
-  # 33 iterations measured on the reference platform; the bound only needs
-  # to prove the default budget was binding.
+  # 7 iterations measured on the reference platform — the quadratic count
+  # the J2 shear fix restored (pre-fix: 33, linear); the bounds only need
+  # to prove the re-based 4-iteration budget was binding.
   assert settings.max_iterations < len(record.iterations) <= 50
   assert remedy_result.statistics.evaluation_count == len(record.iterations)
   observation = record.observation
@@ -886,6 +895,17 @@ def test_budget_exhaustion_surfaces_slow_convergence_on_the_j2_near_miss() -> No
     rtol=0.0,
     atol=_REACTION_ATOL,
   )
+
+  # The finding's original settings: the default budget completes the deck
+  # in the same quadratic substep — the cutback amplification the finding
+  # measured left with the tangent bug.
+  default = _j2_cantilever_driver(NonlinearStaticSettings(tolerance=1.0e-12))
+  default_result = _run_ramp(default, 20.0)
+  assert default_result.status is DriverStatus.COMPLETED
+  (default_record,) = default_result.records
+  assert default_record.status is SubstepStatus.COMMITTED
+  assert default_record.budget_exhaustion is None
+  assert len(default_record.iterations) <= 10  # 7 measured; pre-fix: 33
 
 
 def test_snap_through_failures_type_non_convergent_at_budget_exhaustion() -> None:
