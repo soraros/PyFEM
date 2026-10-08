@@ -93,7 +93,7 @@ class PlaneStrainDamage( BaseMaterial ):
 
     dexxdstrain = self.O1
     deyydstrain = self.O2
-    dexydstrain = 0.5*self.O3
+    dexydstrain = self.O3
     dezzdstrain = self.c*(dexxdstrain+deyydstrain)
 
     dI1dstrain = dexxdstrain+deyydstrain+dezzdstrain
