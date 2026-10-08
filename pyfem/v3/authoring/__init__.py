@@ -54,18 +54,28 @@ owner internals::
 
 from pyfem.v3.authoring.compile import compile
 from pyfem.v3.authoring.evaluate import evaluate, trial_vector
-from pyfem.v3.authoring.materials import linear_elastic, plasticity, uniaxial_elastic
+from pyfem.v3.authoring.materials import (
+  damage,
+  linear_elastic,
+  plasticity,
+  prony_viscoelasticity,
+  uniaxial_elastic,
+)
 from pyfem.v3.authoring.mesh import line2_mesh, quad8_mesh, quad8_patch
 from pyfem.v3.authoring.models import small_strain_continuum, truss
 from pyfem.v3.authoring.program import fixed, nodal_load
 from pyfem.v3.authoring.registry import (
   check_registry,
+  damage_law,
+  damage_registry,
   plane_stress_law,
   plasticity_law,
   plasticity_registry,
+  prony_viscoelasticity_law,
   q8_registry,
   truss_registry,
   uniaxial_law,
+  viscoelasticity_registry,
 )
 from pyfem.v3.authoring.springs import damage_envelope_spring, spring
 from pyfem.v3.authoring.transactions import (
@@ -98,7 +108,10 @@ __all__ = [
   "SubstepStatus",
   "check_registry",
   "compile",
+  "damage",
   "damage_envelope_spring",
+  "damage_law",
+  "damage_registry",
   "evaluate",
   "fixed",
   "line2_mesh",
@@ -109,6 +122,8 @@ __all__ = [
   "plasticity",
   "plasticity_law",
   "plasticity_registry",
+  "prony_viscoelasticity",
+  "prony_viscoelasticity_law",
   "q8_registry",
   "quad8_mesh",
   "quad8_patch",
@@ -120,4 +135,5 @@ __all__ = [
   "truss_registry",
   "uniaxial_elastic",
   "uniaxial_law",
+  "viscoelasticity_registry",
 ]

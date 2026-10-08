@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from pyfem.v3.authoring.registry import check_registry
 from pyfem.v3.compile.continuum import (
+  DAMAGE_MATERIAL_KEY,
   PLASTIC_MATERIAL_KEY,
+  VISCOELASTIC_MATERIAL_KEY,
+  damage_reference_registry,
   plasticity_reference_registry,
   q8_reference_registry,
+  viscoelasticity_reference_registry,
 )
 from pyfem.v3.compile.system import SystemCompilationPolicy, compile_system
 from pyfem.v3.compile.truss import TRUSS_FORMULATION_KEY, truss_reference_registry
@@ -18,12 +22,18 @@ from pyfem.v3.spec.model import ModelSpec
 def _default_registry(model: ModelSpec) -> dict[RegistryKey, RegistryDescriptor]:
   # Mirrors the landed dispatch: unknown formulations fall back to the
   # continuum builder so its coded diagnostics describe the mismatch. A
-  # material on the stateful seam selects the plasticity reference registry.
+  # material on the stateful seam selects its law's reference registry.
   formulations = {region.formulation for region in model.regions}
   if TRUSS_FORMULATION_KEY[1] in formulations:
     return truss_reference_registry()
   if any(material.model == PLASTIC_MATERIAL_KEY[1] for material in model.materials):
     return plasticity_reference_registry()
+  if any(material.model == DAMAGE_MATERIAL_KEY[1] for material in model.materials):
+    return damage_reference_registry()
+  if any(
+    material.model == VISCOELASTIC_MATERIAL_KEY[1] for material in model.materials
+  ):
+    return viscoelasticity_reference_registry()
   return q8_reference_registry()
 
 

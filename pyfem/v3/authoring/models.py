@@ -149,9 +149,10 @@ def small_strain_continuum(
   The region covers every cell of the mesh with the qualified
   ``small-strain-continuum`` formulation on a ``gauss-3x3`` quadrature — one
   readable call for the classic teaching continuum. The material is the
-  elastic ``linear_elastic(E, nu)`` slice or the stateful
-  ``plasticity(E, nu, syield, hard)`` slice; a stateful law authors exactly
-  like an elastic one.
+  elastic ``linear_elastic(E, nu)`` slice or a stateful slice
+  (``plasticity(E, nu, syield, hard)``, ``damage(E, nu, kappa0, kappac,
+  k)``, ``prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last)``); a
+  stateful law authors exactly like an elastic one.
   """
   block = _single_block(mesh, builder="small_strain_continuum")
   _require_geometry(
@@ -165,8 +166,17 @@ def small_strain_continuum(
   )
   selected = _require_material(
     material,
-    models=("plane-stress-linear-elastic", "isotropic-hardening-plasticity"),
-    helper="linear_elastic(E, nu) or plasticity(E, nu, syield, hard)",
+    models=(
+      "plane-stress-linear-elastic",
+      "isotropic-hardening-plasticity",
+      "plane-strain-damage",
+      "prony-viscoelasticity",
+    ),
+    helper=(
+      "linear_elastic(E, nu), plasticity(E, nu, syield, hard), "
+      "damage(E, nu, kappa0, kappac, k), or "
+      "prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last)"
+    ),
   )
   return _model(
     mesh,
