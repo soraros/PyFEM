@@ -102,8 +102,8 @@ class IsotropicHardeningPlasticity( BaseMaterial ):
       eplas[:3] +=  1.5 * flow[:3] * deqpl
       eelas[:3] += -1.5 * flow[:3] * deqpl
 
-      eplas[3:] +=  3.0 * flow[:3] * deqpl
-      eelas[3:] += -3.0 * flow[:3] * deqpl
+      eplas[3:] +=  3.0 * flow[3:] * deqpl
+      eelas[3:] += -3.0 * flow[3:] * deqpl
 
       sigma = flow * syield
       sigma[:3] += shydro * np.ones(3)
