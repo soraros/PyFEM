@@ -106,7 +106,14 @@ class Constrainer:
                         tempFac: List[float] = []
 
                         # Recursive loop until masterDofID not a list, but prescribed value
+                        visited = set()
                         while masterDofID in self.constrainData:
+                            if masterDofID in visited:
+                                raise RuntimeError(
+                                    "ERROR - Cyclic tying relation detected for DOF "
+                                    + str(masterDofID)
+                                )
+                            visited.add(masterDofID)
                             master = self.constrainData[masterDofID][0]
                             if type(master) is list and len(master) == 3:
                                 masterDofID = master[1][0]
