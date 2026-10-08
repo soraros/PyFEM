@@ -392,9 +392,7 @@ def test_tangent_is_the_exact_algorithmic_derivative_by_fd() -> None:
   base = _v3_step(calibration, rows, eps0, 0.7)
   step = 1.0e-7
   for component in range(6):
-    moved = _v3_step(
-      calibration, rows, eps0 + step * np.eye(6)[component], 0.7
-    )
+    moved = _v3_step(calibration, rows, eps0 + step * np.eye(6)[component], 0.7)
     np.testing.assert_allclose(
       (moved.stresses[0] - base.stresses[0]) / step,
       base.tangents[0][:, component],
@@ -638,9 +636,7 @@ def test_parameterized_state_width_resolves_per_term_count() -> None:
     assert layout.initial_rows is not None
     assert np.all(layout.initial_rows.values == 0.0)
   # Deterministic content identity across compilations.
-  assert (
-    _visco_compiled().content_fingerprint == _visco_compiled().content_fingerprint
-  )
+  assert _visco_compiled().content_fingerprint == _visco_compiled().content_fingerprint
 
 
 def test_initial_state_binding_is_explicit_and_validated() -> None:
