@@ -58,6 +58,7 @@ from pyfem.v3.authoring.materials import (
   damage,
   linear_elastic,
   plasticity,
+  prony_viscoelasticity,
   uniaxial_elastic,
 )
 from pyfem.v3.authoring.mesh import line2_mesh, quad8_mesh, quad8_patch
@@ -70,9 +71,11 @@ from pyfem.v3.authoring.registry import (
   plane_stress_law,
   plasticity_law,
   plasticity_registry,
+  prony_viscoelasticity_law,
   q8_registry,
   truss_registry,
   uniaxial_law,
+  viscoelasticity_registry,
 )
 from pyfem.v3.authoring.springs import damage_envelope_spring, spring
 from pyfem.v3.authoring.transactions import (
@@ -119,6 +122,8 @@ __all__ = [
   "plasticity",
   "plasticity_law",
   "plasticity_registry",
+  "prony_viscoelasticity",
+  "prony_viscoelasticity_law",
   "q8_registry",
   "quad8_mesh",
   "quad8_patch",
@@ -130,4 +135,5 @@ __all__ = [
   "truss_registry",
   "uniaxial_elastic",
   "uniaxial_law",
+  "viscoelasticity_registry",
 ]

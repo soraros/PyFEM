@@ -151,7 +151,8 @@ def small_strain_continuum(
   readable call for the classic teaching continuum. The material is the
   elastic ``linear_elastic(E, nu)`` slice or a stateful slice
   (``plasticity(E, nu, syield, hard)``, ``damage(E, nu, kappa0, kappac,
-  k)``); a stateful law authors exactly like an elastic one.
+  k)``, ``prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last)``); a
+  stateful law authors exactly like an elastic one.
   """
   block = _single_block(mesh, builder="small_strain_continuum")
   _require_geometry(
@@ -169,10 +170,12 @@ def small_strain_continuum(
       "plane-stress-linear-elastic",
       "isotropic-hardening-plasticity",
       "plane-strain-damage",
+      "prony-viscoelasticity",
     ),
     helper=(
-      "linear_elastic(E, nu), plasticity(E, nu, syield, hard), or "
-      "damage(E, nu, kappa0, kappac, k)"
+      "linear_elastic(E, nu), plasticity(E, nu, syield, hard), "
+      "damage(E, nu, kappa0, kappac, k), or "
+      "prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last)"
     ),
   )
   return _model(

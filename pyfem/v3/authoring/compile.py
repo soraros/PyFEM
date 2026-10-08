@@ -6,9 +6,11 @@ from pyfem.v3.authoring.registry import check_registry
 from pyfem.v3.compile.continuum import (
   DAMAGE_MATERIAL_KEY,
   PLASTIC_MATERIAL_KEY,
+  VISCOELASTIC_MATERIAL_KEY,
   damage_reference_registry,
   plasticity_reference_registry,
   q8_reference_registry,
+  viscoelasticity_reference_registry,
 )
 from pyfem.v3.compile.system import SystemCompilationPolicy, compile_system
 from pyfem.v3.compile.truss import TRUSS_FORMULATION_KEY, truss_reference_registry
@@ -28,6 +30,10 @@ def _default_registry(model: ModelSpec) -> dict[RegistryKey, RegistryDescriptor]
     return plasticity_reference_registry()
   if any(material.model == DAMAGE_MATERIAL_KEY[1] for material in model.materials):
     return damage_reference_registry()
+  if any(
+    material.model == VISCOELASTIC_MATERIAL_KEY[1] for material in model.materials
+  ):
+    return viscoelasticity_reference_registry()
   return q8_reference_registry()
 
 
