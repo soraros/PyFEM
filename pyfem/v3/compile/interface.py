@@ -902,6 +902,7 @@ def _probe_operator_tangent(
   parameters: np.ndarray,
   *,
   source: SourceContext,
+  response: object = None,
 ) -> None:
   """Central-difference the assembled element tangent at seeded states.
 
@@ -915,8 +916,11 @@ def _probe_operator_tangent(
   block-diagonal across the network, so one displacement component is
   perturbed on all elements at once and the central difference convicts every
   element's tangent column at once. The seed is recorded in every diagnostic,
-  so a failure replays bit-for-bit.
+  so a failure replays bit-for-bit. ``response`` is the evaluation core under
+  test — ``_evaluate_response`` in production; the test suite injects a
+  tampered response to convict this probe's own failure leg.
   """
+  evaluate_response = _evaluate_response if response is None else response
   entity_count = len(weights)
   generator = np.random.default_rng(_OPERATOR_PROBE_SEED)
   reference_ds = midpoints[:, 1] - midpoints[:, 0]
@@ -944,7 +948,7 @@ def _probe_operator_tangent(
       displacements.setflags(write=False)
       accepted_read.setflags(write=False)
       try:
-        _, tangent, _, status = _evaluate_response(
+        _, tangent, _, status = evaluate_response(
           midpoints,
           weights,
           shapes,
@@ -975,7 +979,7 @@ def _probe_operator_tangent(
         plus.setflags(write=False)
         minus.setflags(write=False)
         try:
-          plus_residual, _, _, plus_status = _evaluate_response(
+          plus_residual, _, _, plus_status = evaluate_response(
             midpoints,
             weights,
             shapes,
@@ -984,7 +988,7 @@ def _probe_operator_tangent(
             plus,
             accepted_read,
           )
-          minus_residual, _, _, minus_status = _evaluate_response(
+          minus_residual, _, _, minus_status = evaluate_response(
             midpoints,
             weights,
             shapes,
