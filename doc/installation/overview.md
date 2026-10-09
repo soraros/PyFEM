@@ -6,7 +6,7 @@ Both the **Python API** and the **command-line interface (CLI)** are included.
 ## Requirements
 
 **System Requirements:**
-- Python 3.11 or newer
+- Python 3.13 or newer (see `requires-python` in `pyproject.toml`)
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - Git (for cloning the repository)
 
@@ -16,8 +16,10 @@ Both the **Python API** and the **command-line interface (CLI)** are included.
 - matplotlib
 - meshio
 - h5py
-- PySide6
 - vtk
+
+The GUI additionally requires PySide6, which is intentionally **not** installed
+automatically — see the note on `pyfem-gui` below.
 
 ## Installation with uv (Recommended)
 
@@ -35,6 +37,14 @@ Run them via `uv run`:
 
 ```bash
 uv run pyfem --help
+uv run pyfem --version
+```
+
+The `pyfem-gui` command requires PySide6, which is not part of the default
+dependencies (or any dependency group); install it into the environment first:
+
+```bash
+uv pip install PySide6
 uv run pyfem-gui
 ```
 
@@ -48,26 +58,39 @@ pyfem --help
 
 ### Development setup
 
-`uv sync` also installs dev tools (pytest, coverage, ruff):
+`uv sync` also installs dev tools (pytest, coverage, ruff, sympy):
 
 ```bash
 uv sync
 uv run pytest
 uv run coverage run -m pytest -q
 uv run coverage report
-uv run ruff check pyfem test
-uv run ruff format --check pyfem test
 uv build
 ```
+
+Lint and format gates run with the ruff from the project environment, using
+the per-tree configurations — the same invocations as CI (see
+`.github/workflows/ci.yml` and `CONTRIBUTING.md`):
+
+```bash
+uv run ruff check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+uv run ruff check test/v3 --config test/v3/ruff.toml
+uv run ruff format --check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+uv run ruff format --check test/v3 --config test/v3/ruff.toml
+```
+
+These gates cover the v3 trees (plus `bench` and `notebooks/v3` in CI); the
+legacy top-level `pyfem/` modules and root-level `test/` files predate them.
 
 ## Installation with pip
 
 If you prefer pip, create a virtual environment first:
 
 ```bash
-python3 -m venv .venv
+python3 -m venv .venv      # Linux / macOS
+# py -m venv .venv         # Windows (cmd.exe / PowerShell)
 source .venv/bin/activate  # Linux / macOS
-# .venv\Scripts\activate   # Windows
+# .venv\Scripts\activate.bat   # Windows (cmd.exe)
 pip install .
 ```
 
