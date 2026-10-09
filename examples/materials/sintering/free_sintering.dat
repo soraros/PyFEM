@@ -69,6 +69,6 @@
 <NodeConstraints>
   # Fix one corner to prevent rigid body motion
   # Allow shrinkage in both directions by only fixing one node
-  u 1 0.0;
-  v 1 0.0;
+  u[1] = 0.0;
+  v[1] = 0.0;
 </NodeConstraints>

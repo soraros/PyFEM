@@ -68,22 +68,23 @@
 
 <NodeConstraints>
   # Fix bottom in vertical direction (rigid die surface)
-  v 1 0.0;
-  v 2 0.0;
-  v 3 0.0;
-  v 4 0.0;
-  v 5 0.0;
+  v[1] = 0.0;
+  v[2] = 0.0;
+  v[3] = 0.0;
+  v[4] = 0.0;
+  v[5] = 0.0;
   
   # Fix one corner horizontally to prevent rigid body motion
-  u 1 0.0;
+  u[1] = 0.0;
 </NodeConstraints>
 
 <ExternalForces>
   # Apply compressive pressure on top surface
   # Pressure accelerates densification
-  v 21 "-5.0e5*t";   # Gradually apply 5 MPa pressure
-  v 22 "-5.0e5*t";
-  v 23 "-5.0e5*t";
-  v 24 "-5.0e5*t";
-  v 25 "-5.0e5*t";
+  # Reference load per node; the solver's default loadFunc ramps it as -5.0e5*t
+  v[21] = -5.0e5;   # Gradually apply 5 MPa pressure
+  v[22] = -5.0e5;
+  v[23] = -5.0e5;
+  v[24] = -5.0e5;
+  v[25] = -5.0e5;
 </ExternalForces>
