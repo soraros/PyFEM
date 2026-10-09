@@ -27,7 +27,7 @@ from scipy.sparse import coo_array, csr_array
 from scipy.sparse.linalg import factorized
 
 from bench.workloads import Q8Workload
-from pyfem.v3._prototype_assembly import assemble_loaded
+from pyfem.v3._prototype_assembly import assemble_loaded, canonical_csr
 from pyfem.v3.fem.assembly import (
   _fill_stiffness_coo,
   compile_csr_pattern,
@@ -78,7 +78,9 @@ class V3Q8Pipeline:
     # Precompiled once (one-time topology cost, like driver-plan compilation);
     # the dedup stage then measures argsort-free value reassembly only.
     self.csr_pattern = compile_csr_pattern(self.row, self.col, self.k_coo.shape)
-    self.k_csr = self.k_coo.tocsr()
+    # What a solve consumes: the production COO->CSR conversion (cached
+    # pattern + strict-sequential dedup), not scipy's unstable-order tocsr.
+    self.k_csr = canonical_csr(self.k_coo)
     self.constraints = build_prescribed_constraints(problem)
     self.k_red = (self.constraints.C.T @ (self.k_csr @ self.constraints.C)).tocsr()
     self.solve_red = factorized(self.k_red)
@@ -132,7 +134,7 @@ class V3Q8Pipeline:
     assemble_loaded(self.loaded)
 
   def assemble(self) -> None:
-    assemble_loaded(self.loaded).stiffness.tocsr()
+    canonical_csr(assemble_loaded(self.loaded).stiffness)
 
   def constrain(self) -> None:
     constraints = build_prescribed_constraints(self.problem)

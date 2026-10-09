@@ -1,17 +1,35 @@
-"""Global stiffness assembly."""
+"""Global stiffness assembly.
+
+The module's assemble functions return the raw element-major COO stream
+(``coo_array``) — the pinned contract the parity tests assert against the
+legacy assembly. Production consumers convert that stream to canonical CSR
+through :func:`canonical_csr`, which reuses the stream's compiled
+:class:`~pyfem.v3.fem.assembly.CooCsrPattern` across assemblies of the same
+topology (the driver-plan precedent: topology compilation is a one-time
+cost, refills are values-only) and sums duplicates in the canonical
+strict-sequential order (:func:`~pyfem.v3.fem.assembly.dedup_coo_values`).
+Calling scipy's ``.tocsr()`` on the returned stream remains the reference
+path — same canonical CSR topology, summation-order round-off on values.
+"""
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import numpy as np
-from scipy.sparse import coo_array
+from scipy.sparse import coo_array, csr_array
 
 from pyfem.v3.fem.assembly import (
+  CooCsrPattern,
   assemble_stiffness_coo,
   assemble_tangent_coo,
+  compile_csr_pattern,
   count_tangent_entries,
+  dedup_coo_values,
 )
 from pyfem.v3.registry import resolve_element_type, resolve_material_type
 from pyfem.v3.types import (
+  I32,
   LinearSystem,
   LoadedProblem,
   ProblemDefinition,
@@ -20,6 +38,66 @@ from pyfem.v3.types import (
 
 CHUNK_THRESHOLD = 2048
 DEFAULT_CHUNK_SIZE = 4096
+
+
+class _StreamPatternEntry(NamedTuple):
+  """One cached CSR pattern and the exact COO stream it was compiled from."""
+
+  row: I32
+  col: I32
+  pattern: CooCsrPattern
+
+
+# Process-local CSR pattern cache, keyed by (n_rows, n_cols, entry_count).
+# A cached pattern is consumed only after the incoming row/column stream
+# compares equal, entry by entry, to the stream the pattern was compiled
+# from (the copies stored in the entry): identical streams share a topology,
+# and any topology change — different connectivity, DOF map, group layout,
+# or chunking — mismatches and recompiles. That validation IS the explicit
+# invalidation; there is no staleness window and no identity-based keying.
+_CSR_PATTERN_CACHE: dict[tuple[int, int, int], _StreamPatternEntry] = {}
+
+
+def _cached_csr_pattern(
+  row: np.ndarray,
+  col: np.ndarray,
+  shape: tuple[int, int],
+) -> CooCsrPattern:
+  """Return the compiled CSR pattern of one COO stream, cached per topology."""
+  key = (int(shape[0]), int(shape[1]), int(row.shape[0]))
+  entry = _CSR_PATTERN_CACHE.get(key)
+  if (
+    entry is not None
+    and np.array_equal(entry.row, row)
+    and np.array_equal(entry.col, col)
+  ):
+    return entry.pattern
+  pattern = compile_csr_pattern(row, col, shape)
+  _CSR_PATTERN_CACHE[key] = _StreamPatternEntry(
+    row=np.array(row, dtype=np.int32, order="C", copy=True),
+    col=np.array(col, dtype=np.int32, order="C", copy=True),
+    pattern=pattern,
+  )
+  return pattern
+
+
+def canonical_csr(coo: coo_array) -> csr_array:
+  """Convert an assembled COO stream to canonical CSR via the cached pattern.
+
+  Duplicate (row, col) contributions are summed by
+  :func:`~pyfem.v3.fem.assembly.dedup_coo_values` strictly left-to-right in
+  the stream's own stable order — thread-count- and platform-independent
+  bits, unlike scipy's ``tocsr`` (unstable per-row ``std::sort`` order).
+  The pattern of the stream is compiled once per topology and reused across
+  assemblies; the cached entry is re-validated against the full stream on
+  every call, so a topology change always recompiles.
+  """
+  pattern = _cached_csr_pattern(coo.row, coo.col, coo.shape)
+  data = dedup_coo_values(pattern, coo.data)
+  return csr_array(
+    (data, pattern.indices, pattern.indptr),
+    shape=pattern.shape,
+  )
 
 
 def _assemble_coo_chunk(

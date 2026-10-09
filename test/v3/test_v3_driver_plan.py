@@ -32,6 +32,7 @@ from pyfem.v3.driver import (
   evaluate_loads,
   refill_tangent,
 )
+from pyfem.v3.fem.assembly import dedup_coo_segments
 from pyfem.v3.model.identity import IdentityMismatchError
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec import (
@@ -304,6 +305,130 @@ def test_refill_matches_manual_element_loop() -> None:
     dofs = gather[element]
     expected[np.ix_(dofs, dofs)] += batch[element]
   np.testing.assert_array_equal(refill_tangent(plan, (batch,)).toarray(), expected)
+
+
+def _q8_patch_model() -> ModelSpec:
+  """A 2x2 patch of unit Q8 cells (5x5 nodes at half-unit spacing)."""
+
+  def node_id(hx: int, hy: int) -> int:
+    return hy * 5 + hx + 1
+
+  nodes = tuple(
+    NodeSpec(
+      id=node_id(hx, hy),
+      coordinates=(0.5 * hx, 0.5 * hy),
+      source=_source(f"n{node_id(hx, hy)}"),
+    )
+    for hy in range(5)
+    for hx in range(5)
+  )
+  cells = tuple(
+    CellSpec(
+      id=f"cell-{i}-{j}",
+      node_ids=(
+        node_id(2 * i, 2 * j),
+        node_id(2 * i + 1, 2 * j),
+        node_id(2 * i + 2, 2 * j),
+        node_id(2 * i + 2, 2 * j + 1),
+        node_id(2 * i + 2, 2 * j + 2),
+        node_id(2 * i + 1, 2 * j + 2),
+        node_id(2 * i, 2 * j + 2),
+        node_id(2 * i, 2 * j + 1),
+      ),
+      source=_source(f"cell-{i}-{j}"),
+    )
+    for j in range(2)
+    for i in range(2)
+  )
+  block = CellBlockSpec(
+    id="cells",
+    reference_topology="quadrilateral",
+    topological_dimension=2,
+    embedding_dimension=2,
+    geometry_interpolation="serendipity-quad8",
+    cells=cells,
+    source=_source("block"),
+  )
+  field = FieldSpec(
+    id="displacement",
+    components=("x", "y"),
+    location="node",
+    source=_source("field"),
+  )
+  material = MaterialSpec(
+    id="elastic",
+    model="plane-stress-linear-elastic",
+    parameters=(
+      MaterialParameterSpec("youngs_modulus", 1.0e6),
+      MaterialParameterSpec("poisson_ratio", 0.25),
+    ),
+    source=_source("material"),
+  )
+  region = RegionSpec(
+    id="domain",
+    cell_refs=tuple(CellRef("cells", cell.id) for cell in cells),
+    field_ids=("displacement",),
+    material_id="elastic",
+    formulation="small-strain-continuum",
+    quadrature="gauss-3x3",
+    source=_source("region"),
+  )
+  return ModelSpec(
+    mesh=MeshSpec(nodes=nodes, cell_blocks=(block,), source=_source("mesh")),
+    fields=(field,),
+    materials=(material,),
+    regions=(region,),
+    source=_source("model"),
+  )
+
+
+def test_refill_sums_duplicates_in_strict_sequential_stream_order() -> None:
+  """Refill reduces duplicate runs strictly left-to-right in stable order.
+
+  The 2x2 Q8 patch's interior node is shared by four cells, so its
+  (row, col) duplicate runs have length 4 — the class where
+  ``np.add.reduceat``'s per-segment SIMD inner loop reassociates at ulp
+  level in a platform-dependent way. The canonical order is the
+  strict-sequential one (``fem.assembly.dedup_coo_segments``), pinned here
+  bitwise against an explicit loop and against the shared public kernel,
+  so the driver and production assembly paths reduce identically on every
+  platform.
+  """
+  system = compile_system(_q8_patch_model(), q8_reference_registry())
+  coordinate_map = compile_constraint_map(system)
+  plan = compile_driver_plan(system, coordinate_map)
+  (slice_,) = plan.operator_slices
+  rng = np.random.default_rng(20261009)
+  batch = rng.normal(
+    0.0,
+    1.0e3,
+    (slice_.entity_count, slice_.element_dof_count, slice_.element_dof_count),
+  )
+  permutation = plan.csr_sort_permutation.values
+  segment_offsets = plan.csr_segment_offsets.values
+  run_lengths = np.diff(np.concatenate([segment_offsets, [plan.coo_entry_count]]))
+  assert int(run_lengths.max()) >= 4  # the reduceat-divergent class is exercised
+  coo_values = batch.reshape(-1)
+  reference = np.empty(plan.csr_indices.values.shape[0], dtype=np.float64)
+  for segment in range(segment_offsets.shape[0]):
+    start = int(segment_offsets[segment])
+    stop = (
+      int(segment_offsets[segment + 1])
+      if segment + 1 < segment_offsets.shape[0]
+      else plan.coo_entry_count
+    )
+    acc = 0.0
+    for j in range(start, stop):
+      acc += coo_values[permutation[j]]
+    reference[segment] = acc
+  refilled = refill_tangent(plan, (batch,))
+  np.testing.assert_array_equal(
+    refilled.data.view(np.uint64), reference.view(np.uint64)
+  )
+  np.testing.assert_array_equal(
+    refilled.data.view(np.uint64),
+    dedup_coo_segments(coo_values, permutation, segment_offsets).view(np.uint64),
+  )
 
 
 def test_refill_validates_batches() -> None:

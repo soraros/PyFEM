@@ -5,10 +5,13 @@ topological is built once per (compiled system, coordinate map) pair and never
 re-derived per Newton iteration.
 
 - Global tangent topology is compiled to a canonical CSR pattern plus a stable
-  COO->CSR permutation: ``csr_data = np.add.reduceat(coo_values[perm],
-  segment_offsets)`` refills values only, summing duplicate contributions in
-  stable element order so every refill is byte-deterministic. The pattern is
-  validated once against scipy's own COO->CSR conversion at compile time.
+  COO->CSR permutation (the single canonical compiler,
+  ``fem.assembly.compile_csr_pattern``): ``csr_data = dedup_coo_segments(
+  coo_values, perm, segment_offsets)`` refills values only, summing duplicate
+  contributions strictly left-to-right in stable stream order so every refill
+  is byte-deterministic and platform/SIMD-independent (``np.add.reduceat``'s
+  per-segment SIMD inner loop is not). The pattern is validated once against
+  scipy's own COO->CSR conversion at compile time.
 - The internal-force scatter is one concatenated flat index vector consumed by
   a single ``np.bincount`` per evaluation.
 - Parameter-sensitivity right-hand sides assemble through the SAME residual
@@ -53,6 +56,7 @@ from pyfem.v3.driver.diagnostics import (
   DriverEvaluationError,
   DriverPreparationError,
 )
+from pyfem.v3.fem.assembly import compile_csr_pattern, dedup_coo_segments
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import InstanceId
 from pyfem.v3.model.operator import (
@@ -533,28 +537,22 @@ def _compile_csr_pattern(
   columns: np.ndarray,
   full_count: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-  """Canonical CSR pattern plus the stable COO->CSR refill permutation."""
+  """Canonical CSR pattern plus the stable COO->CSR refill permutation.
+
+  The pattern itself comes from the single canonical compiler
+  (``fem.assembly.compile_csr_pattern``); plan compilation additionally
+  re-validates it against scipy's own COO->CSR conversion at runtime and
+  fails closed on any disagreement, so a plan can never carry a topology
+  scipy would not reproduce.
+  """
+  pattern = compile_csr_pattern(rows, columns, (full_count, full_count))
+  permutation = pattern.permutation.astype(_INDEX_DTYPE)
+  segment_offsets = pattern.segment_offsets.astype(_INDEX_DTYPE)
+  csr_indptr = pattern.indptr.astype(_INDEX_DTYPE)
+  csr_indices = pattern.indices.astype(_INDEX_DTYPE)
   entry_count = rows.shape[0]
   if entry_count == 0:
-    return (
-      np.empty(0, dtype=_INDEX_DTYPE),
-      np.empty(0, dtype=_INDEX_DTYPE),
-      np.zeros(full_count + 1, dtype=_INDEX_DTYPE),
-      np.empty(0, dtype=_INDEX_DTYPE),
-    )
-  permutation = np.lexsort((columns, rows)).astype(_INDEX_DTYPE)
-  sorted_rows = rows[permutation]
-  sorted_columns = columns[permutation]
-  boundary = np.empty(entry_count, dtype=np.bool_)
-  boundary[0] = True
-  np.not_equal(sorted_rows[1:], sorted_rows[:-1], out=boundary[1:])
-  boundary[1:] |= sorted_columns[1:] != sorted_columns[:-1]
-  segment_offsets = np.flatnonzero(boundary).astype(_INDEX_DTYPE)
-  unique_rows = sorted_rows[segment_offsets]
-  csr_indices = sorted_columns[segment_offsets]
-  row_counts = np.bincount(unique_rows, minlength=full_count)
-  csr_indptr = np.zeros(full_count + 1, dtype=_INDEX_DTYPE)
-  np.cumsum(row_counts, out=csr_indptr[1:])
+    return permutation, segment_offsets, csr_indptr, csr_indices
   reference = coo_matrix(
     (np.ones(entry_count, dtype=_FLOATING_DTYPE), (rows, columns)),
     shape=(full_count, full_count),
@@ -1016,9 +1014,11 @@ def refill_tangent(
   """Refill the cached CSR pattern with fresh element tangent values only.
 
   The topology (pattern, permutation, segment offsets) was compiled once;
-  this refill is the D2 values-only Newton reassembly. Duplicate positions are
-  summed in stable element order by ``np.add.reduceat``, so identical inputs
-  refill byte-identical CSR data.
+  this refill is the D2 values-only Newton reassembly. Duplicate positions
+  are summed by ``fem.assembly.dedup_coo_segments`` strictly left-to-right
+  in stable stream order — the canonical v3 accumulation order — so
+  identical inputs refill byte-identical CSR data on any platform and at
+  any thread count.
   """
   if type(plan) is not DriverAssemblyPlan:
     msg = "tangent refill requires an exact DriverAssemblyPlan"
@@ -1040,13 +1040,11 @@ def refill_tangent(
       raise TypeError(msg)
     end = slice_.coo_offset + slice_.coo_length
     coo_values[slice_.coo_offset : end] = batch.reshape(-1)
-  if plan.coo_entry_count == 0:
-    data = np.empty(0, dtype=_FLOATING_DTYPE)
-  else:
-    data = np.add.reduceat(
-      coo_values[plan.csr_sort_permutation.values],
-      plan.csr_segment_offsets.values,
-    )
+  data = dedup_coo_segments(
+    coo_values,
+    plan.csr_sort_permutation.values,
+    plan.csr_segment_offsets.values,
+  )
   return csr_matrix(
     (data, plan.csr_indices.values, plan.csr_indptr.values),
     shape=plan.csr_shape,

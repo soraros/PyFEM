@@ -16,7 +16,7 @@ if sys.version_info < (3, 13):
 from _legacy_parity import legacy_stiffness_coo
 
 from pyfem.v3 import load_problem
-from pyfem.v3._prototype_assembly import assemble_loaded
+from pyfem.v3._prototype_assembly import assemble_loaded, canonical_csr
 from pyfem.v3.fem.assembly import (
   CooCsrPattern,
   _fill_stiffness_coo,
@@ -240,3 +240,129 @@ def test_dedup_coo_values_matches_scipy_within_order_tolerance() -> None:
   data = dedup_coo_values(pattern, coo.data)
   reference = coo.tocsr()
   np.testing.assert_allclose(data, reference.data, rtol=1e-12, atol=1e-8)
+
+
+def test_canonical_csr_matches_scipy_topology_and_sequential_values() -> None:
+  """The production COO->CSR conversion: scipy's pattern, canonical values.
+
+  ``canonical_csr`` is what the solver stack consumes
+  (``solver.context``/``solver.nonlinear``/``solver.riks``): its
+  indptr/indices are bitwise scipy's canonical CSR ones, and its values
+  are bitwise the strict-sequential duplicate sums — agreeing with scipy's
+  unstable-order ``tocsr`` values at summation-order round-off (observed
+  <= 4.7e-10 abs on this mesh, entry magnitudes up to 2e7).
+  """
+  loaded = build_uniform_q8_loaded(8, 8)
+  coo = assemble_loaded(loaded).stiffness
+  csr = canonical_csr(coo)
+  reference = coo.tocsr()
+  np.testing.assert_array_equal(csr.indptr, reference.indptr)
+  np.testing.assert_array_equal(csr.indices, reference.indices)
+  pattern = compile_csr_pattern(coo.row, coo.col, coo.shape)
+  np.testing.assert_array_equal(
+    csr.data.view(np.uint64),
+    _sequential_dedup_reference(coo.data, pattern).view(np.uint64),
+  )
+  np.testing.assert_allclose(csr.data, reference.data, rtol=1e-12, atol=1e-8)
+
+
+def test_canonical_csr_pattern_cache_reuse_and_topology_invalidation(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  """The pattern cache compiles once per topology and never serves stale.
+
+  An identical stream reuses the compiled pattern (no recompile), and a
+  values-only change on the same topology (PlaneStress vs PlaneStrain
+  share the mesh and DOF map) refills correctly through the same pattern.
+  A topology change under an identical (shape, entry-count) cache key —
+  the 4x8 vs 8x4 decoy pair — fails the full-stream validation, so the
+  pattern recompiles and the result stays exactly scipy-canonical.
+  """
+  import pyfem.v3._prototype_assembly as prototype_assembly
+
+  prototype_assembly._CSR_PATTERN_CACHE.clear()
+  compile_calls = 0
+  real_compile = prototype_assembly.compile_csr_pattern
+
+  def counting_compile(
+    row: np.ndarray, col: np.ndarray, shape: tuple[int, int]
+  ) -> CooCsrPattern:
+    nonlocal compile_calls
+    compile_calls += 1
+    return real_compile(row, col, shape)
+
+  monkeypatch.setattr(prototype_assembly, "compile_csr_pattern", counting_compile)
+  try:
+    loaded = build_uniform_q8_loaded(8, 8)
+    first = canonical_csr(assemble_loaded(loaded).stiffness)
+    assert compile_calls == 1
+    second = canonical_csr(assemble_loaded(loaded).stiffness)
+    assert compile_calls == 1  # identical topology: the pattern is reused
+    np.testing.assert_array_equal(
+      first.data.view(np.uint64), second.data.view(np.uint64)
+    )
+
+    strained = build_uniform_q8_loaded(8, 8, material_type="PlaneStrain")
+    strained_coo = assemble_loaded(strained).stiffness
+    third = canonical_csr(strained_coo)
+    assert compile_calls == 1  # same stream topology: values-only refill
+    np.testing.assert_allclose(
+      third.data, strained_coo.tocsr().data, rtol=1e-12, atol=1e-8
+    )
+
+    # Decoy pair: 4x8 and 8x4 patches share the (n_dofs, entry_count) cache
+    # key but have different connectivity.
+    wide_coo = assemble_loaded(build_uniform_q8_loaded(4, 8)).stiffness
+    tall_coo = assemble_loaded(build_uniform_q8_loaded(8, 4)).stiffness
+    assert wide_coo.shape == tall_coo.shape
+    assert wide_coo.row.shape == tall_coo.row.shape
+    assert not np.array_equal(wide_coo.row, tall_coo.row)
+    wide_csr = canonical_csr(wide_coo)
+    assert compile_calls == 2
+    wide_reference = wide_coo.tocsr()
+    np.testing.assert_array_equal(wide_csr.indptr, wide_reference.indptr)
+    np.testing.assert_array_equal(wide_csr.indices, wide_reference.indices)
+    tall_csr = canonical_csr(tall_coo)
+    assert compile_calls == 3  # same key, different stream: recompiled
+    tall_reference = tall_coo.tocsr()
+    np.testing.assert_array_equal(tall_csr.indptr, tall_reference.indptr)
+    np.testing.assert_array_equal(tall_csr.indices, tall_reference.indices)
+    np.testing.assert_allclose(
+      tall_csr.data, tall_reference.data, rtol=1e-12, atol=1e-8
+    )
+    # The decoy displaced the wide entry: reconverting the wide stream
+    # revalidates, mismatches, and recompiles rather than serving stale.
+    canonical_csr(assemble_loaded(build_uniform_q8_loaded(4, 8)).stiffness)
+    assert compile_calls == 4
+  finally:
+    prototype_assembly._CSR_PATTERN_CACHE.clear()
+
+
+def test_production_csr_path_bitwise_identical_across_thread_counts() -> None:
+  """1T vs nT raw-uint64 identity of the production assemble->CSR path.
+
+  The 32x32 patch (262144 entries) is above the dispatcher's parallel
+  threshold, so ``canonical_csr``'s cached-pattern dedup runs its prange
+  kernel at nT; disjoint per-segment outputs and the fixed left-to-right
+  accumulation order make the production CSR bytes thread-count-
+  independent. This extends the fill/dedup kernel pins above to the
+  production assembly entry points (``assemble_loaded`` + the conversion
+  the solver stack consumes).
+  """
+  import numba
+
+  loaded = build_uniform_q8_loaded(32, 32)
+
+  def assemble_data() -> np.ndarray:
+    return canonical_csr(assemble_loaded(loaded).stiffness).data
+
+  previous = numba.get_num_threads()
+  n_threads = max(2, min(16, previous))
+  try:
+    numba.set_num_threads(1)
+    data_1t = assemble_data()
+    numba.set_num_threads(n_threads)
+    data_nt = assemble_data()
+  finally:
+    numba.set_num_threads(previous)
+  np.testing.assert_array_equal(data_1t.view(np.uint64), data_nt.view(np.uint64))
