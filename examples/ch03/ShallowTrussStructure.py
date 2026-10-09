@@ -72,8 +72,11 @@ cons.flush()
 # Store in global data dictionary
 
 from pyfem.util.dataStructures import GlobalData
+from pyfem.models.ModelManager import ModelManager
 
 globdat = GlobalData( nodes, elements, dofs )
+
+globdat.models = ModelManager( props , globdat )
 
 # Solution procedure (Box 2.3)
 

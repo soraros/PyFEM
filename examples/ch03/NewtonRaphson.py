@@ -38,9 +38,16 @@ import sys
 
 props,globdat = InputReader( sys.argv )
 
+props.currentModule = "solver"
 solver       = NonlinearSolver( props , globdat )
+
+props.currentModule = "output"
 outputWriter = OutputWriter   ( props , globdat )
+
+props.currentModule = "mesh"
 meshWriter   = MeshWriter     ( props , globdat )
+
+props.currentModule = "graph"
 graphWriter  = GraphWriter    ( props , globdat )
 
 while globdat.active:
