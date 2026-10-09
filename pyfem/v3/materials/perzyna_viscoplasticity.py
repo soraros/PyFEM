@@ -383,6 +383,11 @@ def perzyna_viscoplasticity_kernel(
             converged = True
             break
           jacobian = -eg3 - hard
+          if jacobian == 0.0:
+            # Unreachable from validated calibrations (jacobian = -eg3 - hard
+            # <= -eg3 < 0); a degenerate hand-packed vector rejects typed
+            # instead of dividing by zero.
+            break
           deqpl_inc = -residual / jacobian
           deqpl += deqpl_inc
         if not converged or not np.isfinite(deqpl):
