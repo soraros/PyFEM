@@ -307,6 +307,26 @@ def continuum_stiffness_batched(
   raise ValueError(msg)
 
 
+def continuum_internal_force_batched(
+  b_matrix: F64,
+  weights: F64,
+  stresses: F64,
+) -> F64:
+  """Assemble batched element internal forces ∫ Bᵀ σ dΩ over a continuum batch.
+
+  ``b_matrix`` is ``(n_elems, n_points, voigt, n_dof)``, ``weights`` is
+  ``(n_elems, n_points)`` (quadrature weight times |det J| per point), and
+  ``stresses`` is ``(n_elems, n_points, voigt)``; the einsum is
+  Voigt-rank-agnostic. This is the residual map's element assembly: the
+  stateful continuum operator routes its internal-force residual and every
+  requested per-parameter residual derivative column through this one
+  expression, so a derivative channel is assembled by exactly the engine its
+  residual map uses (the FD probes of test/v3/test_v3_param_derivatives.py
+  pin the assembled derivative against the residual map at ~1e-9 relative).
+  """
+  return np.einsum("ep,epa,epai->ei", weights, stresses, b_matrix, optimize=True)
+
+
 def quad8_plane_stress_stiffness(nodal_coords: F64, constitutive: F64) -> F64:
   r"""Element stiffness K_e = ∫_Ω Bᵀ C B dΩ (plane stress, Q8)."""
   return _wrap_batched(_btcb_2d_batched, _quad8_rule, nodal_coords, constitutive)

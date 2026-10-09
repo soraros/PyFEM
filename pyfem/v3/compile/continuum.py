@@ -71,6 +71,20 @@ values to the kernel's fourth positional argument, so schedule-owned signals
 (time-like coordinates) reach the law without any hidden global. Descriptors
 without the field compile byte-identical operators that reject every signal.
 
+A stateful descriptor may likewise open the parameter-derivative channel: a
+binding implementing the optional ``param_derivative_kernel`` member (the
+``StatefulContinuumBinding`` protocol) differentiates exactly the descriptor's
+``parameter_names``, and the compiled header then carries
+``ParameterBinding`` and ``ResidualDerivativeChannel`` declarations (one
+``dinternal-force/d<name>`` channel per declared parameter, in
+``parameter_names`` order). The operator answers derivative channel requests
+with per-element residual derivatives assembled from the kernel's exact
+per-IP ``d(stress)/d(parameter)`` columns through the same internal-force
+expression as the residual itself, and the virgin-state probe exercises every
+declared derivative channel before the operator can escape. Bindings without
+the member compile byte-identical channel-free operators that reject every
+derivative request fail-closed.
+
 Capability boundary: every cell belongs to exactly one region; each region
 draws its cells from exactly one cell block; each cell block feeds exactly
 one region; every declared field and material is referenced by at least one
@@ -121,6 +135,7 @@ from pyfem.v3.compile.diagnostics import (
   ModelCompilationDiagnostic,
   ModelCompilationError,
 )
+from pyfem.v3.fem.element import continuum_internal_force_batched
 from pyfem.v3.fem.kinematics import strain_displacement
 from pyfem.v3.fem.quadrature import gauss_tensor_product_2d
 from pyfem.v3.fem.shapes import (
@@ -158,13 +173,16 @@ from pyfem.v3.model.operator import (
   OperatorEvaluationInput,
   OperatorHeader,
   OperatorStateLayout,
+  ParameterBinding,
   PortBinding,
   PortMode,
   ProgramSignalInput,
   ResidualChannel,
+  ResidualDerivativeChannel,
   SignalDerivativeInput,
   SignalPortBinding,
   StateLifetime,
+  evaluation_derivative_values,
   evaluation_status,
 )
 from pyfem.v3.model.provenance import CanonicalManifest
@@ -490,13 +508,19 @@ class Q8ContinuumOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    derivative_ids = tuple(
+      item.channel_id for item in getattr(self.header, "derivative_channels", ())
+    )
     request = inputs.request
+    derivative_request = request.derivative_channel_ids
     if (
       type(request) is not ChannelRequest
       or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
       or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or len(set(derivative_request)) != len(derivative_request)
       or not set(request.residual_channel_ids).issubset(residual_ids)
       or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+      or not set(derivative_request).issubset(derivative_ids)
     ):
       msg = "Q8 evaluation request contains an unavailable or duplicate channel"
       raise ValueError(msg)
@@ -634,13 +658,19 @@ class Q8FiniteStrainOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    derivative_ids = tuple(
+      item.channel_id for item in getattr(self.header, "derivative_channels", ())
+    )
     request = inputs.request
+    derivative_request = request.derivative_channel_ids
     if (
       type(request) is not ChannelRequest
       or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
       or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or len(set(derivative_request)) != len(derivative_request)
       or not set(request.residual_channel_ids).issubset(residual_ids)
       or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+      or not set(derivative_request).issubset(derivative_ids)
     ):
       msg = "finite-strain evaluation request contains an unavailable channel"
       raise ValueError(msg)
@@ -771,13 +801,19 @@ class Hex8ContinuumOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    derivative_ids = tuple(
+      item.channel_id for item in getattr(self.header, "derivative_channels", ())
+    )
     request = inputs.request
+    derivative_request = request.derivative_channel_ids
     if (
       type(request) is not ChannelRequest
       or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
       or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or len(set(derivative_request)) != len(derivative_request)
       or not set(request.residual_channel_ids).issubset(residual_ids)
       or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+      or not set(derivative_request).issubset(derivative_ids)
     ):
       msg = "hex8 evaluation request contains an unavailable or duplicate channel"
       raise ValueError(msg)
@@ -888,13 +924,19 @@ class Q8ThermalOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    derivative_ids = tuple(
+      item.channel_id for item in getattr(self.header, "derivative_channels", ())
+    )
     request = inputs.request
+    derivative_request = request.derivative_channel_ids
     if (
       type(request) is not ChannelRequest
       or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
       or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or len(set(derivative_request)) != len(derivative_request)
       or not set(request.residual_channel_ids).issubset(residual_ids)
       or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+      or not set(derivative_request).issubset(derivative_ids)
     ):
       msg = "thermal evaluation request contains an unavailable or duplicate channel"
       raise ValueError(msg)
@@ -1032,13 +1074,19 @@ class Q8ThermoElasticOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    derivative_ids = tuple(
+      item.channel_id for item in getattr(self.header, "derivative_channels", ())
+    )
     request = inputs.request
+    derivative_request = request.derivative_channel_ids
     if (
       type(request) is not ChannelRequest
       or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
       or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or len(set(derivative_request)) != len(derivative_request)
       or not set(request.residual_channel_ids).issubset(residual_ids)
       or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+      or not set(derivative_request).issubset(derivative_ids)
     ):
       msg = "coupled evaluation request contains an unavailable or duplicate channel"
       raise ValueError(msg)
@@ -1192,6 +1240,46 @@ def _validated_stateful_kernel_result(
   return result.stresses, result.tangents, result.trial_rows, result.status
 
 
+def _validated_stateful_param_kernel_result(
+  result: object,
+  *,
+  entity_count: int,
+  row_width: int,
+  parameter_count: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, EvaluationStatus]:
+  """Validate the derivative-kernel response, adding the derivative columns.
+
+  ``param_derivatives`` must stack exactly ``parameter_count`` declared
+  columns of shape ``(entity_count, 6)`` on a successful evaluation, and is
+  discarded (may be ``None``) on a rejected one — mirroring the primal
+  arrays, which the rejection path also discards.
+  """
+  stresses, tangents, trial_rows, status = _validated_stateful_kernel_result(
+    result,
+    entity_count=entity_count,
+    row_width=row_width,
+  )
+  assert type(result) is StatefulContinuumKernelResult
+  param_derivatives = result.param_derivatives
+  if status is EvaluationStatus.OK:
+    if param_derivatives is None or param_derivatives.shape != (
+      parameter_count,
+      entity_count,
+      6,
+    ):
+      msg = (
+        "stateful kernel param_derivatives must stack the declared parameter "
+        "columns in (parameter_count, entity_count, 6) layout"
+      )
+      raise TypeError(msg)
+    if not bool(np.isfinite(param_derivatives).all()):
+      msg = (
+        "stateful kernel param_derivatives must be finite for a successful evaluation"
+      )
+      raise TypeError(msg)
+  return stresses, tangents, trial_rows, param_derivatives, status
+
+
 def _signal_scalar(value: np.ndarray, label: str) -> None:
   if (
     value.dtype != np.dtype(np.float64)
@@ -1271,6 +1359,17 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
   ``ProgramSignalInput`` per port and forwards the validated scalar values and
   derivative channels to the kernel's fourth positional argument; an operator
   compiled without ports rejects every signal input.
+
+  An operator whose binding provides the optional ``param_derivative_kernel``
+  member carries ``ParameterBinding`` and ``ResidualDerivativeChannel``
+  declarations on its header and answers derivative channel requests through
+  that kernel: the binding's derivative twin returns the primal response
+  bitwise identical to ``kernel`` plus the exact per-IP
+  ``d(stress)/d(parameter)`` columns, which the operator assembles into
+  per-element residual derivatives through the same internal-force expression
+  as the residual itself. Derivative values are pure functions of the
+  accepted state, the port values, and the parameters — the committed record
+  never sees trial-state increments.
   """
 
   header: OperatorHeader
@@ -1278,6 +1377,7 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
   payload: Q8StatefulContinuumPayload
   content_manifest: CanonicalManifest
   kernel: StatefulContinuumKernel | StatefulContinuumSignalKernel
+  param_kernel: StatefulContinuumKernel | StatefulContinuumSignalKernel | None
 
   def evaluate(
     self,
@@ -1320,13 +1420,21 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
       kernel_signals = ()
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    parameters: tuple[ParameterBinding, ...] = getattr(self.header, "parameters", ())
+    derivative_channels: tuple[ResidualDerivativeChannel, ...] = getattr(
+      self.header, "derivative_channels", ()
+    )
+    derivative_ids = tuple(item.channel_id for item in derivative_channels)
     request = inputs.request
+    derivative_request = request.derivative_channel_ids
     if (
       type(request) is not ChannelRequest
       or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
       or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or len(set(derivative_request)) != len(derivative_request)
       or not set(request.residual_channel_ids).issubset(residual_ids)
       or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+      or not set(derivative_request).issubset(derivative_ids)
     ):
       msg = "stateful evaluation request contains an unavailable or duplicate channel"
       raise ValueError(msg)
@@ -1348,24 +1456,49 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
     strains[:, 1] = flat[:, 1]
     strains[:, 5] = flat[:, 2]
 
+    requested_derivatives = set(derivative_request)
+    if requested_derivatives:
+      active_kernel = self.param_kernel
+      if active_kernel is None:
+        msg = (
+          "stateful operator declares derivative channels without a derivative kernel"
+        )
+        raise ValueError(msg)
+    else:
+      active_kernel = self.kernel
     if signal_ports:
-      kernel_result = self.kernel(
+      kernel_result = active_kernel(
         strains,
         accepted_state,
         self.payload.calibration.values,
         kernel_signals,
       )
     else:
-      kernel_result = self.kernel(
+      kernel_result = active_kernel(
         strains,
         accepted_state,
         self.payload.calibration.values,
       )
-    stresses, tangents, trial_rows, status = _validated_stateful_kernel_result(
-      kernel_result,
-      entity_count=layout.entity_count,
-      row_width=layout.row_width,
-    )
+    if requested_derivatives:
+      (
+        stresses,
+        tangents,
+        trial_rows,
+        param_derivatives,
+        status,
+      ) = _validated_stateful_param_kernel_result(
+        kernel_result,
+        entity_count=layout.entity_count,
+        row_width=layout.row_width,
+        parameter_count=len(parameters),
+      )
+    else:
+      stresses, tangents, trial_rows, status = _validated_stateful_kernel_result(
+        kernel_result,
+        entity_count=layout.entity_count,
+        row_width=layout.row_width,
+      )
+      param_derivatives = None
     if status is not EvaluationStatus.OK:
       return _new(
         OperatorEvaluation,
@@ -1382,15 +1515,10 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
     requested_residuals = set(request.residual_channel_ids)
     requested_jacobians = set(request.jacobian_channel_ids)
     residual = tangent = None
+    derivative_blocks: list[np.ndarray] = []
     with np.errstate(over="ignore", invalid="ignore", under="ignore"):
       if "internal-force" in requested_residuals:
-        residual = np.einsum(
-          "ep,epa,epai->ei",
-          weights,
-          stress3,
-          b_matrix,
-          optimize=True,
-        )
+        residual = continuum_internal_force_batched(b_matrix, weights, stress3)
       if "material-tangent" in requested_jacobians:
         tangent = np.einsum(
           "ep,epai,epab,epbj->eij",
@@ -1400,7 +1528,21 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
           b_matrix,
           optimize=True,
         )
-    for block in (residual, tangent):
+      if requested_derivatives:
+        assert param_derivatives is not None
+        parameter_ids = tuple(item.parameter_id for item in parameters)
+        derivative_blocks.extend(
+          continuum_internal_force_batched(
+            b_matrix,
+            weights,
+            param_derivatives[parameter_ids.index(channel.parameter_id)].reshape(
+              element_count, _POINT_COUNT, 6
+            )[:, :, [0, 1, 5]],
+          )
+          for channel in derivative_channels
+          if channel.channel_id in requested_derivatives
+        )
+    for block in (residual, tangent, *derivative_blocks):
       if block is not None and not bool(np.isfinite(block).all()):
         msg = "stateful evaluation response is not representable as finite float64"
         raise ValueError(msg)
@@ -1416,6 +1558,9 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
       jacobian_values=jacobian_values,
       trial_state=FinalizedArray(trial_rows, dtype=np.float64),
       status=status,
+      derivative_values=tuple(
+        FinalizedArray(block, dtype=np.float64) for block in derivative_blocks
+      ),
     )
 
 
@@ -3786,6 +3931,14 @@ def _compile_mechanical_stateful(
       )
   else:
     signal_declarations = ()
+  # The derivative channel is declared behaviorally: a binding implementing
+  # the optional ``param_derivative_kernel`` member differentiates exactly the
+  # descriptor's ``parameter_names``; bindings without it compile
+  # byte-identical channel-free operators (contracts.py module docstring).
+  param_kernel = getattr(binding, "param_derivative_kernel", None)
+  if not callable(param_kernel):
+    param_kernel = None
+  differentiable_parameters = parameter_names if param_kernel is not None else ()
   try:
     with warnings.catch_warnings():
       warnings.simplefilter("error", RuntimeWarning)
@@ -3905,6 +4058,24 @@ def _compile_mechanical_stateful(
     )
     for declaration in signal_declarations
   )
+  parameters: tuple[ParameterBinding, ...] = ()
+  derivative_channels: tuple[ResidualDerivativeChannel, ...] = ()
+  channel_fields: dict[str, object] = {}
+  if differentiable_parameters:
+    parameters = tuple(
+      _new(ParameterBinding, parameter_id=name) for name in differentiable_parameters
+    )
+    derivative_channels = tuple(
+      _new(
+        ResidualDerivativeChannel,
+        channel_id=f"dinternal-force/d{name}",
+        residual_channel_id=residual_channel.channel_id,
+        parameter_id=name,
+      )
+      for name in differentiable_parameters
+    )
+    channel_fields["parameters"] = parameters
+    channel_fields["derivative_channels"] = derivative_channels
   header = _new(
     OperatorHeader,
     block_id=block_id,
@@ -3916,6 +4087,7 @@ def _compile_mechanical_stateful(
     jacobian_channels=(jacobian_channel,),
     state_layout=layout,
     coupling_policy=CouplingPolicy.FIXED,
+    **channel_fields,
   )
   payload = _new(
     Q8StatefulContinuumPayload,
@@ -3985,6 +4157,18 @@ def _compile_mechanical_stateful(
       }
       for signal_port in signal_ports
     ]
+  if differentiable_parameters:
+    manifest_content["parameters"] = [
+      {"parameter_id": parameter.parameter_id} for parameter in parameters
+    ]
+    manifest_content["derivative_channels"] = [
+      {
+        "channel_id": channel.channel_id,
+        "residual_channel_id": channel.residual_channel_id,
+        "parameter_id": channel.parameter_id,
+      }
+      for channel in derivative_channels
+    ]
   manifest = CanonicalManifest(manifest_content)
   operator = _new(
     Q8StatefulContinuumOperator,
@@ -3993,6 +4177,7 @@ def _compile_mechanical_stateful(
     payload=payload,
     content_manifest=manifest,
     kernel=kernel,
+    param_kernel=param_kernel,
   )
 
   # The virgin probe mirrors runtime input mutability exactly: read-only
@@ -4041,7 +4226,15 @@ def _compile_mechanical_stateful(
         ),
         accepted_state=probe_state,
         signals=probe_signals,
-        request=ChannelRequest(("internal-force",), ("material-tangent",)),
+        # Derivative-capable bindings probe the full derivative channel set
+        # at the virgin state: the derivative twin's primal half must
+        # reproduce the byte-equal no-evolution invariant and its columns
+        # must be finite and complete before the operator can escape.
+        request=ChannelRequest(
+          ("internal-force",),
+          ("material-tangent",),
+          tuple(channel.channel_id for channel in derivative_channels),
+        ),
       )
     )
   except (TypeError, ValueError):
@@ -4086,6 +4279,18 @@ def _compile_mechanical_stateful(
       _fail(
         "invalid-kernel-probe",
         "stateful kernel virgin tangent must be symmetric for its declared class",
+        selection.material.source,
+      )
+  if derivative_channels:
+    probe_derivatives = evaluation_derivative_values(probe)
+    if len(probe_derivatives) != len(derivative_channels) or any(
+      block.values.shape != (len(selection.cells), _LOCAL_COEFFICIENT_COUNT)
+      or not bool(np.isfinite(block.values).all())
+      for block in probe_derivatives
+    ):
+      _fail(
+        "invalid-kernel-probe",
+        "stateful kernel virgin probe derivative values must be finite and complete",
         selection.material.source,
       )
   return entity_block, operator
