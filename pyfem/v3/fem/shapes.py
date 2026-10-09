@@ -288,3 +288,35 @@ def linear_tet4(parent_coords: F64) -> tuple[F64, F64]:
 
   dN = np.stack((dxi, deta, dzeta), axis=2)
   return n, dN
+
+
+@njit(cache=True)
+def linear_line2(parent_coords: F64) -> tuple[F64, F64]:
+  """
+  Linear 2-node line on [-1, 1].
+
+  Parameters
+  ----------
+  parent_coords
+      ``(n_points, 1)`` with column ``(xi,)``.
+  """
+  xi = parent_coords[:, 0]
+
+  n = np.stack(
+    (
+      0.5 * (1.0 - xi),
+      0.5 * (1.0 + xi),
+    ),
+    axis=1,
+  )
+
+  dxi = np.stack(
+    (
+      -0.5 * np.ones(xi.shape[0]),
+      0.5 * np.ones(xi.shape[0]),
+    ),
+    axis=1,
+  )
+
+  dN = np.stack((dxi,), axis=2)
+  return n, dN
