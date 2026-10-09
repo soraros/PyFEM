@@ -220,12 +220,12 @@ def fileParser(fileName):
 
 def deepFileParser( fileName , db ):
 
-  ln = "".join(stripHashComment(line) for line in open(fileName))
+  with open(fileName) as fin:
+    ln = "".join(stripHashComment(line) for line in fin)
+
   ln = ln.replace('\n','').replace('\t','').replace(' ','').replace('\r','')
 
   readBlock( ln , db )
-  
-  ln.close()
 
   return db
 
