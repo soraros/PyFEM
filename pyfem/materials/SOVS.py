@@ -313,25 +313,27 @@ class SkorohodOlevsky(BaseMaterial):
         strain_elastic = strain - strain_visc
         sigma = dot(C, strain_elastic)
 
-        # Compute tangent stiffness
-        # For viscous materials: C_tang = C / (1 + C * Δt / η)
-        # Simplified: use elastic stiffness (more complex tangent possible)
+        # Compute tangent stiffness: the algorithmic derivative of the explicit
+        # forward-Euler viscous update above (elastic C when dtime == 0)
         tang = C.copy()
         
-        # Add viscous compliance contribution for consistent tangent
         if dtime > 0:
-            # Volumetric part
+            # Volumetric leg: K_alg = K*(1 - 3*K*dt/(2*eta_vol))
             K = ebulk3 / 3.0  # Bulk modulus
-            K_tang = K / (1.0 + K * dtime * 3.0 / (2.0 * eta_vol))
+            K_tang = K * (1.0 - 3.0 * K * dtime / (2.0 * eta_vol))
             
-            # Shear part
+            # Deviatoric legs: the map applies dstrain_dev = sigma_dev/(2*eta_shear)*dt
+            # componentwise to the Voigt vector, so normal deviatoric legs
+            # (s = 2*G*e_dev) carry 2*G*(1 - G*dt/eta_shear) while engineering
+            # shear legs (tau = G*gamma) carry G*(1 - G*dt/(2*eta_shear))
             G = eg  # Shear modulus
-            G_tang = G / (1.0 + G * dtime / eta_shear)
+            G_dev = G * (1.0 - G * dtime / eta_shear)
+            G_tang = G * (1.0 - G * dtime / (2.0 * eta_shear))
             
             # Reassemble tangent with viscous contributions
-            lam_tang = K_tang - 2.0 * G_tang / 3.0
+            lam_tang = K_tang - 2.0 * G_dev / 3.0
             tang[:3, :3] = lam_tang
-            tang[0, 0] += 2.0 * G_tang
+            tang[0, 0] += 2.0 * G_dev
             tang[1, 1] = tang[0, 0]
             tang[2, 2] = tang[0, 0]
             tang[3, 3] = G_tang
