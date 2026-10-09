@@ -1,11 +1,15 @@
-"""Field-level diffs for registry-descriptor metadata mismatches.
+"""Field-level diffs for registry-descriptor and sensitivity mismatches.
 
 The landed builders reject an incompatible descriptor with a bare
 ``incompatible-registry-descriptor`` code and no detail. The authoring layer
 decodes both canonical manifests back into plain values and names every
 mismatched field, so an author sees exactly which metadata entry disagrees
 with the qualified convention. The diagnostic keeps the landed machine-readable
-code and source context; only the message gains the field-level diff.
+code and source context; only the message gains the field-level diff. The same
+idiom serves run-time sensitivity requests: a name no operator differentiates
+keeps the landed ``unknown-sensitivity-parameter`` code, and the diff names
+each offending entry against what the compiled system declares for it —
+a constant of the calibration or no parameter at all.
 """
 
 from __future__ import annotations
@@ -17,9 +21,10 @@ from pyfem.v3.compile.diagnostics import (
   ModelCompilationDiagnostic,
   ModelCompilationError,
 )
+from pyfem.v3.driver.diagnostics import DriverDiagnostic, DriverPreparationError
 from pyfem.v3.model.provenance import CANONICAL_MANIFEST_FORMAT, CanonicalManifest
 from pyfem.v3.model.registry import RegistryDescriptor, RegistryKey
-from pyfem.v3.spec.diagnostics import SourceContext
+from pyfem.v3.spec.diagnostics import SourceContext, render_diagnostic_value
 
 _MANIFEST_HEADER_LENGTH = len(CANONICAL_MANIFEST_FORMAT) + 1
 _MAX_RENDERED_VALUE_LENGTH = 80
@@ -146,6 +151,54 @@ def raise_descriptor_mismatch(
         message=(
           f"{family} descriptor metadata for registry key {key!r} does not "
           f"match the qualified convention:\n{detail}"
+        ),
+        source=source,
+      ),
+    )
+  )
+
+
+def raise_sensitivity_mismatch(
+  *,
+  offenders: tuple[str, ...],
+  differentiable: tuple[str, ...],
+  constants: tuple[str, ...],
+  source: SourceContext,
+) -> NoReturn:
+  """Raise the landed unknown-parameter code with a field-level diff.
+
+  The landed driver rejects an unservable sensitivity request with the coded
+  ``unknown-sensitivity-parameter`` diagnostic and the declared channel list.
+  The authoring layer names every offending request entry field by field:
+  what the system would have to declare for the name to resolve (a
+  parameterized derivative declaration) against what it actually declares —
+  ``'constant'`` for a qualified-convention parameter baked into the compiled
+  calibration without a derivative channel, ``'unknown'`` for a name no
+  operator declares at all. The declared surface trails the diff.
+  """
+  expected = CanonicalManifest(
+    {"sensitivities": {name: {"parameter": name} for name in offenders}}
+  )
+  authored = CanonicalManifest(
+    {
+      "sensitivities": {
+        name: ("constant" if name in constants else "unknown") for name in offenders
+      }
+    }
+  )
+  diff = diff_manifest_fields(expected, authored)
+  detail = "\n".join(f"  {line}" for line in diff)
+  raise DriverPreparationError(
+    (
+      DriverDiagnostic(
+        code="unknown-sensitivity-parameter",
+        message=(
+          "sensitivity parameters must name the compiled system's declared "
+          f"derivative channels; the request does not match the declared "
+          f"parameter surface:\n{detail}\n"
+          "declared differentiable parameters: "
+          f"{render_diagnostic_value(differentiable)}; declared constant "
+          f"parameters: {render_diagnostic_value(constants)}"
         ),
         source=source,
       ),

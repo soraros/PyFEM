@@ -27,6 +27,20 @@ A stepped stateful analysis wraps the landed nonlinear driver::
     )
     result = session.run({"load": 0.0}, {"load": 0.5}, {"load": 1.0})
     before = session.snapshot()
+
+A sensitivity study names qualified material parameters at run time; the
+committed records carry the typed per-parameter columns in request order::
+
+    sensed = session.run({"load": 0.0}, {"load": 1.0},
+                         sensitivities=("initial_yield_stress",))
+    column = sensed.records[-1].observation.sensitivities[0]
+
+Each column is the implicit-function-theorem sensitivity of the committed
+coefficients with the ENTERING committed state held fixed: exact from the
+virgin state (every first step, elastic or plastic) and exactly zero for
+hardening parameters on elastic steps; from the second step on it is the
+increment's sensitivity — never the total path sensitivity, which needs the
+declared follow-up state-derivative channels (the M48 survey's v2 boundary).
 """
 
 from __future__ import annotations
@@ -37,7 +51,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from pyfem.v3.authoring.diagnostics import raise_sensitivity_mismatch
 from pyfem.v3.authoring.evaluate import trial_vector
+from pyfem.v3.authoring.registry import _convention_parameter_names
 from pyfem.v3.constraints import compile_constraint_map
 from pyfem.v3.driver import (
   NonlinearStaticDriver,
@@ -310,11 +326,55 @@ def state_owner(
   return StateOwner(StateTransactionOwner(system, codecs=codecs))
 
 
+def _sensitivity_names(value: object) -> tuple[str, ...]:
+  if not isinstance(value, Sequence) or isinstance(value, str):
+    msg = "sensitivities must be a sequence of qualified parameter names"
+    raise TypeError(msg)
+  names: list[str] = []
+  for item in value:
+    if type(item) is not str or not item:
+      msg = "sensitivities entries must be non-empty exact strings"
+      raise TypeError(msg)
+    names.append(item)
+  return tuple(names)
+
+
+def _sensitivity_surface(
+  system: CompiledSystem,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+  """Enumerate the compiled system's declared sensitivity parameter surface.
+
+  Returns the differentiable parameters (operator-declared ``dR/dp``
+  derivative channels) and the constant ones (qualified-convention
+  ``parameter_names`` baked into the compiled calibration without a
+  derivative channel), each in first-declared order.
+  """
+  differentiable: list[str] = []
+  declared: list[str] = []
+  for operator in system.operators:
+    header = operator.header
+    for channel in getattr(header, "derivative_channels", ()):
+      parameter_id = channel.parameter_id
+      if type(parameter_id) is str and parameter_id not in differentiable:
+        differentiable.append(parameter_id)
+    for identity in header.implementations:
+      try:
+        names = _convention_parameter_names(identity.kind, identity.name)
+      except KeyError:
+        continue
+      for name in names:
+        if name not in declared:
+          declared.append(name)
+  constants = tuple(name for name in declared if name not in differentiable)
+  return tuple(differentiable), constants
+
+
 class NonlinearStaticSession:
   """Stepping facade over one landed :class:`NonlinearStaticDriver`.
 
   ``run`` translates plain ``{coordinate: value}`` mappings into exact program
-  points and forwards them to the driver's Newton/cutback schedule; state
+  points and qualified sensitivity parameter names onto the driver's IFT
+  channel, forwarding both to the driver's Newton/cutback schedule; state
   reads and manual transactions delegate to the driver-owned M12 owner through
   :class:`StateOwner`. The landed result records are returned unchanged.
   """
@@ -417,19 +477,59 @@ class NonlinearStaticSession:
     self,
     base: dict[str, float] | ProgramPoint,
     *targets: dict[str, float] | ProgramPoint,
+    sensitivities: Sequence[str] = (),
   ) -> NonlinearStaticResult:
     """Advance the committed state through the target-point schedule.
 
     ``base`` and each target bind every declared coordinate by name; the
     landed result (typed statuses, iteration trail, statistics, lineage) is
     returned unchanged.
+
+    ``sensitivities`` names qualified spec-level parameters — the material
+    law's declared ``parameter_names``, such as ``"initial_yield_stress"`` —
+    whose first-order sensitivities of the committed coefficients are solved
+    at every committed substep through the driver's implicit-function-theorem
+    channel: one extra derivative evaluation sweep per committed substep plus
+    ONE back-substitution per parameter on the factorization the converged
+    Newton loop last used, never a differentiation of the iteration process.
+    The default empty sequence keeps the run primal-only at zero extra cost.
+    Names no operator differentiates — unknown names and constant calibration
+    parameters alike — fail before the first substep with the coded
+    ``unknown-sensitivity-parameter`` diagnostic carrying a field-level diff;
+    duplicate names fail through the landed driver's own diagnostic. Every
+    committed record's observation carries the typed
+    :class:`~pyfem.v3.driver.ParameterSensitivityObservation` columns in
+    request order; rejected or failed records never carry sensitivities.
+
+    The per-step derivative holds the ENTERING committed state fixed: it is
+    exact whenever the entering state is parameter-independent (the virgin
+    state — every first step, elastic or plastic), and hardening-parameter
+    columns are exactly zero on every elastic step (the elastic map does not
+    reference them). From the second step on the column is the INCREMENT's
+    sensitivity, not the total path sensitivity: the entering state's own
+    parameter dependence is carried by the declared follow-up
+    state-derivative channels (the M48 survey's v2 boundary).
     """
+    names = _sensitivity_names(sensitivities)
+    if names:
+      differentiable, constants = _sensitivity_surface(self.system)
+      offenders = tuple(
+        dict.fromkeys(name for name in names if name not in differentiable)
+      )
+      if offenders:
+        raise_sensitivity_mismatch(
+          offenders=offenders,
+          differentiable=differentiable,
+          constants=constants,
+          source=SourceContext(source="authoring.run:sensitivities"),
+        )
     return self._driver.run(
       base_point=self._program_point(base, label="base point"),
       target_points=tuple(
         self._program_point(target, label=f"target point {index}")
         for index, target in enumerate(targets)
       ),
+      sensitivity_parameters=names,
     )
 
 
