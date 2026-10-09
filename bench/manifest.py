@@ -1,4 +1,11 @@
-"""Environment manifest capture for benchmark runs (stdlib + installed packages)."""
+"""Environment manifest capture for benchmark runs (stdlib + installed packages).
+
+Alongside the git revision, every manifest records the working-tree state at
+capture (``working_tree.clean`` plus the porcelain file list when dirty) so
+gate adjudication can check a run's provenance mechanically (M60, per the
+M51 review's observation that two runs with identical ``git_revision`` could
+not otherwise be told apart by tree state).
+"""
 
 from __future__ import annotations
 
@@ -118,6 +125,30 @@ def _git_revision() -> str:
     return "unknown"
 
 
+def _git_working_tree() -> dict[str, Any]:
+  """Working-tree cleanliness at capture: ``clean`` flag + dirty file list.
+
+  ``clean`` is True only when ``git status --porcelain`` is empty (no
+  modified tracked files, no untracked files). When dirty, ``dirty_files``
+  lists the porcelain entries verbatim (``"<XY> <path>"``, untracked as
+  ``??``) so adjudication can see exactly what diverges from
+  ``git_revision``. Both values are None when git itself fails (e.g. a
+  tarball install), matching ``_git_revision``'s "unknown".
+  """
+  try:
+    out = subprocess.run(
+      ["git", "status", "--porcelain"],
+      capture_output=True,
+      text=True,
+      check=True,
+      cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    )
+  except (OSError, subprocess.CalledProcessError):
+    return {"clean": None, "dirty_files": None}
+  entries = sorted(line for line in out.stdout.splitlines() if line.strip())
+  return {"clean": not entries, "dirty_files": entries}
+
+
 def _numpy_linalg_backend() -> dict[str, Any]:
   import numpy as np
 
@@ -134,7 +165,8 @@ def _numpy_linalg_backend() -> dict[str, Any]:
 
 
 def collect_manifest(threads: int | None = None) -> dict[str, Any]:
-  """Capture CPU, OS, Python, library versions, BLAS backend, and thread env."""
+  """Capture CPU, OS, Python, library versions, BLAS backend, thread env,
+  and git working-tree state."""
   import numba
   import numpy
   import scipy
@@ -151,6 +183,7 @@ def collect_manifest(threads: int | None = None) -> dict[str, Any]:
     .datetime.now(__import__("datetime").timezone.utc)
     .isoformat(timespec="seconds"),
     "git_revision": _git_revision(),
+    "working_tree": _git_working_tree(),
     "cpu": _cpu_brand(),
     "machine": platform.machine(),
     "os": f"{platform.system()} {platform.release()} ({platform.version()})",

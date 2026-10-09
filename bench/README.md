@@ -189,8 +189,17 @@ load / first-assemble / solve breakdown plus peak RSS. Two flavors:
   first-run-on-a-new-machine accounting, not to commit-to-commit gating.
 
 **Environment manifest.** Every run JSON records CPU, OS, Python, git
-revision, numpy/scipy/numba versions, the numpy BLAS/LAPACK backend, thread
-environment variables, and the numba thread default (`bench/manifest.py`).
+revision, working-tree state, numpy/scipy/numba versions, the numpy
+BLAS/LAPACK backend, thread environment variables, and the numba thread
+default (`bench/manifest.py`). The working-tree state (`working_tree`, M60)
+is `clean: true` only when `git status --porcelain` is empty at capture;
+when dirty it carries the porcelain file list, so adjudication can see
+exactly which files diverge from the recorded `git_revision` (the M51
+review's provenance finding: two runs with identical revisions could not
+otherwise be told apart by tree state). Run JSONs predating the field carry
+no `working_tree`; read provenance through `bench.db.working_tree_state`,
+which reports those as `clean: null` (unknown — "not recorded", not clean).
+Prefer `clean: true` runs for adjudication and baseline promotion.
 
 ## Regression DB and gates
 
@@ -232,6 +241,48 @@ provenance notes. `bench/results/run_*.json` are harness runs.
   Fails the gate, independent of timings.
 - **improvement** (ratio < 0.8) and **new** cells are informational.
 
+### Adjudicating a failed ratio gate: the control-run protocol
+
+A GATE: FAIL is not automatically a code regression. One environmental
+failure class is documented and accepted: **interpreter-bound and
+fixed-overhead cells tripping the 1.25 default ratio under machine load**.
+The legacy per-element Python loops (scale assemble/solve, skim e2e/load)
+and other interpreter-heavy or fixed-overhead cells (cold import/solve/wall,
+family load/e2e) run ~1.3-3x slower on a fleet-loaded or thermally throttled
+machine than in the baseline's recorded reference conditions, with no code
+cause. The class is pinned by two committed M51-era runs — same machine,
+same day, same `git_revision`: the candidate
+`bench/results/run_20261007T163300Z.json` (137 regressions) and the
+base-revision control `bench/results/run_control_oldcode.json` (85
+regressions, 39 shared cells as re-measured in the M51 r1 review). Old code
+failing the same gate on stages the candidate diff could not touch proved
+the baseline's reference conditions did not hold — not that the candidate
+regressed.
+
+When a candidate run fails and the failure pattern matches this class, THE
+accepted adjudication path is the M51 evidence protocol — no threshold
+changes, no gate exceptions:
+
+1. **Candidate run**: a full-coverage `bench.run all` on the branch,
+   committed to `bench/results/`.
+2. **Control run**: the identical command on the candidate's base revision
+   (mission diff stashed), same machine, same session's conditions,
+   committed alongside.
+3. Both manifests should show `working_tree.clean: true`; a dirty tree must
+   be explainable from the manifest's `dirty_files` list, and a run whose
+   dirty files touch timed code is not evidence.
+4. Verdict criteria (all required for "environmental"): the control
+   reproduces failures on cells the diff cannot touch; candidate-only
+   failures sit on stages outside the diff; improvement cells land exactly
+   on diff-touched stages and are absent from the control; all correctness
+   gates pass in both runs.
+5. Cite both run JSONs and the cell-level overlap analysis in the review
+   request, as M51's did.
+
+Baseline re-promotion after environmental contamination is tower-owned (M51
+precedent): a fresh reference-machine run turns the gate green without code
+changes.
+
 When v3 code changes intentionally move a number, regenerate the baseline
 with a full `bench.run all` on the reference machine, review the diff like a
 code change, and commit it as the new `baseline_m3.json` successor (keep the
@@ -248,9 +299,9 @@ bench/
   legacy_settings.py numba-free replica of the v3 skim solver-settings parsers
   gates.py           correctness gates (legacy parity + analytic patch field)
   cold_worker.py     one fresh-subprocess cold measurement, JSON on stdout
-  db.py              cell flattening + ratio-gate comparison
+  db.py              cell flattening, ratio-gate comparison, provenance reads
   workloads.py       workload registry (Q8 sizes/materials, skim, material, family)
-  manifest.py        environment manifest
+  manifest.py        environment manifest (incl. working-tree state)
   common.py          timing core (adaptive reps, stats, RSS), run JSON IO
   results/           committed regression DB (baseline_m3.json + runs)
   generated/         generated legacy .dat/.pro (gitignored, reproducible)

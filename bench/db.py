@@ -120,6 +120,26 @@ def correctness_failures(run: dict[str, Any]) -> list[str]:
   return failures
 
 
+def working_tree_state(run: dict[str, Any]) -> dict[str, Any]:
+  """Working-tree provenance recorded in a run's manifest (M60).
+
+  Returns ``{"clean": ..., "dirty_files": ...}`` as captured by
+  ``bench.manifest``: ``clean`` True/False with ``dirty_files`` listing the
+  porcelain entries when False. Backward-compatible read: run JSONs predating
+  the field (and captures where git itself failed) report
+  ``{"clean": None, "dirty_files": None}`` — provenance unknown, never an
+  error. Adjudication should prefer ``clean`` True runs and treat None as
+  "not recorded", not as clean.
+  """
+  manifest = run.get("manifest")
+  if not isinstance(manifest, dict):
+    return {"clean": None, "dirty_files": None}
+  state = manifest.get("working_tree")
+  if not isinstance(state, dict):
+    return {"clean": None, "dirty_files": None}
+  return {"clean": state.get("clean"), "dirty_files": state.get("dirty_files")}
+
+
 def compare(
   baseline: dict[str, Any],
   candidate: dict[str, Any],

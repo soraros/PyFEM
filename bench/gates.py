@@ -6,6 +6,21 @@ skims; nonlinear finite-strain and Riks skims use their own ``parity.toml``,
 the repo's established numerical oracle). Generated uniform patches are also
 checked against the analytic patch displacement field, so a bug shared by
 both implementations cannot slip through.
+
+Ratio-gate adjudication (the regression gate itself lives in ``bench/db.py``;
+the policy is codified in bench/README.md, "Adjudicating a failed ratio
+gate"). One environmental failure class is documented and accepted:
+interpreter-bound and fixed-overhead cells — the legacy per-element Python
+loops, the pure-Python LinearSolver skim e2e cells, cold import/solve/wall,
+family load/e2e — can trip the 1.25 default ratio en masse on a fleet-loaded
+or thermally throttled machine with no code cause. The class is pinned by two
+committed M51-era runs sharing one ``git_revision``: the candidate
+``bench/results/run_20261007T163300Z.json`` (137 regressions) and the
+base-revision control ``bench/results/run_control_oldcode.json`` (85
+regressions, 39 shared cells as re-measured in the M51 r1 review). THE
+accepted adjudication path is the M51 evidence protocol — a candidate run
+plus a base-revision control run under matched conditions, both with
+``working_tree.clean`` true in their manifests — never a threshold change.
 """
 
 from __future__ import annotations
