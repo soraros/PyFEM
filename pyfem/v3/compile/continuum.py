@@ -49,7 +49,16 @@ through the general splu path with no symmetry assumption. The third is
 rows with a parameterized per-term internal-strain slot), the first
 signal-consuming production law: it declares the optional ``signal_ports``
 field below and consumes the schedule-owned time coordinate through its
-identity port.
+identity port. The fourth and fifth are the rate-dependent family's stateful
+pair, signal-consuming through the same identity time port:
+``perzyna-viscoplasticity`` (the legacy ViscoPlasticity law — Perzyna-branded
+but integrating a rate-INDEPENDENT J2 map with a ``dtime > 0`` gate, 14-float
+rows) and ``skorohod-olevsky`` (the legacy SOVS explicit viscous-sintering
+law, 14-float rows, the first parameter-dependent initial state of the
+family: ``rho = rho0``). Both ship the true algorithmic tangents of their
+implemented maps with class ``algorithmic-symmetric`` — the legacy coded
+tangents diverge from the maps they accompany, and the pinned divergences are
+documented in the kernel modules.
 
 - ``total-lagrangian-continuum``: the finite-strain slice (serendipity-quad8
   only): one node displacement field and the plane-stress
@@ -149,6 +158,10 @@ from pyfem.v3.materials.isotropic_hardening_plasticity import (
   ISOTROPIC_HARDENING_PLASTICITY_BINDING,
   isotropic_hardening_plasticity_metadata,
 )
+from pyfem.v3.materials.perzyna_viscoplasticity import (
+  PERZYNA_VISCOPLASTICITY_BINDING,
+  perzyna_viscoplasticity_metadata,
+)
 from pyfem.v3.materials.plane_strain import plane_strain_matrix
 from pyfem.v3.materials.plane_strain_damage import (
   PLANE_STRAIN_DAMAGE_BINDING,
@@ -158,6 +171,10 @@ from pyfem.v3.materials.plane_stress import plane_stress_matrix
 from pyfem.v3.materials.prony_viscoelasticity import (
   PRONY_VISCOELASTICITY_BINDING,
   prony_viscoelasticity_metadata,
+)
+from pyfem.v3.materials.skorohod_olevsky import (
+  SKOROHOD_OLEVSKY_BINDING,
+  skorohod_olevsky_metadata,
 )
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
@@ -221,6 +238,8 @@ THERMO_MATERIAL_KEY: RegistryKey = ("material", "linear-thermo-elastic")
 PLASTIC_MATERIAL_KEY: RegistryKey = ("material", "isotropic-hardening-plasticity")
 DAMAGE_MATERIAL_KEY: RegistryKey = ("material", "plane-strain-damage")
 VISCOELASTIC_MATERIAL_KEY: RegistryKey = ("material", "prony-viscoelasticity")
+VISCOPLASTIC_MATERIAL_KEY: RegistryKey = ("material", "perzyna-viscoplasticity")
+SOVS_MATERIAL_KEY: RegistryKey = ("material", "skorohod-olevsky")
 _PARAMETER_NAMES = ("youngs_modulus", "poisson_ratio")
 _THERMAL_PARAMETER_NAMES = ("conductivity",)
 _THERMO_PARAMETER_NAMES = (
@@ -1712,6 +1731,10 @@ def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
     return plane_strain_damage_metadata()
   if key == VISCOELASTIC_MATERIAL_KEY:
     return prony_viscoelasticity_metadata()
+  if key == VISCOPLASTIC_MATERIAL_KEY:
+    return perzyna_viscoplasticity_metadata()
+  if key == SOVS_MATERIAL_KEY:
+    return skorohod_olevsky_metadata()
   if key in _BREADTH_DESCRIPTOR_KEYS:
     return breadth_descriptor_metadata(*key)
   return q8_descriptor_metadata(*key)
@@ -1899,6 +1922,53 @@ def viscoelasticity_reference_registry() -> dict[RegistryKey, RegistryDescriptor
     implementation_id="pyfem-v3-prony-viscoelasticity-v1",
     metadata=prony_viscoelasticity_metadata(),
     binding=PRONY_VISCOELASTICITY_BINDING,
+  )
+  registry[descriptor.key] = descriptor
+  return registry
+
+
+def viscoplasticity_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
+  """Build the Q8 reference registry plus the rate-gated J2 law descriptor.
+
+  The Perzyna-branded viscoplastic law (a rate-INDEPENDENT J2 map with a
+  ``dtime > 0`` gate — see the kernel module docstring) declares the identity
+  time port: its compiled operator carries one ``SignalPortBinding``, and its
+  Jacobian channel is ``linear=False, symmetric=True`` per the declared
+  ``algorithmic-symmetric`` class. The frozen v2 schema covers the
+  declaration, so no contracts change accompanies this registration.
+  """
+  registry = dict(q8_reference_registry())
+  descriptor = RegistryDescriptor(
+    kind=VISCOPLASTIC_MATERIAL_KEY[0],
+    name=VISCOPLASTIC_MATERIAL_KEY[1],
+    version="1",
+    implementation_id="pyfem-v3-perzyna-viscoplasticity-v1",
+    metadata=perzyna_viscoplasticity_metadata(),
+    binding=PERZYNA_VISCOPLASTICITY_BINDING,
+  )
+  registry[descriptor.key] = descriptor
+  return registry
+
+
+def sovs_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
+  """Build the Q8 reference registry plus the sintering law descriptor.
+
+  The Skorohod-Olevsky explicit viscous-sintering law declares the identity
+  time port and binds the first parameter-dependent initial state of the
+  stateful family (``rho = rho0`` in every row) through the existing
+  initial-state binding path — the frozen v2 schema covers both, so no
+  contracts change accompanies this registration. Its Jacobian channel is
+  ``linear=False, symmetric=True`` per the declared ``algorithmic-symmetric``
+  class.
+  """
+  registry = dict(q8_reference_registry())
+  descriptor = RegistryDescriptor(
+    kind=SOVS_MATERIAL_KEY[0],
+    name=SOVS_MATERIAL_KEY[1],
+    version="1",
+    implementation_id="pyfem-v3-skorohod-olevsky-v1",
+    metadata=skorohod_olevsky_metadata(),
+    binding=SKOROHOD_OLEVSKY_BINDING,
   )
   registry[descriptor.key] = descriptor
   return registry

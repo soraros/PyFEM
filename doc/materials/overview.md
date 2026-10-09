@@ -37,8 +37,10 @@ planestrain.md
 planestress.md
 powerlawmodei.md
 sandwichcore.md
+sovs.md
 thoulessmodei.md
 transverseisotropic.md
+viscoplasticity.md
 vonmises.md
 xuneedleman.md
 ```
