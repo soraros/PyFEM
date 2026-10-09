@@ -31,6 +31,15 @@ Every pin ships with a conviction leg: the buggy construction measured FAILING
 the same pin (e.g. truncated-unrolled sensitivity deviates 4.1e-3 vs the 1e-8
 pin). A pin without a failing control is decoration.
 
+For closed-form derivative claims, add a SYMBOLIC leg: cross-derive with sympy
+(dev group; differentiate the map symbolically, compare against the coded form
+by evaluation or expression simplification). FD convicts numerically at sampled
+states; symbolic derivation convicts structurally everywhere. The SOVS tangent
+episode (M67) is the cautionary case: per-leg FD identifications were correct
+while the full-matrix reassembly was wrong — a symbolic check of the reassembly
+would have caught it before review. Prefer generated evidence over hand-derived
+claims whenever a formula enters the tree.
+
 Escalation standard: when a hard invariant appears violated, the acceptable
 proof is a four-way experiment (old/new × loose/tight tolerance) separating the
 change's effect from the old run's own convergence slack — the creep_test 0.31

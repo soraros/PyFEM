@@ -57,6 +57,7 @@ dev = [
     "coverage>=7.15.2",
     "pytest>=9.1.1",
     "ruff>=0.15.22",
+    "sympy>=1.14",
 ]
 v3 = [
     "jupytext>=1.19.3",
