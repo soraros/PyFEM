@@ -986,9 +986,9 @@ class StatefulContinuumKernelResult:
   when populated (a derivative-capable kernel answering a derivative
   request) it stacks the law's exact analytic ``d(stress)/d(parameter)``
   columns with shape ``(parameter_count, entity_count, 6)`` in the
-  descriptor's ``differentiable_parameters`` declaration order, each column
-  derived from the converged return-map state of the same call. It is
-  ``None`` on plain primal evaluations and on rejected evaluations.
+  descriptor's ``parameter_names`` order, each column derived from the
+  converged return-map state of the same call. It is ``None`` on plain
+  primal evaluations and on rejected evaluations.
   """
 
   stresses: np.ndarray

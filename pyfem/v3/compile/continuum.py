@@ -3938,7 +3938,7 @@ def _compile_mechanical_stateful(
   param_kernel = getattr(binding, "param_derivative_kernel", None)
   if not callable(param_kernel):
     param_kernel = None
-  differentiable_parameters = parameter_names if param_kernel is not None else ()
+  differentiable_names = parameter_names if param_kernel is not None else ()
   try:
     with warnings.catch_warnings():
       warnings.simplefilter("error", RuntimeWarning)
@@ -4061,9 +4061,9 @@ def _compile_mechanical_stateful(
   parameters: tuple[ParameterBinding, ...] = ()
   derivative_channels: tuple[ResidualDerivativeChannel, ...] = ()
   channel_fields: dict[str, object] = {}
-  if differentiable_parameters:
+  if differentiable_names:
     parameters = tuple(
-      _new(ParameterBinding, parameter_id=name) for name in differentiable_parameters
+      _new(ParameterBinding, parameter_id=name) for name in differentiable_names
     )
     derivative_channels = tuple(
       _new(
@@ -4072,7 +4072,7 @@ def _compile_mechanical_stateful(
         residual_channel_id=residual_channel.channel_id,
         parameter_id=name,
       )
-      for name in differentiable_parameters
+      for name in differentiable_names
     )
     channel_fields["parameters"] = parameters
     channel_fields["derivative_channels"] = derivative_channels
@@ -4157,7 +4157,7 @@ def _compile_mechanical_stateful(
       }
       for signal_port in signal_ports
     ]
-  if differentiable_parameters:
+  if differentiable_names:
     manifest_content["parameters"] = [
       {"parameter_id": parameter.parameter_id} for parameter in parameters
     ]
