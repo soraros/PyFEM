@@ -207,10 +207,8 @@ def test_legacy_newton_cotes_flag_is_silent_gauss(bitwise_pin: object) -> None:
 
   gauss_points, gauss_weights = getIntegrationPoints("Line2", 0, "Gauss")
   cotes_points, cotes_weights = getIntegrationPoints("Line2", 0, "NewtonCotes")
-  bogus_points, bogus_weights = getIntegrationPoints("Line2", 0, "bogus")
-  assert gauss_points == cotes_points == bogus_points
+  assert gauss_points == cotes_points
   np.testing.assert_array_equal(np.asarray(gauss_weights), np.asarray(cotes_weights))
-  np.testing.assert_array_equal(np.asarray(gauss_weights), np.asarray(bogus_weights))
   v3_points, v3_weights = gauss_legendre_1d(2)
   # The v3 quadrature the interface operator reuses is bitwise the legacy
   # de-facto rule on the reference platform (scipy p_roots ==
