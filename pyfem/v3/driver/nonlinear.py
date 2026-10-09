@@ -38,10 +38,12 @@ Protocol summary:
   final measured residual contracts to at most half the first with a
   strict majority of decreasing steps — is the near-miss: the substep ran
   out of budget, not of convergence, and the documented remedy is a larger
-  ``max_iterations`` (the load-controlled J2 cantilever with near-yield
-  tangent chatter converges in one 33-iteration substep at
-  ``max_iterations=50`` where the default 25 thrashes it into 294
-  records / 7270 evaluations of cutback). The classification is
+  ``max_iterations`` (the M48 finding's episode on the PRE-FIX J2 tangent:
+  the load-controlled cantilever with near-yield tangent chatter converged
+  in one 33-iteration substep at ``max_iterations=50`` where the default 25
+  thrashed it into 294 records / 7270 evaluations of cutback; the M54
+  shear-tangent fix restored quadratic convergence — the same deck commits
+  in one 7-iteration substep at the default budget). The classification is
   observation-only by policy — the driver never extends the budget itself:
   a past-limit-load trajectory can net-decrease over a budget window
   without converging (5 of 59 failing attempts on the snap-through truss
@@ -70,15 +72,52 @@ Protocol summary:
   state-independent: it is assembled and factorized once and the
   factorization is reused bitwise across all iterations, substeps, and runs.
   Otherwise each Newton iteration factorizes the refilled reduced tangent.
+- Requested parameter sensitivities (``sensitivity_parameters`` on ``run``)
+  are implicit-function-theorem solves on committed states, never a
+  differentiation of the iteration process — the M48 study measured
+  truncated-unrolled differentiation at K=1 reporting exactly zero
+  sensitivity on a plastifying step (the elastic predictor has not
+  discovered plasticity), a 100% relative error the converged-state IFT
+  avoids by construction. At each COMMITTED substep the requested
+  ``d(residual)/d(parameter)`` channels are evaluated once at the converged
+  point with the ENTERING committed state held fixed — one extra evaluation
+  sweep inside the still-open transaction, over only the operators that
+  declare a requested parameter — and after commit each parameter solves
+  ``K_q (dq/dp) = -P.T dR/dp`` with ONE back-substitution on the
+  factorization the converged Newton loop last used (for a
+  constant-tangent plan, the state-independent cached one), counted as
+  factorization reuse in the workspace counters; no per-parameter
+  refactorization ever happens. The one exception: a substep that
+  converged with no Newton solve at all (the entering state already
+  satisfies the new point) owns no converged factorization, so the
+  converged tangent is factorized once from the in-hand Jacobian batches
+  and counted truthfully (and cached when the plan is constant-tangent,
+  where it is the same state-independent tangent). Sensitivities chain
+  forward per committed substep on committed states only — rejected
+  attempts never produce them and the budget-exhaustion machinery is
+  untouched — and surface as typed ``ParameterSensitivityObservation``
+  values on the committed records. With the entering state held fixed the
+  per-step derivative is exact whenever the entering committed state is
+  parameter-independent — the virgin state, so every first step, elastic
+  or plastic — and the hardening-parameter columns are exactly zero on
+  every elastic step (the elastic map does not reference them). From the
+  second step on, the entering state's stress and strain rows are
+  parameter-dependent even on elastic trajectories, so the column is the
+  increment's sensitivity (pinned by the two-step-elastic factor-2 test);
+  propagating the entering state's own parameter dependence needs
+  state-derivative channels, the M48 survey's declared v2 boundary.
 """
 
 from __future__ import annotations
+
+from typing import NoReturn
 
 import numpy as np
 from scipy.sparse.linalg import splu
 
 from pyfem.v3.constraints.compile import (
   CompiledConstraintMap,
+  admissible_increment,
   evaluate_offsets,
   full_coefficients,
   reaction_forces,
@@ -95,14 +134,22 @@ from pyfem.v3.driver.contracts import (
   IterationRecord,
   NonlinearStaticResult,
   NonlinearStaticSettings,
+  ParameterSensitivityObservation,
   SubstepObservation,
   SubstepRecord,
   SubstepStatus,
 )
+from pyfem.v3.driver.diagnostics import (
+  DriverDiagnostic,
+  DriverEvaluationError,
+)
 from pyfem.v3.driver.plan import (
+  CompiledSensitivityProgram,
   DriverAssemblyPlan,
   assemble_internal_force,
+  assemble_parameter_rhs,
   compile_driver_plan,
+  compile_sensitivity_program,
   evaluate_loads,
   evaluate_signals,
   refill_tangent,
@@ -112,15 +159,24 @@ from pyfem.v3.model.operator import (
   ChannelRequest,
   EvaluationStatus,
   OperatorEvaluationInput,
+  ProgramSignalInput,
+  evaluation_derivative_values,
   evaluation_status,
 )
 from pyfem.v3.model.system import CompiledSystem
+from pyfem.v3.spec.diagnostics import SourceContext
 from pyfem.v3.spec.program import (
   NodalLoadSpec,
   ProgramCoordinateValue,
   ProgramPoint,
 )
-from pyfem.v3.state import StateTransactionOwner
+from pyfem.v3.state import StateTransaction, StateTransactionOwner
+
+
+def _evaluation_fail(code: str, message: str) -> NoReturn:
+  raise DriverEvaluationError(
+    (DriverDiagnostic(code=code, message=message, source=SourceContext()),)
+  )
 
 
 class _DriverWorkspace:
@@ -136,6 +192,7 @@ class _DriverWorkspace:
     "linear_solve_count",
     "rejected_substep_count",
     "residual_assembly_count",
+    "stashed_factorization",
     "tangent_refill_count",
   )
 
@@ -149,6 +206,7 @@ class _DriverWorkspace:
     self.linear_solve_count = 0
     self.rejected_substep_count = 0
     self.residual_assembly_count = 0
+    self.stashed_factorization: object = None
     self.tangent_refill_count = 0
 
 
@@ -299,6 +357,9 @@ class NonlinearStaticDriver:
       except RuntimeError:
         return None
       workspace.factorization_count += 1
+      # Stash every fresh factorization: a committed substep's parameter
+      # sensitivity solves reuse the converged loop's last factorization.
+      workspace.stashed_factorization = factorization
       if plan.constant_tangent:
         workspace.cached_factorization = factorization
     correction = factorization.solve(rhs)
@@ -307,10 +368,163 @@ class NonlinearStaticDriver:
       return None
     return np.asarray(correction, dtype=np.float64)
 
+  def _evaluate_sensitivity_columns(
+    self,
+    program: CompiledSensitivityProgram,
+    full: FinalizedArray,
+    transaction: StateTransaction,
+    signal_inputs: tuple[tuple[ProgramSignalInput, ...], ...],
+  ) -> tuple[tuple[FinalizedArray, ...] | None, ...]:
+    """Evaluate the requested derivative channels at the converged point.
+
+    One extra evaluation per operator declaring a requested parameter. The
+    channel semantics hold the accepted state fixed at the ENTERING
+    committed state, so this runs inside the still-open transaction
+    immediately before commit; the trial rows it returns are discarded
+    (the primal evaluations are staged) — they are bitwise identical to
+    them by the derivative-twin contract. Operators declaring no requested
+    parameter are never evaluated and contribute an exact zero batch.
+    """
+    columns: list[tuple[FinalizedArray, ...] | None] = []
+    evaluated = False
+    for operator, slice_, signals in zip(
+      self._system.operators,
+      program.operator_slices,
+      signal_inputs,
+      strict=True,
+    ):
+      if not slice_.derivative_channel_ids:
+        columns.append(None)
+        continue
+      gather = operator.header.ports[0].coefficient_map.values
+      evaluation = operator.evaluate(
+        OperatorEvaluationInput(
+          port_values=(
+            FinalizedArray(
+              np.array(full.values[gather], dtype=np.float64, order="C", copy=True),
+              dtype=np.float64,
+            ),
+          ),
+          accepted_state=transaction.accepted_state(
+            operator.header.state_layout.block_id
+          ),
+          signals=signals,
+          request=ChannelRequest((), (), slice_.derivative_channel_ids),
+        )
+      )
+      evaluated = True
+      if evaluation_status(evaluation) is not EvaluationStatus.OK:
+        _evaluation_fail(
+          "sensitivity-evaluation-rejected",
+          "the derivative evaluation at a converged point rejected; the "
+          "primal evaluation at the same point converged, so the operator "
+          "contract is broken",
+        )
+      values = evaluation_derivative_values(evaluation)
+      if len(values) != len(slice_.derivative_channel_ids):
+        _evaluation_fail(
+          "derivative-channel-count-mismatch",
+          "an operator returned fewer derivative values than the requested "
+          "channels it declared",
+        )
+      columns.append(values)
+    if evaluated:
+      self._workspace.evaluation_count += 1
+    return tuple(columns)
+
+  def _solve_sensitivities(
+    self,
+    program: CompiledSensitivityProgram,
+    columns: tuple[tuple[FinalizedArray, ...] | None, ...],
+    jacobian_batches: tuple[np.ndarray, ...],
+    *,
+    solved: bool,
+  ) -> tuple[ParameterSensitivityObservation, ...]:
+    """Solve the per-parameter IFT systems on the committed factorization.
+
+    Every back-substitution reuses the factorization the converged Newton
+    loop last solved with (for a constant-tangent plan, the cached
+    state-independent one) — counted as factorization reuse, never a new
+    factorization. A substep that converged without any Newton solve owns
+    no such factorization; the converged tangent is then factorized once
+    from the in-hand Jacobian batches, counted truthfully (and cached when
+    the plan is constant-tangent, where it is the same tangent).
+    """
+    plan = self._plan
+    workspace = self._workspace
+    fresh = False
+    if plan.constant_tangent and workspace.cached_factorization is not None:
+      factorization = workspace.cached_factorization
+    elif solved and workspace.stashed_factorization is not None:
+      factorization = workspace.stashed_factorization
+    else:
+      tangent = refill_tangent(plan, jacobian_batches)
+      workspace.tangent_refill_count += 1
+      try:
+        factorization = splu(reduce_tangent(self._map, tangent).tocsc())
+      except RuntimeError:
+        _evaluation_fail(
+          "singular-sensitivity-tangent",
+          "the converged tangent is singular, so the parameter sensitivity "
+          "system has no solution",
+        )
+      workspace.factorization_count += 1
+      fresh = True
+      if plan.constant_tangent:
+        workspace.cached_factorization = factorization
+    zero_batches: dict[int, np.ndarray] = {}
+    observations: list[ParameterSensitivityObservation] = []
+    for parameter_index, parameter_id in enumerate(program.parameter_ids):
+      batches: list[np.ndarray] = []
+      for operator_index, (columns_, slice_, plan_slice) in enumerate(
+        zip(
+          columns,
+          program.operator_slices,
+          plan.operator_slices,
+          strict=True,
+        )
+      ):
+        if columns_ is not None and parameter_id in slice_.parameter_ids:
+          batches.append(columns_[slice_.parameter_ids.index(parameter_id)].values)
+          continue
+        zero = zero_batches.get(operator_index)
+        if zero is None:
+          zero = np.zeros(
+            (plan_slice.entity_count, plan_slice.element_dof_count),
+            dtype=np.float64,
+          )
+          zero_batches[operator_index] = zero
+        batches.append(zero)
+      rhs = assemble_parameter_rhs(plan, self._map, tuple(batches))
+      workspace.residual_assembly_count += 1
+      sensitivity = np.asarray(
+        factorization.solve(rhs.values),
+        dtype=np.float64,
+      )
+      workspace.linear_solve_count += 1
+      # The first solve on a just-factorized corner tangent is not a reuse;
+      # every other sensitivity solve reuses a committed factorization.
+      if not (fresh and parameter_index == 0):
+        workspace.factorization_reuse_count += 1
+      if not bool(np.isfinite(sensitivity).all()):
+        _evaluation_fail(
+          "non-finite-sensitivity-solution",
+          f"the parameter sensitivity solve for {parameter_id!r} produced "
+          "non-finite coefficients",
+        )
+      observations.append(
+        ParameterSensitivityObservation(
+          parameter_id=parameter_id,
+          coefficients=admissible_increment(self._map, sensitivity),
+        )
+      )
+    return tuple(observations)
+
   def _newton_substep(
     self,
     point: ProgramPoint,
     committed_point: ProgramPoint | None,
+    sensitivity_program: CompiledSensitivityProgram | None,
   ) -> tuple[
     bool,
     tuple[IterationRecord, ...],
@@ -323,6 +537,10 @@ class NonlinearStaticDriver:
     base for increment-bound signals); identity-only plans never read it.
     The fourth return is non-``None`` only on the iteration-budget-exhaust
     exit, carrying the measured residual-trend classification.
+    ``sensitivity_program`` is the run's validated parameter request (or
+    ``None``): its derivative channels are evaluated once at the converged
+    point and solved per parameter post-commit — only on the committed
+    exit, so rejected attempts never see it.
     """
     plan = self._plan
     workspace = self._workspace
@@ -422,6 +640,19 @@ class NonlinearStaticDriver:
               increment_norm,
             )
           )
+          # The derivative channels read the ENTERING committed state, so
+          # their evaluation runs inside the still-open transaction; the
+          # solves run post-commit. Staging uses the primal evaluations.
+          sensitivity_columns = (
+            self._evaluate_sensitivity_columns(
+              sensitivity_program,
+              full,
+              transaction,
+              signal_inputs,
+            )
+            if sensitivity_program is not None
+            else None
+          )
           transaction.stage_physical(full)
           for operator, evaluation in zip(
             self._system.operators,
@@ -437,11 +668,20 @@ class NonlinearStaticDriver:
           workspace.committed_substep_count += 1
           full_residual = internal - external
           reactions = reaction_forces(coordinate_map, full_residual)
+          sensitivities: tuple[ParameterSensitivityObservation, ...] = ()
+          if sensitivity_program is not None and sensitivity_columns is not None:
+            sensitivities = self._solve_sensitivities(
+              sensitivity_program,
+              sensitivity_columns,
+              jacobian_batches,
+              solved=increment is not None,
+            )
           observation = SubstepObservation(
             reactions=reactions,
             constraint_work=float(np.dot(reactions.values, full.values)),
             full_residual_norm=float(np.linalg.norm(full_residual)),
             reduced_residual_norm=residual_norm,
+            sensitivities=sensitivities,
           )
           return True, tuple(iterations), observation, None
         if first_residual_norm is None:
@@ -503,13 +743,31 @@ class NonlinearStaticDriver:
     *,
     base_point: ProgramPoint,
     target_points: tuple[ProgramPoint, ...],
+    sensitivity_parameters: tuple[str, ...] = (),
   ) -> NonlinearStaticResult:
-    """Advance the committed state through the exact target-point schedule."""
+    """Advance the committed state through the exact target-point schedule.
+
+    ``sensitivity_parameters`` names the spec-level parameters whose
+    first-order sensitivities of the committed coefficients are solved per
+    committed substep (the implicit-function-theorem protocol in the module
+    docstring); the default empty tuple keeps the run primal-only at zero
+    extra cost. The request is validated before the first substep: a
+    parameter no operator declares a derivative channel for is rejected
+    with a coded diagnostic.
+    """
     if type(target_points) is not tuple or any(
       type(point) is not ProgramPoint for point in target_points
     ):
       msg = "driver target points must be an exact tuple of ProgramPoint values"
       raise TypeError(msg)
+    if type(sensitivity_parameters) is not tuple:
+      msg = "driver sensitivity parameters must be an exact tuple of names"
+      raise TypeError(msg)
+    sensitivity_program = (
+      compile_sensitivity_program(self._system, sensitivity_parameters)
+      if sensitivity_parameters
+      else None
+    )
     initial_generation = self._owner.generation
     base_values = self._bound_point_values(base_point)
     target_values = tuple(self._bound_point_values(point) for point in target_points)
@@ -544,6 +802,7 @@ class NonlinearStaticDriver:
         committed, iterations, observation, budget_exhaustion = self._newton_substep(
           trial_point,
           committed_point,
+          sensitivity_program,
         )
         if committed:
           records.append(
