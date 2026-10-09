@@ -11,6 +11,12 @@ re-derived per Newton iteration.
   validated once against scipy's own COO->CSR conversion at compile time.
 - The internal-force scatter is one concatenated flat index vector consumed by
   a single ``np.bincount`` per evaluation.
+- Parameter-sensitivity right-hand sides assemble through the SAME residual
+  scatter: a requested parameter set resolves onto the operators' declared
+  ``d(residual)/d(parameter)`` channels (``compile_sensitivity_program``,
+  failing closed at request time on undeclared or ambiguous parameters), and
+  ``assemble_parameter_rhs`` reduces the negated scatter through the
+  coordinate map — zero new topology.
 - Nodal loads compile to the same affine structure as the coordinate map's
   prescribed offsets: ``f_ext(p) = constant + coefficients @ p``.
 - Declared operator signal ports compile to coordinate-index slices: every
@@ -39,6 +45,7 @@ from scipy.sparse import coo_matrix, csr_matrix
 
 from pyfem.v3.constraints.compile import (
   CompiledConstraintMap,
+  reduce_residual,
   require_compatible_system,
 )
 from pyfem.v3.driver.diagnostics import (
@@ -153,6 +160,35 @@ class CompiledLoadProgram:
   constant: FinalizedArray
   coordinate_coefficients: FinalizedArray
   load_count: int
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class OperatorDerivativeSlice:
+  """One operator's share of a validated sensitivity request.
+
+  ``parameter_ids`` and ``derivative_channel_ids`` align pairwise in the
+  header's declaration order filtered by the request, so the evaluation's
+  derivative values index columns directly. Operators declaring no requested
+  parameter carry empty tuples: they are never re-evaluated and contribute
+  an exact zero batch to every right-hand side.
+  """
+
+  parameter_ids: tuple[str, ...]
+  derivative_channel_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class CompiledSensitivityProgram:
+  """One validated sensitivity request resolved onto operator channels.
+
+  ``parameter_ids`` keeps the request order (the observation order);
+  ``operator_slices`` aligns with the compiled system's operator order. The
+  program is pure request resolution — it owns no topology, so assembly
+  plans and their manifests are untouched by sensitivity requests.
+  """
+
+  parameter_ids: tuple[str, ...]
+  operator_slices: tuple[OperatorDerivativeSlice, ...]
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -678,6 +714,95 @@ def compile_driver_plan(
   )
 
 
+def compile_sensitivity_program(
+  system: CompiledSystem,
+  parameter_ids: tuple[str, ...],
+) -> CompiledSensitivityProgram:
+  """Resolve one requested parameter set onto operator derivative channels.
+
+  The resolution keys on the operators' declared ``ResidualDerivativeChannel``
+  values (headers predating the channel read as empty — the
+  ``OperatorStateLayout.initial_rows`` getattr precedent), keeping each
+  operator's header declaration order. Request-time validation fails closed
+  with coded diagnostics: a parameter no operator declares a derivative
+  channel for, a channel not differentiating the operator's residual channel,
+  or two channels of one operator answering the same parameter (which would
+  double-count in the scatter) can never assemble an honest right-hand side,
+  so the request is rejected before any substep runs.
+  """
+  if type(system) is not CompiledSystem:
+    msg = "sensitivity program compilation requires an exact CompiledSystem"
+    raise TypeError(msg)
+  if (
+    type(parameter_ids) is not tuple
+    or not parameter_ids
+    or any(type(parameter_id) is not str for parameter_id in parameter_ids)
+  ):
+    msg = "sensitivity parameters must be a non-empty exact tuple of exact strings"
+    raise TypeError(msg)
+  requested: set[str] = set()
+  for parameter_id in parameter_ids:
+    if parameter_id in requested:
+      _preparation_fail(
+        "duplicate-sensitivity-parameter",
+        f"sensitivity parameter {render_diagnostic_value(parameter_id)} is "
+        "requested twice",
+        SourceContext(),
+      )
+    requested.add(parameter_id)
+  slices: list[OperatorDerivativeSlice] = []
+  declared: list[str] = []
+  for operator in system.operators:
+    header = operator.header
+    channels = getattr(header, "derivative_channels", ())
+    matched_ids: list[str] = []
+    matched_channel_ids: list[str] = []
+    for channel in channels:
+      parameter_id = channel.parameter_id
+      if type(parameter_id) is str and parameter_id not in declared:
+        declared.append(parameter_id)
+      if parameter_id not in requested:
+        continue
+      if (
+        len(header.residual_channels) != 1
+        or channel.residual_channel_id != header.residual_channels[0].channel_id
+      ):
+        _preparation_fail(
+          "unsupported-derivative-channel-target",
+          f"derivative channel {render_diagnostic_value(channel.channel_id)} "
+          "does not differentiate the operator's single residual channel",
+          SourceContext(),
+        )
+      if parameter_id in matched_ids:
+        _preparation_fail(
+          "duplicate-derivative-channel",
+          f"an operator declares two derivative channels for parameter "
+          f"{render_diagnostic_value(parameter_id)}",
+          SourceContext(),
+        )
+      matched_ids.append(parameter_id)
+      matched_channel_ids.append(channel.channel_id)
+    slices.append(
+      OperatorDerivativeSlice(
+        parameter_ids=tuple(matched_ids),
+        derivative_channel_ids=tuple(matched_channel_ids),
+      )
+    )
+  for parameter_id in parameter_ids:
+    if not any(parameter_id in slice_.parameter_ids for slice_ in slices):
+      _preparation_fail(
+        "unknown-sensitivity-parameter",
+        f"sensitivity parameter {render_diagnostic_value(parameter_id)} is "
+        "declared by no operator's derivative channels (declared: "
+        f"{render_diagnostic_value(tuple(declared))})",
+        SourceContext(),
+      )
+  return CompiledSensitivityProgram(
+    parameter_ids=parameter_ids,
+    operator_slices=tuple(slices),
+  )
+
+
 def _bound_coordinate_values(
   loads: CompiledLoadProgram,
   point: ProgramPoint,
@@ -861,6 +986,27 @@ def assemble_internal_force(
     weights=flat,
     minlength=plan.full_dof_count,
   )
+
+
+def assemble_parameter_rhs(
+  plan: DriverAssemblyPlan,
+  coordinate_map: CompiledConstraintMap,
+  derivative_batches: tuple[np.ndarray, ...],
+) -> FinalizedArray:
+  """Assemble one parameter's reduced IFT right-hand side ``-P.T @ dR/dp``.
+
+  Derivative channel values follow the referenced residual channel's
+  element-batch layout exactly (the M56 channel contract), so they scatter
+  through the exact internal-force machinery — one flat ``np.bincount`` over
+  the compiled scatter indices, no parallel assembly path — and then reduce
+  through the coordinate map. The sign is the implicit function theorem's:
+  at the converged state ``K_q @ (dq/dp) = -P.T @ dR/dp``.
+  """
+  if type(coordinate_map) is not CompiledConstraintMap:
+    msg = "parameter right-hand side assembly requires an exact CompiledConstraintMap"
+    raise TypeError(msg)
+  full_derivative = assemble_internal_force(plan, derivative_batches)
+  return reduce_residual(coordinate_map, np.negative(full_derivative))
 
 
 def refill_tangent(

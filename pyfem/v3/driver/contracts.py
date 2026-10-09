@@ -140,6 +140,28 @@ class IterationRecord:
 
 
 @dataclass(frozen=True, slots=True, eq=False)
+class ParameterSensitivityObservation:
+  """First-order sensitivity of the committed coefficients to one parameter.
+
+  ``parameter_id`` is the spec-level parameter name the run requested (for
+  the stateful continuum slice, the material law's declared
+  ``parameter_names`` entry). ``coefficients`` is the full-space
+  ``d(u)/d(parameter)`` at the committed point: the implicit-function-theorem
+  solution ``K_q^{-1} (-P.T dR/dp)`` on the substep's converged tangent
+  factorization, prolonged to the full basis (``P @ d(q)/d(parameter)`` —
+  prescribed offsets do not depend on material parameters). The derivative
+  channel is evaluated with the entering committed state held fixed, so the
+  observation is exact for a parameter-independent entering state (the
+  virgin state, and every elastic step with zero plastic integration
+  points); propagating the entering state's own parameter dependence is the
+  declared follow-up boundary (state-derivative channels, M48 survey).
+  """
+
+  parameter_id: str
+  coefficients: FinalizedArray
+
+
+@dataclass(frozen=True, slots=True, eq=False)
 class SubstepObservation:
   """Reaction and energy observations from the FULL residual at commit.
 
@@ -147,13 +169,16 @@ class SubstepObservation:
   coordinate map (the full residual on constrained DOFs, zero elsewhere).
   ``constraint_work`` is ``f_c . u`` under the map basis. Both are derived
   from the same full residual that drove convergence; nothing is
-  re-evaluated.
+  re-evaluated. ``sensitivities`` carries the per-parameter IFT coefficient
+  sensitivities of the committed point in request order — empty unless the
+  run requested sensitivity parameters.
   """
 
   reactions: FinalizedArray
   constraint_work: float
   full_residual_norm: float
   reduced_residual_norm: float
+  sensitivities: tuple[ParameterSensitivityObservation, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, eq=False)
