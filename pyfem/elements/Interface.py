@@ -142,12 +142,12 @@ class Interface( Element ):
     normal = self.getHistoryParameter('normal')
 
     if norm(normal) < 0.5:
-      normal[0] = ds[1]/norm(ds)
-      normal[1] = ds[0]/norm(ds)
+      normal[0] = -ds[1]/norm(ds)
+      normal[1] =  ds[0]/norm(ds)
     else:
       newnormal = zeros(2)
-      newnormal[0] = ds[1]/norm(ds)
-      newnormal[1] = ds[0]/norm(ds)
+      newnormal[0] = -ds[1]/norm(ds)
+      newnormal[1] =  ds[0]/norm(ds)
 
       if dot(newnormal,normal) < 0 :
         normal = -newnormal
