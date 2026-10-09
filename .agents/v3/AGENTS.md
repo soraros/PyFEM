@@ -8,6 +8,7 @@
 | How do I run or format this code? | [conventions.md](conventions.md) |
 | What migration work is pending? | [migration-execution.md](migration-execution.md#exact-next-safe-action); check the actual checkout against its refs. |
 | What does a coverage or completion claim mean? | [migration_workflow.md](migration_workflow.md) |
+| What has the program learned about doing this work (instruments, disciplines, ordering)? | [program-playbook.md](program-playbook.md) |
 | Where is a prior result or oracle? | [README.md](README.md#evidence-index); query the relevant case or revision. |
 
 These are separate kinds of information, not a mandatory reading sequence. For a
