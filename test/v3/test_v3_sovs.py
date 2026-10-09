@@ -677,6 +677,185 @@ def test_kernel_tangent_is_the_exact_stress_map_derivative_by_fd() -> None:
   assert worst < 1.0e-9, worst  # observed: ~1e-13 class over all states
 
 
+def test_fd_conviction_holds_at_the_kink_states() -> None:
+  """FD conviction AT the density kinks — the tower's spec-correction leg.
+
+  The guard (rho >= 0.999 -> eta = 1e20) switches on the COMMITTED rho and
+  the clamp binds only the committed rho trajectory (the stress reads the
+  unclamped drho, SOVS.py:297), so the strain->stress map at every fixed
+  committed state is affine — across the kinks included — and central FD is
+  exact to rounding everywhere. No one-sided stencil is needed; the reason
+  is documented here per the M26 skip-and-document precedent (which is
+  deliberately not exercised).
+  """
+  calibration = skorohod_olevsky_calibration(*_parameters(_ACTIVATED))
+  worst = 0.0
+
+  def check(rows: np.ndarray, strain_total: np.ndarray, time_new: float) -> None:
+    nonlocal worst
+    base = _v3_step(calibration, rows, strain_total, time_new)
+    fd = _fd_tangent_v3(calibration, rows, strain_total, time_new)
+    scale = float(np.max(np.abs(base.tangents[0])))
+    worst = max(worst, float(np.max(np.abs(fd - base.tangents[0]))) / scale)
+
+  # A guard-regime committed state (rho = 1.0 exactly, plateau branch).
+  guard = np.zeros((1, 14))
+  guard[:, 12] = 1.0
+  check(guard, np.zeros(6), 0.01)
+  check(guard, np.array([1.0e-4, 0.0, 0.0, 0.0, 0.0, -5.0e-5]), 0.02)
+  # A boundary-adjacent Skorohod-branch state (rho just below the guard).
+  edge = np.zeros((1, 14))
+  edge[:, 12] = 0.9985
+  check(edge, np.zeros(6), 0.01)
+  assert worst < 1.0e-9, worst
+
+  # A clamp-firing step: committed rho = 0.6 and the huge sintering stress
+  # drives rho + drho past 1.0 mid-evaluation. The tangent must still be the
+  # exact derivative of the stress map (the map reads the unclamped drho).
+  config = {**_ACTIVATED, "sigma_sint": 1.0e12}
+  calibration_c = skorohod_olevsky_calibration(*_parameters(config))
+  rows = np.zeros((1, 14))
+  rows[:, 12] = 0.6
+  base = _v3_step(calibration_c, rows, np.zeros(6), 0.01)
+  assert base.trial_rows[0, 12] == 1.0  # the clamp fired on this step
+  fd = _fd_tangent_v3(calibration_c, rows, np.zeros(6), 0.01)
+  scale = float(np.max(np.abs(base.tangents[0])))
+  assert float(np.max(np.abs(fd - base.tangents[0]))) / scale < 1.0e-9
+
+
+def _symbolic_sovs_jacobian(
+  calibration: np.ndarray,
+  row: np.ndarray,
+  dtime: float,
+) -> object:
+  """The SOVS explicit map differentiated symbolically in the 6-Voigt strain.
+
+  The committed state enters as numeric constants (committed rho, viscous
+  strain, calibration); the trial strain is symbolic. Returns the sympy
+  Jacobian of the step's stress map (dtime > 0 branch of SOVS.py:284-306).
+  """
+  import sympy as sp
+
+  eta_ref = calibration[0]
+  rho0 = calibration[1]
+  sigma_sint = calibration[2]
+  n_vol = calibration[3]
+  n_shear = calibration[4]
+  e_base = calibration[5]
+  rho_power = calibration[6]
+  nu_eff = calibration[7]
+  rho = float(row[12])
+  if rho < 0.999:
+    eta_vol = eta_ref * (rho ** (-n_vol) - 1.0)
+    eta_shear = eta_ref * (rho ** (-n_shear) - 1.0)
+  else:
+    eta_vol = 1.0e20
+    eta_shear = 1.0e20
+  e_eff = e_base * ((rho / rho0) ** rho_power)
+  ebulk3 = e_eff / (1.0 - 2.0 * nu_eff)
+  eg2 = e_eff / (1.0 + nu_eff)
+  eg = 0.5 * eg2
+  elam = (ebulk3 - eg2) / 3.0
+  ctang = np.zeros((6, 6))
+  ctang[:3, :3] = elam
+  ctang[0, 0] += eg2
+  ctang[1, 1] = ctang[0, 0]
+  ctang[2, 2] = ctang[0, 0]
+  ctang[3, 3] = eg
+  ctang[4, 4] = ctang[3, 3]
+  ctang[5, 5] = ctang[3, 3]
+
+  eps = sp.Matrix(sp.symbols("e0:6"))
+  elastic = eps - sp.Matrix(row[6:12])
+  trial = sp.Matrix(ctang) * elastic
+  sigma_m = (trial[0] + trial[1] + trial[2]) / 3.0
+  deviatoric = trial - sigma_m * sp.Matrix([1, 1, 1, 0, 0, 0])
+  drho = (3.0 * rho / (2.0 * eta_vol)) * (sigma_sint - sigma_m) * dtime
+  dstrain_visc = sp.Matrix(
+    [-(drho / rho) / 3.0, -(drho / rho) / 3.0, -(drho / rho) / 3.0, 0, 0, 0]
+  )
+  dstrain_visc += deviatoric / (2.0 * eta_shear) * dtime
+  sigma = sp.Matrix(ctang) * (elastic - dstrain_visc)
+  return sigma.jacobian(eps)
+
+
+def test_symbolic_jacobian_confirms_the_closed_form() -> None:
+  """The sympy leg of the tangent conviction (the tower's SOVS instrument).
+
+  FD convicts at sampled states; the symbolic Jacobian of the explicit map
+  convicts the closed form STRUCTURALLY. Measured agreement of the kernel's
+  three-leg tangent with the symbolic derivative: ~1e-16 relative (exact
+  arithmetic structure; float evaluation of the same expressions). The
+  survey's two-modulus isotropic reassembly disagrees with the same symbolic
+  derivative by ~1.4e-2 — the tower's 2026-10-09 spec correction pinned at
+  the full-matrix level.
+  """
+  calibration = skorohod_olevsky_calibration(*_parameters(_ACTIVATED))
+  probe = np.array([1.0e-4, -2.0e-4, 3.0e-5, 1.0e-4, 0.0, 5.0e-5])
+  states = []
+  virgin = np.zeros((1, 14))
+  virgin[:, 12] = _ACTIVATED["rho0"]
+  states.append((virgin, 0.01))
+  states.append((virgin, 0.001))
+  # Free-sintered state with nonzero viscous strain.
+  rows = virgin
+  for k in range(20):
+    rows = _v3_step(calibration, rows, np.zeros(6), 0.01 * (k + 1)).trial_rows
+  states.append((rows, 0.01))
+  # Pressured state (nonzero committed total and viscous strain).
+  strained = _v3_step(
+    calibration, rows, np.array([-2.0e-4, -1.0e-4, 0.0, 0.0, 0.0, 3.0e-5]), 0.22
+  ).trial_rows
+  states.append((strained, 0.01))
+  # Guard-regime state (plateau branch).
+  guard = np.zeros((1, 14))
+  guard[:, 12] = 1.0
+  states.append((guard, 0.01))
+
+  worst = 0.0
+  for state_rows, dtime in states:
+    time_new = float(state_rows[0, 13]) + dtime
+    symbolic = _symbolic_sovs_jacobian(calibration, state_rows[0], dtime)
+    numeric = np.array(
+      symbolic.subs({f"e{i}": float(probe[i]) for i in range(6)})
+    ).astype(float)
+    base = _v3_step(calibration, state_rows, probe, time_new)
+    tangent = base.tangents[0]
+    scale = float(np.max(np.abs(tangent)))
+    worst = max(worst, float(np.max(np.abs(numeric - tangent))) / scale)
+    assert float(np.max(np.abs(numeric - numeric.T))) / scale < 1.0e-12
+  assert worst < 1.0e-9, worst  # observed: ~1e-16 class over all states
+
+  # Conviction of the corrected sketch: the two-modulus isotropic reassembly
+  # (K_alg, G_alg) is structurally NOT the map's derivative.
+  rows = states[2][0]
+  symbolic = _symbolic_sovs_jacobian(calibration, rows[0], 0.01)
+  numeric = np.array(
+    symbolic.subs({f"e{i}": float(probe[i]) for i in range(6)})
+  ).astype(float)
+  eta_ref, rho0, _, _, _, e_base, rho_power, nu_eff = calibration
+  rho = float(rows[0, 12])
+  eta_vol = eta_ref * (rho ** (-calibration[3]) - 1.0)
+  eta_shear = eta_ref * (rho ** (-calibration[4]) - 1.0)
+  e_eff = e_base * ((rho / rho0) ** rho_power)
+  k_mod = e_eff / (1.0 - 2.0 * nu_eff) / 3.0
+  g_mod = 0.5 * (e_eff / (1.0 + nu_eff))
+  k_alg = k_mod * (1.0 - 3.0 * k_mod * 0.01 / (2.0 * eta_vol))
+  g_alg = g_mod * (1.0 - g_mod * 0.01 / (2.0 * eta_shear))
+  lam_iso = k_alg - 2.0 * g_alg / 3.0
+  iso = np.zeros((6, 6))
+  iso[:3, :3] = lam_iso
+  iso[0, 0] += 2.0 * g_alg
+  iso[1, 1] = iso[0, 0]
+  iso[2, 2] = iso[0, 0]
+  iso[3, 3] = g_alg
+  iso[4, 4] = g_alg
+  iso[5, 5] = g_alg
+  scale = float(np.max(np.abs(numeric)))
+  gap = float(np.max(np.abs(numeric - iso))) / scale
+  assert gap > 1.0e-2  # measured 1.4e-2 — the corrected survey sketch
+
+
 def test_kernel_reports_typed_failures() -> None:
   calibration = skorohod_olevsky_calibration(*_parameters(_ACTIVATED))
   rows = np.zeros((1, 14))

@@ -679,6 +679,67 @@ def test_kernel_tangent_is_the_exact_stress_map_derivative_by_fd() -> None:
   assert worst < 1.0e-8, worst  # observed: ~1e-10 class over all states
 
 
+def test_symbolic_jacobian_confirms_the_true_tangent() -> None:
+  """The sympy leg of the tangent conviction (the tower's SOVS instrument).
+
+  The implemented map's plastic branch has a linear local residual, so its
+  exact solution is ``deqpl = (smises - syield_current) / (eg3 + hard)`` in
+  closed form; differentiating the resulting stress map symbolically in the
+  6-Voigt strain convicts the kernel's rate-factor-free tangent
+  STRUCTURALLY (the FD legs convict it at sampled states). Measured
+  agreement: ~4e-16 relative at the documented mixed-shear plastic state —
+  the kernel's Newton lands at the exact root. The symbolic derivative is
+  symmetric (the algorithmic-symmetric class is structural, not incidental).
+  """
+  import sympy as sp
+
+  calibration = perzyna_viscoplasticity_calibration(_E, _NU, _SYIELD, _HARD, _GAMMA, _N)
+  eg3 = calibration[2]
+  syield = calibration[5]
+  hard = calibration[6]
+  ctang = calibration[10:46].reshape(6, 6)
+  rows = np.zeros((1, 14))
+  for index, strain in enumerate(_uniaxial_path()):
+    rows = _v3_step(calibration, rows, strain, 0.1 * (index + 1)).trial_rows
+  kappa0 = float(rows[0, 12])
+  assert kappa0 > 0.0
+
+  # The exact plastic map of the step (the linear residual's closed-form
+  # root), symbolic in the trial strain, numeric in the committed state.
+  eps = sp.Matrix(sp.symbols("e0:6"))
+  committed = rows[0, 0:6] + rows[0, 6:12]
+  dstrain = eps - sp.Matrix(committed)
+  trial = sp.Matrix(ctang) * (sp.Matrix(rows[0, 0:6]) + dstrain)
+  smises = sp.sqrt(
+    (
+      (trial[0] - trial[1]) ** 2
+      + (trial[1] - trial[2]) ** 2
+      + (trial[2] - trial[0]) ** 2
+      + 6.0 * (trial[3] ** 2 + trial[4] ** 2 + trial[5] ** 2)
+    )
+    / 2.0
+  )
+  syield_current = syield + hard * kappa0
+  deqpl = (smises - syield_current) / (eg3 + hard)
+  syield_final = syield + hard * (kappa0 + deqpl)
+  shydro = (trial[0] + trial[1] + trial[2]) / 3.0
+  flow = (trial - shydro * sp.Matrix([1, 1, 1, 0, 0, 0])) / smises
+  sigma = flow * syield_final + shydro * sp.Matrix([1, 1, 1, 0, 0, 0])
+  jacobian = sigma.jacobian(eps)
+
+  probe = np.array([0.004, 0.0, 0.0, 0.0, 0.0, 0.004])
+  numeric = np.array(
+    jacobian.subs({f"e{i}": float(probe[i]) for i in range(6)})
+  ).astype(float)
+  base = _v3_step(calibration, rows, probe, 1.4)
+  assert base.trial_rows[0, 12] > kappa0  # the probe step is plastic
+  tangent = base.tangents[0]
+  scale = float(np.max(np.abs(tangent)))
+  deviation = float(np.max(np.abs(numeric - tangent))) / scale
+  assert deviation < 1.0e-9, deviation  # measured 4.2e-16
+  assert float(np.max(np.abs(numeric - numeric.T))) / scale < 1.0e-12
+
+
 def test_kernel_reports_typed_failures() -> None:
   calibration = perzyna_viscoplasticity_calibration(_E, _NU, _SYIELD, _HARD, _GAMMA, _N)
   rows = np.zeros((1, 14))
