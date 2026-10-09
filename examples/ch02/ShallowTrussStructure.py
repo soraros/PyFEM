@@ -23,11 +23,11 @@ iterMax = 5
 # Store data in properties   #
 ##############################
 
-from pyfem.utils.dataStructures import Properties
+from pyfem.util.dataStructures import Properties
 
 props = Properties()
-props.Trusses = Properties( { 'EA0' : EA0 } )
-props.Spring  = Properties( { 'k' : 2*k } )
+props.Trusses = Properties( { 'type' : 'Truss'  , 'E' : EA0 , 'Area' : 1.0 } )
+props.Spring  = Properties( { 'type' : 'Spring' , 'k' : 2*k } )
 
 #############################
 # Defining finite element   #
@@ -45,13 +45,11 @@ nodes.add( 4, [0.,h ] ) #Loading point
 
 #ElementSet
 from pyfem.fem.ElementSet import ElementSet
-from pyfem.elements.Truss import Truss
-from pyfem.elements.Spring import Spring
 
-elements = ElementSet( nodes )
-elements.add( 1, Truss ( [2,4] ) )
-elements.add( 2, Truss ( [3,4] ) )
-elements.add( 3, Spring( [1,4] ) )
+elements = ElementSet( nodes , props )
+elements.add( 1, 'Trusses' , [2,4] )
+elements.add( 2, 'Trusses' , [3,4] )
+elements.add( 3, 'Spring'  , [1,4] )
 
 #Add groups
 elements.addGroup( 'Trusses', [1,2] )
@@ -62,24 +60,32 @@ from pyfem.fem.DofSpace import DofSpace
 
 dofs = DofSpace( elements )
 
-dofs.constrain( 1, ['u','v'] )
-dofs.constrain( 2, ['u','v'] )
-dofs.constrain( 3, ['u','v'] )
+cons = dofs.createConstrainer()
+
+cd = dofs.getForTypes( [1,2,3],['u','v'] )
+
+for ido in cd:
+  cons.addConstraint( ido , 0.0 , "main" )
+
+cons.flush()
 
 ###################################
 # Store in global data dictionary #
 ###################################
 
-from pyfem.utils.dataStructures import GlobalData
+from pyfem.util.dataStructures import GlobalData
+from pyfem.models.ModelManager import ModelManager
 
 globdat = GlobalData( nodes, elements, dofs )
+
+globdat.models = ModelManager( props , globdat )
 
 ################################
 # Solution procedure (Box 2.3) #
 ################################
 
 from numpy import zeros, array
-from pyfem.fem.Assembly import assembleInternalForce, assembleTangentStiffness
+from pyfem.fem.Assembly import assembleTangentStiffness
 
 #################################
 # Step 1:                       #
@@ -121,7 +127,7 @@ for i in range(N):
   # Compute the tangent stiffness matrix      #
   #############################################
 
-  K = assembleTangentStiffness( props, globdat )
+  K,fint = assembleTangentStiffness( props, globdat )
 
   while error > tol:
     
@@ -148,8 +154,7 @@ for i in range(N):
     # -> Compute new internal force vector        #
     ###############################################
 
-    fint = assembleInternalForce( props, globdat )
-    K    = assembleTangentStiffness( props, globdat )
+    K,fint = assembleTangentStiffness( props, globdat )
     
     ###############################################
     # Step 11:                                    #
