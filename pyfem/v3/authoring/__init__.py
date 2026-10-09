@@ -50,6 +50,13 @@ owner internals::
     result = session.run({"load": 0.0}, {"load": 0.5}, {"load": 1.0})
     rows = session.accepted_state("springs")
     snapshot = session.snapshot()  # byte-exact rollback reference
+
+A sensitivity study names qualified material parameters at run time and reads
+the typed per-parameter columns off the committed records::
+
+    sensed = session.run({"load": 0.0}, {"load": 1.0},
+                         sensitivities=("initial_yield_stress",))
+    column = sensed.records[-1].observation.sensitivities[0].coefficients
 """
 
 from pyfem.v3.authoring.compile import compile
@@ -91,6 +98,7 @@ from pyfem.v3.driver import (
   DriverStatus,
   NonlinearStaticResult,
   NonlinearStaticSettings,
+  ParameterSensitivityObservation,
   SubstepStatus,
 )
 from pyfem.v3.model.operator import EvaluationStatus
@@ -101,6 +109,7 @@ __all__ = [
   "NonlinearStaticResult",
   "NonlinearStaticSession",
   "NonlinearStaticSettings",
+  "ParameterSensitivityObservation",
   "SpringKernelResult",
   "StateOwner",
   "StateSnapshot",

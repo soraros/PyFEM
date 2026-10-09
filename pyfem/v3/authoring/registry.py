@@ -285,6 +285,20 @@ def _continuum_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
   return q8_descriptor_metadata(kind, name)
 
 
+def _convention_parameter_names(kind: str, name: str) -> tuple[str, ...]:
+  """Return the qualified convention's ``parameter_names`` for one key.
+
+  Covers the continuum (Q8 and stateful seam) and truss conventions; keys no
+  qualified convention pins raise ``KeyError``, which callers read as a
+  convention with no declared parameter names.
+  """
+  try:
+    metadata = _continuum_descriptor_metadata(kind, name)
+  except KeyError:
+    metadata = truss_descriptor_metadata(kind, name)
+  return tuple(metadata.get("parameter_names", ()))
+
+
 def plasticity_registry(
   *,
   topology: RegistryDescriptor | None = None,
