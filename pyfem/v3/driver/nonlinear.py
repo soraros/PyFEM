@@ -97,11 +97,15 @@ Protocol summary:
   attempts never produce them and the budget-exhaustion machinery is
   untouched — and surface as typed ``ParameterSensitivityObservation``
   values on the committed records. With the entering state held fixed the
-  per-step derivative is exact for a parameter-independent entering state
-  (the virgin state, and every elastic step with zero plastic integration
-  points); propagating the entering state's own parameter dependence needs
-  state-derivative channels and is the declared follow-up boundary (the
-  M48 survey's v2 scope).
+  per-step derivative is exact whenever the entering committed state is
+  parameter-independent — the virgin state, so every first step, elastic
+  or plastic — and the hardening-parameter columns are exactly zero on
+  every elastic step (the elastic map does not reference them). From the
+  second step on, the entering state's stress and strain rows are
+  parameter-dependent even on elastic trajectories, so the column is the
+  increment's sensitivity (pinned by the two-step-elastic factor-2 test);
+  propagating the entering state's own parameter dependence needs
+  state-derivative channels, the M48 survey's declared v2 boundary.
 """
 
 from __future__ import annotations

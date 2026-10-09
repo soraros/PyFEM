@@ -151,10 +151,12 @@ class ParameterSensitivityObservation:
   factorization, prolonged to the full basis (``P @ d(q)/d(parameter)`` —
   prescribed offsets do not depend on material parameters). The derivative
   channel is evaluated with the entering committed state held fixed, so the
-  observation is exact for a parameter-independent entering state (the
-  virgin state, and every elastic step with zero plastic integration
-  points); propagating the entering state's own parameter dependence is the
-  declared follow-up boundary (state-derivative channels, M48 survey).
+  observation is exact whenever the entering state is parameter-independent
+  (the virgin state — every first step, elastic or plastic), and the
+  hardening-parameter columns are exactly zero on every elastic step; from
+  the second step on it is the increment's sensitivity, with the entering
+  state's own parameter dependence carried by the declared follow-up
+  state-derivative channels (the M48 survey's v2 scope).
   """
 
   parameter_id: str
