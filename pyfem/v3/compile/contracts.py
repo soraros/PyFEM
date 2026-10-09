@@ -32,6 +32,17 @@ program-signal port declarations (``port_id``, ``signal_id``,
 ``derivative_coordinate_ids``) resolved into ``SignalPortBinding`` emissions at
 compile time. Descriptors without the field declare no ports and keep
 byte-identical metadata, manifests, and kernel calls.
+
+The parameter-derivative channel (M56) is declared behaviorally, not through
+metadata: a binding implementing the optional ``param_derivative_kernel``
+member (same getattr precedent as ``initial_state``) opens
+``ParameterBinding``/``ResidualDerivativeChannel`` emissions covering the
+descriptor's ``parameter_names``, while bindings without it compile
+byte-identical channel-free operators. Capability inference — rather than a
+new metadata field — is what keeps the ABI validator untouched: the qualified
+J2 metadata is reused verbatim by teaching bindings whose kernels are
+primal-only (test/v3/test_v3_authoring_plasticity.py), and a metadata
+declaration they inherit but cannot honor would break their compile.
 """
 
 from __future__ import annotations
@@ -970,12 +981,21 @@ class StatefulContinuumKernelResult:
   order, ``tangents`` has shape ``(entity_count, 6, 6)``, and ``trial_rows``
   has shape ``(entity_count, row_width)``. When ``status`` is not ``OK`` the
   operator discards the arrays and returns the accepted rows byte-equal.
+
+  ``param_derivatives`` is the optional exact parameter-derivative channel:
+  when populated (a derivative-capable kernel answering a derivative
+  request) it stacks the law's exact analytic ``d(stress)/d(parameter)``
+  columns with shape ``(parameter_count, entity_count, 6)`` in the
+  descriptor's ``parameter_names`` order, each column derived from the
+  converged return-map state of the same call. It is ``None`` on plain
+  primal evaluations and on rejected evaluations.
   """
 
   stresses: np.ndarray
   tangents: np.ndarray
   trial_rows: np.ndarray
   status: EvaluationStatus
+  param_derivatives: np.ndarray | None = None
 
   def __post_init__(self) -> None:
     if type(self.status) is not EvaluationStatus:
@@ -993,6 +1013,13 @@ class StatefulContinuumKernelResult:
       ):
         msg = f"stateful kernel {label} must be a plain float64 ndarray"
         raise TypeError(msg)
+    if self.param_derivatives is not None and (
+      type(self.param_derivatives) is not np.ndarray
+      or self.param_derivatives.dtype != np.dtype(np.float64)
+      or self.param_derivatives.dtype.metadata is not None
+    ):
+      msg = "stateful kernel param_derivatives must be a plain float64 ndarray"
+      raise TypeError(msg)
 
 
 class StatefulContinuumKernel(Protocol):
@@ -1099,6 +1126,21 @@ class StatefulContinuumBinding(Protocol):
   ``StatefulContinuumSignalKernel`` form); the compiler probes that form before
   the operator can escape. Signal values reach the law exclusively through
   this argument — there is no schedule back channel.
+
+  A binding providing the optional ``param_derivative_kernel`` member (same
+  getattr precedent as ``initial_state``; the signature mirrors ``kernel``,
+  taking the bound signal tuple as its fourth positional argument when the
+  descriptor also declares ports) opens the parameter-derivative channel: the
+  compiled header declares one ``ParameterBinding`` and one
+  ``ResidualDerivativeChannel`` per declared ``parameter_names`` entry. The
+  member returns the same ``StatefulContinuumKernelResult`` carrier with
+  ``param_derivatives`` populated: the exact analytic
+  ``d(stress)/d(parameter)`` columns of the declared parameters in
+  ``parameter_names`` order, derived from the converged return-map state of
+  the same call, with primal outputs (stresses, tangents, trial rows, status)
+  bitwise identical to ``kernel`` on the same inputs. The compiler probes
+  that identity before the operator can escape; bindings without the member
+  compile channel-free operators that reject derivative requests fail-closed.
   """
 
   def __call__(self, *parameters: float) -> np.ndarray: ...

@@ -61,6 +61,8 @@ from pyfem.v3.materials.isotropic_hardening_plasticity import (
   isotropic_hardening_calibration,
   isotropic_hardening_plasticity_kernel,
   isotropic_hardening_plasticity_kernel_reference,
+  isotropic_hardening_plasticity_param_kernel,
+  isotropic_hardening_plasticity_param_kernel_reference,
 )
 from pyfem.v3.model.operator import EvaluationStatus
 from pyfem.v3.spec import (
@@ -757,3 +759,99 @@ def test_optimized_kernel_matches_reference_bitwise(
   # The tolerance branch end-to-end with real kernel outputs (on the
   # reference machine bitwise-equal outputs are within any tolerance).
   assert_bitwise(strains[:8], np.zeros((8, 19)))
+
+
+def test_param_derivative_kernels_match_primal_and_each_other_bitwise(
+  bitwise_pin: Callable[..., None],
+) -> None:
+  """The M56 derivative twins extend the M30 bitwise pin.
+
+  Same batches as the primal pin (virgin, stepped, seeded random, whole-batch
+  rejects): each twin's primal outputs (stresses, tangents, trial rows,
+  status) are bitwise identical to its plain kernel's, and the two twins'
+  ``param_derivatives`` columns are bitwise identical to each other —
+  raw-uint64 on the reference platform, the documented cross-platform
+  tolerance elsewhere (the derivative columns inherit the predictor-stage
+  BLAS path selection of the primal pin; the return-map derivative math is
+  scalar and per-component, so the same bound applies). On rejected batches
+  the derivative columns are absent (``None``), exactly like the primal
+  arrays are discarded.
+  """
+  calibration = isotropic_hardening_calibration(_E, _NU, _SYIELD, _HARD)
+
+  def assert_bitwise(strains: np.ndarray, rows: np.ndarray) -> None:
+    plain_reference = isotropic_hardening_plasticity_kernel_reference(
+      strains, rows, calibration
+    )
+    plain_optimized = isotropic_hardening_plasticity_kernel(strains, rows, calibration)
+    twin_reference = isotropic_hardening_plasticity_param_kernel_reference(
+      strains, rows, calibration
+    )
+    twin_optimized = isotropic_hardening_plasticity_param_kernel(
+      strains, rows, calibration
+    )
+    # Status identity is discrete and platform-independent: strict everywhere.
+    assert twin_reference.status is plain_reference.status
+    assert twin_optimized.status is plain_optimized.status
+    for twin, plain in (
+      (twin_reference, plain_reference),
+      (twin_optimized, plain_optimized),
+    ):
+      for label, twin_array, plain_array in (
+        ("stresses", twin.stresses, plain.stresses),
+        ("tangents", twin.tangents, plain.tangents),
+        ("trial_rows", twin.trial_rows, plain.trial_rows),
+      ):
+        assert twin_array is not None and plain_array is not None, label
+        bitwise_pin(
+          twin_array,
+          plain_array,
+          rtol=_CROSS_PLATFORM_RTOL,
+          atol=_CROSS_PLATFORM_ATOL,
+        )
+    if twin_reference.status is EvaluationStatus.OK:
+      assert twin_reference.param_derivatives is not None
+      assert twin_optimized.param_derivatives is not None
+      assert twin_reference.param_derivatives.shape == (
+        4,
+        *plain_reference.stresses.shape,
+      )
+      bitwise_pin(
+        twin_optimized.param_derivatives,
+        twin_reference.param_derivatives,
+        rtol=_CROSS_PLATFORM_RTOL,
+        atol=_CROSS_PLATFORM_ATOL,
+      )
+    else:
+      assert twin_reference.param_derivatives is None
+      assert twin_optimized.param_derivatives is None
+
+  # Deterministic documented ramp magnitudes, every third entity in mixed
+  # shear, so elastic, plastic-normal, and plastic-mixed branches all appear.
+  n = 1024
+  strains = np.zeros((n, 6))
+  strains[:, 0] = np.linspace(0.0002, 0.004, n)
+  strains[::3, 5] = 0.003
+  virgin = np.zeros((n, 19))
+  assert_bitwise(strains, virgin)
+  stepped = isotropic_hardening_plasticity_kernel_reference(
+    strains, virgin, calibration
+  ).trial_rows
+  assert_bitwise(strains * 1.5, stepped)
+
+  # Seeded random batches, virgin then stepped (nonzero state, mixed paths).
+  rng = np.random.default_rng(42)
+  random_strains = rng.normal(size=(512, 6)) * 1.5e-3
+  assert_bitwise(random_strains, np.zeros((512, 19)))
+  stepped_random = isotropic_hardening_plasticity_kernel_reference(
+    random_strains, np.zeros((512, 19)), calibration
+  ).trial_rows
+  assert_bitwise(rng.normal(size=(512, 6)) * 1.0e-3, stepped_random)
+
+  # Whole-batch rejects: beyond the hardening table, non-finite predictor.
+  extreme = np.zeros((8, 6))
+  extreme[3, 0] = 2.0
+  assert_bitwise(extreme, np.zeros((8, 19)))
+  nonfinite = np.zeros((8, 6))
+  nonfinite[5, 4] = np.inf
+  assert_bitwise(nonfinite, np.zeros((8, 19)))

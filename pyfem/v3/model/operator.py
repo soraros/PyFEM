@@ -126,6 +126,41 @@ class ResidualChannel(CompilerConstructed):
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
+class ParameterBinding(CompilerConstructed):
+  """One declared differentiable parameter of a compiled operator.
+
+  ``parameter_id`` keys the parameter at spec level — for the stateful
+  continuum slice it is the material law's declared ``parameter_names``
+  entry. The header declaration order fixes the stacking order of
+  per-parameter derivative batches everywhere they appear (kernel results
+  and evaluation derivative values alike).
+  """
+
+  parameter_id: SemanticId
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class ResidualDerivativeChannel(CompilerConstructed):
+  """One declared ``d(residual)/d(parameter)`` channel of a compiled operator.
+
+  ``channel_id`` is the operator-local name evaluation requests bind by;
+  ``residual_channel_id`` names the residual channel being differentiated
+  and ``parameter_id`` the declared ``ParameterBinding`` the derivative is
+  taken with respect to. Derivative channel values follow the referenced
+  residual channel's element-batch layout exactly, so assembly machinery
+  built for residual values scatters them unchanged. The derivative is taken
+  at the evaluation point with the accepted state held fixed — it is a pure
+  function of the committed state, the port values, and the parameters, and
+  never carries trial-state increments. Operators with no declared
+  derivative channels reject every derivative request fail-closed.
+  """
+
+  channel_id: str
+  residual_channel_id: str
+  parameter_id: SemanticId
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
 class JacobianChannel(CompilerConstructed):
   channel_id: str
   residual_channel_id: str
@@ -179,6 +214,15 @@ class OperatorStateLayout(CompilerConstructed):
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class OperatorHeader(CompilerConstructed):
+  """The compiled channel and state declaration of one operator block.
+
+  ``parameters`` and ``derivative_channels`` are optional: compilers
+  predating the parameter-derivative channel (and compilers of channel-free
+  operators) leave both unset, and consumers read them as empty tuples —
+  the ``OperatorStateLayout.initial_rows`` precedent. A header carrying no
+  derivative channels admits no derivative channel requests.
+  """
+
   block_id: SemanticId
   entity_block_id: SemanticId
   implementations: tuple[ImplementationIdentity, ...]
@@ -188,6 +232,8 @@ class OperatorHeader(CompilerConstructed):
   jacobian_channels: tuple[JacobianChannel, ...]
   state_layout: OperatorStateLayout
   coupling_policy: CouplingPolicy
+  parameters: tuple[ParameterBinding, ...]
+  derivative_channels: tuple[ResidualDerivativeChannel, ...]
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -229,12 +275,22 @@ class ProgramSignalInput:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class ChannelRequest:
+  """The per-evaluation channel selection of one operator call.
+
+  ``derivative_channel_ids`` names the requested ``d(residual)/d(parameter)``
+  channels (``ResidualDerivativeChannel`` declarations of the operator
+  header); it defaults to empty, so callers predating the parameter
+  derivative channel construct requests unchanged.
+  """
+
   residual_channel_ids: tuple[str, ...]
   jacobian_channel_ids: tuple[str, ...]
+  derivative_channel_ids: tuple[str, ...] = ()
 
   def __post_init__(self) -> None:
     _exact_tuple(self.residual_channel_ids, str, "residual channel IDs")
     _exact_tuple(self.jacobian_channel_ids, str, "Jacobian channel IDs")
+    _exact_tuple(self.derivative_channel_ids, str, "derivative channel IDs")
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -256,10 +312,21 @@ class OperatorEvaluationInput:
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class OperatorEvaluation(CompilerConstructed):
+  """The typed result of one operator evaluation.
+
+  ``derivative_values`` carries one ``FinalizedArray`` per requested
+  derivative channel in the header's declaration order, mirroring
+  ``residual_values`` semantics; each entry follows the referenced residual
+  channel's element-batch layout. Evaluators predating the parameter
+  derivative channel construct evaluations without the slot — read them as
+  empty via ``evaluation_derivative_values`` (the ``status`` precedent).
+  """
+
   residual_values: tuple[FinalizedArray, ...]
   jacobian_values: tuple[FinalizedArray, ...]
   trial_state: FinalizedArray
   status: EvaluationStatus
+  derivative_values: tuple[FinalizedArray, ...]
 
 
 def evaluation_status(evaluation: OperatorEvaluation) -> EvaluationStatus:
@@ -277,6 +344,28 @@ def evaluation_status(evaluation: OperatorEvaluation) -> EvaluationStatus:
     msg = "operator evaluation status must be an exact EvaluationStatus"
     raise TypeError(msg)
   return status
+
+
+def evaluation_derivative_values(
+  evaluation: OperatorEvaluation,
+) -> tuple[FinalizedArray, ...]:
+  """Return the requested derivative channel values of one operator evaluation.
+
+  Evaluators predating the parameter derivative channel construct evaluations
+  without a ``derivative_values`` slot, and evaluations that served no
+  derivative request carry an empty tuple; both read as empty by
+  construction. Any other foreign or malformed value fails closed.
+  """
+  if type(evaluation) is not OperatorEvaluation:
+    msg = "evaluation derivative values require an exact OperatorEvaluation"
+    raise TypeError(msg)
+  values = getattr(evaluation, "derivative_values", ())
+  if type(values) is not tuple or any(
+    type(item) is not FinalizedArray for item in values
+  ):
+    msg = "operator evaluation derivative values must be FinalizedArray tuples"
+    raise TypeError(msg)
+  return values
 
 
 class StateCodec(Protocol):

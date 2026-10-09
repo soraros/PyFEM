@@ -465,13 +465,19 @@ class SpringOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    derivative_ids = tuple(
+      item.channel_id for item in getattr(self.header, "derivative_channels", ())
+    )
     request = inputs.request
+    derivative_request = request.derivative_channel_ids
     if (
       type(request) is not ChannelRequest
       or len(set(request.residual_channel_ids)) != len(request.residual_channel_ids)
       or len(set(request.jacobian_channel_ids)) != len(request.jacobian_channel_ids)
+      or len(set(derivative_request)) != len(derivative_request)
       or not set(request.residual_channel_ids).issubset(residual_ids)
       or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+      or not set(derivative_request).issubset(derivative_ids)
     ):
       msg = "spring evaluation request contains an unavailable or duplicate channel"
       raise ValueError(msg)

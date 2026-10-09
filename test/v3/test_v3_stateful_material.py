@@ -41,7 +41,14 @@ from pyfem.v3.materials.isotropic_hardening_plasticity import (
   ISOTROPIC_HARDENING_PLASTICITY_BINDING,
   isotropic_hardening_plasticity_metadata,
 )
-from pyfem.v3.model.operator import EvaluationStatus
+from pyfem.v3.model.arrays import FinalizedArray
+from pyfem.v3.model.operator import (
+  ChannelRequest,
+  EvaluationStatus,
+  OperatorEvaluationInput,
+  evaluation_derivative_values,
+  evaluation_status,
+)
 from pyfem.v3.model.provenance import CanonicalManifest
 from pyfem.v3.model.registry import RegistryDescriptor
 from pyfem.v3.spec import (
@@ -698,3 +705,106 @@ def test_unknown_material_model_fails_at_registry_capture() -> None:
       ),
       q8_reference_registry(),
     )
+
+
+class _MockDerivativeBinding(_MockViscoBinding):
+  """The mock law with the optional derivative kernel member attached.
+
+  The echo map is exactly linear in ``youngs_modulus`` (sigma = E * strain)
+  and independent of ``term_count``, so the exact columns are ``strains``
+  and zero respectively.
+  """
+
+  def param_derivative_kernel(
+    self,
+    strains: np.ndarray,
+    accepted_rows: np.ndarray,
+    calibration: np.ndarray,
+  ) -> StatefulContinuumKernelResult:
+    base = _mock_kernel(strains, accepted_rows, calibration)
+    columns = np.zeros((2, len(strains), 6), dtype=np.float64)
+    columns[0] = strains
+    return StatefulContinuumKernelResult(
+      stresses=base.stresses,
+      tangents=base.tangents,
+      trial_rows=base.trial_rows,
+      status=base.status,
+      param_derivatives=columns,
+    )
+
+
+def test_derivative_capable_binding_opens_the_channel_on_the_generic_path() -> None:
+  """The parameter-derivative channel is generic, not J2-specific.
+
+  The parameterized-width mock binding gains the optional
+  ``param_derivative_kernel`` member, and the same generic stateful compiler
+  path emits one ``ParameterBinding`` and one ``dinternal-force/d<name>``
+  channel per declared ``parameter_names`` entry and answers derivative
+  requests with the assembled exact columns. The echo map's exact linearity
+  in the modulus makes the oracle bitwise: the ``dR/dyoungs_modulus``
+  channel equals the unit-modulus recompile's residual (``1.0 * x`` is
+  exact), and the ``term_count`` channel — which the stress map does not
+  reference — is exactly zero.
+  """
+  system = compile_system(
+    _mock_spec(), _mock_registry(binding=_MockDerivativeBinding())
+  )
+  operator = system.operators[0]
+  header = operator.header
+  assert tuple(item.parameter_id for item in header.parameters) == (
+    "youngs_modulus",
+    "term_count",
+  )
+  assert tuple(item.channel_id for item in header.derivative_channels) == (
+    "dinternal-force/dyoungs_modulus",
+    "dinternal-force/dterm_count",
+  )
+  layout = header.state_layout
+  assert layout.initial_rows is not None
+  displacements = np.zeros((1, 16))
+  displacements[0, 0::2] = 1.0e-3 * np.array([point[0] for point in _UNIT_COORDINATES])
+  accepted = FinalizedArray(
+    np.array(layout.initial_rows.values, copy=True), dtype=np.float64
+  )
+  evaluation = operator.evaluate(
+    OperatorEvaluationInput(
+      port_values=(FinalizedArray(displacements, dtype=np.float64),),
+      accepted_state=accepted,
+      signals=(),
+      request=ChannelRequest(
+        ("internal-force",),
+        (),
+        ("dinternal-force/dyoungs_modulus", "dinternal-force/dterm_count"),
+      ),
+    )
+  )
+  assert evaluation_status(evaluation) is EvaluationStatus.OK
+  columns = evaluation_derivative_values(evaluation)
+  assert len(columns) == 2
+  assert np.all(columns[1].values == 0.0)
+  unit = compile_system(
+    _stateful_model(_MOCK_MODEL, (("youngs_modulus", 1.0), ("term_count", 3.0))),
+    _mock_registry(),
+  )
+  reference = unit.operators[0].evaluate(
+    OperatorEvaluationInput(
+      port_values=(FinalizedArray(displacements, dtype=np.float64),),
+      accepted_state=accepted,
+      signals=(),
+      request=ChannelRequest(("internal-force",), ()),
+    )
+  )
+  np.testing.assert_array_equal(columns[0].values, reference.residual_values[0].values)
+  # The primal-only request on the same operator serves no derivative values.
+  primal = operator.evaluate(
+    OperatorEvaluationInput(
+      port_values=(FinalizedArray(displacements, dtype=np.float64),),
+      accepted_state=accepted,
+      signals=(),
+      request=ChannelRequest(("internal-force",), ()),
+    )
+  )
+  assert evaluation_derivative_values(primal) == ()
+  np.testing.assert_array_equal(
+    evaluation.residual_values[0].values, primal.residual_values[0].values
+  )

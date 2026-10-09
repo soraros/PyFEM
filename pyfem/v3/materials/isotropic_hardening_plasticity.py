@@ -133,6 +133,41 @@ on deterministic and seeded batches, and the bench material gate
 equality holds. If a future platform's BLAS or einsum path selection breaks
 the bitwise identity, those checks fail loudly rather than silently changing
 numerics.
+
+Parameter derivative channel (M56). Each kernel has a derivative twin —
+``isotropic_hardening_plasticity_param_kernel_reference`` and
+``isotropic_hardening_plasticity_param_kernel`` — returning the same carrier
+with ``param_derivatives`` populated: the exact analytic
+``d(sigma)/d(parameter)`` columns of the four declared parameters, stacked in
+``parameter_names`` order, derived from the converged return-map state of the
+same call (accepted state and total strain held fixed). On the elastic
+branch the map is ``sigma_a + ctang @ dstrain`` and the columns are
+``d(ctang)/dp @ dstrain`` — exactly zero for the two hardening parameters,
+which the elastic map does not reference. On the plastic branch the columns
+follow the implicit derivative of the converged consistency condition
+``smises - eg3 * deqpl - syield(eqplas + deqpl) = 0`` (the hardening table
+is linear, so the local Newton correction is exact): with the converged
+``flow``, ``deqpl``, ``syield`` and table slope ``hard`` of the same call,
+
+    d(deqpl)/dp = (d(smises)/dp - deqpl * d(eg3)/dp - dsy_fixed/dp) / (eg3 + hard)
+    d(syield)/dp = dsy_fixed/dp + hard * d(deqpl)/dp
+    d(sigma)/dp  = d(flow)/dp * syield + flow * d(syield)/dp + d(shydro)/dp
+
+where ``dsy_fixed/dp`` is the yield-stress derivative at fixed ``deqpl``
+(1 for ``initial_yield_stress``, the converged ``eqplas`` for
+``hardening_slope``, 0 otherwise) and ``d(flow)/dp``/``d(smises)/dp``
+differentiate the trial predictor ``d(ctang)/dp @ dstrain`` (zero for the
+hardening parameters). The derivatives use the table slope ``hard`` the map
+actually solved with; the algorithmic tangent's ``hard_slope`` slot agrees
+with it to table-packing rounding, below the finite-difference noise floor
+of the verification battery. No autodiff framework and no finite differences
+enter the shipped path: the columns are hand-derived from the return map and
+verified against central finite differences of the kernel itself to
+~1e-9 relative per column (test/v3/test_v3_param_derivatives.py). The two
+twins are bitwise identical to each other on every path — the same
+predictor-einsum/scalar-return-map split as the primal kernels — and their
+primal outputs are bitwise identical to the primal kernels, both pinned in
+``test/v3/test_v3_stateful_plasticity.py``.
 """
 
 from __future__ import annotations
@@ -435,6 +470,212 @@ def isotropic_hardening_plasticity_kernel_reference(
   )
 
 
+_PARAMETER_COUNT = 4
+_HYDROSTATIC_MASK = np.array([1.0, 1.0, 1.0, 0.0, 0.0, 0.0])
+
+
+def _calibration_elastic_derivatives(
+  calibration: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, float, float]:
+  """Exact ``d/d(E, nu)`` of the packed elastic constants.
+
+  The kernel ABI hands the law only the packed calibration vector, so the
+  parameter values are recovered from the packed constants by inverting the
+  constructor ratios: ``nu = (ebulk3 - eg2) / (2*ebulk3 + eg2)`` and
+  ``E = eg2 * (1 + nu)`` (from ``ebulk3 = E/(1 - 2*nu)`` and
+  ``eg2 = E/(1 + nu)``). The derivative expressions differentiate the
+  constructor's own arithmetic (``isotropic_hardening_calibration``) in its
+  statement order, so both derivative twins compute identical values.
+  Returns ``d(ctang)`` for E and nu and the two ``d(eg3)`` scalars.
+  """
+  eg2 = calibration[1]
+  ebulk3 = calibration[3]
+  nu = (ebulk3 - eg2) / (2.0 * ebulk3 + eg2)
+  e = eg2 * (1.0 + nu)
+  d_ebulk3_e = 1.0 / (1.0 - 2.0 * nu)
+  d_eg2_e = 1.0 / (1.0 + nu)
+  d_eg_e = 0.5 * d_eg2_e
+  d_eg3_e = 3.0 * d_eg_e
+  d_elam_e = (d_ebulk3_e - d_eg2_e) / 3.0
+  d_ebulk3_nu = 2.0 * e / ((1.0 - 2.0 * nu) * (1.0 - 2.0 * nu))
+  d_eg2_nu = -e / ((1.0 + nu) * (1.0 + nu))
+  d_eg_nu = 0.5 * d_eg2_nu
+  d_eg3_nu = 3.0 * d_eg_nu
+  d_elam_nu = (d_ebulk3_nu - d_eg2_nu) / 3.0
+
+  dctang_e = np.zeros(shape=(6, 6))
+  dctang_e[:3, :3] = d_elam_e
+  dctang_e[0, 0] += d_eg2_e
+  dctang_e[1, 1] = dctang_e[0, 0]
+  dctang_e[2, 2] = dctang_e[0, 0]
+  dctang_e[3, 3] = d_eg_e
+  dctang_e[4, 4] = dctang_e[3, 3]
+  dctang_e[5, 5] = dctang_e[3, 3]
+  dctang_nu = np.zeros(shape=(6, 6))
+  dctang_nu[:3, :3] = d_elam_nu
+  dctang_nu[0, 0] += d_eg2_nu
+  dctang_nu[1, 1] = dctang_nu[0, 0]
+  dctang_nu[2, 2] = dctang_nu[0, 0]
+  dctang_nu[3, 3] = d_eg_nu
+  dctang_nu[4, 4] = dctang_nu[3, 3]
+  dctang_nu[5, 5] = dctang_nu[3, 3]
+  return dctang_e, dctang_nu, d_eg3_e, d_eg3_nu
+
+
+def isotropic_hardening_plasticity_param_kernel_reference(
+  strains: np.ndarray,
+  accepted_rows: np.ndarray,
+  calibration: np.ndarray,
+) -> StatefulContinuumKernelResult:
+  """The derivative twin of the M25 reference kernel, one entity at a time.
+
+  Same inputs and same primal arithmetic as
+  ``isotropic_hardening_plasticity_kernel_reference`` (bitwise identical
+  stresses, tangents, trial rows, and status), with ``param_derivatives``
+  populated: the exact analytic ``d(sigma)/d(parameter)`` columns of the
+  four declared parameters, stacked in ``parameter_names`` order, derived
+  from the converged return-map state of the same call (module docstring,
+  "Parameter derivative channel").
+  """
+  if calibration.shape != (_CALIBRATION_SIZE,):
+    msg = "isotropic hardening kernel requires the packed calibration vector"
+    raise TypeError(msg)
+  if not bool(np.isfinite(strains).all()):
+    return _reject(accepted_rows)
+  eg = calibration[0]
+  eg3 = calibration[2]
+  ebulk3 = calibration[3]
+  syield0 = calibration[5]
+  tolerance = calibration[6]
+  hard_slope = calibration[7]
+  ctang = calibration[8:44].reshape(6, 6)
+  table_strains = calibration[44:46]
+  table_stresses = calibration[46:48]
+  dctang_e, dctang_nu, d_eg3_e, d_eg3_nu = _calibration_elastic_derivatives(calibration)
+
+  entity_count = strains.shape[0]
+  stresses = np.empty((entity_count, 6), dtype=np.float64)
+  tangents = np.empty((entity_count, 6, 6), dtype=np.float64)
+  trial_rows = np.empty((entity_count, _ROW_WIDTH), dtype=np.float64)
+  param_derivatives = np.empty((_PARAMETER_COUNT, entity_count, 6), dtype=np.float64)
+
+  for index in range(entity_count):
+    row = accepted_rows[index]
+    with np.errstate(over="ignore", invalid="ignore"):
+      dstrain = strains[index] - (row[6:12] + row[12:18])
+      eelas = row[6:12] + dstrain
+      sigma = row[0:6] + ctang @ dstrain
+      smises = _von_mises(sigma)
+      dsts = np.zeros((_PARAMETER_COUNT, 6), dtype=np.float64)
+      dsts[0] = dctang_e @ dstrain
+      dsts[1] = dctang_nu @ dstrain
+    eplas = np.array(row[12:18], copy=True)
+    eqplas = float(row[18])
+    if not bool(np.isfinite(sigma).all()) or not np.isfinite(smises):
+      return _reject(accepted_rows)
+    hardening = _hardening(table_strains, table_stresses, eqplas)
+    if hardening is None:
+      return _reject(accepted_rows)
+    syield, hard = hardening
+
+    if smises > (1.0 + tolerance) * syield:
+      sigma_trial = sigma
+      shydro = 0.333333333333333 * (sigma[0] + sigma[1] + sigma[2])
+      flow = np.array(sigma, copy=True)
+      flow[:3] = flow[:3] - shydro * np.ones(3)
+      flow *= 1.0 / smises
+
+      syield = syield0
+      deqpl = 0.0
+      rhs = syield
+      iterations = 0
+      while abs(rhs) > tolerance * syield0:
+        iterations += 1
+        if iterations > _LOCAL_NEWTON_LIMIT:
+          return _reject(accepted_rows)
+        rhs = smises - eg3 * deqpl - syield
+        deqpl = deqpl + rhs / (eg3 + hard)
+        if not np.isfinite(deqpl):
+          return _reject(accepted_rows)
+        hardening = _hardening(table_strains, table_stresses, eqplas + deqpl)
+        if hardening is None:
+          return _reject(accepted_rows)
+        syield, hard = hardening
+
+      eplas[:3] += 1.5 * flow[:3] * deqpl
+      eelas[:3] += -1.5 * flow[:3] * deqpl
+      eplas[3:] += 3.0 * flow[3:] * deqpl
+      eelas[3:] += -3.0 * flow[3:] * deqpl
+
+      sigma = flow * syield
+      sigma[:3] += shydro
+      eqplas += deqpl
+
+      effg = eg * syield / smises
+      effg2 = 2.0 * effg
+      effg3 = 3.0 * effg
+      efflam = 1.0 / 3.0 * (ebulk3 - effg2)
+      # Legacy tangent semantics: the declared slope (self.hard), which the
+      # two-point table matches exactly in this linear-hardening law.
+      effhdr = eg3 * hard_slope / (eg3 + hard_slope) - effg3
+
+      # The legacy law aliases and mutates its elastic tangent here; the pure
+      # v3 kernel writes the algorithmic tangent into a fresh copy instead.
+      # Every block is assigned, not accumulated: the legacy shear block adds
+      # effg on top of the elastic eg, an excess G the v3 law drops (the
+      # pinned divergence of the module docstring).
+      tang = np.array(ctang, copy=True)
+      tang[:3, :3] = efflam
+      for i in range(3):
+        tang[i, i] += effg2
+        tang[i + 3, i + 3] = effg
+      tang += effhdr * np.outer(flow, flow)
+
+      # Exact parameter derivatives of the converged return map (module
+      # docstring formulas). ``rec`` recomputes the primal's reciprocal
+      # expression on the same operands, so the value is identical.
+      rec = 1.0 / smises
+      for p in range(_PARAMETER_COUNT):
+        dst = dsts[p]
+        deg3_p = (d_eg3_e, d_eg3_nu, 0.0, 0.0)[p]
+        dsy_fixed = (0.0, 0.0, 1.0, eqplas)[p]
+        dsh = 0.333333333333333 * (dst[0] + dst[1] + dst[2])
+        da2 = 2.0 * (
+          (sigma_trial[0] - sigma_trial[1]) * (dst[0] - dst[1])
+          + (sigma_trial[1] - sigma_trial[2]) * (dst[1] - dst[2])
+          + (sigma_trial[2] - sigma_trial[0]) * (dst[2] - dst[0])
+        )
+        db2 = 2.0 * (
+          sigma_trial[3] * dst[3] + sigma_trial[4] * dst[4] + sigma_trial[5] * dst[5]
+        )
+        dsm = (da2 + 6.0 * db2) / (4.0 * smises)
+        drec = -dsm * rec * rec
+        dflow = (dst - _HYDROSTATIC_MASK * dsh) * rec + (
+          sigma_trial - _HYDROSTATIC_MASK * shydro
+        ) * drec
+        ddeqpl = (dsm - deqpl * deg3_p - dsy_fixed) / (eg3 + hard)
+        dsy_c = dsy_fixed + hard * ddeqpl
+        dsig = dflow * syield + flow * dsy_c
+        dsig[:3] += dsh
+        param_derivatives[p, index] = dsig
+    else:
+      tang = ctang
+      for p in range(_PARAMETER_COUNT):
+        param_derivatives[p, index] = dsts[p]
+
+    stresses[index] = sigma
+    tangents[index] = tang
+    trial_rows[index] = np.concatenate((sigma, eelas, eplas, [eqplas]))
+
+  return StatefulContinuumKernelResult(
+    stresses=stresses,
+    tangents=tangents,
+    trial_rows=trial_rows,
+    status=EvaluationStatus.OK,
+    param_derivatives=param_derivatives,
+  )
+
+
 @njit(cache=True)
 def _hardening_lookup(
   table_strains: F64,
@@ -592,6 +833,279 @@ def _return_map_batched(
   return rejects
 
 
+@njit(cache=True, parallel=True)
+def _return_map_param_batched(
+  dstrain: F64,
+  sigma_trial: F64,
+  smises: F64,
+  dstrials: F64,
+  accepted_rows: F64,
+  calibration: F64,
+  d_eg3_e: float,
+  d_eg3_nu: float,
+  stresses: F64,
+  tangents: F64,
+  trial_rows: F64,
+  param_derivatives: F64,
+) -> int:
+  """Batched radial return with fused exact parameter derivatives.
+
+  The primal statements mirror ``_return_map_batched`` verbatim (the pinned
+  bitwise identity extends to this twin's stresses, tangents, and trial
+  rows); the derivative block evaluates the module-docstring IFT formulas
+  per parameter with the same per-component expression order as
+  ``isotropic_hardening_plasticity_param_kernel_reference``, so both twins
+  are bitwise identical. ``dstrials[p]`` carries the predictor derivative
+  ``d(ctang)/dp @ dstrain`` (zero rows for the two hardening parameters) and
+  ``param_derivatives[p]`` receives the converged-map column.
+  """
+  eg = calibration[0]
+  eg3 = calibration[2]
+  ebulk3 = calibration[3]
+  syield0 = calibration[5]
+  tolerance = calibration[6]
+  hard_slope = calibration[7]
+  ctang = calibration[8:44].reshape(6, 6)
+  table_strains = calibration[44:46]
+  table_stresses = calibration[46:48]
+
+  rejects = 0
+  for index in prange(dstrain.shape[0]):
+    row = accepted_rows[index]
+    eelas = row[6:12] + dstrain[index]
+    eplas = row[12:18].copy()
+    eqplas = row[18]
+    sigma = sigma_trial[index]
+    sm = smises[index]
+
+    finite = np.isfinite(sm)
+    for component in range(6):
+      if not np.isfinite(sigma[component]):
+        finite = False
+    if not finite:
+      rejects += 1
+      continue
+
+    syield, hard, found = _hardening_lookup(table_strains, table_stresses, eqplas)
+    if not found:
+      rejects += 1
+      continue
+
+    tang = np.empty((6, 6))
+    if sm > (1.0 + tolerance) * syield:
+      shydro = 0.333333333333333 * (sigma[0] + sigma[1] + sigma[2])
+      flow = sigma.copy()
+      for component in range(3):
+        flow[component] -= shydro
+      reciprocal = 1.0 / sm
+      for component in range(6):
+        flow[component] *= reciprocal
+
+      syield = syield0
+      deqpl = 0.0
+      rhs = syield
+      iterations = 0
+      converged = True
+      while abs(rhs) > tolerance * syield0:
+        iterations += 1
+        if iterations > _LOCAL_NEWTON_LIMIT:
+          converged = False
+          break
+        rhs = sm - eg3 * deqpl - syield
+        deqpl = deqpl + rhs / (eg3 + hard)
+        if not np.isfinite(deqpl):
+          converged = False
+          break
+        syield, hard, found = _hardening_lookup(
+          table_strains, table_stresses, eqplas + deqpl
+        )
+        if not found:
+          converged = False
+          break
+      if not converged:
+        rejects += 1
+        continue
+
+      for component in range(3):
+        eplas[component] += 1.5 * flow[component] * deqpl
+        eelas[component] += -1.5 * flow[component] * deqpl
+      for component in range(3, 6):
+        eplas[component] += 3.0 * flow[component] * deqpl
+        eelas[component] += -3.0 * flow[component] * deqpl
+
+      sigma = flow * syield
+      for component in range(3):
+        sigma[component] += shydro
+      eqplas += deqpl
+
+      effg = eg * syield / sm
+      effg2 = 2.0 * effg
+      effg3 = 3.0 * effg
+      efflam = 1.0 / 3.0 * (ebulk3 - effg2)
+      # Legacy tangent semantics: the declared slope (self.hard), which the
+      # two-point table matches exactly in this linear-hardening law.
+      effhdr = eg3 * hard_slope / (eg3 + hard_slope) - effg3
+
+      for i in range(6):
+        for j in range(6):
+          tang[i, j] = ctang[i, j]
+      for i in range(3):
+        for j in range(3):
+          tang[i, j] = efflam
+      # Every block is assigned, not accumulated: the reference kernel's
+      # plastic branch carries the same assignments (the legacy +G shear
+      # excess is dropped in both kernels alike).
+      for i in range(3):
+        tang[i, i] += effg2
+        tang[i + 3, i + 3] = effg
+      for i in range(6):
+        for j in range(6):
+          tang[i, j] += effhdr * (flow[i] * flow[j])
+
+      # Exact parameter derivatives of the converged return map (module
+      # docstring formulas); per-component order matches the reference twin.
+      trial = sigma_trial[index]
+      for p in range(4):
+        if p == 0:
+          deg3_p = d_eg3_e
+        elif p == 1:
+          deg3_p = d_eg3_nu
+        else:
+          deg3_p = 0.0
+        if p == 2:
+          dsy_fixed = 1.0
+        elif p == 3:
+          dsy_fixed = eqplas
+        else:
+          dsy_fixed = 0.0
+        dst = dstrials[p, index]
+        dsh = 0.333333333333333 * (dst[0] + dst[1] + dst[2])
+        da2 = 2.0 * (
+          (trial[0] - trial[1]) * (dst[0] - dst[1])
+          + (trial[1] - trial[2]) * (dst[1] - dst[2])
+          + (trial[2] - trial[0]) * (dst[2] - dst[0])
+        )
+        db2 = 2.0 * (trial[3] * dst[3] + trial[4] * dst[4] + trial[5] * dst[5])
+        dsm = (da2 + 6.0 * db2) / (4.0 * sm)
+        drec = -dsm * reciprocal * reciprocal
+        ddeqpl = (dsm - deqpl * deg3_p - dsy_fixed) / (eg3 + hard)
+        dsy_c = dsy_fixed + hard * ddeqpl
+        for component in range(6):
+          if component < 3:
+            mask = 1.0
+          else:
+            mask = 0.0
+          dflow = (dst[component] - mask * dsh) * reciprocal + (
+            trial[component] - mask * shydro
+          ) * drec
+          dsig = dflow * syield + flow[component] * dsy_c
+          if component < 3:
+            dsig += dsh
+          param_derivatives[p, index, component] = dsig
+    else:
+      for i in range(6):
+        for j in range(6):
+          tang[i, j] = ctang[i, j]
+      for p in range(4):
+        for component in range(6):
+          param_derivatives[p, index, component] = dstrials[p, index, component]
+
+    stresses[index] = sigma
+    tangents[index] = tang
+    for component in range(6):
+      trial_rows[index, component] = sigma[component]
+      trial_rows[index, component + 6] = eelas[component]
+      trial_rows[index, component + 12] = eplas[component]
+    trial_rows[index, 18] = eqplas
+  return rejects
+
+
+def isotropic_hardening_plasticity_param_kernel(
+  strains: np.ndarray,
+  accepted_rows: np.ndarray,
+  calibration: np.ndarray,
+) -> StatefulContinuumKernelResult:
+  """The derivative twin of the M30 production kernel (batched SoA pass).
+
+  Same inputs and same primal arithmetic as
+  ``isotropic_hardening_plasticity_kernel`` (bitwise identical stresses,
+  tangents, trial rows, and status), with ``param_derivatives`` populated:
+  the exact analytic ``d(sigma)/d(parameter)`` columns of the four declared
+  parameters, stacked in ``parameter_names`` order. Outputs are bitwise
+  identical to ``isotropic_hardening_plasticity_param_kernel_reference``
+  (module docstring, "Parameter derivative channel").
+  """
+  if calibration.shape != (_CALIBRATION_SIZE,):
+    msg = "isotropic hardening kernel requires the packed calibration vector"
+    raise TypeError(msg)
+  if not bool(np.isfinite(strains).all()):
+    return _reject(accepted_rows)
+  entity_count = strains.shape[0]
+  if strains.shape != (entity_count, 6) or accepted_rows.shape != (
+    entity_count,
+    _ROW_WIDTH,
+  ):
+    msg = "isotropic hardening kernel requires (n, 6) strains and (n, 19) rows"
+    raise ValueError(msg)
+
+  strains64 = np.ascontiguousarray(strains, dtype=np.float64)
+  rows64 = np.ascontiguousarray(accepted_rows, dtype=np.float64)
+  ctang = calibration[8:44].reshape(6, 6)
+  dctang_e, dctang_nu, d_eg3_e, d_eg3_nu = _calibration_elastic_derivatives(calibration)
+  with np.errstate(over="ignore", invalid="ignore"):
+    # Batched elastic predictor over the SoA block. The einsum contractions
+    # with optimize=False are per-entity-bitwise equal to the reference
+    # kernel's `ctang @ dstrain` and `np.dot(shear, shear)` on the reference
+    # platform (optimize=True selects a different BLAS path and is not).
+    dstrain = strains64 - (rows64[:, 6:12] + rows64[:, 12:18])
+    sigma_trial = rows64[:, 0:6] + np.einsum(
+      "ij,nj->ni", ctang, dstrain, optimize=False
+    )
+    shear = sigma_trial[:, 3:]
+    smises = (
+      (sigma_trial[:, 0] - sigma_trial[:, 1]) * (sigma_trial[:, 0] - sigma_trial[:, 1])
+      + (sigma_trial[:, 1] - sigma_trial[:, 2])
+      * (sigma_trial[:, 1] - sigma_trial[:, 2])
+      + (sigma_trial[:, 2] - sigma_trial[:, 0])
+      * (sigma_trial[:, 2] - sigma_trial[:, 0])
+    )
+    smises += 6.0 * np.einsum("ni,ni->n", shear, shear, optimize=False)
+    smises = np.sqrt(0.5 * smises)
+    # Predictor parameter derivatives d(ctang)/dp @ dstrain, stacked in
+    # parameter_names order; the hardening parameters have zero rows.
+    dstrials = np.zeros((_PARAMETER_COUNT, entity_count, 6), dtype=np.float64)
+    dstrials[0] = np.einsum("ij,nj->ni", dctang_e, dstrain, optimize=False)
+    dstrials[1] = np.einsum("ij,nj->ni", dctang_nu, dstrain, optimize=False)
+
+  stresses = np.empty((entity_count, 6), dtype=np.float64)
+  tangents = np.empty((entity_count, 6, 6), dtype=np.float64)
+  trial_rows = np.empty((entity_count, _ROW_WIDTH), dtype=np.float64)
+  param_derivatives = np.empty((_PARAMETER_COUNT, entity_count, 6), dtype=np.float64)
+  rejects = _return_map_param_batched(
+    dstrain,
+    sigma_trial,
+    smises,
+    dstrials,
+    rows64,
+    np.ascontiguousarray(calibration, dtype=np.float64),
+    d_eg3_e,
+    d_eg3_nu,
+    stresses,
+    tangents,
+    trial_rows,
+    param_derivatives,
+  )
+  if rejects:
+    return _reject(accepted_rows)
+  return StatefulContinuumKernelResult(
+    stresses=stresses,
+    tangents=tangents,
+    trial_rows=trial_rows,
+    status=EvaluationStatus.OK,
+    param_derivatives=param_derivatives,
+  )
+
+
 def isotropic_hardening_plasticity_kernel(
   strains: np.ndarray,
   accepted_rows: np.ndarray,
@@ -697,6 +1211,16 @@ class IsotropicHardeningPlasticityBinding:
     calibration: np.ndarray,
   ) -> StatefulContinuumKernelResult:
     return isotropic_hardening_plasticity_kernel(strains, accepted_rows, calibration)
+
+  def param_derivative_kernel(
+    self,
+    strains: np.ndarray,
+    accepted_rows: np.ndarray,
+    calibration: np.ndarray,
+  ) -> StatefulContinuumKernelResult:
+    return isotropic_hardening_plasticity_param_kernel(
+      strains, accepted_rows, calibration
+    )
 
   def initial_state(
     self,
