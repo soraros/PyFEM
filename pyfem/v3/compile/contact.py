@@ -1,25 +1,43 @@
-"""Kernel-parameterized point-spring compiler with operator-local state.
+"""Penalty contact compiler: node-vs-analytic-obstacle point operator.
 
-This module is the researcher-facing extension seam for stateful laws. A
-researcher authors a plain batched kernel — displacements and accepted state
-rows in, force, tangent, trial rows, and a typed evaluation status out — plus a
-small declaration of state slots and parameters. The compiler owns every
-trusted carrier, validates the kernel against its declared schema once at the
-compile boundary, and checks the kernel tangent against a central finite
-difference of its force at seeded nonzero accepted states, so a tangent wrong
-only off the virgin probe state fails compilation with a coded diagnostic
-instead of evaluating silently wrong. The resulting operator coexists with the
-zero-width Q8 slice in one composed compiled system. Kernels never touch
-transactions, codecs, or carrier construction.
+This module ports the legacy ``pyfem.models.Contact`` capability onto the
+point-entity seam: a frictionless penalty law between a declared set of
+surface nodes and an analytic disc obstacle whose centre moves affine in a
+bound program signal (``centre + lam * direction``), evaluated over the
+declared node set with no contact search, exactly as legacy loops over all
+nodes. The researcher-facing kernel receives the CURRENT node positions
+(reference coordinates captured at compile plus the displacement port
+values), the accepted state rows, the packed parameters, and the bound
+signals.
 
-A declaration may additionally declare ``signal_ports``: typed program-signal
-port declarations emitted as ``SignalPortBinding`` values on the operator
-header. The compiled operator then accepts one bound ``ProgramSignalInput``
-per declared port and forwards the validated scalar values and derivative
-channels to the kernel's fourth positional argument, so schedule-owned
-coordinates (the load factor driving an obstacle, say) reach the law without
-any hidden global. Declarations without the field compile byte-identical
-operators that reject every signal input.
+The landed ``penalty_disc_kernel`` reproduces the legacy force law
+``-penalty * overlap * n`` operation for operation, so converged solutions
+match legacy; its tangent is the exact symmetric derivative
+``penalty * (1 - radius/d) * I + penalty * (radius/d) * n x n`` of that force
+— a documented improvement over legacy's appended ``penalty * n x n``, which
+the M62 survey measured inexact by exactly ``overlap/d`` (1.01% at an overlap
+of 0.01 radius). The exact tangent keeps ``symmetric=True`` honest; its
+tangential block is negative while penetrating, which the driver's general
+splu path handles without a definiteness assumption.
+
+The operator is stateless: the active set is a pure function of the trial
+point and the bound signal, so contact engage/disengage transitions across
+substeps ride the driver's transaction discipline (trial evaluations stage
+zero-width rows; commit/reject atomically advances or rewinds) with no state
+slots and no observation channels.
+
+The compile boundary mirrors the spring seam: a virgin-state probe over the
+captured reference coordinates enforces array and status plumbing, and a
+seeded finite-difference probe verifies the kernel tangent at engaged,
+disengaged, and boundary-adjacent states placed deterministically around the
+declared obstacle, clear of the non-differentiable kink at ``d = radius`` by
+orders of magnitude more than the finite-difference step. The kernel is
+dimension-generic, but compilation is pinned to two-component spaces by a
+coded rejection until a 3D oracle exists (legacy's sphere branch is
+unreachable through its ModelManager import — M62 finding 4). NOT-yet:
+friction, finite sliding with contact search, Lagrange-multiplier or
+augmented-Lagrange constraint enforcement, and gap/status observation
+channels.
 """
 
 from __future__ import annotations
@@ -48,7 +66,6 @@ from pyfem.v3.model.operator import (
   OperatorEvaluationInput,
   OperatorHeader,
   OperatorStateLayout,
-  OperatorStateSlot,
   PortBinding,
   PortMode,
   ProgramSignalInput,
@@ -67,17 +84,20 @@ from pyfem.v3.model.system import (
 )
 from pyfem.v3.spec.diagnostics import SourceContext
 
-SPRING_SYSTEM_EXTENSION_SCHEMA = "pyfem-v3-compiled-system-spring-extension-v1"
-DAMAGE_ENVELOPE_STATE_SCHEMA = "pyfem-v3-spring-damage-envelope-v1"
+CONTACT_SYSTEM_EXTENSION_SCHEMA = "pyfem-v3-compiled-system-contact-extension-v1"
+PENALTY_DISC_CONTACT_SCHEMA = "pyfem-v3-contact-penalty-disc-v1"
 _FLOAT64_DTYPE = np.dtype(np.float64).str
 
-# The tangent probe draws a handful of nonzero accepted states from one
-# fixed-seed generator and central-differences the kernel force at each state
-# the kernel accepts. The seed, state count, relative tolerance, and step are
-# part of the conformance contract: the seed is recorded in every probe
+# The tangent probe places seeded states on circles around the obstacle's base
+# centre, one state per distance band (in units of the radius): engaged deep,
+# disengaged, and engaged boundary-adjacent. The bands are part of the
+# conformance contract: they keep every probed state clear of the
+# non-differentiable kink at d = radius by far more than the finite-difference
+# step, and the engaged bands sit where legacy's inexact tangent misses by
+# overlap/d (one to eleven percent). The seed is recorded in every probe
 # diagnostic so a failure replays bit-for-bit.
-_TANGENT_PROBE_SEED = 20260930
-_TANGENT_PROBE_STATE_COUNT = 3
+_TANGENT_PROBE_SEED = 20261009
+_TANGENT_PROBE_BANDS = ((0.90, 0.99), (1.01, 1.10), (0.995, 0.999))
 _TANGENT_PROBE_RTOL = 1.0e-4
 _TANGENT_PROBE_STEP = float(np.cbrt(np.finfo(np.float64).eps))
 
@@ -104,34 +124,6 @@ def _source(value: SourceContext) -> CompiledSource:
   )
 
 
-@dataclass(frozen=True, slots=True)
-class SpringKernelResult:
-  """One batched local response of a point-spring law evaluation.
-
-  ``force`` has shape ``(entity_count, 2)``, ``tangent`` has shape
-  ``(entity_count, 2, 2)``, and ``trial_rows`` has shape
-  ``(entity_count, row_width)``. When ``status`` is not ``OK`` the operator
-  discards the arrays and returns the accepted rows byte-equal, so kernels
-  report expected numerical outcomes instead of raising.
-  """
-
-  force: np.ndarray
-  tangent: np.ndarray
-  trial_rows: np.ndarray
-  status: EvaluationStatus
-
-
-class SpringKernel(Protocol):
-  """Researcher-authored batched constitutive kernel for point springs."""
-
-  def __call__(
-    self,
-    displacements: np.ndarray,
-    accepted_rows: np.ndarray,
-    parameters: np.ndarray,
-  ) -> SpringKernelResult: ...
-
-
 def _signal_scalar(value: np.ndarray, label: str) -> None:
   if (
     type(value) is not np.ndarray
@@ -140,13 +132,13 @@ def _signal_scalar(value: np.ndarray, label: str) -> None:
     or value.shape != (1,)
     or not bool(np.isfinite(value).all())
   ):
-    msg = f"spring {label} must be a plain finite one-element float64 array"
+    msg = f"contact {label} must be a plain finite one-element float64 array"
     raise TypeError(msg)
 
 
 @dataclass(frozen=True, slots=True)
-class SpringSignalPort:
-  """One declared program-signal port of a spring network.
+class ContactSignalPort:
+  """One declared program-signal port of a contact network.
 
   ``port_id`` names the operator-local port evaluation inputs bind by;
   ``signal_id`` names the program signal the driver binds to the port, under
@@ -163,43 +155,38 @@ class SpringSignalPort:
 
   def __post_init__(self) -> None:
     if type(self.port_id) is not str or not self.port_id:
-      msg = "spring signal port ids must be non-empty exact strings"
+      msg = "contact signal port ids must be non-empty exact strings"
       raise TypeError(msg)
     if type(self.signal_id) is not str or not self.signal_id:
-      msg = "spring signal port signal ids must be non-empty exact strings"
+      msg = "contact signal port signal ids must be non-empty exact strings"
       raise TypeError(msg)
     if type(self.derivative_coordinate_ids) is not tuple or any(
       type(item) is not str or not item for item in self.derivative_coordinate_ids
     ):
-      msg = "spring signal port derivative coordinates must be exact strings"
+      msg = "contact signal port derivative coordinates must be exact strings"
       raise TypeError(msg)
     if len(set(self.derivative_coordinate_ids)) != len(self.derivative_coordinate_ids):
-      msg = "spring signal port derivative coordinates must be unique"
+      msg = "contact signal port derivative coordinates must be unique"
       raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
-class SpringSignalDerivative:
-  """One program-coordinate derivative channel of one bound signal port.
-
-  ``values`` holds ``d(signal)/d(coordinate_id)`` at the bound program point.
-  This ABI revision's signals are scalar, so every values array carries
-  exactly one float64.
-  """
+class ContactSignalDerivative:
+  """One program-coordinate derivative channel of one bound signal port."""
 
   coordinate_id: str
   values: np.ndarray
 
   def __post_init__(self) -> None:
     if type(self.coordinate_id) is not str or not self.coordinate_id:
-      msg = "spring signal derivative coordinates must be non-empty exact strings"
+      msg = "contact signal derivative coordinates must be non-empty exact strings"
       raise TypeError(msg)
     _signal_scalar(self.values, "signal derivative values")
 
 
 @dataclass(frozen=True, slots=True)
-class SpringSignalInput:
-  """One bound signal port forwarded to a signal-consuming spring kernel.
+class ContactSignalInput:
+  """One bound signal port forwarded to a contact kernel evaluation.
 
   The compiled operator builds these from validated ``ProgramSignalInput``
   values in declared port order; ``derivatives`` follows the port's declared
@@ -208,202 +195,207 @@ class SpringSignalInput:
 
   port_id: str
   values: np.ndarray
-  derivatives: tuple[SpringSignalDerivative, ...]
+  derivatives: tuple[ContactSignalDerivative, ...]
 
   def __post_init__(self) -> None:
     if type(self.port_id) is not str or not self.port_id:
-      msg = "spring signal input port ids must be non-empty exact strings"
+      msg = "contact signal input port ids must be non-empty exact strings"
       raise TypeError(msg)
     _signal_scalar(self.values, "signal values")
     if type(self.derivatives) is not tuple or any(
-      type(item) is not SpringSignalDerivative for item in self.derivatives
+      type(item) is not ContactSignalDerivative for item in self.derivatives
     ):
-      msg = "spring signal derivatives must be exact SpringSignalDerivative values"
+      msg = "contact signal derivatives must be exact ContactSignalDerivative values"
       raise TypeError(msg)
 
 
-class SignalSpringKernel(Protocol):
-  """Researcher-authored batched constitutive kernel with program signals.
+@dataclass(frozen=True, slots=True)
+class ContactKernelResult:
+  """One batched local response of a contact law evaluation.
 
-  A declaration carrying ``signal_ports`` binds this form: the compiled
-  operator forwards the validated bound signals as the kernel's fourth
-  positional argument, in declared port order.
+  ``force`` has shape ``(entity_count, dimension)`` and ``tangent``
+  ``(entity_count, dimension, dimension)``; ``trial_rows`` has shape
+  ``(entity_count, 0)`` — penalty contact is stateless, so the trial rows are
+  always the accepted rows byte-equal. When ``status`` is not ``OK`` the
+  operator discards the arrays and returns the accepted rows byte-equal, so
+  kernels report expected numerical outcomes instead of raising.
   """
+
+  force: np.ndarray
+  tangent: np.ndarray
+  trial_rows: np.ndarray
+  status: EvaluationStatus
+
+
+class ContactKernel(Protocol):
+  """Researcher-authored batched law for node-vs-obstacle penalty contact."""
 
   def __call__(
     self,
-    displacements: np.ndarray,
+    current_positions: np.ndarray,
     accepted_rows: np.ndarray,
     parameters: np.ndarray,
-    signals: tuple[SpringSignalInput, ...],
-  ) -> SpringKernelResult: ...
+    signals: tuple[ContactSignalInput, ...],
+  ) -> ContactKernelResult: ...
 
 
 @dataclass(frozen=True, slots=True)
-class SpringStateSlot:
-  """One named contiguous slice of a spring entity's state row."""
+class ContactDeclaration:
+  """Authored meaning for one penalty contact network against one obstacle.
 
-  name: str
-  width: int
-
-  def __post_init__(self) -> None:
-    if type(self.name) is not str or not self.name:
-      msg = "spring state slot names must be non-empty exact strings"
-      raise TypeError(msg)
-    if type(self.width) is not int or self.width <= 0:
-      msg = "spring state slot widths must be positive exact integers"
-      raise TypeError(msg)
-
-
-@dataclass(frozen=True, slots=True)
-class SpringDeclaration:
-  """Authored meaning for one network of stateful point springs."""
+  ``centre``, ``direction``, ``radius``, and ``penalty`` describe the analytic
+  disc: at the bound signal value ``lam`` the obstacle centre sits at
+  ``centre + lam * direction``. They are packed into the kernel's parameter
+  array as ``(penalty, radius, *centre, *direction)`` and drive the seeded
+  tangent probe's obstacle-relative state placement.
+  """
 
   block_id: SemanticId
   space_id: SemanticId
-  spring_ids: tuple[SemanticId, ...]
+  contact_ids: tuple[SemanticId, ...]
   node_ids: tuple[SemanticId, ...]
+  centre: tuple[float, float]
+  direction: tuple[float, float]
+  radius: float
+  penalty: float
   state_schema: str
-  state_slots: tuple[SpringStateSlot, ...]
   kernel_name: str
   kernel_version: str
   implementation_id: str
-  parameters: tuple[float, ...]
-  kernel: SpringKernel | SignalSpringKernel
+  kernel: ContactKernel
   source: SourceContext
-  signal_ports: tuple[SpringSignalPort, ...] = ()
+  signal_ports: tuple[ContactSignalPort, ...] = ()
 
   def __post_init__(self) -> None:
     if type(self.block_id) not in (str, int, tuple):
-      msg = "spring block id must be an exact semantic id"
+      msg = "contact block id must be an exact semantic id"
       raise TypeError(msg)
     if (
-      type(self.spring_ids) is not tuple
+      type(self.contact_ids) is not tuple
       or type(self.node_ids) is not tuple
-      or not self.spring_ids
-      or len(self.spring_ids) != len(self.node_ids)
-      or len(set(self.spring_ids)) != len(self.spring_ids)
+      or not self.contact_ids
+      or len(self.contact_ids) != len(self.node_ids)
+      or len(set(self.contact_ids)) != len(self.contact_ids)
     ):
-      msg = "spring declarations require paired unique spring and node id tuples"
+      msg = "contact declarations require paired unique contact and node id tuples"
       raise TypeError(msg)
+    for label, pair in (("centre", self.centre), ("direction", self.direction)):
+      if (
+        type(pair) is not tuple
+        or len(pair) != 2
+        or any(type(value) is not float or not math.isfinite(value) for value in pair)
+      ):
+        msg = f"contact {label} must be a finite exact float pair"
+        raise TypeError(msg)
+    for label, value in (("radius", self.radius), ("penalty", self.penalty)):
+      if type(value) is not float or not math.isfinite(value) or value <= 0.0:
+        msg = f"contact {label} must be a positive finite exact float"
+        raise TypeError(msg)
     if type(self.state_schema) is not str or not self.state_schema:
-      msg = "spring state schema must be a non-empty exact string"
+      msg = "contact state schema must be a non-empty exact string"
       raise TypeError(msg)
-    if type(self.state_slots) is not tuple or any(
-      type(slot) is not SpringStateSlot for slot in self.state_slots
-    ):
-      msg = "spring state slots must be exact SpringStateSlot values"
-      raise TypeError(msg)
-    if len({slot.name for slot in self.state_slots}) != len(self.state_slots):
-      msg = "spring state slot names must be unique"
-      raise ValueError(msg)
-    if type(self.signal_ports) is not tuple or any(
-      type(port) is not SpringSignalPort for port in self.signal_ports
-    ):
-      msg = "spring signal ports must be exact SpringSignalPort values"
-      raise TypeError(msg)
-    if len({port.port_id for port in self.signal_ports}) != len(self.signal_ports):
-      msg = "spring signal port ids must be unique"
-      raise ValueError(msg)
     for label in ("kernel_name", "kernel_version", "implementation_id"):
       value = getattr(self, label)
       if type(value) is not str or not value:
-        msg = f"spring {label} must be a non-empty exact string"
+        msg = f"contact {label} must be a non-empty exact string"
         raise TypeError(msg)
-    if type(self.parameters) is not tuple or any(
-      type(value) is not float or not math.isfinite(value) for value in self.parameters
-    ):
-      msg = "spring parameters must be finite exact floats"
-      raise TypeError(msg)
     if not callable(self.kernel):
-      msg = "spring kernel must be callable"
+      msg = "contact kernel must be callable"
       raise TypeError(msg)
     if type(self.source) is not SourceContext:
-      msg = "spring declarations require an exact SourceContext"
+      msg = "contact declarations require an exact SourceContext"
       raise TypeError(msg)
+    if type(self.signal_ports) is not tuple or any(
+      type(port) is not ContactSignalPort for port in self.signal_ports
+    ):
+      msg = "contact signal ports must be exact ContactSignalPort values"
+      raise TypeError(msg)
+    if len({port.port_id for port in self.signal_ports}) != len(self.signal_ports):
+      msg = "contact signal port ids must be unique"
+      raise ValueError(msg)
 
 
-def damage_envelope_kernel(
-  displacements: np.ndarray,
+def penalty_disc_kernel(
+  current_positions: np.ndarray,
   accepted_rows: np.ndarray,
   parameters: np.ndarray,
-) -> SpringKernelResult:
-  """Isotropic damage-envelope spring with an irreversible max-extension row.
+  signals: tuple[ContactSignalInput, ...],
+) -> ContactKernelResult:
+  """Frictionless penalty contact against a signal-driven disc obstacle.
 
-  State row ``[kappa]`` records the largest displacement magnitude ever
-  accepted. Damage ``omega = min(kappa / critical_extension, 1)`` degrades the
-  stiffness irreversibly; unloading keeps the degraded secant. A trial whose
-  extension jump exceeds ``max_increment`` skips the envelope path and is
-  classified ``REJECT_STEP`` so the schedule cuts back from the same accepted
-  generation. At full damage the spring carries no force.
+  The single bound signal is the obstacle schedule coordinate ``lam``: the
+  centre sits at ``centre + lam * direction``. Engaged entities
+  (``overlap = radius - d > 0`` with ``d = |x - centre|``) carry exactly the
+  legacy force law ``-penalty * overlap * n``, operation for operation, and
+  the exact symmetric tangent of that force,
+  ``penalty * (1 - radius/d) * I + penalty * (radius/d) * n x n``; disengaged
+  entities carry zeros. The kernel is dimension-generic over the component
+  axis; the compiler pins two-component spaces because no 3D oracle exists.
   """
-  stiffness, critical_extension, max_increment = parameters
-  kappa = accepted_rows[:, 0]
-  radius = np.linalg.norm(displacements, axis=1)
-  if bool((radius - kappa > max_increment).any()):
-    return SpringKernelResult(
-      force=np.zeros_like(displacements),
-      tangent=np.zeros((len(displacements), 2, 2)),
-      trial_rows=np.array(accepted_rows, copy=True),
-      status=EvaluationStatus.REJECT_STEP,
-    )
-  trial_kappa = np.maximum(kappa, radius)
-  damage = np.minimum(trial_kappa / critical_extension, 1.0)
-  force = (1.0 - damage)[:, None] * stiffness * displacements
-  tangent = ((1.0 - damage) * stiffness)[:, None, None] * np.eye(2)[None, :, :]
-  growing = (radius > kappa) & (trial_kappa < critical_extension)
-  safe_radius = np.where(growing, np.maximum(radius, 1.0e-300), 1.0)
-  degradation = np.where(
-    growing,
-    stiffness / (critical_extension * safe_radius),
-    0.0,
-  )
-  tangent = tangent - degradation[:, None, None] * np.einsum(
-    "ei,ej->eij",
-    displacements,
-    displacements,
-  )
-  return SpringKernelResult(
+  if len(signals) != 1:
+    msg = "the penalty disc kernel binds exactly one obstacle schedule signal"
+    raise TypeError(msg)
+  dimension = current_positions.shape[1]
+  penalty = parameters[0]
+  radius = parameters[1]
+  base_centre = parameters[2 : 2 + dimension]
+  centre = base_centre + signals[0].values[0] * parameters[2 + dimension :]
+  entity_count = len(current_positions)
+  force = np.zeros((entity_count, dimension), dtype=np.float64)
+  tangent = np.zeros((entity_count, dimension, dimension), dtype=np.float64)
+  ds = current_positions - centre
+  distance = np.sqrt(np.sum(ds * ds, axis=1))
+  overlap = radius - distance
+  engaged = overlap > 0.0
+  if bool(engaged.any()):
+    normal = ds[engaged] / distance[engaged, None]
+    force[engaged] = (-penalty * overlap[engaged])[:, None] * normal
+    tangent[engaged] = (penalty * (1.0 - radius / distance[engaged]))[
+      :, None, None
+    ] * np.eye(dimension)[None, :, :] + (penalty * (radius / distance[engaged]))[
+      :, None, None
+    ] * np.einsum("ei,ej->eij", normal, normal)
+  return ContactKernelResult(
     force=force,
     tangent=tangent,
-    trial_rows=trial_kappa[:, None],
+    trial_rows=np.array(accepted_rows, copy=True),
     status=EvaluationStatus.OK,
   )
 
 
-def damage_envelope_declaration(
+def penalty_disc_declaration(
   *,
   block_id: SemanticId,
   space_id: SemanticId,
-  spring_ids: tuple[SemanticId, ...],
+  contact_ids: tuple[SemanticId, ...],
   node_ids: tuple[SemanticId, ...],
-  stiffness: float,
-  critical_extension: float,
-  max_increment: float,
+  centre: tuple[float, float],
+  direction: tuple[float, float],
+  radius: float,
+  penalty: float,
+  signal_port: ContactSignalPort,
   source: SourceContext,
-) -> SpringDeclaration:
-  """Build a validated declaration for the damage-envelope spring law."""
-  for label, value in (
-    ("stiffness", stiffness),
-    ("critical_extension", critical_extension),
-    ("max_increment", max_increment),
-  ):
-    if type(value) is not float or not math.isfinite(value) or value <= 0.0:
-      msg = f"damage envelope {label} must be a positive finite exact float"
-      raise ValueError(msg)
-  return SpringDeclaration(
+) -> ContactDeclaration:
+  """Build a validated declaration for the landed penalty disc law."""
+  if type(signal_port) is not ContactSignalPort:
+    msg = "the penalty disc law binds exactly one obstacle schedule signal port"
+    raise TypeError(msg)
+  return ContactDeclaration(
     block_id=block_id,
     space_id=space_id,
-    spring_ids=spring_ids,
+    contact_ids=contact_ids,
     node_ids=node_ids,
-    state_schema=DAMAGE_ENVELOPE_STATE_SCHEMA,
-    state_slots=(SpringStateSlot("max_extension", 1),),
-    kernel_name="damage-envelope-spring",
+    centre=centre,
+    direction=direction,
+    radius=radius,
+    penalty=penalty,
+    state_schema=PENALTY_DISC_CONTACT_SCHEMA,
+    kernel_name="penalty-disc-contact",
     kernel_version="1",
-    implementation_id=DAMAGE_ENVELOPE_STATE_SCHEMA,
-    parameters=(stiffness, critical_extension, max_increment),
-    kernel=damage_envelope_kernel,
+    implementation_id=PENALTY_DISC_CONTACT_SCHEMA,
+    kernel=penalty_disc_kernel,
     source=source,
+    signal_ports=(signal_port,),
   )
 
 
@@ -412,16 +404,21 @@ def _validated_kernel_arrays(
   *,
   entity_count: int,
   row_width: int,
+  dimension: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, EvaluationStatus]:
-  if type(result) is not SpringKernelResult:
-    msg = "spring kernels must return an exact SpringKernelResult"
+  if type(result) is not ContactKernelResult:
+    msg = "contact kernels must return an exact ContactKernelResult"
     raise TypeError(msg)
   status = result.status
   if type(status) is not EvaluationStatus:
-    msg = "spring kernel status must be an exact EvaluationStatus"
+    msg = "contact kernel status must be an exact EvaluationStatus"
     raise TypeError(msg)
   arrays = (result.force, result.tangent, result.trial_rows)
-  shapes = ((entity_count, 2), (entity_count, 2, 2), (entity_count, row_width))
+  shapes = (
+    (entity_count, dimension),
+    (entity_count, dimension, dimension),
+    (entity_count, row_width),
+  )
   for array, shape in zip(arrays, shapes, strict=True):
     if (
       type(array) is not np.ndarray
@@ -429,20 +426,20 @@ def _validated_kernel_arrays(
       or array.dtype.metadata is not None
       or array.shape != shape
     ):
-      msg = "spring kernel arrays must match the declared batched float64 shapes"
+      msg = "contact kernel arrays must match the declared batched float64 shapes"
       raise TypeError(msg)
   if status is EvaluationStatus.OK and not all(
     bool(np.isfinite(array).all()) for array in arrays
   ):
-    msg = "spring kernel arrays must be finite for a successful evaluation"
+    msg = "contact kernel arrays must be finite for a successful evaluation"
     raise TypeError(msg)
   return result.force, result.tangent, result.trial_rows, status
 
 
-def _validated_spring_signals(
+def _validated_contact_signals(
   ports: tuple[SignalPortBinding, ...],
   signals: tuple[ProgramSignalInput, ...],
-) -> tuple[SpringSignalInput, ...]:
+) -> tuple[ContactSignalInput, ...]:
   """Bind evaluation signal inputs exactly onto the declared signal ports.
 
   Every declared port must be bound exactly once and every input must name a
@@ -453,32 +450,32 @@ def _validated_spring_signals(
   by_port: dict[str, ProgramSignalInput] = {}
   for signal in signals:
     if signal.port_id in by_port:
-      msg = "spring evaluation received a duplicate program signal port"
+      msg = "contact evaluation received a duplicate program signal port"
       raise ValueError(msg)
     by_port[signal.port_id] = signal
   declared = {port.port_id: port for port in ports}
   for port_id in by_port:
     if port_id not in declared:
-      msg = "spring evaluation received an undeclared program signal port"
+      msg = "contact evaluation received an undeclared program signal port"
       raise ValueError(msg)
-  kernel_signals: list[SpringSignalInput] = []
+  kernel_signals: list[ContactSignalInput] = []
   for port in ports:
     signal = by_port.get(port.port_id)
     if signal is None:
-      msg = "spring evaluation is missing a declared program signal port"
+      msg = "contact evaluation is missing a declared program signal port"
       raise ValueError(msg)
     if (
       tuple(item.coordinate_id for item in signal.derivatives)
       != port.derivative_coordinate_ids
     ):
-      msg = "spring signal derivatives must match the declared coordinates"
+      msg = "contact signal derivatives must match the declared coordinates"
       raise ValueError(msg)
     kernel_signals.append(
-      SpringSignalInput(
+      ContactSignalInput(
         port_id=port.port_id,
         values=signal.values.values,
         derivatives=tuple(
-          SpringSignalDerivative(
+          ContactSignalDerivative(
             coordinate_id=item.coordinate_id,
             values=item.values.values,
           )
@@ -490,8 +487,8 @@ def _validated_spring_signals(
 
 
 def _probe_signals(
-  ports: tuple[SpringSignalPort, ...],
-) -> tuple[SpringSignalInput, ...]:
+  ports: tuple[ContactSignalPort, ...],
+) -> tuple[ContactSignalInput, ...]:
   """Zero-valued compile-probe signals with identity-style derivative deltas.
 
   Mirrors the landed stateful-continuum precedent: a zero signal with a
@@ -499,11 +496,11 @@ def _probe_signals(
   driver binding rule, so a signal-consuming kernel sees its schedule origin
   at the compile boundary. The carriers are read-only, exactly as at runtime.
   """
-  carriers: list[SpringSignalInput] = []
+  carriers: list[ContactSignalInput] = []
   for port in ports:
     values = np.zeros(1, dtype=np.float64)
     values.setflags(write=False)
-    derivatives: list[SpringSignalDerivative] = []
+    derivatives: list[ContactSignalDerivative] = []
     for coordinate in port.derivative_coordinate_ids:
       derivative = np.array(
         [1.0 if coordinate == port.signal_id else 0.0],
@@ -511,10 +508,10 @@ def _probe_signals(
       )
       derivative.setflags(write=False)
       derivatives.append(
-        SpringSignalDerivative(coordinate_id=coordinate, values=derivative)
+        ContactSignalDerivative(coordinate_id=coordinate, values=derivative)
       )
     carriers.append(
-      SpringSignalInput(
+      ContactSignalInput(
         port_id=port.port_id,
         values=values,
         derivatives=tuple(derivatives),
@@ -524,43 +521,46 @@ def _probe_signals(
 
 
 def _probe_kernel_tangent(
-  kernel: SpringKernel | SignalSpringKernel,
+  kernel: ContactKernel,
   parameters: np.ndarray,
   *,
   entity_count: int,
   row_width: int,
+  centre: tuple[float, float],
+  radius: float,
+  signals: tuple[ContactSignalInput, ...],
   source: SourceContext,
-  signals: tuple[SpringSignalInput, ...] | None = None,
 ) -> None:
-  """Central-difference the kernel tangent at seeded nonzero accepted states.
+  """Central-difference the kernel tangent around the declared obstacle.
 
-  The virgin-state probe proves array and status plumbing only, so a tangent
-  wrong solely at nonzero accepted state would compile clean and evaluate
-  silently wrong. Every seeded state the kernel accepts is checked by a
-  central finite difference of the force along each displacement component.
-  States — or stencil legs — the kernel rejects with a typed status carry no
-  channels to verify and are skipped. The draws come from one fixed-seed
-  generator and the seed is recorded in every diagnostic, so a failure
-  replays bit-for-bit. A signal-consuming kernel is probed with the fixed
-  zero-valued probe signals held constant across every stencil leg.
+  Every probed state places ``entity_count`` seeded positions on a circle
+  whose radius sweeps one of the fixed bands — engaged deep, disengaged, and
+  engaged boundary-adjacent — so a tangent wrong in any regime fails
+  compilation with a coded diagnostic instead of evaluating silently wrong.
+  States the kernel rejects with a typed status carry no channels to verify
+  and are skipped. The draws come from one fixed-seed generator and the seed
+  is recorded in every diagnostic, so a failure replays bit-for-bit.
   """
   generator = np.random.default_rng(_TANGENT_PROBE_SEED)
-  for state_index in range(_TANGENT_PROBE_STATE_COUNT):
-    displacements = generator.standard_normal((entity_count, 2))
-    accepted_rows = generator.standard_normal((entity_count, row_width))
+  base_centre = np.array(centre, dtype=np.float64)
+  for state_index, band in enumerate(_TANGENT_PROBE_BANDS):
+    angles = generator.uniform(0.0, 2.0 * math.pi, entity_count)
+    distances = radius * generator.uniform(band[0], band[1], entity_count)
+    positions = base_centre[None, :] + distances[:, None] * np.stack(
+      (np.cos(angles), np.sin(angles)),
+      axis=1,
+    )
+    accepted_rows = np.zeros((entity_count, row_width), dtype=np.float64)
     # The probe mirrors runtime input mutability exactly, exactly as at the
     # virgin state: every array handed to the kernel is read-only.
-    displacements.setflags(write=False)
+    positions.setflags(write=False)
     accepted_rows.setflags(write=False)
     try:
-      if signals is None:
-        probed = kernel(displacements, accepted_rows, parameters)
-      else:
-        probed = kernel(displacements, accepted_rows, parameters, signals)
+      probed = kernel(positions, accepted_rows, parameters, signals)
     except Exception:
       _fail(
         "kernel-probe-failed",
-        "spring kernel failed its seeded nonzero-state compile probe "
+        "contact kernel failed its seeded nonzero-state compile probe "
         f"(seed {_TANGENT_PROBE_SEED}, state {state_index})",
         source,
       )
@@ -568,6 +568,7 @@ def _probe_kernel_tangent(
       probed,
       entity_count=entity_count,
       row_width=row_width,
+      dimension=2,
     )
     if status is not EvaluationStatus.OK:
       continue
@@ -575,25 +576,21 @@ def _probe_kernel_tangent(
       for component in range(2):
         step = _TANGENT_PROBE_STEP * max(
           1.0,
-          abs(float(displacements[entity_index, component])),
+          abs(float(positions[entity_index, component])),
         )
-        plus = np.array(displacements, copy=True)
-        minus = np.array(displacements, copy=True)
+        plus = np.array(positions, copy=True)
+        minus = np.array(positions, copy=True)
         plus[entity_index, component] += step
         minus[entity_index, component] -= step
         plus.setflags(write=False)
         minus.setflags(write=False)
         try:
-          if signals is None:
-            plus_result = kernel(plus, accepted_rows, parameters)
-            minus_result = kernel(minus, accepted_rows, parameters)
-          else:
-            plus_result = kernel(plus, accepted_rows, parameters, signals)
-            minus_result = kernel(minus, accepted_rows, parameters, signals)
+          plus_result = kernel(plus, accepted_rows, parameters, signals)
+          minus_result = kernel(minus, accepted_rows, parameters, signals)
         except Exception:
           _fail(
             "kernel-probe-failed",
-            "spring kernel failed its seeded nonzero-state compile probe "
+            "contact kernel failed its seeded nonzero-state compile probe "
             f"(seed {_TANGENT_PROBE_SEED}, state {state_index}, entity "
             f"{entity_index}, component {component})",
             source,
@@ -602,11 +599,13 @@ def _probe_kernel_tangent(
           plus_result,
           entity_count=entity_count,
           row_width=row_width,
+          dimension=2,
         )
         minus_force, _, _, minus_status = _validated_kernel_arrays(
           minus_result,
           entity_count=entity_count,
           row_width=row_width,
+          dimension=2,
         )
         if (
           plus_status is not EvaluationStatus.OK
@@ -626,7 +625,7 @@ def _probe_kernel_tangent(
         if mismatch > _TANGENT_PROBE_RTOL * scale:
           _fail(
             "inconsistent-kernel-tangent",
-            "spring kernel tangent contradicts a central finite difference of "
+            "contact kernel tangent contradicts a central finite difference of "
             "its force at a seeded nonzero accepted state (seed "
             f"{_TANGENT_PROBE_SEED}, state {state_index}, entity "
             f"{entity_index}, component {component}): kernel tangent column "
@@ -636,29 +635,31 @@ def _probe_kernel_tangent(
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
-class SpringPayload(CompilerConstructed):
+class ContactPayload(CompilerConstructed):
   parameters: FinalizedArray
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
-class SpringOperator(CompilerConstructed):
+class PenaltyContactOperator(CompilerConstructed):
+  """Compiled stateless penalty contact operator over a declared node set."""
+
   header: OperatorHeader
-  spring_block: PointEntityBlock
-  payload: SpringPayload
+  contact_block: PointEntityBlock
+  payload: ContactPayload
   content_manifest: CanonicalManifest
-  kernel: SpringKernel
+  kernel: ContactKernel
   system_instance: InstanceId
 
   def evaluate(
     self,
     inputs: OperatorEvaluationInput,
   ) -> OperatorEvaluation:
-    """Evaluate the spring network from accepted state with typed outcomes."""
+    """Evaluate the contact network from accepted state with typed outcomes."""
     if type(inputs) is not OperatorEvaluationInput:
-      msg = "spring evaluation requires an exact immutable evaluation input"
+      msg = "contact evaluation requires an exact immutable evaluation input"
       raise TypeError(msg)
     if type(inputs.port_values) is not tuple or len(inputs.port_values) != 1:
-      msg = "spring evaluation requires exactly one displacement port batch"
+      msg = "contact evaluation requires exactly one displacement port batch"
       raise TypeError(msg)
     values = inputs.port_values[0].values
     expected = self.header.ports[0].coefficient_map.values.shape
@@ -668,7 +669,7 @@ class SpringOperator(CompilerConstructed):
       or values.shape != expected
       or not bool(np.isfinite(values).all())
     ):
-      msg = "spring displacement port values must be a finite float64 batch"
+      msg = "contact displacement port values must be a finite float64 batch"
       raise TypeError(msg)
     layout = self.header.state_layout
     accepted_state = inputs.accepted_state.values
@@ -678,18 +679,16 @@ class SpringOperator(CompilerConstructed):
       or accepted_state.shape != layout.row_shape
       or not bool(np.isfinite(accepted_state).all())
     ):
-      msg = "spring accepted state must match the compiled state layout"
+      msg = "contact accepted state must match the compiled state layout"
       raise TypeError(msg)
     signal_ports = self.header.signal_ports
     if signal_ports:
-      kernel_signals: tuple[SpringSignalInput, ...] | None = _validated_spring_signals(
-        signal_ports, inputs.signals
-      )
+      kernel_signals = _validated_contact_signals(signal_ports, inputs.signals)
     else:
       if inputs.signals:
-        msg = "spring model operator does not accept program signal inputs"
+        msg = "contact model operator does not accept program signal inputs"
         raise ValueError(msg)
-      kernel_signals = None
+      kernel_signals = ()
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
     derivative_ids = tuple(
@@ -706,20 +705,29 @@ class SpringOperator(CompilerConstructed):
       or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
       or not set(derivative_request).issubset(derivative_ids)
     ):
-      msg = "spring evaluation request contains an unavailable or duplicate channel"
+      msg = "contact evaluation request contains an unavailable or duplicate channel"
       raise ValueError(msg)
 
+    # Current positions = compile-time reference coordinates + displacements:
+    # the legacy ``crd += state`` accumulation, one add per component.
+    current_positions = np.array(
+      self.contact_block.reference_coordinates.values + values,
+      dtype=np.float64,
+    )
+    if not bool(np.isfinite(current_positions).all()):
+      msg = "contact current positions must be finite float64 values"
+      raise TypeError(msg)
+    current_positions.setflags(write=False)
     force, tangent, trial_rows, status = _validated_kernel_arrays(
-      self.kernel(values, accepted_state, self.payload.parameters.values)
-      if kernel_signals is None
-      else self.kernel(
-        values,
+      self.kernel(
+        current_positions,
         accepted_state,
         self.payload.parameters.values,
         kernel_signals,
       ),
       entity_count=layout.entity_count,
       row_width=layout.row_width,
+      dimension=2,
     )
     if status is not EvaluationStatus.OK:
       return _new(
@@ -746,16 +754,16 @@ class SpringOperator(CompilerConstructed):
     )
 
 
-def compile_spring_operator(
+def compile_contact_operator(
   system: CompiledSystem,
-  declaration: SpringDeclaration,
-) -> tuple[PointEntityBlock, SpringOperator]:
-  """Compile one authored spring network against an existing compiled system."""
+  declaration: ContactDeclaration,
+) -> tuple[PointEntityBlock, PenaltyContactOperator]:
+  """Compile one authored contact network against an existing compiled system."""
   if type(system) is not CompiledSystem:
-    msg = "spring compilation requires an exact CompiledSystem"
+    msg = "contact compilation requires an exact CompiledSystem"
     raise TypeError(msg)
-  if type(declaration) is not SpringDeclaration:
-    msg = "spring compilation requires an exact SpringDeclaration"
+  if type(declaration) is not ContactDeclaration:
+    msg = "contact compilation requires an exact ContactDeclaration"
     raise TypeError(msg)
   source = declaration.source
   space = next(
@@ -764,14 +772,17 @@ def compile_spring_operator(
   )
   if space is None:
     _fail(
-      "unknown-spring-space",
-      "spring network references a space the compiled system does not have",
+      "unknown-contact-space",
+      "contact network references a space the compiled system does not have",
       source,
     )
   if len(space.components) != 2:
     _fail(
-      "unsupported-spring-space",
-      "point springs require a two-component displacement space",
+      "unsupported-contact-space",
+      "penalty contact requires a two-component displacement space: the "
+      "kernel is dimension-generic, but no three-dimensional oracle exists "
+      "(the legacy sphere branch is unreachable), so 3D compilation is "
+      "rejected until one lands",
       source,
     )
   support = next(
@@ -780,8 +791,8 @@ def compile_spring_operator(
   )
   if support is None:
     _fail(
-      "unknown-spring-support-block",
-      "spring space support block is absent from the compiled system",
+      "unknown-contact-support-block",
+      "contact space support block is absent from the compiled system",
       source,
     )
   node_dense = {node_id: index for index, node_id in enumerate(support.entity_ids)}
@@ -790,54 +801,57 @@ def compile_spring_operator(
     index = node_dense.get(node_id)
     if index is None:
       _fail(
-        "unknown-spring-support-node",
-        "spring network references a support node the compiled system does not have",
+        "unknown-contact-support-node",
+        "contact network references a support node the compiled system does not have",
         source,
       )
     node_indices.append(index)
 
-  entity_count = len(declaration.spring_ids)
-  row_width = sum(slot.width for slot in declaration.state_slots)
-  parameters = FinalizedArray(declaration.parameters, dtype=np.float64)
-  probe_signals = (
-    _probe_signals(declaration.signal_ports) if declaration.signal_ports else None
+  entity_count = len(declaration.contact_ids)
+  row_width = 0
+  parameters = FinalizedArray(
+    (
+      declaration.penalty,
+      declaration.radius,
+      *declaration.centre,
+      *declaration.direction,
+    ),
+    dtype=np.float64,
   )
+  probe_signals = _probe_signals(declaration.signal_ports)
   # The probe must mirror runtime input mutability exactly: evaluate hands the
   # kernel read-only arrays, so the probe does too, or an input-mutating kernel
   # would compile and fail untyped at first evaluation.
-  probe_displacements = np.zeros((entity_count, 2), dtype=np.float64)
+  probe_positions = np.array(
+    support.reference_coordinates.values[node_indices],
+    dtype=np.float64,
+  )
   probe_rows = np.zeros((entity_count, row_width), dtype=np.float64)
-  probe_displacements.setflags(write=False)
+  probe_positions.setflags(write=False)
   probe_rows.setflags(write=False)
   try:
-    if probe_signals is None:
-      probe_result = declaration.kernel(
-        probe_displacements,
-        probe_rows,
-        parameters.values,
-      )
-    else:
-      probe_result = declaration.kernel(
-        probe_displacements,
-        probe_rows,
-        parameters.values,
-        probe_signals,
-      )
+    probe_result = declaration.kernel(
+      probe_positions,
+      probe_rows,
+      parameters.values,
+      probe_signals,
+    )
   except Exception:
     _fail(
       "kernel-probe-failed",
-      "spring kernel failed its virgin-state compile probe",
+      "contact kernel failed its virgin-state compile probe",
       source,
     )
   probe = _validated_kernel_arrays(
     probe_result,
     entity_count=entity_count,
     row_width=row_width,
+    dimension=2,
   )
   if probe[3] is not EvaluationStatus.OK:
     _fail(
       "invalid-kernel-probe",
-      "spring kernel must evaluate its virgin zero state successfully",
+      "contact kernel must evaluate its virgin reference state successfully",
       source,
     )
   _probe_kernel_tangent(
@@ -845,15 +859,17 @@ def compile_spring_operator(
     parameters.values,
     entity_count=entity_count,
     row_width=row_width,
-    source=source,
+    centre=declaration.centre,
+    radius=declaration.radius,
     signals=probe_signals,
+    source=source,
   )
 
-  spring_block = _new(
+  contact_block = _new(
     PointEntityBlock,
     block_id=declaration.block_id,
-    entity_ids=declaration.spring_ids,
-    sources=tuple(_source(source) for _ in declaration.spring_ids),
+    entity_ids=declaration.contact_ids,
+    sources=tuple(_source(source) for _ in declaration.contact_ids),
     reference_coordinates=FinalizedArray(
       support.reference_coordinates.values[node_indices],
       dtype=np.float64,
@@ -865,18 +881,9 @@ def compile_spring_operator(
     schema=declaration.state_schema,
     block_id=block_id,
     entity_count=entity_count,
-    slots=tuple(
-      _new(
-        OperatorStateSlot,
-        name=slot.name,
-        width=slot.width,
-        dtype=_FLOAT64_DTYPE,
-        lifetime=StateLifetime.ACCEPTED_TRIAL,
-      )
-      for slot in declaration.state_slots
-    ),
+    slots=(),
     entity_offsets=FinalizedArray(
-      np.arange(entity_count + 1, dtype=space.coefficient_map.values.dtype) * row_width,
+      np.zeros(entity_count + 1, dtype=space.coefficient_map.values.dtype),
       dtype=space.coefficient_map.values.dtype,
     ),
     row_width=row_width,
@@ -895,14 +902,14 @@ def compile_spring_operator(
   )
   residual_channel = _new(
     ResidualChannel,
-    channel_id="spring-force",
+    channel_id="contact-force",
     target_port_id=port.port_id,
     balance_role=BalanceRole.INTERNAL,
     linear=False,
   )
   jacobian_channel = _new(
     JacobianChannel,
-    channel_id="spring-tangent",
+    channel_id="contact-tangent",
     residual_channel_id=residual_channel.channel_id,
     target_port_id=port.port_id,
     source_port_id=port.port_id,
@@ -913,7 +920,7 @@ def compile_spring_operator(
   header = _new(
     OperatorHeader,
     block_id=block_id,
-    entity_block_id=spring_block.block_id,
+    entity_block_id=contact_block.block_id,
     implementations=(
       _new(
         ImplementationIdentity,
@@ -938,11 +945,11 @@ def compile_spring_operator(
     state_layout=state_layout,
     coupling_policy=CouplingPolicy.FIXED,
   )
-  payload = _new(SpringPayload, parameters=parameters)
+  payload = _new(ContactPayload, parameters=parameters)
   manifest_content: dict[str, object] = {
     "block_id": block_id,
-    "entity_block_id": spring_block.block_id,
-    "entity_ids": spring_block.entity_ids,
+    "entity_block_id": contact_block.block_id,
+    "entity_ids": contact_block.entity_ids,
     "support_node_ids": declaration.node_ids,
     "implementations": [
       {
@@ -952,24 +959,28 @@ def compile_spring_operator(
         "implementation_id": declaration.implementation_id,
       }
     ],
+    "obstacle": {
+      "centre": declaration.centre,
+      "direction": declaration.direction,
+      "radius": declaration.radius,
+      "penalty": declaration.penalty,
+    },
     "port": {
       "port_id": port.port_id,
       "space_id": port.space_id,
       "coefficient_map": port.coefficient_map.values,
     },
-    "channels": ["spring-force", "spring-tangent"],
+    "channels": ["contact-force", "contact-tangent"],
     "state": {
       "schema": state_layout.schema,
       "row_width": row_width,
-      "slots": [
-        {"name": slot.name, "width": slot.width} for slot in declaration.state_slots
-      ],
+      "slots": [],
       "entity_offsets": state_layout.entity_offsets.values,
     },
     "payload": {"parameters": payload.parameters.values},
   }
-  # Declarations without signal ports keep byte-identical manifests: the key
-  # exists only when a port is declared.
+  # Declarations without signal ports keep the key out of the manifest, the
+  # landed signal-versioning precedent.
   if declaration.signal_ports:
     manifest_content["signal_ports"] = [
       {
@@ -981,88 +992,90 @@ def compile_spring_operator(
     ]
   manifest = CanonicalManifest(manifest_content)
   operator = _new(
-    SpringOperator,
+    PenaltyContactOperator,
     header=header,
-    spring_block=spring_block,
+    contact_block=contact_block,
     payload=payload,
     content_manifest=manifest,
     kernel=declaration.kernel,
     system_instance=system.instance_id,
   )
-  return spring_block, operator
+  return contact_block, operator
 
 
-def compose_system(
+def compose_contact_system(
   base: CompiledSystem,
-  spring_block: PointEntityBlock,
-  spring_operator: SpringOperator,
+  contact_block: PointEntityBlock,
+  contact_operator: PenaltyContactOperator,
 ) -> CompiledSystem:
-  """Compose one compiled spring network into a base compiled system."""
+  """Compose one compiled contact network into a base compiled system."""
   if type(base) is not CompiledSystem:
-    msg = "spring composition requires an exact base CompiledSystem"
+    msg = "contact composition requires an exact base CompiledSystem"
     raise TypeError(msg)
-  if type(spring_block) is not PointEntityBlock:
-    msg = "spring composition requires an exact spring PointEntityBlock"
+  if type(contact_block) is not PointEntityBlock:
+    msg = "contact composition requires an exact contact PointEntityBlock"
     raise TypeError(msg)
-  if type(spring_operator) is not SpringOperator:
-    msg = "spring composition requires an exact SpringOperator"
+  if type(contact_operator) is not PenaltyContactOperator:
+    msg = "contact composition requires an exact PenaltyContactOperator"
     raise TypeError(msg)
   require_same_instance(
-    spring_operator.system_instance,
+    contact_operator.system_instance,
     base.instance_id,
-    context="spring system composition",
+    context="contact system composition",
   )
-  if spring_operator.spring_block is not spring_block:
-    msg = "spring operator must bind the exact composed spring block"
+  if contact_operator.contact_block is not contact_block:
+    msg = "contact operator must bind the exact composed contact block"
     raise ValueError(msg)
-  if any(block.block_id == spring_block.block_id for block in base.point_blocks) or any(
-    block.block_id == spring_block.block_id for block in base.entity_blocks
-  ):
-    msg = "spring block id collides with an existing compiled entity block"
+  block_collision = any(
+    block.block_id == contact_block.block_id
+    for block in (*base.point_blocks, *base.entity_blocks)
+  )
+  if block_collision:
+    msg = "contact block id collides with an existing compiled entity block"
     raise ValueError(msg)
   if any(
-    operator.header.block_id == spring_operator.header.block_id
+    operator.header.block_id == contact_operator.header.block_id
     for operator in base.operators
   ):
-    msg = "spring operator block id collides with an existing compiled operator"
+    msg = "contact operator block id collides with an existing compiled operator"
     raise ValueError(msg)
   space_ids = {space.space_id for space in base.spaces}
-  if spring_operator.header.ports[0].space_id not in space_ids:
-    msg = "spring operator port references a space outside the base system"
+  if contact_operator.header.ports[0].space_id not in space_ids:
+    msg = "contact operator port references a space outside the base system"
     raise ValueError(msg)
 
-  spring_attribution = (
+  contact_attribution = (
     _new(
       SourceAttribution,
       kind="entity_block",
-      semantic_id=spring_block.block_id,
-      source=spring_block.sources[0],
+      semantic_id=contact_block.block_id,
+      source=contact_block.sources[0],
     ),
     *(
       _new(
         SourceAttribution,
-        kind="spring",
+        kind="contact",
         semantic_id=entity_id,
         source=source,
       )
       for entity_id, source in zip(
-        spring_block.entity_ids,
-        spring_block.sources,
+        contact_block.entity_ids,
+        contact_block.sources,
         strict=True,
       )
     ),
   )
-  attributions = (*base.source_attribution, *spring_attribution)
+  attributions = (*base.source_attribution, *contact_attribution)
   manifest = CanonicalManifest(
     {
-      "schema": SPRING_SYSTEM_EXTENSION_SCHEMA,
+      "schema": CONTACT_SYSTEM_EXTENSION_SCHEMA,
       "base_system": base.provenance.manifest,
-      "spring_point_block": {
-        "block_id": spring_block.block_id,
-        "entity_ids": spring_block.entity_ids,
-        "reference_coordinates": spring_block.reference_coordinates.values,
+      "contact_point_block": {
+        "block_id": contact_block.block_id,
+        "entity_ids": contact_block.entity_ids,
+        "reference_coordinates": contact_block.reference_coordinates.values,
       },
-      "spring_operator": spring_operator.content_manifest,
+      "contact_operator": contact_operator.content_manifest,
       "source_attribution": [
         {
           "kind": record.kind,
@@ -1073,13 +1086,13 @@ def compose_system(
             "column": record.source.column,
           },
         }
-        for record in spring_attribution
+        for record in contact_attribution
       ],
     }
   )
   provenance = _new(
     SystemProvenance,
-    schema=SPRING_SYSTEM_EXTENSION_SCHEMA,
+    schema=CONTACT_SYSTEM_EXTENSION_SCHEMA,
     manifest=manifest,
     registry_fingerprint=base.provenance.registry_fingerprint,
     floating_dtype=base.provenance.floating_dtype,
@@ -1092,9 +1105,9 @@ def compose_system(
     content_fingerprint=ContentFingerprint.from_manifest(manifest),
     provenance=provenance,
     registry_snapshot=base.registry_snapshot,
-    point_blocks=(*base.point_blocks, spring_block),
+    point_blocks=(*base.point_blocks, contact_block),
     entity_blocks=base.entity_blocks,
     spaces=base.spaces,
-    operators=(*base.operators, spring_operator),
+    operators=(*base.operators, contact_operator),
     source_attribution=attributions,
   )

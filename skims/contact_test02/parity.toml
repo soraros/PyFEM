@@ -1,0 +1,5 @@
+# Measured on the reference host (macOS x86_64): final-state deviation
+# 8.8e-13 absolute / 1.8e-12 relative against legacy at tol=1e-8, per-substep
+# deviations 1.4e-13..8.8e-13 — the band below carries ~100x headroom.
+rtol = 1.0e-9
+atol = 1.0e-10
