@@ -131,6 +131,33 @@ def readItem( l1 , db ):
 #
 #-------------------------------------------------------------------------------
 
+def stripHashComment( line ):
+
+  '''
+  Strip a '#' comment from a single .pro line.
+
+  An unquoted '#' starts a comment that runs to the end of the line;
+  '#' inside a single- or double-quoted string is preserved.
+  '''
+
+  inQuote = None
+
+  for i, ch in enumerate(line):
+
+    if inQuote is not None:
+      if ch == inQuote:
+        inQuote = None
+    elif ch == '"' or ch == "'":
+      inQuote = ch
+    elif ch == '#':
+      return line[:i]
+
+  return line
+
+#-------------------------------------------------------------------------------
+#
+#-------------------------------------------------------------------------------
+
 def readBlock( ln , db ):
 
   while True:
@@ -152,10 +179,6 @@ def readBlock( ln , db ):
     if l1[0][0:2] == '//':
       ln = l1[1].split(';',1)[1]
       continue
-
-    #if l1[0][0:1] == '#':
-    #  ln = l1[1].split(';',1)[1]
-    #  continue
 
     if l1[1][0] == '{':
       child = Properties()
@@ -182,11 +205,8 @@ def fileParser(fileName):
   db = Properties()
 
   with filePath.open("r", encoding="utf-8") as f:
-    # Keep lines that are not comments
-    lines = [
-      line for line in f
-      if not line.lstrip().startswith("#")
-    ]
+    # Strip '#' comments, both full-line and trailing
+    lines = [stripHashComment(line) for line in f]
 
   # Remove whitespace characters
   ln = "".join(lines).translate(str.maketrans("", "", " \t\r\n"))
@@ -200,7 +220,8 @@ def fileParser(fileName):
 
 def deepFileParser( fileName , db ):
 
-  ln = open(fileName).read().replace('\n','').replace('\t','').replace(' ','').replace('\r','')
+  ln = "".join(stripHashComment(line) for line in open(fileName))
+  ln = ln.replace('\n','').replace('\t','').replace(' ','').replace('\r','')
 
   readBlock( ln , db )
   
