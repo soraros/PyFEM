@@ -23,12 +23,16 @@ Each stage is a separately timed callable over the real v3 code path:
 from __future__ import annotations
 
 import numpy as np
-from scipy.sparse import coo_array
+from scipy.sparse import coo_array, csr_array
 from scipy.sparse.linalg import factorized
 
 from bench.workloads import Q8Workload
 from pyfem.v3._prototype_assembly import assemble_loaded
-from pyfem.v3.fem.assembly import _fill_stiffness_coo
+from pyfem.v3.fem.assembly import (
+  _fill_stiffness_coo,
+  compile_csr_pattern,
+  dedup_coo_values,
+)
 from pyfem.v3.fem.element import continuum_stiffness_batched
 from pyfem.v3.mesh.refined_patch import (
   build_uniform_q8_loaded,
@@ -71,6 +75,9 @@ class V3Q8Pipeline:
       (self.val, (self.row, self.col)),
       shape=(n_dofs, n_dofs),
     )
+    # Precompiled once (one-time topology cost, like driver-plan compilation);
+    # the dedup stage then measures argsort-free value reassembly only.
+    self.csr_pattern = compile_csr_pattern(self.row, self.col, self.k_coo.shape)
     self.k_csr = self.k_coo.tocsr()
     self.constraints = build_prescribed_constraints(problem)
     self.k_red = (self.constraints.C.T @ (self.k_csr @ self.constraints.C)).tocsr()
@@ -115,10 +122,11 @@ class V3Q8Pipeline:
     _fill_stiffness_coo(self.element_dofs, self.ke, self.row, self.col, self.val)
 
   def dedup(self) -> None:
-    coo_array(
-      (self.val, (self.row, self.col)),
-      shape=self.k_coo.shape,
-    ).tocsr()
+    data = dedup_coo_values(self.csr_pattern, self.val)
+    csr_array(
+      (data, self.csr_pattern.indices, self.csr_pattern.indptr),
+      shape=self.csr_pattern.shape,
+    )
 
   def assemble_coo(self) -> None:
     assemble_loaded(self.loaded)

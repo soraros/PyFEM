@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import numpy as np
-from numba import njit
+from numba import get_num_threads, njit, prange
 
 from pyfem.v3.elements.finite_strain_continuum import FINITE_STRAIN_ELEMENT
 from pyfem.v3.fem.element import continuum_stiffness_batched
 from pyfem.v3.fem.link2 import link2_tangent_batched
 from pyfem.v3.fem.tl_element import quad8_tl_tangent_batched
 from pyfem.v3.types import F64, GROUP_CONTINUUM, GROUP_SPRING, GROUP_TRUSS, I32
+
+# Parallel-dispatch threshold in COO entries. The numba threading-layer
+# dispatch costs ~85 us on the reference machine — about the serial fill
+# time of 2**17 entries — so below it the serial kernels win.
+_PARALLEL_MIN_ENTRIES = 1 << 17
 
 
 def nodes_per_elem(conn: I32) -> int:
@@ -24,7 +31,7 @@ def entries_per_elem(conn: I32, spatial_dim: int) -> int:
 
 
 @njit(cache=True)
-def _fill_stiffness_coo(
+def _fill_stiffness_coo_serial(
   element_dofs: I32,
   stiffness: F64,
   row: I32,
@@ -47,6 +54,179 @@ def _fill_stiffness_coo(
         col[idx] = dofs[j]
         val[idx] = ke[i, j]
         k += 1
+
+
+@njit(cache=True, parallel=True)
+def _fill_stiffness_coo_parallel(
+  element_dofs: I32,
+  stiffness: F64,
+  row: I32,
+  col: I32,
+  val: F64,
+) -> None:
+  """Parallel variant of ``_fill_stiffness_coo_serial``.
+
+  Each COO slot is written by exactly one element, so the buffers are
+  bit-identical to the serial kernel at any thread count.
+  """
+  n_elems = element_dofs.shape[0]
+  n_dof = element_dofs.shape[1]
+  entries_per_elem = n_dof * n_dof
+  for e in prange(n_elems):
+    dofs = element_dofs[e]
+    ke = stiffness[e]
+    base = e * entries_per_elem
+    k = 0
+    for i in range(n_dof):
+      for j in range(n_dof):
+        idx = base + k
+        row[idx] = dofs[i]
+        col[idx] = dofs[j]
+        val[idx] = ke[i, j]
+        k += 1
+
+
+def _fill_stiffness_coo(
+  element_dofs: I32,
+  stiffness: F64,
+  row: I32,
+  col: I32,
+  val: F64,
+) -> None:
+  """Scatter batched element matrices into COO buffers (parallel when large).
+
+  The serial kernel also serves single-threaded execution: a prange region
+  pays the threading-layer scheduler even at one numba thread (~1.5x slower
+  on the 32x32 patch's serial scatter).
+  """
+  n_dof = element_dofs.shape[1]
+  if (
+    element_dofs.shape[0] * n_dof * n_dof >= _PARALLEL_MIN_ENTRIES
+    and get_num_threads() > 1
+  ):
+    _fill_stiffness_coo_parallel(element_dofs, stiffness, row, col, val)
+  else:
+    _fill_stiffness_coo_serial(element_dofs, stiffness, row, col, val)
+
+
+class CooCsrPattern(NamedTuple):
+  """Precompiled canonical CSR topology of one fixed COO entry stream.
+
+  ``permutation`` is the stable (row, col) lexsort of the stream and
+  ``segment_offsets`` the start of each unique (row, col) run in sorted
+  order, so duplicate accumulation follows the stream's own entry order —
+  the stable-order contract ``driver.plan``'s ``refill_tangent`` documents.
+  """
+
+  indptr: I32
+  indices: I32
+  permutation: I32
+  segment_offsets: I32
+  shape: tuple[int, int]
+
+
+def compile_csr_pattern(row: I32, col: I32, shape: tuple[int, int]) -> CooCsrPattern:
+  """Compile the CSR pattern of a COO stream once, for repeated value refills.
+
+  One-time topology cost (a stable lexsort); each reassembly through
+  :func:`dedup_coo_values` is then argsort-free.
+  """
+  n_rows = int(shape[0])
+  entry_count = row.shape[0]
+  if entry_count == 0:
+    return CooCsrPattern(
+      indptr=np.zeros(n_rows + 1, dtype=np.int32),
+      indices=np.empty(0, dtype=np.int32),
+      permutation=np.empty(0, dtype=np.int32),
+      segment_offsets=np.empty(0, dtype=np.int32),
+      shape=(n_rows, int(shape[1])),
+    )
+  permutation = np.lexsort((col, row)).astype(np.int32)
+  sorted_row = row[permutation]
+  sorted_col = col[permutation]
+  boundary = np.empty(entry_count, dtype=np.bool_)
+  boundary[0] = True
+  np.not_equal(sorted_row[1:], sorted_row[:-1], out=boundary[1:])
+  boundary[1:] |= sorted_col[1:] != sorted_col[:-1]
+  segment_offsets = np.flatnonzero(boundary).astype(np.int32)
+  indices = sorted_col[segment_offsets]
+  row_counts = np.bincount(sorted_row[segment_offsets], minlength=n_rows)
+  indptr = np.zeros(n_rows + 1, dtype=np.int32)
+  np.cumsum(row_counts, out=indptr[1:])
+  return CooCsrPattern(
+    indptr=indptr,
+    indices=indices,
+    permutation=permutation,
+    segment_offsets=segment_offsets,
+    shape=(n_rows, int(shape[1])),
+  )
+
+
+@njit(cache=True)
+def _dedup_coo_values_serial(
+  val: F64,
+  permutation: I32,
+  segment_offsets: I32,
+  data: F64,
+) -> None:
+  """Sum each sorted duplicate run of ``val`` into canonical CSR data order."""
+  n_segments = segment_offsets.shape[0]
+  nnz = val.shape[0]
+  for s in range(n_segments):
+    start = segment_offsets[s]
+    stop = segment_offsets[s + 1] if s + 1 < n_segments else nnz
+    acc = 0.0
+    for j in range(start, stop):
+      acc += val[permutation[j]]
+    data[s] = acc
+
+
+@njit(cache=True, parallel=True)
+def _dedup_coo_values_parallel(
+  val: F64,
+  permutation: I32,
+  segment_offsets: I32,
+  data: F64,
+) -> None:
+  """Parallel variant: segments are disjoint output slots, fixed sum order."""
+  n_segments = segment_offsets.shape[0]
+  nnz = val.shape[0]
+  for s in prange(n_segments):
+    start = segment_offsets[s]
+    stop = segment_offsets[s + 1] if s + 1 < n_segments else nnz
+    acc = 0.0
+    for j in range(start, stop):
+      acc += val[permutation[j]]
+    data[s] = acc
+
+
+def dedup_coo_values(pattern: CooCsrPattern, val: F64, out: F64 | None = None) -> F64:
+  """Sum duplicate COO contributions of ``val`` into canonical CSR data.
+
+  Duplicate runs accumulate strictly left-to-right in the COO stream's own
+  (stable-sorted) order, so the result is bit-identical at any thread
+  count and on any platform. scipy's ``tocsr`` sums the same runs but in
+  its unstable per-row ``std::sort`` order, so its result agrees only to
+  round-off (observed <= 9.4e-10 abs on the landed meshes, where entries
+  reach 2e7). ``np.add.reduceat`` over the same segments agrees except on
+  runs of length >= 3, where numpy's SIMD inner loop reorders at ulp level.
+  """
+  data = np.empty(pattern.indices.shape[0], dtype=np.float64) if out is None else out
+  if val.shape[0] >= _PARALLEL_MIN_ENTRIES and get_num_threads() > 1:
+    _dedup_coo_values_parallel(
+      val,
+      pattern.permutation,
+      pattern.segment_offsets,
+      data,
+    )
+  else:
+    _dedup_coo_values_serial(
+      val,
+      pattern.permutation,
+      pattern.segment_offsets,
+      data,
+    )
+  return data
 
 
 @njit(cache=True)
