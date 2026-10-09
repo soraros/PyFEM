@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON }}
@@ -68,7 +68,7 @@ jobs:
         # that floor fail at uv sync before any test runs.
         python-version: ["3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: ${{ matrix.python-version }}
@@ -81,14 +81,29 @@ jobs:
       - run: uv sync --group v3
       - run: uv run coverage run -m pytest -q
       - run: uv run coverage report
-      - run: uv run pyfem --help
+      # Deck runs are headless (Agg) and execute in a temp dir so generated
+      # output files never touch the checkout; the venv binary is called
+      # directly because uv run resolves the project from the working dir.
+      - name: Smoke test CLI and example decks
+        env:
+          MPLBACKEND: Agg
+        run: |
+          uv run pyfem --help
+          uv run pyfem --version
+          mkdir -p "$RUNNER_TEMP/pyfem-smoke"
+          cp examples/ch02/PatchTest8.pro examples/ch02/PatchTest8.dat "$RUNNER_TEMP/pyfem-smoke/"
+          cp examples/ch02/PatchTest3.pro examples/ch02/PatchTest3.dat "$RUNNER_TEMP/pyfem-smoke/"
+          cd "$RUNNER_TEMP/pyfem-smoke"
+          "$GITHUB_WORKSPACE/.venv/bin/pyfem" PatchTest8.pro
+          "$GITHUB_WORKSPACE/.venv/bin/pyfem" PatchTest3.pro
+          test -f PatchTest8.pvd && test -f PatchTest3.pvd
 
   build:
     name: Build package
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON }}
@@ -101,7 +116,7 @@ jobs:
           uv pip install --python .wheel-check dist/*.whl
           .wheel-check/bin/python -c "import pyfem; print(pyfem.__version__)"
           .wheel-check/bin/pyfem --help
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -115,7 +130,7 @@ jobs:
       pages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON }}
@@ -129,7 +144,7 @@ jobs:
       - run: uv run sphinx-build -M html doc doc/_build
       - name: Upload Pages artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: doc/_build/html
 
@@ -149,5 +164,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v5
         id: deployment

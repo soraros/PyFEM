@@ -13,6 +13,7 @@ and object factories are delegated to `InputReader`, `Solver` and
 """
 
 import sys
+from importlib.metadata import version
 from typing import Any
 
 from pyfem.io.InputReader   import InputReader
@@ -42,6 +43,10 @@ def main(argv: list[str] | None = None) -> None:
 
     if '--help' in args or '-h' in args:
         print_help()
+        return
+
+    if '--version' in args:
+        print(f"PyFEM {version('pyfem')}")
         return
 
     props, globdat = InputReader(args)
