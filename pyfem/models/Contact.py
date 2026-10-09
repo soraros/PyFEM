@@ -71,5 +71,8 @@ class Contact(BaseModel):
             if overlap > 0:
                 normal = ds / dsnorm
                 mbuilder.B[idofs] += -self.penalty * overlap * normal
-                mat = self.penalty * np.outer(normal, normal)
+                mat = self.penalty * (
+                    (1.0 - self.radius / dsnorm) * np.eye(len(self.dispDofs))
+                    + (self.radius / dsnorm) * np.outer(normal, normal)
+                )
                 mbuilder.append(mat, idofs)

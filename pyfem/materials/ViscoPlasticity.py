@@ -266,9 +266,7 @@ class ViscoPlasticity(BaseMaterial):
             effg3 = 3.0 * effg
             efflam = (self.ebulk3 - effg2) / 3.0
 
-            # Rate-dependent hardening contribution
-            rate_factor = self.gamma * self.n * (overstress ** (self.n - 1)) * dtime / syield_current
-            effhdr = self.eg3 * (self.hard + rate_factor) / (self.eg3 + self.hard + rate_factor) - effg3
+            effhdr = self.eg3 * self.hard / (self.eg3 + self.hard) - effg3
 
             # Construct tangent
             tang = zeros(shape=(6, 6))

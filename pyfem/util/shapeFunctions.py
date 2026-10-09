@@ -836,7 +836,13 @@ def getIntegrationPoints(elemType: str, order: int, scheme: str) -> Tuple[List[L
             - 0: Standard integration for element type
             - +1: Higher order integration
             - -1: Lower order integration
-        scheme: Integration scheme name (e.g., 'Gauss')
+        scheme: Integration scheme name. Only 'Gauss' rules are implemented.
+            'NewtonCotes' is accepted as a legacy alias for 'Gauss': no
+            Newton-Cotes rule ever existed in this code base (every scheme
+            silently received Gauss-Legendre points since v1.0, and Interface
+            elements still request 'NewtonCotes'), so the alias preserves the
+            de-facto behavior on every existing code path. Any other value
+            raises NotImplementedError.
         
     Returns:
         Tuple of:
@@ -844,11 +850,14 @@ def getIntegrationPoints(elemType: str, order: int, scheme: str) -> Tuple[List[L
             - List of integration weights
             
     Raises:
-        NotImplementedError: If element type is unknown
+        NotImplementedError: If element type or integration scheme is unknown
     """
 
     xi = []
     weight = []
+
+    if scheme not in ("Gauss", "NewtonCotes"):
+        raise NotImplementedError('Integration scheme not known: ' + str(scheme))
 
     if elemType[:-1] == "Line":
         if elemType == "Line2":
