@@ -6,6 +6,9 @@
   differ; root formatting defaults do not apply to these trees.
 - PySide6 is absent from the Intel-Mac baseline. The legacy `pyfem-gui` entrypoint
   needs separately installed GUI dependencies and is not a core development gate.
+- Running legacy example scripts or decks directly (evidence runs, parity oracles)
+  must be headless: prefix with `MPLBACKEND=Agg` — several call `plt.show()` and
+  will otherwise pop windows on the operator's machine.
 - Tests live in `test/v3/`; notebooks in `notebooks/v3/`. Jupytext is configured in
   root `pyproject.toml`. Diagnostic benchmarks use `_bench_*.py` and stay out of
   ordinary pytest collection.
