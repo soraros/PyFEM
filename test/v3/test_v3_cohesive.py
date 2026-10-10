@@ -55,13 +55,28 @@ _SOURCE = SourceContext(source="test_v3_cohesive")
 ROOT = Path(__file__).resolve().parents[2]
 
 # Cross-platform tolerance note for every bitwise pin below: the reference-
-# platform branch asserts raw-uint64 identity. The documented off-reference
-# deviation for transcendentals of this size is 32 ulps (~7.1e-15 relative,
-# the M30 plasticity kernel measured on ubuntu-latest CI runs 37440534665 and
-# 37441926273, cited in test/v3/conftest.py); rtol=1e-12 carries >100x
-# headroom. The atol floors the all-zero-traction battery rows.
+# platform branch asserts raw-uint64 identity (signed zeros included) — only
+# the off-reference branch uses these bands. rtol=1e-12 carries >100x
+# headroom over the documented drift class for transcendentals (32 ulps,
+# ~7.1e-15 relative, the M30 plasticity kernel on ubuntu-latest CI runs
+# 37440534665 and 37441926273, cited in test/v3/conftest.py).
+#
+# The atol floors guard the batteries' exact-zero entries, where rtol
+# contributes nothing. CI run 38023817372 (ubuntu x86_64) measured max abs
+# 2.22e-16 against an expected exact-zero XuNeedleman traction (2/136
+# entries) — ~1 ulp of the O(1) exp intermediates at the ~1e-1 drift site,
+# i.e. ~2e-15 relative to battery scale. The floors sit at the 4-ulp class
+# of the transcendental-carrying laws' measured maxima (XuNeedleman /
+# PowerLawModeI, this host): traction max 17.8 (ulp 3.6e-15; 2.0e-14 =
+# 5.6 ulps), tangent max 367.1 (ulp 5.7e-14; 5.0e-13 = 8.8 ulps) —
+# respectively ~90x and ~2300x above the measured drift, and ~3 orders
+# below the 1e-9-class order bug the pins must catch. Dummy needs no such
+# floor: its D*jump law has no libm content, so its exact zeros are
+# structural and its nonzero entries are single correctly-rounded products
+# (rtol=1e-12 covers a hypothetical FMA contraction at 1e5 by ~7000x).
 _LAW_RTOL = 1.0e-12
-_LAW_ATOL = 1.0e-20
+_TRACTION_ATOL = 2.0e-14
+_TANGENT_ATOL = 5.0e-13
 
 
 def _legacy_material(law: str) -> object:
@@ -170,8 +185,8 @@ def test_law_kernel_matches_legacy_bitwise(law: str, bitwise_pin: object) -> Non
     np.zeros((len(battery), 0)),
     np.array(parameters, dtype=np.float64),
   )
-  bitwise_pin(result.traction, legacy_stress, rtol=_LAW_RTOL, atol=_LAW_ATOL)
-  bitwise_pin(result.tangent, legacy_tangent, rtol=_LAW_RTOL, atol=_LAW_ATOL)
+  bitwise_pin(result.traction, legacy_stress, rtol=_LAW_RTOL, atol=_TRACTION_ATOL)
+  bitwise_pin(result.tangent, legacy_tangent, rtol=_LAW_RTOL, atol=_TANGENT_ATOL)
 
 
 @pytest.mark.parametrize(
@@ -446,6 +461,10 @@ def test_element_residual_matches_legacy_bitwise_axis_aligned(
           request=ChannelRequest(("interface-traction",), ()),
         )
       )
+      # Residual floor audit (M77): max|fint| over this battery is 6.4e3
+      # (Dummy D=1e5 states; ulp 9.1e-13), so atol=1.0e-9 sits ~280x above
+      # the 4-ulp class and needs no widening — CI run 38023817372 passed
+      # this battery on ubuntu with it.
       bitwise_pin(
         evaluation.residual_values[0].values[0],
         legacy_fint,
