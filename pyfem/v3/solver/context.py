@@ -6,10 +6,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_array
 from scipy.sparse.linalg import factorized
 
-from pyfem.v3._prototype_assembly import assemble_linear_system, assemble_loaded
+from pyfem.v3._prototype_assembly import (
+  assemble_linear_system,
+  assemble_loaded,
+  canonical_csr,
+)
 from pyfem.v3.registry import resolve_solver_type
 from pyfem.v3.solver.constraints import (
   PrescribedConstraints,
@@ -21,7 +25,7 @@ from pyfem.v3.types import F64, LinearSystem, LoadedProblem, ProblemDefinition
 
 def factorized_reduced_solve(
   constraints: PrescribedConstraints,
-  k_csr: csr_matrix,
+  k_csr: csr_array,
 ) -> Callable[[F64], F64]:
   """Factorize the reduced stiffness ``C.T @ K @ C`` for repeated back-solves."""
   k_red = constraints.C.T @ (k_csr @ constraints.C)
@@ -30,7 +34,7 @@ def factorized_reduced_solve(
 
 def solve_reduced_displacement(
   constraints: PrescribedConstraints,
-  k_csr: csr_matrix,
+  k_csr: csr_array,
   rhs: F64,
 ) -> F64:
   """Solve ``K @ da = rhs`` on free DOFs and return the full increment."""
@@ -48,7 +52,7 @@ class CachedLinearSystem:
 
   factorized_solve: Callable[[F64], F64]
   constraints: PrescribedConstraints
-  k_csr: csr_matrix
+  k_csr: csr_array
   n_dofs: int
   base_load: F64
 
@@ -94,7 +98,7 @@ class CachedLinearSystem:
     system: LinearSystem,
   ) -> CachedLinearSystem:
     constraints = build_prescribed_constraints(problem)
-    k_csr = system.stiffness.tocsr()
+    k_csr = canonical_csr(system.stiffness)
     solve_red = factorized_reduced_solve(constraints, k_csr)
     return cls(
       factorized_solve=solve_red,

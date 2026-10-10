@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from pyfem.v3._prototype_assembly import assemble_tangent_loaded
+from pyfem.v3._prototype_assembly import assemble_tangent_loaded, canonical_csr
 from pyfem.v3.registry import (
   resolve_element_type,
   resolve_material_type,
@@ -44,7 +44,7 @@ def solve_riks(loaded: LoadedProblem) -> SolverState:
 
     if cycle == 1:
       tangent = assemble_tangent_loaded(loaded, state)
-      k_csr = tangent.stiffness.tocsr()
+      k_csr = canonical_csr(tangent.stiffness)
       da1 = solve_reduced_displacement(constraints, k_csr, lam * fhat)
       dlam1 = lam
     else:
@@ -58,7 +58,7 @@ def solve_riks(loaded: LoadedProblem) -> SolverState:
 
     tangent = assemble_tangent_loaded(loaded, state)
     f_int = tangent.internal_force
-    k_csr = tangent.stiffness.tocsr()
+    k_csr = canonical_csr(tangent.stiffness)
 
     f_ext = lam * fhat
     error = residual_norm(f_ext, f_int, constraints)
@@ -84,7 +84,7 @@ def solve_riks(loaded: LoadedProblem) -> SolverState:
 
       tangent = assemble_tangent_loaded(loaded, state)
       f_int = tangent.internal_force
-      k_csr = tangent.stiffness.tocsr()
+      k_csr = canonical_csr(tangent.stiffness)
       error = residual_norm(f_ext, f_int, constraints)
 
     if not settings.fixed_step:

@@ -200,6 +200,34 @@ def _dedup_coo_values_parallel(
     data[s] = acc
 
 
+def dedup_coo_segments(
+  val: F64,
+  permutation: I32,
+  segment_offsets: I32,
+  out: F64 | None = None,
+) -> F64:
+  """Sum duplicate COO contributions of ``val`` over precomputed segments.
+
+  ``permutation`` is the stable (row, col) lexsort of the COO stream and
+  ``segment_offsets`` the start of each unique (row, col) run in sorted
+  order — exactly :class:`CooCsrPattern`'s fields, so
+  :func:`dedup_coo_values` is this function keyed by a compiled pattern.
+  Duplicate runs accumulate strictly left-to-right in the COO stream's own
+  (stable-sorted) order, so the result is bit-identical at any thread
+  count and on any platform: the parallel kernel assigns each segment one
+  disjoint output slot and never reassociates. This strict-sequential
+  order is the canonical v3 accumulation order. ``np.add.reduceat`` over
+  the same segments agrees except on runs of length >= 3, where numpy's
+  SIMD inner loop reorders at ulp level in a platform-dependent way.
+  """
+  data = np.empty(segment_offsets.shape[0], dtype=np.float64) if out is None else out
+  if val.shape[0] >= _PARALLEL_MIN_ENTRIES and get_num_threads() > 1:
+    _dedup_coo_values_parallel(val, permutation, segment_offsets, data)
+  else:
+    _dedup_coo_values_serial(val, permutation, segment_offsets, data)
+  return data
+
+
 def dedup_coo_values(pattern: CooCsrPattern, val: F64, out: F64 | None = None) -> F64:
   """Sum duplicate COO contributions of ``val`` into canonical CSR data.
 
@@ -208,25 +236,9 @@ def dedup_coo_values(pattern: CooCsrPattern, val: F64, out: F64 | None = None) -
   count and on any platform. scipy's ``tocsr`` sums the same runs but in
   its unstable per-row ``std::sort`` order, so its result agrees only to
   round-off (observed <= 9.4e-10 abs on the landed meshes, where entries
-  reach 2e7). ``np.add.reduceat`` over the same segments agrees except on
-  runs of length >= 3, where numpy's SIMD inner loop reorders at ulp level.
+  reach 2e7).
   """
-  data = np.empty(pattern.indices.shape[0], dtype=np.float64) if out is None else out
-  if val.shape[0] >= _PARALLEL_MIN_ENTRIES and get_num_threads() > 1:
-    _dedup_coo_values_parallel(
-      val,
-      pattern.permutation,
-      pattern.segment_offsets,
-      data,
-    )
-  else:
-    _dedup_coo_values_serial(
-      val,
-      pattern.permutation,
-      pattern.segment_offsets,
-      data,
-    )
-  return data
+  return dedup_coo_segments(val, pattern.permutation, pattern.segment_offsets, out)
 
 
 @njit(cache=True)
