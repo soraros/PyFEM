@@ -9,8 +9,8 @@ same float64 subtraction — and sets ``solverStat.time`` per committed step,
 the hidden channel the v3 law replaces with the declared identity signal
 port. Because the kernel replicates the legacy ``getStress`` arithmetic
 statement for statement and both sides run identical NumPy operations in
-identical order, every law-level stress/state comparison is bitwise on every
-platform.
+identical order, every law-level stress/state/tangent comparison is bitwise
+on every platform.
 
 Semantics pinned loudly (finding
 20261009-agent-vp1-bug-viscoplasticity-stress-update-is-rate-independent-j2-perzyna):
@@ -28,21 +28,24 @@ example README's rate-dependence promises
 implemented map; a true-Perzyna rate law is a deferred v2 feature, not this
 migration.
 
-The tangent is the pinned divergence of this mission (finding
-20261009-agent-vp1-bug-viscoplasticity-tangent-inconsistent-with-its-own-stress-upd):
-the legacy coded tangent adds a spurious ``rate_factor`` (:270) — the
-derivative of the discarded initial guess, not of the converged map. The v3
-kernel writes the TRUE rate-factor-free J2 consistent tangent. This battery
-pins the divergence by mechanism against legacy AT THE FORK BASE: the v3
-tangent reproduces the rate-factor-free recomputation bit for bit, the legacy
-oracle reproduces the coded recomputation bit for bit, and central finite
-differences of each law's own stress response convict the sides (v3 exact to
-~1.6e-10; legacy off by 7.0e-2 relative at the amplified state gamma = 1e4,
-dtime = 1e3). At deck constants the divergence is dormant (~2e-11 relative of
-max|tang| at dtime ~ 1) — pinned by the dormancy band in the ramp legs. The
-L3 mission (M67) repairs the legacy side in parallel; when it lands, the
-divergence pins flip to parity-where-repaired by whoever integrates second
-(M54/M55 precedent — this module is the flip target).
+The tangent relationship is parity-where-repaired (the M55/l2 flip
+precedent). The legacy coded tangent used to add a spurious ``rate_factor``
+— the derivative of the discarded initial guess, not of the converged map
+(finding
+20261009-agent-vp1-bug-viscoplasticity-tangent-inconsistent-with-its-own-stress-upd).
+This battery pinned that divergence by mechanism against legacy at the fork
+base: the v3 tangent reproduced the rate-factor-free recomputation bit for
+bit, the legacy oracle reproduced the coded recomputation bit for bit, and
+central finite differences of each law's own stress response convicted the
+sides (v3 exact to ~1.6e-10; legacy off by 7.0e-2 relative at the amplified
+state gamma = 1e4, dtime = 1e3, the divergence dormant ~2e-11 relative of
+max|tang| at deck constants). M67 repaired the legacy side (commit 494f30c,
+the rate_factor deletion); the v3 kernel is unchanged, so the pins below
+assert bitwise tangent equality on every step, plastic included. The coded
+recomputation is retained as the divergence-record witness at the amplified
+state — it still fails the shared FD by the documented 7.0e-2 — and central
+FDs of each law's own response pin both tangents as the algorithmically
+consistent derivative of the shared stress map.
 
 Documented oracle configuration: the shipped deck
 (examples/materials/viscoplasticity/bar_tension.pro): E = 2e5, nu = 0.3,
@@ -286,15 +289,16 @@ def _map_tangents(
   strain_total: np.ndarray,
   time_new: float,
 ) -> tuple[np.ndarray, np.ndarray, bool]:
-  """Replicate the tangent construction, coded and rate-factor-free.
+  """Replicate the tangent construction, repaired-shared and pre-repair.
 
   Recomputes the return map from the committed row with the kernel's own
   statement order, then assembles both tangent forms on the shared block
-  base: the legacy coded form carrying the spurious ``rate_factor``
-  (bitwise-equal to the legacy oracle's returned tangent) and the true
-  rate-factor-free J2 form (bitwise-equal to the v3 kernel's tangent).
-  Returns ``plastic=False`` with two elastic-tangent copies on gated or
-  elastic steps.
+  base: the true rate-factor-free J2 form (bitwise-equal to the v3 kernel's
+  tangent AND to the M67-repaired legacy oracle's tangent — commit 494f30c
+  deleted the spurious ``rate_factor``) and the pre-repair legacy coded form
+  carrying it, retained as the divergence-record witness (bitwise-equal to
+  the PRE-repair legacy oracle's tangent). Returns ``plastic=False`` with
+  two elastic-tangent copies on gated or elastic steps.
   """
   eg = calibration[0]
   eg3 = calibration[2]
@@ -405,18 +409,15 @@ def _run_path_parity(
   *,
   gamma: float = _GAMMA,
   n: float = _N,
-  max_tangent_gap: float = 1.0e-9,
 ) -> tuple[np.ndarray, list[np.ndarray], bool]:
   """Step both laws along one (total-strain, time) path; bitwise everywhere.
 
-  Stress and state are bitwise-identical on every step. The tangent is
-  bitwise on elastic and gated steps; on plastic steps the divergence is
-  pinned by mechanism — the legacy oracle reproduces the coded recomputation
-  bit for bit, the v3 kernel reproduces the rate-factor-free recomputation
-  bit for bit, and the relative gap sits inside ``max_tangent_gap`` of
-  max|tang|. The default is the documented dormancy band of the deck
-  constants (measured ~2e-11 at dtime ~ 1); amplified fluidities carry an
-  active rate_factor and pass a looser bound.
+  Stress, state, AND tangent are bitwise-identical on every step, plastic
+  steps included: repair confirmed (module docstring), the M67-repaired
+  legacy oracle and the v3 kernel both reproduce the rate-factor-free
+  recomputation bit for bit. The pre-repair coded form is not exercised
+  here; it survives as the divergence-record witness in the
+  amplified-state leg.
   """
   calibration = perzyna_viscoplasticity_calibration(_E, _NU, _SYIELD, _HARD, gamma, n)
   legacy = _legacy_law(gamma, n)
@@ -429,17 +430,12 @@ def _run_path_parity(
     result = _v3_step(calibration, rows_v, strain_total, time_new)
     assert np.array_equal(result.stresses[0], sigma_l)
     assert np.array_equal(result.trial_rows[0], row_l)
-    coded, true, plastic = _map_tangents(calibration, rows_v[0], strain_total, time_new)
+    _, true, plastic = _map_tangents(calibration, rows_v[0], strain_total, time_new)
     assert plastic == bool(result.trial_rows[0, 12] > rows_v[0, 12])
-    assert np.array_equal(tangent_l, coded)
+    assert np.array_equal(tangent_l, true)
     assert np.array_equal(result.tangents[0], true)
-    if plastic:
-      went_plastic = True
-      gap = float(np.max(np.abs(tangent_l - result.tangents[0])))
-      scale = float(np.max(np.abs(result.tangents[0])))
-      assert 0.0 < gap / scale < max_tangent_gap
-    else:
-      assert np.array_equal(tangent_l, result.tangents[0])
+    assert np.array_equal(tangent_l, result.tangents[0])
+    went_plastic |= plastic
     rows_v = result.trial_rows
     stresses.append(sigma_l)
   return rows_v, stresses, went_plastic
@@ -499,9 +495,10 @@ def test_unload_reload_keeps_kappa_and_returns_to_the_surface() -> None:
   assert np.array_equal(result.stresses[0], sigma_l)
   assert np.array_equal(result.trial_rows[0], row_l)
   assert result.trial_rows[0, 12] > kappa_loaded
-  coded, true, plastic = _map_tangents(calibration, pre_reload[0], reload_strain, 1.2)
+  _, true, plastic = _map_tangents(calibration, pre_reload[0], reload_strain, 1.2)
   assert plastic
-  assert np.array_equal(tangent_l, coded)
+  # Repair confirmed: the legacy reload tangent is bitwise the v3 tangent.
+  assert np.array_equal(tangent_l, result.tangents[0])
   assert np.array_equal(result.tangents[0], true)
 
 
@@ -570,12 +567,11 @@ def test_converged_stress_is_invariant_to_gamma_and_n() -> None:
   # (the ramp harness asserts it step by step).
   path = _ramped(_uniaxial_path(), 0.0, 0.1)
   rows_a, stresses_a, plastic_a = _run_path_parity(path, gamma=1.0e-4, n=1.0)
-  # At gamma = 1e2 the coded-legacy rate_factor is ACTIVE (the gap is far
-  # outside the deck-constants dormancy band); the leg pins stress/state
-  # parity and the divergence mechanism, not the dormancy bound.
-  rows_b, stresses_b, plastic_b = _run_path_parity(
-    path, gamma=1.0e2, n=2.0, max_tangent_gap=1.0
-  )
+  # At gamma = 1e2 the pre-repair coded rate_factor was ACTIVE (the tangent
+  # divergence sat far outside the deck-constants dormancy band); repair
+  # confirmed — the leg pins full bitwise tangent parity at both
+  # configurations now, not a dormancy band.
+  rows_b, stresses_b, plastic_b = _run_path_parity(path, gamma=1.0e2, n=2.0)
   assert plastic_a and plastic_b
   for sigma_a, sigma_b in zip(stresses_a, stresses_b):
     np.testing.assert_allclose(sigma_a, sigma_b, rtol=1.0e-8, atol=1.0e-8)
@@ -584,12 +580,17 @@ def test_converged_stress_is_invariant_to_gamma_and_n() -> None:
   assert rows_a[0, 13] == rows_b[0, 13]
 
 
-def test_tangent_divergence_pin_at_the_amplified_state() -> None:
-  # gamma = 1e4, dtime = 1e3 (rate_factor A ~ 4e4): the legacy coded tangent
-  # contradicts a central FD of the legacy law's own stress response by
-  # 7.0e-2 relative of max|tang|, while the v3 rate-factor-free tangent
-  # matches an FD of the kernel's own response to ~1.6e-10. Both recomputed
-  # forms reproduce their returned counterparts bit for bit.
+def test_tangent_repair_confirmed_at_the_amplified_state() -> None:
+  # gamma = 1e4, dtime = 1e3 (rate_factor A ~ 4e4 in the pre-repair coded
+  # form): the divergence was pinned at this state — the coded legacy
+  # tangent contradicted a central FD of the legacy law's own stress
+  # response by 7.0e-2 relative of max|tang| while the v3 rate-factor-free
+  # tangent matched an FD of the kernel's own response to ~1.6e-10. Repair
+  # confirmed (M67 commit 494f30c, the rate_factor deletion): the legacy
+  # tangent is now bitwise the v3 tangent and passes the same FD of its own
+  # response; the coded recomputation, retained as the witness, still fails
+  # that FD by the documented 7.0e-2 — the probe state and the divergence
+  # record are unchanged.
   gamma, n = 1.0e4, 1.0
   calibration = perzyna_viscoplasticity_calibration(_E, _NU, _SYIELD, _HARD, gamma, n)
   legacy = _legacy_law(gamma, n)
@@ -605,22 +606,28 @@ def test_tangent_divergence_pin_at_the_amplified_state() -> None:
   assert base.trial_rows[0, 12] > rows_v[0, 12]  # the probe step is plastic
   coded, true, plastic = _map_tangents(calibration, rows_v[0], probe_strain, probe_time)
   assert plastic
-  assert np.array_equal(tangent_l, coded)
+  assert np.array_equal(tangent_l, true)
   assert np.array_equal(base.tangents[0], true)
+  assert np.array_equal(tangent_l, base.tangents[0])
 
   fd_v3 = _fd_tangent_v3(calibration, rows_v, probe_strain, probe_time)
   fd_l = _fd_tangent_legacy(legacy, probe_strain, probe_time)
   # Both laws implement the same stress map: the FDs agree to FD noise.
   scale = float(np.max(np.abs(fd_v3)))
   np.testing.assert_allclose(fd_v3, fd_l, rtol=1.0e-6, atol=scale * 1.0e-6)
+  # Repair confirmed: both tangents are the algorithmically consistent
+  # derivative of the shared stress response (the pre-repair coded legacy
+  # tangent failed this check materially; M67 commit 494f30c).
   legacy_error = float(np.max(np.abs(fd_l - tangent_l))) / scale
   v3_error = float(np.max(np.abs(fd_v3 - base.tangents[0]))) / scale
-  assert legacy_error > 1.0e-2  # measured 7.0e-2
+  assert legacy_error < 1.0e-8  # measured ~1.6e-10 class, as v3
   assert v3_error < 1.0e-8  # measured 1.6e-10
-  gap = float(np.max(np.abs(tangent_l - base.tangents[0]))) / scale
-  assert gap > 1.0e-2  # the pinned divergence, dominant at this state
-  # Symmetry: the true tangent is exactly symmetric; the FDs are symmetric to
-  # their noise floor (measured ~1.6e-10 at this state).
+  # The divergence record, reproduced by the retained coded recomputation at
+  # this same state: the witness convicts the pre-repair form.
+  coded_error = float(np.max(np.abs(fd_l - coded))) / scale
+  assert coded_error > 1.0e-2  # measured 7.0e-2
+  # Symmetry: the shared tangent is exactly symmetric; the FDs are symmetric
+  # to their noise floor (measured ~1.6e-10 at this state).
   assert float(np.max(np.abs(fd_v3 - fd_v3.T))) / scale < 1.0e-8
   assert float(np.max(np.abs(base.tangents[0] - base.tangents[0].T))) == 0.0
 
