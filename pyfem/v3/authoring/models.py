@@ -151,7 +151,9 @@ def small_strain_continuum(
   readable call for the classic teaching continuum. The material is the
   elastic ``linear_elastic(E, nu)`` slice or a stateful slice
   (``plasticity(E, nu, syield, hard)``, ``damage(E, nu, kappa0, kappac,
-  k)``, ``prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last)``); a
+  k)``, ``prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last)``,
+  ``viscoplasticity(E, nu, syield, hard, gamma, n)``, or
+  ``skorohod_olevsky(eta0, Q, T, rho0, sigma_sint, R, n_vol, n_shear)``); a
   stateful law authors exactly like an elastic one.
   """
   block = _single_block(mesh, builder="small_strain_continuum")
@@ -171,11 +173,15 @@ def small_strain_continuum(
       "isotropic-hardening-plasticity",
       "plane-strain-damage",
       "prony-viscoelasticity",
+      "perzyna-viscoplasticity",
+      "skorohod-olevsky",
     ),
     helper=(
       "linear_elastic(E, nu), plasticity(E, nu, syield, hard), "
-      "damage(E, nu, kappa0, kappac, k), or "
-      "prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last)"
+      "damage(E, nu, kappa0, kappac, k), "
+      "prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last), "
+      "viscoplasticity(E, nu, syield, hard, gamma, n), or "
+      "skorohod_olevsky(eta0, Q, T, rho0, sigma_sint, R, n_vol, n_shear)"
     ),
   )
   return _model(

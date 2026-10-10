@@ -261,6 +261,164 @@ def prony_viscoelasticity(
   )
 
 
+def viscoplasticity(
+  E: float,
+  nu: float,
+  syield: float,
+  hard: float,
+  gamma: float,
+  n: float,
+  *,
+  id: SpecId = "material",
+  source: str = "authoring.viscoplasticity",
+) -> MaterialSpec:
+  """Author Perzyna-branded viscoplasticity parameters for a continuum region.
+
+  ``E`` is Young's modulus, ``nu`` Poisson's ratio, ``syield`` the initial
+  yield stress, ``hard`` the linear hardening slope, ``gamma`` the fluidity,
+  and ``n`` the rate exponent; they map onto the qualified
+  ``youngs_modulus``/``poisson_ratio``/``initial_yield_stress``/
+  ``hardening_slope``/``fluidity``/``rate_exponent`` parameter convention of
+  the v2 stateful descriptor. Note the landed law integrates a
+  rate-INDEPENDENT J2 map: ``gamma``/``n`` only seed the discarded initial
+  guess, and the sole rate effect is the ``dtime > 0`` gate (see the kernel
+  module docstring). Domain checks (positive modulus, yield stress, fluidity,
+  and rate exponent, ``-1 < nu < 0.5``, non-negative slope) run at compile
+  time with coded diagnostics. Time reaches the compiled law through its
+  declared identity signal port: declare a ``time`` program coordinate and
+  bind it per step — there is no solverStat-style channel.
+  """
+  youngs_modulus = _finite_scalar(E, label="viscoplasticity E")
+  poisson_ratio = _finite_scalar(nu, label="viscoplasticity nu")
+  initial_yield_stress = _finite_scalar(syield, label="viscoplasticity syield")
+  hardening_slope = _finite_scalar(hard, label="viscoplasticity hard")
+  fluidity = _finite_scalar(gamma, label="viscoplasticity gamma")
+  rate_exponent = _finite_scalar(n, label="viscoplasticity n")
+  return MaterialSpec(
+    id=_material_id(id),
+    model="perzyna-viscoplasticity",
+    parameters=(
+      MaterialParameterSpec(
+        "youngs_modulus",
+        youngs_modulus,
+        _source(f"{source}:youngs_modulus"),
+      ),
+      MaterialParameterSpec(
+        "poisson_ratio",
+        poisson_ratio,
+        _source(f"{source}:poisson_ratio"),
+      ),
+      MaterialParameterSpec(
+        "initial_yield_stress",
+        initial_yield_stress,
+        _source(f"{source}:initial_yield_stress"),
+      ),
+      MaterialParameterSpec(
+        "hardening_slope",
+        hardening_slope,
+        _source(f"{source}:hardening_slope"),
+      ),
+      MaterialParameterSpec(
+        "fluidity",
+        fluidity,
+        _source(f"{source}:fluidity"),
+      ),
+      MaterialParameterSpec(
+        "rate_exponent",
+        rate_exponent,
+        _source(f"{source}:rate_exponent"),
+      ),
+    ),
+    source=_source(source),
+  )
+
+
+def skorohod_olevsky(
+  eta0: float,
+  Q: float,
+  T: float,
+  rho0: float,
+  sigma_sint: float,
+  R: float,
+  n_vol: float,
+  n_shear: float,
+  *,
+  id: SpecId = "material",
+  source: str = "authoring.skorohod_olevsky",
+) -> MaterialSpec:
+  """Author Skorohod-Olevsky viscous-sintering parameters for a continuum region.
+
+  ``eta0`` is the reference viscosity, ``Q`` the activation energy, ``T`` the
+  absolute temperature, ``rho0`` the initial relative density, ``sigma_sint``
+  the sintering stress, ``R`` the gas constant, and ``n_vol``/``n_shear`` the
+  volumetric and shear viscosity exponents; they map onto the qualified
+  ``reference_viscosity``/``activation_energy``/``temperature``/
+  ``initial_relative_density``/``sintering_stress``/``gas_constant``/
+  ``viscosity_exponent_volumetric``/``viscosity_exponent_shear`` parameter
+  convention of the v2 stateful descriptor. Domain checks (all positive,
+  ``0 < rho0 <= 1``) run at compile time with coded diagnostics. The compiled
+  law's initial state carries ``rho = rho0`` in every row — the authoring
+  slice needs no initial-state argument. Time reaches the compiled law
+  through its declared identity signal port: declare a ``time`` program
+  coordinate and bind it per step — there is no solverStat-style channel.
+  """
+  reference_viscosity = _finite_scalar(eta0, label="skorohod_olevsky eta0")
+  activation_energy = _finite_scalar(Q, label="skorohod_olevsky Q")
+  temperature = _finite_scalar(T, label="skorohod_olevsky T")
+  initial_relative_density = _finite_scalar(rho0, label="skorohod_olevsky rho0")
+  sintering_stress = _finite_scalar(sigma_sint, label="skorohod_olevsky sigma_sint")
+  gas_constant = _finite_scalar(R, label="skorohod_olevsky R")
+  viscosity_exponent_volumetric = _finite_scalar(n_vol, label="skorohod_olevsky n_vol")
+  viscosity_exponent_shear = _finite_scalar(n_shear, label="skorohod_olevsky n_shear")
+  return MaterialSpec(
+    id=_material_id(id),
+    model="skorohod-olevsky",
+    parameters=(
+      MaterialParameterSpec(
+        "reference_viscosity",
+        reference_viscosity,
+        _source(f"{source}:reference_viscosity"),
+      ),
+      MaterialParameterSpec(
+        "activation_energy",
+        activation_energy,
+        _source(f"{source}:activation_energy"),
+      ),
+      MaterialParameterSpec(
+        "temperature",
+        temperature,
+        _source(f"{source}:temperature"),
+      ),
+      MaterialParameterSpec(
+        "initial_relative_density",
+        initial_relative_density,
+        _source(f"{source}:initial_relative_density"),
+      ),
+      MaterialParameterSpec(
+        "sintering_stress",
+        sintering_stress,
+        _source(f"{source}:sintering_stress"),
+      ),
+      MaterialParameterSpec(
+        "gas_constant",
+        gas_constant,
+        _source(f"{source}:gas_constant"),
+      ),
+      MaterialParameterSpec(
+        "viscosity_exponent_volumetric",
+        viscosity_exponent_volumetric,
+        _source(f"{source}:viscosity_exponent_volumetric"),
+      ),
+      MaterialParameterSpec(
+        "viscosity_exponent_shear",
+        viscosity_exponent_shear,
+        _source(f"{source}:viscosity_exponent_shear"),
+      ),
+    ),
+    source=_source(source),
+  )
+
+
 def uniaxial_elastic(
   E: float,
   area: float,
