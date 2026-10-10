@@ -16,7 +16,7 @@ correctness bugs (finding 20261007-agent-g4) that this battery pinned as
 a structural divergence (v3-minus-legacy exactly rank-1 with the
 effective-stress left vector, the legacy tangent failing the
 finite-difference check materially). M55 repaired both defects in the
-legacy law (commits bad3512 / 5b1bee2, "correctness bug"); the v3
+legacy law (commits 5ff40d5 / cb4f23a, "correctness bug"); the v3
 kernel, which had deliberately inherited neither, is unchanged, and the
 relationship is now parity-where-repaired: the pins below assert
 bitwise tangent equality on progressive branches, with the shared
@@ -332,7 +332,7 @@ def test_progressive_tangent_matches_stress_finite_difference() -> None:
     np.testing.assert_allclose(fd, tang_v, rtol=_FD_RTOL, atol=_FD_ATOL)
     # Repair confirmed: the legacy tangent passes the same check — it is the
     # algorithmic tangent of the shared stress response (the pre-repair
-    # symmetric secant failed this materially; M55 commits bad3512/5b1bee2).
+    # symmetric secant failed this materially; M55 commits 5ff40d5/cb4f23a).
     legacy = _legacy_law()
     _, tang_l, _ = _legacy_step(legacy, strain)
     np.testing.assert_allclose(fd, tang_l, rtol=_FD_RTOL, atol=_FD_ATOL)
