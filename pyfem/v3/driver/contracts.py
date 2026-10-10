@@ -164,6 +164,72 @@ class ParameterSensitivityObservation:
 
 
 @dataclass(frozen=True, slots=True, eq=False)
+class HomogenizationReduction:
+  """One homogenized stress component as a boundary-group reaction reduction.
+
+  ``dofs`` are full-space DOF indices of one boundary group's force
+  components (for the periodic RVE cell, the Right or Top group's ``x``/``y``
+  DOFs); the reduced value is ``scale`` times their sum — the legacy
+  normalization by the cell's width or height (RVE.py's ``dx``/``dy``).
+  Reduction DOFs name REACTION components: constrained DOFs carry the
+  committed residual, free DOFs contribute an exact zero by the reaction
+  observation's construction, so the reduction is identical whether applied
+  to the committed reactions or to their map-coordinate derivative.
+  """
+
+  component_id: str
+  dofs: tuple[int, ...]
+  scale: float
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class HomogenizationRequest:
+  """Named homogenization request for one driver run.
+
+  ``strain_coordinates`` names the declared map coordinates whose prescribed
+  offset columns ``du_bar/d(coordinate)`` are the macroscopic strain axes
+  (for the periodic RVE cell, ``eps11``/``eps22``/``gamma12``); the
+  homogenized tangent is differentiated along them in request order.
+  ``reductions`` defines the homogenized stress components as boundary-group
+  reaction reductions. The request is validated against the coordinate map
+  and system before the first substep, failing closed with coded
+  diagnostics: every strain coordinate must be declared, component ids must
+  be unique, and every reduction DOF must be a valid full-space index
+  without duplicates inside one reduction.
+  """
+
+  strain_coordinates: tuple[str, ...]
+  reductions: tuple[HomogenizationReduction, ...]
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class HomogenizationObservation:
+  """Homogenized stress and consistent tangent of one committed substep.
+
+  ``stress`` is the boundary-group reaction reduction of the COMMITTED
+  reactions in ``component_ids`` order — a solve-free observation from the
+  same full residual that drove convergence. ``tangent`` is the homogenized
+  consistent tangent, row per stress component, column per strain
+  coordinate in ``strain_coordinates`` order: the map-level
+  implicit-function-theorem column
+  ``dq/de = -(P.T K P)^-1 P.T (K du_bar/de - df_ext/de)``
+  solved with ONE back-substitution per strain coordinate on the substep's
+  converged factorization, reduced from the full reaction-derivative field
+  ``K (P dq/de + du_bar/de) - df_ext/de`` — the exact first derivative of
+  the committed reaction map along each strain axis (the external-force
+  term is exactly zero unless loads bind the strain coordinates). The
+  computation touches no operator
+  channel: the derivative source lives in the constraint map's compiled
+  offset columns, never in a material parameter.
+  """
+
+  component_ids: tuple[str, ...]
+  strain_coordinates: tuple[str, ...]
+  stress: FinalizedArray
+  tangent: FinalizedArray
+
+
+@dataclass(frozen=True, slots=True, eq=False)
 class SubstepObservation:
   """Reaction and energy observations from the FULL residual at commit.
 
@@ -173,7 +239,10 @@ class SubstepObservation:
   from the same full residual that drove convergence; nothing is
   re-evaluated. ``sensitivities`` carries the per-parameter IFT coefficient
   sensitivities of the committed point in request order — empty unless the
-  run requested sensitivity parameters.
+  run requested sensitivity parameters. ``homogenization`` carries the
+  boundary-group reduction of those same reactions and their
+  map-coordinate derivatives — ``None`` unless the run requested
+  homogenization.
   """
 
   reactions: FinalizedArray
@@ -181,6 +250,7 @@ class SubstepObservation:
   full_residual_norm: float
   reduced_residual_norm: float
   sensitivities: tuple[ParameterSensitivityObservation, ...] = ()
+  homogenization: HomogenizationObservation | None = None
 
 
 @dataclass(frozen=True, slots=True, eq=False)
