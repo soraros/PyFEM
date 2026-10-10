@@ -46,6 +46,25 @@ Parameters:
 - T: temperature (K)
 - n_vol, n_shear: viscosity exponents
 
+## Kinematics: Plane Strain on 2D Meshes
+
+Although the samples are thin plates, these 2D examples run in **plane
+strain**, not plane stress. The `SkorohodOlevsky` law is 3D internally;
+under the 2D small-strain continuum elements used here the element supplies
+the 3-component in-plane strain `(ε_x, ε_y, γ_xy)`, which the law promotes
+to 6 components with `ε_zz = 0` (`transform2To3`, `MatUtils.py`) — the
+plane-strain constraint. The out-of-plane stress `σ_zz = λ(ε_x + ε_y)` is
+therefore generally nonzero; a true plane-stress treatment would instead
+need `ε_zz = -ν/(1-ν)(ε_x + ε_y)` (or static condensation). Verified
+empirically: the pressure-sintering response matches a `PlaneStrain`
+reference run (E = 100 GPa, ν = 0.25 — the law's effective moduli at
+ρ = ρ₀) to machine precision at every time step.
+
+This has no effect on the shipped decks (densification is dormant, so the
+response is the density-pinned elastic one either way), but any
+activated-sintering study comparing against plane-stress analytics would
+see a systematic `(1-ν²)`-scale stiffness discrepancy.
+
 ## Examples
 
 ### 1. Free Sintering (`free_sintering.pro`)

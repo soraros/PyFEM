@@ -173,7 +173,7 @@ def test_spring_legacy_tangent_repaired_matches_v3(
   projector ``k * t t^T`` (M24 pinned that divergence here as
   ``test_spring_legacy_tangent_is_not_the_oracle``). M55 repaired the legacy
   element to the axial-only tangent ``k * b b^T`` — the exact derivative of
-  its unchanged axial residual (commit 5b9f964, "correctness bug") — so the
+  its unchanged axial residual (commit ed798ae, "correctness bug") — so the
   relationship is now parity: legacy tangent == v3 tangent, and the legacy
   RESIDUAL stays authoritative (internal-force parity holds, as before).
   """

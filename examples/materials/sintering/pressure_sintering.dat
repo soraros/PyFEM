@@ -2,7 +2,7 @@
 #  Mesh file for pressure-assisted sintering (hot pressing)
 #
 #  Rectangular ceramic sample under uniaxial compression
-#  Dimensions: 10 mm × 5 mm (2D plane stress)
+#  Dimensions: 10 mm × 5 mm (2D plane strain)
 #  Applied pressure accelerates densification
 ############################################################################
 

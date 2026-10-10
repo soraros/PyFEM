@@ -196,3 +196,15 @@ outside the current working tree.
   known-false (superseded by cleared re-measurement; the merged fix itself
   verified three ways). All benchmark baselines stand — they measured
   unmodified kernels with no edits between cache population and measurement.
+
+Update (2026-10-10, post-M59/M64): the per-file counts above are the dated
+audit record; `pyfem/v3/fem/assembly.py` now holds 7 `cache=True` kernels,
+not 4. The audited four were `_fill_stiffness_coo`,
+`_gather_element_states`, `_batched_element_internal_forces`, and
+`_scatter_nodal_forces`; M59 (599369a) split `_fill_stiffness_coo` into
+`_fill_stiffness_coo_serial` / `_fill_stiffness_coo_parallel` behind a
+size-gated dispatcher and added the fused `_dedup_coo_values_serial` /
+`_dedup_coo_values_parallel` pair, and M64 (8728567) wired the CSR pattern
+onto them with no new cached kernels. All seven are same-file
+numpy/numba-only, so they stay in the §5 (a) cache-friendly class, enforced
+by the AST canary in the test suite.

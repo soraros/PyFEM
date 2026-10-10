@@ -48,18 +48,21 @@ stress, plus deviatoric creep, through the Skorohod viscosity functions
 
 ## Tangent note
 
-The coded tangent is the closed form of an IMPLICIT step while the update is
+The coded tangent was the closed form of an IMPLICIT step while the update is
 explicit — an O(dt) inconsistency (finding
 `20261009-agent-vp1-bug-sovs-tangent-is-the-implicit-step-form-of-an-explicit-update`:
 9.4e-3 relative against a finite difference of the law's own response at
 `dtime = 0.01` on activated constants, 9.9e-4 at `dtime = 0.001`; the
-elastic branch is exact). Converged states are unaffected. The true
+elastic branch is exact). Converged states were unaffected. The true
 explicit-map derivative has closed form at the committed density —
 `K_alg = K(1 − 3K·dt/2η_v)` volumetric, `G_dev = G(1 − G·dt/η_s)` on the
 normal-deviatoric block, `G_alg = G(1 − G·dt/2η_s)` shear — exact because the
-map is affine in the strain increment at fixed state. The legacy repair rides
-the L3 wave; the v3 migration (`pyfem.v3` law `skorohod-olevsky`) ships the
-true tangent from day one and starts its state at `ρ = ρ0`.
+map is affine in the strain increment at fixed state. The legacy repair
+landed in M67 (commit 30a5f4e, merge 8a3eae8): the law now assembles the
+true explicit-map tangent. The v3 migration (`pyfem.v3` law
+`skorohod-olevsky`) shipped the same true tangent from day one and starts
+its state at `ρ = ρ0`; the v3 divergence pins flipped to repair-confirmed
+parity in M76 (b0ad9ed, merge 2ffcf20).
 
 ## References
 

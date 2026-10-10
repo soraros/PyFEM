@@ -10,10 +10,12 @@ a plane-strain embedding, and truncates stress/tangent back to
 
 Parameters (``parameter_names`` order): ``youngs_modulus`` E > 0,
 ``poisson_ratio`` -1 < nu < 0.5, ``initial_yield_stress`` syield0 > 0, and
-``hardening_slope`` hard >= 0. The legacy law's plastic branch reads
-``self.hard`` for its tangent (``IsotropicHardeningPlasticity.py:119``), so
-only decks carrying a ``hard`` property ever defined its plastic behavior; the
-canonical consistent configuration is linear hardening, where the tabulated
+``hardening_slope`` hard >= 0. The legacy law's plastic branch used to read
+an undefined ``self.hard`` for its tangent, so only decks carrying a ``hard``
+property ever defined its plastic behavior; M55 repaired legacy to use the
+tabulated hardening slope (commit 47277a6, merge 945a95d), which this law's
+``hardening_slope`` calibration slot matches exactly. The canonical
+consistent configuration is linear hardening, where the tabulated
 slope equals ``hard``. This law ships exactly that configuration: the stress
 update interpolates the legacy two-point table ``EqPlasStrains = [0, 1]``,
 ``Stresses = [syield0, syield0 + hard]`` (the legacy ``np.insert`` prepend is a
@@ -49,28 +51,30 @@ Numerical contract with the legacy oracle (exercised by
   bit on the documented proportional normal-strain paths, and the tangent
   matches on elastic steps; paths mixing plastic shear agree to a 1e-12
   relative tolerance, the drift being rounding-level accumulation through
-  the strain-split identity. The plastic-branch tangent diverges from legacy
-  by exactly the pinned mechanism of the shear-block bullet below.
-- One legacy statement is deliberately NOT replicated:
-  ``IsotropicHardeningPlasticity.py:105-106`` transfers ``flow[:3]`` (the
+  the strain-split identity. The plastic-branch tangent used to diverge from
+  legacy by exactly the pinned mechanism of the shear-block bullet below;
+  post-M55 both sides agree there too.
+- One legacy statement was deliberately NOT replicated at the fork:
+  ``IsotropicHardeningPlasticity.py:105-106`` transferred ``flow[:3]`` (the
   normal deviatoric direction) into the shear slots of ``epsilon_p`` and
-  ``epsilon_e`` where ``flow[3:]`` belongs. The bug is physically inert — the
+  ``epsilon_e`` where ``flow[3:]`` belongs. The bug was physically inert — the
   ``epsilon_e + epsilon_p`` sum driving the next increment is preserved — but
-  it pollutes the shear split the v3 slot schema promises. The v3 kernel
-  writes ``flow[3:]``; the parity battery pins the divergence (legacy shear
-  bookkeeping is nonzero on plastic normal paths, v3 is exactly zero) instead
-  of inheriting it.
-- A second legacy construction is deliberately NOT replicated: the
-  plastic-branch tangent accumulates the shear block on top of the aliased
-  elastic tangent (``IsotropicHardeningPlasticity.py:62`` aliases
+  it polluted the shear split the v3 slot schema promises. The v3 kernel
+  writes ``flow[3:]``; M55 repaired the legacy side identically (commit
+  0fc8c15, merge 945a95d), so the pinned pre-repair divergence (legacy shear
+  bookkeeping nonzero on plastic normal paths, v3 exactly zero) is history —
+  both sides now write ``flow[3:]``.
+- A second legacy construction was deliberately NOT replicated at the fork:
+  the plastic-branch tangent accumulated the shear block on top of the
+  aliased elastic tangent (``IsotropicHardeningPlasticity.py:62`` aliases
   ``tang = self.ctang``; :121 assigns the normal block, wiping its elastic
-  entries, but :123-125 accumulate ``effg`` onto the shear diagonals, whose
-  elastic ``eg`` survives). The legacy shear-shear diagonals therefore carry
-  the elastic G one time too many — ``eg + effg + effhdr*flow_k^2`` instead
-  of ``effg + effhdr*flow_k^2`` — up to ~31% of max|tang| at plastic
-  integration points (finding 20261007-agent-a3). Converged solutions are
+  entries, but :123-125 accumulated ``effg`` onto the shear diagonals, whose
+  elastic ``eg`` survived). The legacy shear-shear diagonals therefore
+  carried the elastic G one time too many — ``eg + effg + effhdr*flow_k^2``
+  instead of ``effg + effhdr*flow_k^2`` — up to ~31% of max|tang| at plastic
+  integration points (finding 20261007-agent-a3). Converged solutions were
   unaffected (Newton finds R = 0 with any consistent-enough Jacobian, which
-  is why the bug survived), but the returned tangent is not the derivative
+  is why the bug survived), but the returned tangent was not the derivative
   of the law's own stress map: global Newton degrades from quadratic to
   linear (41 vs 5 iterations to 1e-12 on the load-controlled J2 bending
   protocol case of ``test/v3/test_v3_j2_tangent.py``; the finding measured
@@ -80,12 +84,13 @@ Numerical contract with the legacy oracle (exercised by
   like the normal block, so the returned tangent is the exact algorithmic
   derivative of the stress map (central finite differences of the kernel's
   own stress update agree to 3.9e-10 relative of max|tang| over every
-  plastic step of the documented paths). The parity battery pins the
+  plastic step of the documented paths). The parity battery pinned the
   divergence against the legacy oracle AT THE FORK BASE: entries outside the
   shear diagonal still reproduce the legacy arithmetic bit for bit, and the
-  shear diagonals differ by the elastic G up to rounding. The L2 mission
-  repairs the legacy side of the same construction in parallel; when it
-  lands, the divergence pin flips to parity-where-repaired.
+  shear diagonals differed by the elastic G up to rounding. M55 repaired the
+  legacy side of the same construction (commit 9f713b6, merge 945a95d —
+  legacy now assigns the shear block too); the v3 kernels are unchanged and
+  the relationship is now parity-where-repaired.
 - The legacy law aliases ``tang = self.ctang`` and mutates the elastic
   tangent in the plastic branch, so its later elastic predictors depend on
   evaluation history. That is an impurity the pure v3 contract (accepted rows
@@ -440,15 +445,16 @@ def isotropic_hardening_plasticity_kernel_reference(
       effg2 = 2.0 * effg
       effg3 = 3.0 * effg
       efflam = 1.0 / 3.0 * (ebulk3 - effg2)
-      # Legacy tangent semantics: the declared slope (self.hard), which the
+      # Legacy tangent semantics: the tabulated hardening slope (post-M55;
+      # pre-repair legacy read an undefined self.hard — 47277a6), which the
       # two-point table matches exactly in this linear-hardening law.
       effhdr = eg3 * hard_slope / (eg3 + hard_slope) - effg3
 
       # The legacy law aliases and mutates its elastic tangent here; the pure
       # v3 kernel writes the algorithmic tangent into a fresh copy instead.
-      # Every block is assigned, not accumulated: the legacy shear block adds
-      # effg on top of the elastic eg, an excess G the v3 law drops (the
-      # pinned divergence of the module docstring).
+      # Every block is assigned, not accumulated — post-M55 the legacy shear
+      # block assigns too (9f713b6; pre-repair it added effg on top of the
+      # elastic eg, the pinned divergence of the module docstring).
       tang = np.array(ctang, copy=True)
       tang[:3, :3] = efflam
       for i in range(3):
@@ -615,15 +621,16 @@ def isotropic_hardening_plasticity_param_kernel_reference(
       effg2 = 2.0 * effg
       effg3 = 3.0 * effg
       efflam = 1.0 / 3.0 * (ebulk3 - effg2)
-      # Legacy tangent semantics: the declared slope (self.hard), which the
+      # Legacy tangent semantics: the tabulated hardening slope (post-M55;
+      # pre-repair legacy read an undefined self.hard — 47277a6), which the
       # two-point table matches exactly in this linear-hardening law.
       effhdr = eg3 * hard_slope / (eg3 + hard_slope) - effg3
 
       # The legacy law aliases and mutates its elastic tangent here; the pure
       # v3 kernel writes the algorithmic tangent into a fresh copy instead.
-      # Every block is assigned, not accumulated: the legacy shear block adds
-      # effg on top of the elastic eg, an excess G the v3 law drops (the
-      # pinned divergence of the module docstring).
+      # Every block is assigned, not accumulated — post-M55 the legacy shear
+      # block assigns too (9f713b6; pre-repair it added effg on top of the
+      # elastic eg, the pinned divergence of the module docstring).
       tang = np.array(ctang, copy=True)
       tang[:3, :3] = efflam
       for i in range(3):
@@ -799,7 +806,8 @@ def _return_map_batched(
       effg2 = 2.0 * effg
       effg3 = 3.0 * effg
       efflam = 1.0 / 3.0 * (ebulk3 - effg2)
-      # Legacy tangent semantics: the declared slope (self.hard), which the
+      # Legacy tangent semantics: the tabulated hardening slope (post-M55;
+      # pre-repair legacy read an undefined self.hard — 47277a6), which the
       # two-point table matches exactly in this linear-hardening law.
       effhdr = eg3 * hard_slope / (eg3 + hard_slope) - effg3
 
@@ -810,8 +818,9 @@ def _return_map_batched(
         for j in range(3):
           tang[i, j] = efflam
       # Every block is assigned, not accumulated: the reference kernel's
-      # plastic branch carries the same assignments (the legacy +G shear
-      # excess is dropped in both kernels alike).
+      # plastic branch carries the same assignments (the pre-M55 legacy +G
+      # shear excess is dropped in both kernels alike — and legacy-side too
+      # since 9f713b6).
       for i in range(3):
         tang[i, i] += effg2
         tang[i + 3, i + 3] = effg
@@ -942,7 +951,8 @@ def _return_map_param_batched(
       effg2 = 2.0 * effg
       effg3 = 3.0 * effg
       efflam = 1.0 / 3.0 * (ebulk3 - effg2)
-      # Legacy tangent semantics: the declared slope (self.hard), which the
+      # Legacy tangent semantics: the tabulated hardening slope (post-M55;
+      # pre-repair legacy read an undefined self.hard — 47277a6), which the
       # two-point table matches exactly in this linear-hardening law.
       effhdr = eg3 * hard_slope / (eg3 + hard_slope) - effg3
 
@@ -953,8 +963,9 @@ def _return_map_param_batched(
         for j in range(3):
           tang[i, j] = efflam
       # Every block is assigned, not accumulated: the reference kernel's
-      # plastic branch carries the same assignments (the legacy +G shear
-      # excess is dropped in both kernels alike).
+      # plastic branch carries the same assignments (the pre-M55 legacy +G
+      # shear excess is dropped in both kernels alike — and legacy-side too
+      # since 9f713b6).
       for i in range(3):
         tang[i, i] += effg2
         tang[i + 3, i + 3] = effg

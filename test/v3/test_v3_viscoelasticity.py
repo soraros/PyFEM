@@ -18,7 +18,7 @@ contradicting the legacy stress update whose derivative is
 0.7295 relative error against the finite difference of the legacy law's
 own response, Newton contraction 2.6975 > 1 at dtime = 0.05). M55 repaired
 the legacy tangent to the true algorithmic ``Cinf * (1 + sum f_i a_i)``
-(commit 3a20cae, "correctness bug"); the v3 kernel is unchanged, the
+(commit bc4a434, "correctness bug"); the v3 kernel is unchanged, the
 relationship is now parity-where-repaired, and this battery pins the
 shared tangent bitwise (the module docstring of
 ``pyfem/v3/materials/prony_viscoelasticity.py`` carries the
