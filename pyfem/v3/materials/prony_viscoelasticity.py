@@ -71,24 +71,29 @@ legacy behavior, now exact because the committed strain is stored):
   Cinf`` — class ``algorithmic-symmetric``, so the Jacobian channel is
   nonlinear and the driver re-factorizes every Newton iteration.
 
-One legacy statement is deliberately NOT replicated: the legacy tangent
-accumulation ``tang += (factor * (1 - exp_factor)) * Cinf``
-(``ViscoElasticity.py:213-214``) yields ``Cinf * (1 + sum f_i (1 - a_i))``,
-which contradicts the legacy stress update it accompanies — the exact
+One legacy statement was deliberately NOT replicated at the fork: the legacy
+tangent accumulation ``tang += (factor * (1 - exp_factor)) * Cinf``
+(``ViscoElasticity.py:213-214``) yielded ``Cinf * (1 + sum f_i (1 - a_i))``,
+which contradicted the legacy stress update it accompanied — the exact
 derivative of ``sigma += f_i Cinf : (dstrain - eps_i)`` with
 ``eps_i <- a_i eps_i + (1 - a_i) dstrain`` is ``Cinf * (1 + sum f_i a_i)``
-(the legacy tangent belongs to the standard branch-stress recurrence, a
-different discretization). The divergence is not rounding-level: against a
-finite difference of the legacy law's own stress response at dtime = 0.05 on
-the example-deck constants, the legacy tangent errs at 0.73 relative while
-``Cinf * (1 + sum f_i a_i)`` matches to 2e-12, and a Newton iteration on the
-legacy tangent contracts as ``|1 - K_true/K_legacy| = 2.7 > 1`` there —
-divergence that driver cutback worsens (halving dtime moves the ratio toward
-10x; the shipped creep_test.pro survives only because its dtime = 0.5 sits
-mid-spectrum, where the swap nearly cancels). The v3 kernel therefore writes
-the true algorithmic tangent (the M25 ``flow[3:]`` precedent: fix, and pin
-the divergence); stress and state bookkeeping remain bitwise-identical to
-legacy, and the parity battery pins the tangent divergence explicitly.
+(the pre-repair legacy tangent belonged to the standard branch-stress
+recurrence, a different discretization). The divergence was not
+rounding-level: against a finite difference of the legacy law's own stress
+response at dtime = 0.05 on the example-deck constants, the pre-repair
+legacy tangent errs at 0.73 relative while ``Cinf * (1 + sum f_i a_i)``
+matches to 2e-12, and a Newton iteration on the pre-repair tangent contracts
+as ``|1 - K_true/K_legacy| = 2.7 > 1`` there — divergence that driver
+cutback worsens (halving dtime moves the ratio toward 10x; the shipped
+creep_test.pro survived only because its dtime = 0.5 sits mid-spectrum,
+where the swap nearly cancels). The v3 kernel therefore writes the true
+algorithmic tangent (the M25 ``flow[3:]`` precedent: fix, and pin the
+divergence). M55 repaired the legacy side to the same true tangent (commit
+bc4a434, merge 945a95d); the v3 kernel is unchanged, stress and state
+bookkeeping remain bitwise-identical to legacy, and the relationship is now
+parity-where-repaired — the parity battery pins the shared tangent bitwise,
+with the pre-repair evidence above retained as the record of why the
+divergence existed.
 
 Divergences from legacy are typed, not silent: a non-finite strain batch or a
 non-finite bound time reports ``REJECT_STEP`` with byte-equal trial rows

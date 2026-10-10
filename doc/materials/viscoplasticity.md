@@ -46,16 +46,19 @@ A true-Perzyna rate law is a deferred feature, not a bugfix of this class.
 
 ## Notes
 
-- **Tangent:** the returned plastic-branch tangent adds a spurious
+- **Tangent:** the returned plastic-branch tangent used to add a spurious
   `rate_factor` term (the derivative of the discarded initial guess, not of
   the converged map — finding
   `20261009-agent-vp1-bug-viscoplasticity-tangent-inconsistent-with-its-own-stress-upd`).
-  Converged states are unaffected; measured against a finite difference of
+  Converged states were unaffected; measured against a finite difference of
   the law's own stress response the coded tangent errs by 6.6e-2 relative at
   an amplified state (`gamma = 1e4`, `dtime = 1e3`), while the
   rate-factor-free J2 consistent tangent matches to 3e-8 class. The term is
-  dormant at deck-like time steps (~1e-11 relative). The legacy repair rides
-  the L3 wave; the v3 migration (`pyfem.v3` law `perzyna-viscoplasticity`)
-  ships the true tangent from day one.
+  dormant at deck-like time steps (~1e-11 relative). The legacy repair
+  landed in M67 (commit 494f30c, merge 8a3eae8) — the returned tangent is
+  now the rate-factor-free consistent form. The v3 migration (`pyfem.v3` law
+  `perzyna-viscoplasticity`) shipped the same true tangent from day one; the
+  v3 divergence pins flipped to repair-confirmed parity in M76 (b0ad9ed,
+  merge 2ffcf20).
 - **Non-convergence:** the legacy local iteration warns and continues; the
   v3 law reports a typed step rejection instead.

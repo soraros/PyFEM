@@ -34,22 +34,25 @@ PlaneStrainDamage.py:69-70) to the symmetric ``(1 - omega) * De``; on elastic
 and unloading branches it is exactly ``(1 - omega) * De``. The Jacobian
 channel therefore reports ``linear=False, symmetric=False`` honestly.
 
-The legacy zero-return divergence (pinned, not inherited). Legacy
-``getEquivStrain`` computes ``detadstrain`` and then returns the
-never-assigned ``depsdstrain = zeros(3)`` instead
+The legacy zero-return divergence (repair-confirmed history, not inherited).
+Pre-repair legacy ``getEquivStrain`` computed ``detadstrain`` and then
+returned the never-assigned ``depsdstrain = zeros(3)``
 (``PlaneStrainDamage.py:99,133``) — present since the first commit
 (``d041176``) and in the shipped v1.0 tarballs — so the legacy rank-1
-correction vanishes identically and the legacy tangent is always the
-symmetric ``(1 - omega) * De``. The discarded legacy expression is itself
-additionally inconsistent in its shear component: it weighs
+correction vanished identically and the legacy tangent was always the
+symmetric ``(1 - omega) * De``. The discarded legacy expression was itself
+additionally inconsistent in its shear component: it weighed
 ``d(exy)/d(strain)`` as ``0.5 * O3`` (``PlaneStrainDamage.py:96``) against
 its own ``J2 = ... + exy**2`` (``PlaneStrainDamage.py:90``), halving the true
-shear derivative. The v3 kernel differentiates the legacy-returned
-equivalent strain exactly (``d(exy)/d(strain) = O3``), so its tangent is the
-algorithmically consistent tangent of the shared stress response —
-finite-difference verified in the parity battery — matching the discarded
-legacy expression in the normal components and correcting it in the shear
-component. This is what makes the declared ``algorithmic-nonsymmetric``
+shear derivative. The v3 kernel differentiates the equivalent strain exactly
+(``d(exy)/d(strain) = O3``), so its tangent is the algorithmically
+consistent tangent of the shared stress response — finite-difference
+verified in the parity battery. M55 repaired both legacy defects (commits
+5ff40d5 / cb4f23a, merge 945a95d): the legacy law now returns the computed
+``detadstrain`` with the exact ``O3`` shear weight, arithmetic identical to
+this kernel. The v3 kernel is unchanged and the relationship is now
+parity-where-repaired: legacy and v3 tangents match bit for bit on every
+branch. This is what makes the declared ``algorithmic-nonsymmetric``
 class honest rather than aspirational. The parity contract with the legacy
 oracle (exercised by ``test/v3/test_v3_damage.py``):
 
@@ -65,15 +68,16 @@ oracle (exercised by ``test/v3/test_v3_damage.py``):
   arithmetic statement by statement (same NumPy operation order, including
   the branch-local recomputation of ``eps`` at ``PlaneStrainDamage.py:116``
   and :126).
-- Tangents match the legacy law bit for bit on elastic and unloading
-  branches (both sides return ``(1 - omega) * De`` there). On progressive
-  branches the legacy tangent stays ``(1 - omega) * De`` (the zero-return
-  divergence above) while the v3 tangent carries the rank-1 correction; the
-  parity battery recomputes the legacy side independently (the ``getDamage``
-  factor on the committed kappa), pins the difference as exactly rank-1 with
-  the effective-stress left vector, and a finite-difference check pins the
-  v3 tangent as the algorithmically consistent one (the legacy tangent fails
-  that check materially).
+- Tangents match the legacy law bit for bit on every branch. On elastic and
+  unloading branches both sides return ``(1 - omega) * De``; on progressive
+  branches both sides carry the rank-1 correction (the repaired state of the
+  zero-return divergence above). The parity battery recomputes the legacy
+  side independently (the ``getDamage`` factor on the committed kappa), and
+  a finite-difference check pins both tangents as the algorithmically
+  consistent derivative of the shared stress response (the pre-repair legacy
+  tangent — the symmetric secant — failed that check materially; the pinned
+  pre-repair difference was exactly rank-1 with the effective-stress left
+  vector).
 - Divergences from legacy failures are typed, not silent: a non-finite
   strain batch or a non-finite equivalent strain reports ``REJECT_STEP``
   with byte-equal trial rows, never an exception. Beyond kappac the law
@@ -228,11 +232,11 @@ def plane_strain_damage_kernel(
   ``strains`` holds total engineering 6-Voigt strain per entity (the
   plane-strain embedding ``[xx, yy, 0, 0, 0, xy]``); ``accepted_rows`` holds
   the committed 1-float kappa rows. The stress/tangent arithmetic replicates
-  the legacy ``getStress`` statement by statement, with the two documented
-  divergences of the rank-1 correction (module docstring, "The legacy
-  zero-return divergence"): the derivative is returned at all (legacy returns
-  ``zeros(3)``), and its shear component differentiates the legacy equivalent
-  strain exactly (legacy's discarded expression halves it).
+  the legacy ``getStress`` statement by statement — post-M55 without
+  residue: the two pre-repair divergences of the rank-1 correction (module
+  docstring, "The legacy zero-return divergence") were repaired legacy-side
+  (5ff40d5 / cb4f23a), so legacy now also returns the computed derivative
+  and differentiates the shear component exactly.
   """
   if calibration.shape != (_CALIBRATION_SIZE,):
     msg = "plane-strain damage kernel requires the packed calibration vector"
@@ -269,17 +273,19 @@ def plane_strain_damage_kernel(
     exy = strain[5]
     with np.errstate(over="ignore", invalid="ignore"):
       # Legacy getEquivStrain (PlaneStrainDamage.py:82-131), statement order
-      # kept, except the returned derivative is the computed ``detadstrain``
-      # (the legacy return reads the never-assigned ``depsdstrain``).
+      # kept; post-M55 the legacy return is the same computed
+      # ``detadstrain`` (pre-repair it read the never-assigned
+      # ``depsdstrain`` — repaired in 5ff40d5).
       ezz = c * (exx + eyy)
       i1 = exx + eyy + ezz
       j2 = (exx**2 + eyy**2 + ezz**2 - exx * eyy - eyy * ezz - exx * ezz) / 3.0 + exy**2
 
       dexxdstrain = np.array([1.0, 0.0, 0.0])
       deyydstrain = np.array([0.0, 1.0, 0.0])
-      # Legacy writes ``0.5 * self.O3`` here (PlaneStrainDamage.py:96), which
-      # halves the shear derivative of its own ``J2 = ... + exy**2``; the v3
-      # kernel differentiates the legacy-returned equivalent strain exactly.
+      # Legacy wrote ``0.5 * self.O3`` here pre-M55 (PlaneStrainDamage.py:96),
+      # halving the shear derivative of its own ``J2 = ... + exy**2``; the
+      # cb4f23a repair made legacy differentiate its equivalent strain
+      # exactly, matching this kernel.
       dexydstrain = np.array([0.0, 0.0, 1.0])
       dezzdstrain = c * (dexxdstrain + deyydstrain)
 

@@ -67,14 +67,16 @@ the tolerance, a measure-zero band the FD legs avoid), and the elastic branch
 (:284-287). Stress and every state slot match the legacy oracle bit for bit
 on every committed path.
 
-Two legacy behaviors are deliberately NOT replicated:
+Two legacy behaviors are documented, not silently inherited — the first is
+deliberately NOT replicated; the second was NOT replicated at the fork and
+has since been repaired legacy-side:
 
 - The no-convergence path warns and continues (:242-244 — dead code in
   practice, the residual is linear): the v3 kernel reports ``REJECT_STEP``
   with byte-equal trial rows instead, as it does for a non-finite strain
   batch, a non-finite bound time, or a non-finite predictor. Divergences from
   legacy are typed, not silent.
-- The plastic-branch tangent adds a spurious ``rate_factor``
+- The plastic-branch tangent used to add a spurious ``rate_factor``
   (:270: ``gamma * n * overstress**(n-1) * dtime / syield_current``) to the
   hardening term — the derivative of the discarded initial guess, not of the
   converged map (finding
@@ -89,13 +91,12 @@ Two legacy behaviors are deliberately NOT replicated:
   legacy block construction order (:264-282) otherwise untouched — class
   ``algorithmic-symmetric`` (the coded tangent is also symmetric, just wrong;
   no taxonomy extension). Stress and state bookkeeping stay bitwise-identical
-  to legacy; the parity battery pins the tangent divergence by mechanism
-  (v3 == rate-factor-free form bitwise, legacy == coded form bitwise, the
-  relative gap pinned per leg: dormant ~2.3e-11 of effhdr at deck constants
-  with dtime ~ 1, dominant 7.0e-2 at the amplified state). The L3 mission
-  (M67) repairs the legacy side of the same construction in parallel; when it
-  lands, the divergence pins flip to parity-where-repaired by whoever
-  integrates second (M54/M55 precedent).
+  to legacy. M67 repaired the legacy side to the same rate-factor-free form
+  (commit 494f30c, merge 8a3eae8) and M76 flipped the divergence pins to
+  repair-confirmed parity (b0ad9ed, merge 2ffcf20); the pre-repair pin
+  record: v3 == rate-factor-free form bitwise, legacy == coded form bitwise,
+  the relative gap pinned per leg (dormant ~2.3e-11 of effhdr at deck
+  constants with dtime ~ 1, dominant 7.0e-2 at the amplified state).
 
 Tangent class: ``algorithmic-symmetric`` — the Jacobian channel is nonlinear
 (never ``linear``) and symmetric; the driver re-factorizes every Newton
@@ -407,9 +408,9 @@ def perzyna_viscoplasticity_kernel(
 
         # The TRUE algorithmic tangent of the implemented rate-independent
         # map: the legacy block construction order (:264-282) with the
-        # spurious rate_factor term deleted (module docstring). The kernel
-        # pins the divergence against the legacy oracle at the fork base; the
-        # parallel L3 mission (M67) repairs the legacy side.
+        # spurious rate_factor term deleted (module docstring). M67 repaired
+        # the legacy side identically (494f30c), so the fork-base divergence
+        # this kernel pinned is now repair-confirmed parity (M76, b0ad9ed).
         effg = eg * syield_final / smises
         effg2 = 2.0 * effg
         effg3 = 3.0 * effg

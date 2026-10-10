@@ -70,8 +70,9 @@ Tangent class: ``algorithmic-symmetric`` — the Jacobian channel is nonlinear
 (never ``linear``) and symmetric; the driver re-factorizes every Newton
 iteration (counter-asserted in the battery).
 
-The TRUE algorithmic tangent (one legacy statement NOT replicated). The
-legacy coded tangent (:322-339) is the closed form of an IMPLICIT step —
+The TRUE algorithmic tangent (one legacy statement NOT replicated at the
+fork; repair-confirmed since M67). The legacy coded tangent (:322-339) was
+the closed form of an IMPLICIT step —
 ``K/(1 + K dt 3/(2 eta_vol))``, ``G/(1 + G dt/eta_shear)`` — while the stress
 update is explicit forward Euler: against a central finite difference of the
 legacy law's own stress response at an activated state (eta0 = 1e10, Q = 1,
@@ -107,10 +108,10 @@ the normal block) — the three-modulus form above is the FD-identified truth
 the mission pins (the volumetric and shear legs agree with the survey; only
 the normal-block deviatoric leg was under-specified). The v3 kernel writes
 this true tangent; stress and state bookkeeping stay bitwise-identical to
-legacy, and the parity battery pins the tangent divergence by mechanism. The
-L3 mission (M67) repairs the legacy side in parallel; when it lands, the
-divergence pins flip to parity-where-repaired by whoever integrates second
-(M54/M55 precedent).
+legacy. M67 repaired the legacy side to the same three-leg closed form
+(commit 30a5f4e, merge 8a3eae8) and M76 flipped the divergence pins to
+repair-confirmed parity (b0ad9ed, merge 2ffcf20); the pre-repair divergence
+record above is retained as the evidence of why the fork existed.
 
 Dormancy note: both shipped sintering decks (``examples/materials/sintering/``)
 carry eta0 = 1e12, Q = 5e5, T = 1600, so ``eta_ref = 2.1e28`` Pa.s and the
@@ -413,7 +414,8 @@ def skorohod_olevsky_kernel(
         # the three-leg closed form of the module docstring (FD-identified,
         # exact at rounding level because the map is affine in the trial
         # strain at fixed committed state). The legacy coded tangent — the
-        # implicit-step form — is not replicated (the pinned divergence).
+        # implicit-step form pre-M67 — was repaired legacy-side to this same
+        # closed form (30a5f4e); parity confirmed by the M76 pin flip.
         k_mod = ebulk3 / 3.0
         k_alg = k_mod * (1.0 - 3.0 * k_mod * dtime / (2.0 * eta_vol))
         g_dev = eg * (1.0 - eg * dtime / eta_shear)

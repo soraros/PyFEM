@@ -57,8 +57,10 @@ rows) and ``skorohod-olevsky`` (the legacy SOVS explicit viscous-sintering
 law, 14-float rows, the first parameter-dependent initial state of the
 family: ``rho = rho0``). Both ship the true algorithmic tangents of their
 implemented maps with class ``algorithmic-symmetric`` — the legacy coded
-tangents diverge from the maps they accompany, and the pinned divergences are
-documented in the kernel modules.
+tangents used to diverge from the maps they accompanied; M67 repaired the
+legacy sides (494f30c, 30a5f4e; merge 8a3eae8) and M76 flipped the v3 pins
+to repair-confirmed parity (b0ad9ed, merge 2ffcf20). The pre-repair
+divergence records are retained in the kernel modules.
 
 - ``total-lagrangian-continuum``: the finite-strain slice (serendipity-quad8
   only): one node displacement field and the plane-stress

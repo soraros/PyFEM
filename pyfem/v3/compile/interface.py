@@ -16,16 +16,19 @@ with a coded diagnostic instead of evaluating silently wrong.
 Two decisions are pinned by the M62 survey (legacy evidence in
 pyfem/elements/Interface.py and pyfem/materials/):
 
-- Frame: legacy builds a REFLECTING frame (``rot = [[n0, n1], [n1, -n0]]``,
+- Frame: legacy built a REFLECTING frame (``rot = [[n0, n1], [n1, -n0]]``,
   determinant -1) with ``normal = (ds_y, ds_x)/|ds|`` — the normal/shear
-  components are exactly swapped on a 45-degree element (survey finding 1).
-  This family ships the CORRECTED proper-rotation frame
+  components were exactly swapped on a 45-degree element (survey finding 1).
+  This family ships the proper-rotation frame
   ``normal = (-ds_y, ds_x)/|ds|`` with ``rot = [[n0, n1], [-n1, n0]]``
-  (determinant +1). On axis-aligned horizontal decks the two frames agree on
-  the normal, and the flipped shear row cancels pairwise through ``B`` and
-  ``B.T`` for every shipped law (all odd in the shear jump), so element
-  residuals there are bitwise reproducible against legacy; oblique decks
-  diverge by construction and are outside the bitwise parity scope.
+  (determinant +1); M67 repaired the legacy side to the same proper rotation
+  (commit 9965442, merge 8a3eae8), so the frames now agree on any geometry.
+  On axis-aligned horizontal decks the two frames always agreed on the
+  normal, and the pre-repair flipped shear row cancels pairwise through ``B``
+  and ``B.T`` for every shipped law (all odd in the shear jump), so element
+  residuals there are bitwise reproducible against legacy — the axis-aligned
+  parity scope is unchanged (pre-repair, oblique decks diverged by
+  construction and were outside it).
 - Tangent: legacy assembles ``sum w * B.T @ D @ B`` and omits the
   ``d(rot)/da`` geometric term (survey: ~6e-3..1e-2 relative deviation from a
   finite difference of its own residual; the true Jacobian is ~1%
@@ -37,9 +40,11 @@ pyfem/elements/Interface.py and pyfem/materials/):
   documented and measured in the test suite.
 
 Parity integration is two-point Gauss (``gauss_legendre_1d(2)``): legacy's
-``intMethod="NewtonCotes"`` flag is a silent no-op since v1.0 (survey finding
-2), so Gauss-2 IS the legacy behavior. A Newton-Cotes family is explicitly
-NOT-yet. All four shipped laws are stateless reversible potentials of the
+``intMethod="NewtonCotes"`` flag was a silent no-op from v1.0 (survey finding
+2) until M67 made it a validated alias for ``"Gauss"`` (commit 4d2093a, merge
+8a3eae8 — no Newton-Cotes rule exists in the code base, and unknown schemes
+now raise), so Gauss-2 IS the legacy behavior. A Newton-Cotes family is
+explicitly NOT-yet. All four shipped laws are stateless reversible potentials of the
 local jump (zero material history); irreversible laws, the rank-3/3D branch
 (dead+broken legacy-side, survey finding 3), dissipation channels, and
 traction output channels are NOT-yet.
