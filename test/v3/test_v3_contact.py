@@ -96,10 +96,11 @@ _PARAMETERS = np.array(
 # Cross-platform band for the kernel-vs-legacy force pin (M77): the
 # reference-platform branch of bitwise_pin asserts raw-uint64 identity; the
 # off-reference branch uses these tolerances. The legacy helper norms via
-# np.linalg.norm (BLAS dnrm2) while the v3 kernel norms via
-# sqrt(sum(ds*ds)) — different reductions whose rounding drifts at the
-# few-ulp class off the reference platform (test/v3/conftest.py cites 4
-# ulps measured on ubuntu-latest). One norm ulp at the engaged scale
+# np.linalg.norm — sqrt(x.dot(x)) with the dot through CBLAS ddot —
+# while the v3 kernel norms via sqrt(sum(ds*ds)): different reductions
+# whose rounding drifts at the few-ulp class off the reference platform
+# (test/v3/conftest.py cites 4 ulps measured on ubuntu-latest). One norm
+# ulp at the engaged scale
 # |ds| < radius = 0.5 (ulp 1.1e-16) maps through the 1e6 penalty to
 # 1.1e-10 absolute in the force, so the 4-ulp class is 4.4e-10; atol=1e-9
 # covers it ~2.3x. The battery's max|force| is 4.5e5 (ulp 5.8e-11), and
