@@ -106,10 +106,32 @@ Protocol summary:
   increment's sensitivity (pinned by the two-step-elastic factor-2 test);
   propagating the entering state's own parameter dependence needs
   state-derivative channels, the M48 survey's declared v2 boundary.
+- Requested homogenization (``homogenization`` on ``run``) observes, at each
+  COMMITTED substep, named boundary-group reaction reductions and their
+  map-coordinate derivatives. The homogenized stress is a solve-free
+  reduction of the committed reactions. Each homogenized-tangent column is
+  the map-level implicit-function-theorem sensitivity of the committed
+  point along one requested strain coordinate: with the offset-derivative
+  column ``v = du_bar/de`` from the map's compiled affine offsets and the
+  external-force column ``df_ext/de`` of the same coordinate, the reduced
+  right-hand side ``P.T (df_ext/de - K v)`` assembles from ONE values-only
+  refill of the committed tangent per committed substep (no operator is
+  re-evaluated — the derivative source lives in the constraint map, never
+  in a material parameter channel), and ONE back-substitution per strain
+  coordinate reuses the factorization the converged Newton loop last used
+  under the exact stash/cache/plateau-corner discipline of the parameter
+  sensitivity solves above. The full reaction-derivative field
+  ``K (P dq/de + v) - df_ext/de``, masked to constrained DOFs like the
+  reaction observation itself, feeds the same boundary reductions, so the
+  homogenized tangent is exactly the first derivative of the committed
+  reaction map along the strain axes. Rejected attempts never produce the
+  observation, and an unrequested run pays zero cost.
 """
 
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass
 from typing import NoReturn
 
 import numpy as np
@@ -131,6 +153,9 @@ from pyfem.v3.driver.contracts import (
   BudgetExhaustionTrend,
   DriverStatistics,
   DriverStatus,
+  HomogenizationObservation,
+  HomogenizationReduction,
+  HomogenizationRequest,
   IterationRecord,
   NonlinearStaticResult,
   NonlinearStaticSettings,
@@ -142,6 +167,7 @@ from pyfem.v3.driver.contracts import (
 from pyfem.v3.driver.diagnostics import (
   DriverDiagnostic,
   DriverEvaluationError,
+  DriverPreparationError,
 )
 from pyfem.v3.driver.plan import (
   CompiledSensitivityProgram,
@@ -164,7 +190,7 @@ from pyfem.v3.model.operator import (
   evaluation_status,
 )
 from pyfem.v3.model.system import CompiledSystem
-from pyfem.v3.spec.diagnostics import SourceContext
+from pyfem.v3.spec.diagnostics import SourceContext, render_diagnostic_value
 from pyfem.v3.spec.program import (
   NodalLoadSpec,
   ProgramCoordinateValue,
@@ -175,6 +201,12 @@ from pyfem.v3.state import StateTransaction, StateTransactionOwner
 
 def _evaluation_fail(code: str, message: str) -> NoReturn:
   raise DriverEvaluationError(
+    (DriverDiagnostic(code=code, message=message, source=SourceContext()),)
+  )
+
+
+def _preparation_fail(code: str, message: str) -> NoReturn:
+  raise DriverPreparationError(
     (DriverDiagnostic(code=code, message=message, source=SourceContext()),)
   )
 
@@ -261,6 +293,135 @@ def _classify_budget_exhaustion(
     final_residual_norm=measured[-1],
     decreasing_step_count=decreasing,
     measured_step_count=len(measured),
+  )
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class _CompiledHomogenizationProgram:
+  """One validated homogenization request resolved onto the coordinate map.
+
+  ``coordinate_indices`` aligns with ``strain_coordinates`` (request order);
+  ``reduction_dofs``/``reduction_scales`` align with ``component_ids``. The
+  program is pure request resolution against the map — it owns no topology,
+  so assembly plans and their manifests are untouched by homogenization
+  requests.
+  """
+
+  strain_coordinates: tuple[str, ...]
+  coordinate_indices: tuple[int, ...]
+  component_ids: tuple[str, ...]
+  reduction_dofs: tuple[FinalizedArray, ...]
+  reduction_scales: tuple[float, ...]
+
+
+def _compile_homogenization_program(
+  coordinate_map: CompiledConstraintMap,
+  request: HomogenizationRequest,
+) -> _CompiledHomogenizationProgram:
+  """Validate one homogenization request and resolve it onto the map.
+
+  Request-time validation fails closed before any substep runs: a strain
+  coordinate the map does not declare, a duplicated coordinate or component
+  id, an out-of-range or duplicated reduction DOF, or a non-finite
+  reduction scale can never assemble an honest observation, so the request
+  is rejected with coded diagnostics. Type-contract violations on the
+  request shape itself remain ``TypeError``.
+  """
+  if type(coordinate_map) is not CompiledConstraintMap:
+    msg = "homogenization program compilation requires an exact CompiledConstraintMap"
+    raise TypeError(msg)
+  if type(request.strain_coordinates) is not tuple or not request.strain_coordinates:
+    msg = "homogenization strain coordinates must be a non-empty exact tuple"
+    raise TypeError(msg)
+  coordinate_lookup = {
+    name: index for index, name in enumerate(coordinate_map.coordinate_names)
+  }
+  coordinate_indices: list[int] = []
+  seen_coordinates: set[str] = set()
+  for coordinate in request.strain_coordinates:
+    if type(coordinate) is not str or not coordinate:
+      msg = "homogenization strain coordinates must be non-empty exact strings"
+      raise TypeError(msg)
+    if coordinate in seen_coordinates:
+      _preparation_fail(
+        "duplicate-homogenization-coordinate",
+        "homogenization strain coordinate "
+        f"{render_diagnostic_value(coordinate)} is requested twice",
+      )
+    seen_coordinates.add(coordinate)
+    index = coordinate_lookup.get(coordinate)
+    if index is None:
+      _preparation_fail(
+        "unknown-homogenization-coordinate",
+        "homogenization strain coordinate "
+        f"{render_diagnostic_value(coordinate)} is not a declared program "
+        f"coordinate (declared: "
+        f"{render_diagnostic_value(coordinate_map.coordinate_names)})",
+      )
+    coordinate_indices.append(index)
+  if type(request.reductions) is not tuple or not request.reductions:
+    msg = "homogenization reductions must be a non-empty exact tuple"
+    raise TypeError(msg)
+  component_ids: list[str] = []
+  reduction_dofs: list[FinalizedArray] = []
+  reduction_scales: list[float] = []
+  for reduction in request.reductions:
+    if type(reduction) is not HomogenizationReduction:
+      msg = "homogenization reductions must be exact HomogenizationReduction values"
+      raise TypeError(msg)
+    if type(reduction.component_id) is not str or not reduction.component_id:
+      msg = "homogenization component ids must be non-empty exact strings"
+      raise TypeError(msg)
+    if reduction.component_id in component_ids:
+      _preparation_fail(
+        "duplicate-homogenization-component",
+        f"homogenization component "
+        f"{render_diagnostic_value(reduction.component_id)} is requested twice",
+      )
+    component_ids.append(reduction.component_id)
+    if type(reduction.dofs) is not tuple or not reduction.dofs:
+      msg = "homogenization reduction DOFs must be a non-empty exact tuple"
+      raise TypeError(msg)
+    seen_dofs: set[int] = set()
+    for dof in reduction.dofs:
+      if type(dof) is not int:
+        msg = "homogenization reduction DOFs must be exact integers"
+        raise TypeError(msg)
+      if not 0 <= dof < coordinate_map.full_dof_count:
+        _preparation_fail(
+          "homogenization-dof-out-of-range",
+          f"homogenization reduction DOF {dof} lies outside the full space "
+          f"[0, {coordinate_map.full_dof_count})",
+        )
+      if dof in seen_dofs:
+        _preparation_fail(
+          "duplicate-homogenization-dof",
+          f"homogenization component "
+          f"{render_diagnostic_value(reduction.component_id)} repeats DOF {dof}",
+        )
+      seen_dofs.add(dof)
+    scale = reduction.scale
+    if type(scale) is not int and type(scale) is not float:
+      msg = "homogenization reduction scales must be exact int or float numbers"
+      raise TypeError(msg)
+    scale = float(scale)
+    if not math.isfinite(scale):
+      _preparation_fail(
+        "non-finite-homogenization-scale",
+        f"homogenization component "
+        f"{render_diagnostic_value(reduction.component_id)} has a non-finite "
+        "reduction scale",
+      )
+    reduction_dofs.append(
+      FinalizedArray(np.array(reduction.dofs, dtype=np.int64), dtype=np.int64)
+    )
+    reduction_scales.append(scale)
+  return _CompiledHomogenizationProgram(
+    strain_coordinates=request.strain_coordinates,
+    coordinate_indices=tuple(coordinate_indices),
+    component_ids=tuple(component_ids),
+    reduction_dofs=tuple(reduction_dofs),
+    reduction_scales=tuple(reduction_scales),
   )
 
 
@@ -520,11 +681,130 @@ class NonlinearStaticDriver:
       )
     return tuple(observations)
 
+  def _solve_homogenization(
+    self,
+    program: _CompiledHomogenizationProgram,
+    point: ProgramPoint,
+    jacobian_batches: tuple[np.ndarray, ...],
+    reactions: FinalizedArray,
+    *,
+    solved: bool,
+  ) -> HomogenizationObservation:
+    """Observe the homogenized stress and tangent of one committed substep.
+
+    The stress is the boundary-group reduction of the COMMITTED reactions —
+    solve-free. Each tangent column differentiates the committed reaction
+    map along one strain coordinate: the offset-derivative column
+    ``v = du_bar/de`` is the map's compiled affine column (point-independent)
+    and ``df_ext/de`` is the same coordinate's external-force column, so the
+    reduced right-hand side ``P.T (df_ext/de - K v)`` needs only the
+    committed tangent — refilled values-only ONCE per committed substep from
+    the in-hand Jacobian batches of the converged evaluation, shared by the
+    right-hand sides, the corner factorization, and the reaction-derivative
+    reductions. Every back-substitution reuses the factorization the
+    converged Newton loop last used (for a constant-tangent plan, the cached
+    state-independent one) — counted as factorization reuse, never a new
+    factorization. A substep that converged without any Newton solve owns
+    no such factorization; the converged tangent is then factorized once
+    from the shared refill, counted truthfully (and cached when the plan is
+    constant-tangent, where it is the same tangent). No operator is
+    re-evaluated: the derivative source lives in the constraint map, never
+    in a material parameter channel.
+    """
+    plan = self._plan
+    workspace = self._workspace
+    coordinate_map = self._map
+    tangent = refill_tangent(plan, jacobian_batches)
+    workspace.tangent_refill_count += 1
+    fresh = False
+    if plan.constant_tangent and workspace.cached_factorization is not None:
+      factorization = workspace.cached_factorization
+    elif solved and workspace.stashed_factorization is not None:
+      factorization = workspace.stashed_factorization
+    else:
+      try:
+        factorization = splu(reduce_tangent(coordinate_map, tangent).tocsc())
+      except RuntimeError:
+        _evaluation_fail(
+          "singular-homogenization-tangent",
+          "the converged tangent is singular, so the homogenization system "
+          "has no solution",
+        )
+      workspace.factorization_count += 1
+      fresh = True
+      if plan.constant_tangent:
+        workspace.cached_factorization = factorization
+    derivatives = evaluate_offsets(coordinate_map, point).derivatives.values
+    load_coefficients = plan.loads.coordinate_coefficients.values
+    constrained = coordinate_map.constrained_dofs.values
+    reaction_values = reactions.values
+    component_count = len(program.component_ids)
+    stress = np.empty(component_count, dtype=np.float64)
+    macro_tangent = np.empty(
+      (component_count, len(program.coordinate_indices)),
+      dtype=np.float64,
+    )
+    for component_index, (dofs, scale) in enumerate(
+      zip(program.reduction_dofs, program.reduction_scales, strict=True)
+    ):
+      stress[component_index] = scale * float(reaction_values[dofs.values].sum())
+    for ordinal, coordinate_index in enumerate(program.coordinate_indices):
+      offset_column = derivatives[:, coordinate_index]
+      rhs_full = tangent @ offset_column
+      rhs_reduced = reduce_residual(
+        coordinate_map,
+        np.subtract(load_coefficients[:, coordinate_index], rhs_full),
+      )
+      workspace.residual_assembly_count += 1
+      sensitivity = np.asarray(
+        factorization.solve(rhs_reduced.values),
+        dtype=np.float64,
+      )
+      workspace.linear_solve_count += 1
+      # The first solve on a just-factorized corner tangent is not a reuse;
+      # every other homogenization solve reuses a committed factorization.
+      if not (fresh and ordinal == 0):
+        workspace.factorization_reuse_count += 1
+      if not bool(np.isfinite(sensitivity).all()):
+        _evaluation_fail(
+          "non-finite-homogenization-solution",
+          "the homogenization solve for strain coordinate "
+          f"{program.strain_coordinates[ordinal]!r} produced non-finite "
+          "coefficients",
+        )
+      full_derivative = (
+        admissible_increment(coordinate_map, sensitivity).values + offset_column
+      )
+      reaction_derivative = tangent @ full_derivative
+      np.subtract(
+        reaction_derivative,
+        load_coefficients[:, coordinate_index],
+        out=reaction_derivative,
+      )
+      # The tangent column differentiates the reaction OBSERVATION, which is
+      # zero on free DOFs, so the field is masked to constrained DOFs exactly
+      # like ``reaction_forces`` before the boundary reductions.
+      masked = np.zeros(coordinate_map.full_dof_count, dtype=np.float64)
+      masked[constrained] = reaction_derivative[constrained]
+      for component_index, (dofs, scale) in enumerate(
+        zip(program.reduction_dofs, program.reduction_scales, strict=True)
+      ):
+        macro_tangent[component_index, ordinal] = scale * float(
+          masked[dofs.values].sum()
+        )
+    return HomogenizationObservation(
+      component_ids=program.component_ids,
+      strain_coordinates=program.strain_coordinates,
+      stress=FinalizedArray(stress, dtype=np.float64),
+      tangent=FinalizedArray(macro_tangent, dtype=np.float64),
+    )
+
   def _newton_substep(
     self,
     point: ProgramPoint,
     committed_point: ProgramPoint | None,
     sensitivity_program: CompiledSensitivityProgram | None,
+    homogenization_program: _CompiledHomogenizationProgram | None,
   ) -> tuple[
     bool,
     tuple[IterationRecord, ...],
@@ -540,7 +820,11 @@ class NonlinearStaticDriver:
     ``sensitivity_program`` is the run's validated parameter request (or
     ``None``): its derivative channels are evaluated once at the converged
     point and solved per parameter post-commit — only on the committed
-    exit, so rejected attempts never see it.
+    exit, so rejected attempts never see it. ``homogenization_program`` is
+    the run's validated homogenization request (or ``None``): its
+    observation is computed post-commit from the committed reactions and
+    the in-hand converged Jacobian batches — likewise only on the
+    committed exit.
     """
     plan = self._plan
     workspace = self._workspace
@@ -676,12 +960,24 @@ class NonlinearStaticDriver:
               jacobian_batches,
               solved=increment is not None,
             )
+          homogenization = (
+            self._solve_homogenization(
+              homogenization_program,
+              point,
+              jacobian_batches,
+              reactions,
+              solved=increment is not None,
+            )
+            if homogenization_program is not None
+            else None
+          )
           observation = SubstepObservation(
             reactions=reactions,
             constraint_work=float(np.dot(reactions.values, full.values)),
             full_residual_norm=float(np.linalg.norm(full_residual)),
             reduced_residual_norm=residual_norm,
             sensitivities=sensitivities,
+            homogenization=homogenization,
           )
           return True, tuple(iterations), observation, None
         if first_residual_norm is None:
@@ -744,6 +1040,7 @@ class NonlinearStaticDriver:
     base_point: ProgramPoint,
     target_points: tuple[ProgramPoint, ...],
     sensitivity_parameters: tuple[str, ...] = (),
+    homogenization: HomogenizationRequest | None = None,
   ) -> NonlinearStaticResult:
     """Advance the committed state through the exact target-point schedule.
 
@@ -754,6 +1051,15 @@ class NonlinearStaticDriver:
     extra cost. The request is validated before the first substep: a
     parameter no operator declares a derivative channel for is rejected
     with a coded diagnostic.
+
+    ``homogenization`` names boundary-group reaction reductions and the
+    strain coordinates along which their committed-map derivatives are
+    solved per committed substep (the homogenization protocol in the module
+    docstring); the default ``None`` keeps the run primal-only at zero
+    extra cost. The request is validated before the first substep:
+    undeclared strain coordinates, duplicated coordinates, component ids,
+    or reduction DOFs, out-of-range DOFs, and non-finite scales are
+    rejected with coded diagnostics.
     """
     if type(target_points) is not tuple or any(
       type(point) is not ProgramPoint for point in target_points
@@ -763,9 +1069,17 @@ class NonlinearStaticDriver:
     if type(sensitivity_parameters) is not tuple:
       msg = "driver sensitivity parameters must be an exact tuple of names"
       raise TypeError(msg)
+    if homogenization is not None and type(homogenization) is not HomogenizationRequest:
+      msg = "driver homogenization must be an exact HomogenizationRequest or None"
+      raise TypeError(msg)
     sensitivity_program = (
       compile_sensitivity_program(self._system, sensitivity_parameters)
       if sensitivity_parameters
+      else None
+    )
+    homogenization_program = (
+      _compile_homogenization_program(self._map, homogenization)
+      if homogenization is not None
       else None
     )
     initial_generation = self._owner.generation
@@ -803,6 +1117,7 @@ class NonlinearStaticDriver:
           trial_point,
           committed_point,
           sensitivity_program,
+          homogenization_program,
         )
         if committed:
           records.append(
