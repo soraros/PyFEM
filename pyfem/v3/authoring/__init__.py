@@ -60,13 +60,22 @@ the typed per-parameter columns off the committed records::
 """
 
 from pyfem.v3.authoring.compile import compile
+from pyfem.v3.authoring.contacts import penalty_contact
 from pyfem.v3.authoring.evaluate import evaluate, trial_vector
+from pyfem.v3.authoring.interfaces import (
+  dummy_interface,
+  power_law_mode_i,
+  thouless_mode_i,
+  xu_needleman,
+)
 from pyfem.v3.authoring.materials import (
   damage,
   linear_elastic,
   plasticity,
   prony_viscoelasticity,
+  skorohod_olevsky,
   uniaxial_elastic,
+  viscoplasticity,
 )
 from pyfem.v3.authoring.mesh import line2_mesh, quad8_mesh, quad8_patch
 from pyfem.v3.authoring.models import small_strain_continuum, truss
@@ -80,9 +89,13 @@ from pyfem.v3.authoring.registry import (
   plasticity_registry,
   prony_viscoelasticity_law,
   q8_registry,
+  skorohod_olevsky_law,
+  skorohod_olevsky_registry,
   truss_registry,
   uniaxial_law,
   viscoelasticity_registry,
+  viscoplasticity_law,
+  viscoplasticity_registry,
 )
 from pyfem.v3.authoring.springs import damage_envelope_spring, spring
 from pyfem.v3.authoring.transactions import (
@@ -121,28 +134,39 @@ __all__ = [
   "damage_envelope_spring",
   "damage_law",
   "damage_registry",
+  "dummy_interface",
   "evaluate",
   "fixed",
   "line2_mesh",
   "linear_elastic",
   "nodal_load",
   "nonlinear_static",
+  "penalty_contact",
   "plane_stress_law",
   "plasticity",
   "plasticity_law",
   "plasticity_registry",
+  "power_law_mode_i",
   "prony_viscoelasticity",
   "prony_viscoelasticity_law",
   "q8_registry",
   "quad8_mesh",
   "quad8_patch",
+  "skorohod_olevsky",
+  "skorohod_olevsky_law",
+  "skorohod_olevsky_registry",
   "small_strain_continuum",
   "spring",
   "state_owner",
+  "thouless_mode_i",
   "trial_vector",
   "truss",
   "truss_registry",
   "uniaxial_elastic",
   "uniaxial_law",
   "viscoelasticity_registry",
+  "viscoplasticity",
+  "viscoplasticity_law",
+  "viscoplasticity_registry",
+  "xu_needleman",
 ]

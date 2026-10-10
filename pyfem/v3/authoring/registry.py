@@ -20,12 +20,16 @@ from pyfem.v3.compile.continuum import (
   Q8_MATERIAL_KEY,
   Q8_QUADRATURE_KEY,
   Q8_TOPOLOGY_KEY,
+  SOVS_MATERIAL_KEY,
   VISCOELASTIC_MATERIAL_KEY,
+  VISCOPLASTIC_MATERIAL_KEY,
   damage_reference_registry,
   plasticity_reference_registry,
   q8_descriptor_metadata,
   q8_reference_registry,
+  sovs_reference_registry,
   viscoelasticity_reference_registry,
+  viscoplasticity_reference_registry,
 )
 from pyfem.v3.compile.contracts import StatefulContinuumBinding
 from pyfem.v3.compile.truss import (
@@ -38,8 +42,12 @@ from pyfem.v3.compile.truss import (
 from pyfem.v3.materials.isotropic_hardening_plasticity import (
   isotropic_hardening_plasticity_metadata,
 )
+from pyfem.v3.materials.perzyna_viscoplasticity import (
+  perzyna_viscoplasticity_metadata,
+)
 from pyfem.v3.materials.plane_strain_damage import plane_strain_damage_metadata
 from pyfem.v3.materials.prony_viscoelasticity import prony_viscoelasticity_metadata
+from pyfem.v3.materials.skorohod_olevsky import skorohod_olevsky_metadata
 from pyfem.v3.model.provenance import CanonicalManifest
 from pyfem.v3.model.registry import RegistryDescriptor, RegistryKey
 from pyfem.v3.spec.diagnostics import SourceContext
@@ -183,6 +191,69 @@ def prony_viscoelasticity_law(
   )
 
 
+def viscoplasticity_law(
+  binding: StatefulContinuumBinding,
+  *,
+  implementation_id: str,
+  version: str = "1",
+) -> RegistryDescriptor:
+  """Bind a stateful Perzyna-branded viscoplasticity binding to the convention.
+
+  ``binding`` implements the v2 stateful continuum binding protocol: a
+  calibration call receiving ``(youngs_modulus, poisson_ratio,
+  initial_yield_stress, hardening_slope, fluidity, rate_exponent)`` and
+  returning the law's flat float64 calibration vector, a batched kernel over
+  total 6-Voigt strains, accepted 14-float state rows (``epsilon_e`` 6,
+  ``epsilon_p`` 6, ``kappa`` 1, ``time`` 1), and the declared identity time
+  signal port, and an optional ``initial_state``. The descriptor pins the
+  qualified perzyna-viscoplasticity convention (metadata the user never has
+  to copy); compilation re-declares the binding's metadata and validates it
+  byte-wise against the captured descriptor, so equivalent kernels are
+  accepted and contradictory ones rejected with coded diagnostics.
+  """
+  return RegistryDescriptor(
+    kind=VISCOPLASTIC_MATERIAL_KEY[0],
+    name=VISCOPLASTIC_MATERIAL_KEY[1],
+    version=version,
+    implementation_id=implementation_id,
+    metadata=perzyna_viscoplasticity_metadata(),
+    binding=binding,
+  )
+
+
+def skorohod_olevsky_law(
+  binding: StatefulContinuumBinding,
+  *,
+  implementation_id: str,
+  version: str = "1",
+) -> RegistryDescriptor:
+  """Bind a stateful Skorohod-Olevsky sintering binding to the convention.
+
+  ``binding`` implements the v2 stateful continuum binding protocol: a
+  calibration call receiving ``(reference_viscosity, activation_energy,
+  temperature, initial_relative_density, sintering_stress, gas_constant,
+  viscosity_exponent_volumetric, viscosity_exponent_shear)`` and returning
+  the law's flat float64 calibration vector, a batched kernel over total
+  6-Voigt strains, accepted 14-float state rows (``strain`` 6,
+  ``strain_visc`` 6, ``rho`` 1, ``time`` 1), and the declared identity time
+  signal port, and an optional ``initial_state`` — the qualified convention's
+  initial rows carry ``rho = initial_relative_density`` (the family's first
+  parameter-dependent initial state). The descriptor pins the qualified
+  skorohod-olevsky convention (metadata the user never has to copy);
+  compilation re-declares the binding's metadata and validates it byte-wise
+  against the captured descriptor, so equivalent kernels are accepted and
+  contradictory ones rejected with coded diagnostics.
+  """
+  return RegistryDescriptor(
+    kind=SOVS_MATERIAL_KEY[0],
+    name=SOVS_MATERIAL_KEY[1],
+    version=version,
+    implementation_id=implementation_id,
+    metadata=skorohod_olevsky_metadata(),
+    binding=binding,
+  )
+
+
 def _replace(
   registry: dict[RegistryKey, RegistryDescriptor],
   replacements: tuple[tuple[RegistryKey, object], ...],
@@ -282,20 +353,51 @@ def _continuum_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
     return plane_strain_damage_metadata()
   if (kind, name) == VISCOELASTIC_MATERIAL_KEY:
     return prony_viscoelasticity_metadata()
+  if (kind, name) == VISCOPLASTIC_MATERIAL_KEY:
+    return perzyna_viscoplasticity_metadata()
+  if (kind, name) == SOVS_MATERIAL_KEY:
+    return skorohod_olevsky_metadata()
   return q8_descriptor_metadata(kind, name)
+
+
+# The declaration-routed operator families carry no registry convention, but
+# their landed kernels pin a fixed parameter tuple per kernel name — the
+# qualified convention the sensitivity surface resolves them by (no wave-13
+# kernel declares a derivative channel, so every one reads 'constant').
+_KERNEL_CONVENTION_PARAMETER_NAMES: dict[tuple[str, str], tuple[str, ...]] = {
+  ("constitutive-kernel", "xu-needleman-rank2"): (
+    "fracture_energy",
+    "ultimate_traction",
+  ),
+  ("constitutive-kernel", "power-law-mode-i"): (
+    "fracture_energy",
+    "ultimate_traction",
+  ),
+  ("constitutive-kernel", "thouless-mode-i"): (
+    "fracture_energy",
+    "ultimate_traction",
+    "d1d3",
+    "d2d3",
+  ),
+  ("constitutive-kernel", "dummy-linear-interface"): ("stiffness",),
+  ("constitutive-kernel", "penalty-disc-contact"): ("penalty", "radius"),
+}
 
 
 def _convention_parameter_names(kind: str, name: str) -> tuple[str, ...]:
   """Return the qualified convention's ``parameter_names`` for one key.
 
-  Covers the continuum (Q8 and stateful seam) and truss conventions; keys no
-  qualified convention pins raise ``KeyError``, which callers read as a
-  convention with no declared parameter names.
+  Covers the continuum (Q8 and stateful seam), truss, and declaration-routed
+  kernel conventions; keys no qualified convention pins raise ``KeyError``,
+  which callers read as a convention with no declared parameter names.
   """
   try:
     metadata = _continuum_descriptor_metadata(kind, name)
   except KeyError:
-    metadata = truss_descriptor_metadata(kind, name)
+    try:
+      return _KERNEL_CONVENTION_PARAMETER_NAMES[(kind, name)]
+    except KeyError:
+      metadata = truss_descriptor_metadata(kind, name)
   return tuple(metadata.get("parameter_names", ()))
 
 
@@ -396,6 +498,72 @@ def viscoelasticity_registry(
   return registry
 
 
+def viscoplasticity_registry(
+  *,
+  topology: RegistryDescriptor | None = None,
+  quadrature: RegistryDescriptor | None = None,
+  formulation: RegistryDescriptor | None = None,
+  material: RegistryDescriptor | None = None,
+) -> dict[RegistryKey, RegistryDescriptor]:
+  """Compose a viscoplasticity registry: references plus your replacements.
+
+  Mirrors :func:`plasticity_registry` for the qualified
+  perzyna-viscoplasticity convention: the Q8 reference implementations plus
+  the rate-gated J2 law with its identity time port. Replacements keep the
+  qualified registry key and metadata convention; only the implementation
+  (its id, version, and binding) is yours. A mismatching key or metadata
+  field fails here with a field-level diff, not later with a bare compile
+  error.
+  """
+  registry = viscoplasticity_reference_registry()
+  _replace(
+    registry,
+    (
+      (Q8_TOPOLOGY_KEY, topology),
+      (Q8_QUADRATURE_KEY, quadrature),
+      (Q8_FORMULATION_KEY, formulation),
+      (VISCOPLASTIC_MATERIAL_KEY, material),
+    ),
+    family="viscoplasticity",
+    metadata_for=_continuum_descriptor_metadata,
+    source="authoring.viscoplasticity_registry",
+  )
+  return registry
+
+
+def skorohod_olevsky_registry(
+  *,
+  topology: RegistryDescriptor | None = None,
+  quadrature: RegistryDescriptor | None = None,
+  formulation: RegistryDescriptor | None = None,
+  material: RegistryDescriptor | None = None,
+) -> dict[RegistryKey, RegistryDescriptor]:
+  """Compose a skorohod-olevsky registry: references plus your replacements.
+
+  Mirrors :func:`plasticity_registry` for the qualified skorohod-olevsky
+  convention: the Q8 reference implementations plus the explicit
+  viscous-sintering law with its identity time port and parameter-dependent
+  ``rho = rho0`` initial state. Replacements keep the qualified registry key
+  and metadata convention; only the implementation (its id, version, and
+  binding) is yours. A mismatching key or metadata field fails here with a
+  field-level diff, not later with a bare compile error.
+  """
+  registry = sovs_reference_registry()
+  _replace(
+    registry,
+    (
+      (Q8_TOPOLOGY_KEY, topology),
+      (Q8_QUADRATURE_KEY, quadrature),
+      (Q8_FORMULATION_KEY, formulation),
+      (SOVS_MATERIAL_KEY, material),
+    ),
+    family="skorohod-olevsky",
+    metadata_for=_continuum_descriptor_metadata,
+    source="authoring.skorohod_olevsky_registry",
+  )
+  return registry
+
+
 def check_registry(
   spec: ModelSpec,
   registry: dict[RegistryKey, RegistryDescriptor],
@@ -436,9 +604,10 @@ def check_registry(
   if family == "Q8":
     # The small-strain formulation is the open stateful seam: the compiler
     # selects the material descriptor by the spec's model name. Only the
-    # pinned Q8, plasticity, damage, and viscoelasticity conventions carry
-    # a qualified metadata contract here; other stateful keys defer to the
-    # landed compiler's binding re-declaration validation.
+    # pinned Q8, plasticity, damage, viscoelasticity, viscoplasticity, and
+    # skorohod-olevsky conventions carry a qualified metadata contract here;
+    # other stateful keys defer to the landed compiler's binding
+    # re-declaration validation.
     material_key: RegistryKey = ("material", material.model)
     keys = (
       Q8_TOPOLOGY_KEY,
