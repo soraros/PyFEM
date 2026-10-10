@@ -2,7 +2,7 @@
 #  Mesh file for free sintering simulation
 #
 #  Simple rectangular ceramic sample undergoing free sintering
-#  Dimensions: 10 mm × 5 mm (2D plane stress)
+#  Dimensions: 10 mm × 5 mm (2D plane strain)
 #  The sample will shrink uniformly due to sintering stress
 ############################################################################
 
