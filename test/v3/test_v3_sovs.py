@@ -9,16 +9,16 @@ same float64 subtraction — and sets ``solverStat.time`` per committed step,
 the hidden channel the v3 law replaces with the declared identity signal
 port. Because the kernel replicates the legacy ``getStress`` arithmetic
 statement for statement and both sides run identical NumPy operations in
-identical order, every law-level stress/state comparison is bitwise on every
-platform — including at the density kinks (the ``rho >= 0.999 -> 1e20``
-viscosity guard at SOVS.py:236-242 and the ``rho`` clamp into ``[rho0, 1]``
-at :292-293), which are state-trajectory kinks, not strain-response kinks:
-at fixed committed state the implemented map is AFFINE in the trial strain
-(the clamp binds only ``rho_new`` while the volumetric viscous strain reads
-the unclamped ``drho`` at :297), so the closed-form tangent is exact at every
-state and the finite-difference legs need no kink avoidance (the M26
-skip-and-document precedent is noted for the record and deliberately not
-exercised).
+identical order, every law-level stress/state/tangent comparison is bitwise
+on every platform — including at the density kinks (the
+``rho >= 0.999 -> 1e20`` viscosity guard at SOVS.py:236-242 and the ``rho``
+clamp into ``[rho0, 1]`` at :292-293), which are state-trajectory kinks, not
+strain-response kinks: at fixed committed state the implemented map is AFFINE
+in the trial strain (the clamp binds only ``rho_new`` while the volumetric
+viscous strain reads the unclamped ``drho`` at :297), so the closed-form
+tangent is exact at every state and the finite-difference legs need no kink
+avoidance (the M26 skip-and-document precedent is noted for the record and
+deliberately not exercised).
 
 Dormancy (finding 20261009-agent-vp1-improve-sovs-vp-migration-relevant-
 quirks-hard-coded-moduli-dormant): the shipped decks
@@ -31,27 +31,29 @@ sigma_sint = 1e6, n_vol = 2, n_shear = 1: the survey's finding leg, rho =
 0.6000062 after 20 free-sintering steps at dtime = 0.01). The dormant deck
 configuration is pinned as its own bitwise leg.
 
-The tangent is the pinned divergence of this mission (finding
+The tangent relationship is parity-where-repaired (the M55/l2 flip
+precedent). The legacy coded tangent used to be the closed form of an
+IMPLICIT step while the stress update is explicit forward Euler (finding
 20261009-agent-vp1-bug-sovs-tangent-is-the-implicit-step-form-of-an-explicit-update):
-the legacy coded tangent (:322-339) is the closed form of an IMPLICIT step
-while the stress update is explicit forward Euler — central FD of the legacy
-law's own response convicts it at 9.41e-3 relative of max|tang| at
-dtime = 0.01 and 9.94e-4 at dtime = 0.001 (O(dt) inconsistency; elastic
-branch exact). The v3 kernel writes the TRUE explicit-map derivative, the
-three-leg closed form of the kernel module docstring:
-``K_alg = K(1 - 3K dt/2ηv)`` volumetric, ``G_dev = G(1 - G dt/ηs)`` on the
-normal-deviatoric block, ``G_alg = G(1 - G dt/2ηs)`` shear — FD-exact to
-3.3e-15 at the activated state (rounding level, the map is affine). The M63
-survey sketch's two-modulus "isotropic (K_alg, G_alg)" assembly is NOT the
-derivative of the implemented map (1.4e-2 against the same FD — it misses the
-deviatoric viscous flow on the normal components); the divergence pins below
-compare against the kernel's three-modulus form. This battery pins the
-divergence by mechanism against legacy AT THE FORK BASE: the legacy oracle
-reproduces the coded recomputation bit for bit and the v3 kernel reproduces
-the true recomputation bit for bit. The L3 mission (M67) repairs the legacy
-side in parallel; when it lands, the divergence pins flip to
-parity-where-repaired by whoever integrates second (M54/M55 precedent — this
-module is the flip target).
+central FD of the legacy law's own response convicted it at 9.41e-3 relative
+of max|tang| at dtime = 0.01 and 9.94e-4 at dtime = 0.001 (O(dt)
+inconsistency; elastic branch exact), and this battery pinned the divergence
+by mechanism against legacy at the fork base (the legacy oracle reproducing
+the coded recomputation bit for bit, the v3 kernel the true recomputation).
+M67 repaired the legacy side (commit 30a5f4e) to the same true explicit-map
+derivative the v3 kernel writes — the three-leg closed form of the kernel
+module docstring: ``K_alg = K(1 - 3K dt/2ηv)`` volumetric,
+``G_dev = G(1 - G dt/ηs)`` on the normal-deviatoric block,
+``G_alg = G(1 - G dt/2ηs)`` shear — FD-exact to 3.3e-15 at the activated
+state (rounding level, the map is affine). The v3 kernel is unchanged, so
+the pins below assert bitwise tangent equality on every step, kink states
+included; the coded implicit-step form is retained as the divergence-record
+witness in the FD leg, still failing the shared FD by the documented
+9.41e-3/9.94e-4. The M63 survey sketch's two-modulus "isotropic
+(K_alg, G_alg)" assembly is NOT the derivative of the implemented map
+(1.4e-2 against the same FD — it misses the deviatoric viscous flow on the
+normal components); the shared tangent remains the kernel's three-modulus
+form.
 
 The driver battery proves schedule-owned time flows through the M29 identity
 signal port: committed state rows equal the kernel oracle stepped on the
@@ -298,14 +300,16 @@ def _sovs_tangents(
   row: np.ndarray,
   time_new: float,
 ) -> tuple[np.ndarray, np.ndarray, bool]:
-  """Replicate the tangent construction, legacy-coded and true explicit-map.
+  """Replicate the tangent construction, repaired-shared and pre-repair.
 
   Both forms depend only on the committed rho and the time increment (the
   map is affine in the trial strain, so the tangent carries no strain
-  argument): the legacy coded implicit-step form (SOVS.py:322-339,
-  bitwise-equal to the legacy oracle's returned tangent) and the v3 kernel's
-  true three-leg closed form (bitwise-equal to the kernel's tangent).
-  Returns ``active=False`` with two elastic-stiffness copies on dtime <= 0.
+  argument): the v3 kernel's true three-leg closed form (bitwise-equal to
+  the kernel's tangent AND to the M67-repaired legacy oracle's tangent —
+  commit 30a5f4e replaced the implicit-step form) and the pre-repair legacy
+  coded implicit-step form, retained as the divergence-record witness
+  (bitwise-equal to the PRE-repair legacy oracle's tangent). Returns
+  ``active=False`` with two elastic-stiffness copies on dtime <= 0.
   """
   eta_ref = calibration[0]
   rho0 = calibration[1]
@@ -340,7 +344,8 @@ def _sovs_tangents(
     return np.array(ctang, copy=True), np.array(ctang, copy=True), False
   k_mod = ebulk3 / 3.0
   g_mod = eg
-  # Legacy coded tangent (SOVS.py:324-339): the implicit-step closed form.
+  # Pre-repair legacy coded tangent: the implicit-step closed form (the
+  # divergence record; M67 commit 30a5f4e replaced it with the true form).
   k_tang = k_mod / (1.0 + k_mod * dtime * 3.0 / (2.0 * eta_vol))
   g_tang = g_mod / (1.0 + g_mod * dtime / eta_shear)
   lam_tang = k_tang - 2.0 * g_tang / 3.0
@@ -352,7 +357,8 @@ def _sovs_tangents(
   coded[3, 3] = g_tang
   coded[4, 4] = g_tang
   coded[5, 5] = g_tang
-  # True explicit-map tangent (the v3 kernel's three-leg closed form).
+  # True explicit-map tangent: the v3 kernel's three-leg closed form, now
+  # also the M67-repaired legacy oracle's (SOVS.py:320-341, commit 30a5f4e).
   k_alg = k_mod * (1.0 - 3.0 * k_mod * dtime / (2.0 * eta_vol))
   g_dev = g_mod * (1.0 - g_mod * dtime / eta_shear)
   g_alg = g_mod * (1.0 - g_mod * dtime / (2.0 * eta_shear))
@@ -402,22 +408,17 @@ def _fd_tangent_legacy(
 def _run_path_parity(
   config: dict,
   path: list[tuple[np.ndarray, float]],
-  *,
-  assert_active_band: bool = True,
 ) -> tuple[np.ndarray, list[np.ndarray], list[float]]:
   """Step both laws along one (total-strain, time) path; bitwise everywhere.
 
-  Stress and state are bitwise-identical on every step, kink steps included.
-  The tangent is pinned by mechanism: the legacy oracle reproduces the coded
-  implicit-form recomputation bit for bit and the v3 kernel reproduces the
-  true explicit-map recomputation bit for bit. With ``assert_active_band``
-  the relative gap on active (dtime > 0) steps is pinned inside the
-  documented band (1e-4 < gap < 1e-1 of max|tang| — the coded tangent's
-  O(dt) inconsistency scale at these viscosities); the kink legs drop the
-  band because on plateau-branch steps (rho >= 0.999, eta = 1e20) the
-  correction underflows and the divergence is dormant. On dtime <= 0 steps
-  both tangents are the elastic stiffness, bitwise. Returns the final v3
-  rows, the legacy stresses, and the per-step committed rho trajectory.
+  Stress, state, AND tangent are bitwise-identical on every step, kink
+  steps included: repair confirmed (module docstring), the M67-repaired
+  legacy oracle and the v3 kernel both reproduce the true explicit-map
+  recomputation bit for bit. On dtime <= 0 steps both tangents are the
+  elastic stiffness, bitwise. The pre-repair coded form is not exercised
+  here; it survives as the divergence-record witness in the FD leg.
+  Returns the final v3 rows, the legacy stresses, and the per-step
+  committed rho trajectory.
   """
   calibration = skorohod_olevsky_calibration(*_parameters(config))
   legacy = _legacy_law(config)
@@ -431,15 +432,10 @@ def _run_path_parity(
     result = _v3_step(calibration, rows_v, strain_total, time_new)
     assert np.array_equal(result.stresses[0], sigma_l)
     assert np.array_equal(result.trial_rows[0], row_l)
-    coded, true, active = _sovs_tangents(calibration, rows_v[0], time_new)
-    assert np.array_equal(tangent_l, coded)
+    _, true, _ = _sovs_tangents(calibration, rows_v[0], time_new)
+    assert np.array_equal(tangent_l, true)
     assert np.array_equal(result.tangents[0], true)
-    if active and assert_active_band:
-      gap = float(np.max(np.abs(tangent_l - result.tangents[0])))
-      scale = float(np.max(np.abs(result.tangents[0])))
-      assert 1.0e-4 < gap / scale < 1.0e-1
-    elif not active:
-      assert np.array_equal(tangent_l, result.tangents[0])
+    assert np.array_equal(tangent_l, result.tangents[0])
     rows_v = result.trial_rows
     stresses.append(sigma_l)
     rhos.append(float(rows_v[0, 12]))
@@ -474,11 +470,13 @@ def _run_path_parity_overrides(
   config: dict,
   path: list[tuple[np.ndarray, float]],
 ) -> tuple[np.ndarray, list[np.ndarray], list[float]]:
-  """The parity loop without the active-gap band (dormant deck leg).
+  """The parity loop at the dormant deck constants (the elastic limit).
 
   At the dormant deck constants the tangent correction underflows below the
-  elastic-stiffness ulp, so the coded and true tangents coincide bit for bit
-  with the elastic stiffness — full bitwise parity, the elastic limit.
+  elastic-stiffness ulp, so the repaired shared tangent and the retained
+  pre-repair coded form coincide bit for bit with the elastic stiffness —
+  full bitwise parity, with the underflow coincidence as the dormancy
+  witness.
   """
   calibration = skorohod_olevsky_calibration(*_parameters(config))
   legacy = _legacy_law(config)
@@ -493,9 +491,10 @@ def _run_path_parity_overrides(
     assert np.array_equal(result.stresses[0], sigma_l)
     assert np.array_equal(result.trial_rows[0], row_l)
     assert np.array_equal(tangent_l, result.tangents[0])  # dormant: bitwise
-    coded, true, active = _sovs_tangents(calibration, rows_v[0], time_new)
-    assert np.array_equal(tangent_l, coded)
+    coded, true, _ = _sovs_tangents(calibration, rows_v[0], time_new)
+    assert np.array_equal(tangent_l, true)
     assert np.array_equal(result.tangents[0], true)
+    assert np.array_equal(coded, true)  # dormancy: both forms underflow to C
     rows_v = result.trial_rows
     stresses.append(sigma_l)
     rhos.append(float(rows_v[0, 12]))
@@ -536,10 +535,11 @@ def test_rho_guard_kink_matches_legacy_bitwise() -> None:
   # The eta guard kink (rho >= 0.999 -> 1e20): rho0 = 0.998 with a large
   # sintering stress crosses the guard mid-path — the first step runs the
   # Skorohod branch, later steps the plateau branch. Bitwise state parity AT
-  # the kink; the tangent pin holds per branch.
+  # the kink; the tangent parity holds bitwise on both branches (repair
+  # confirmed — the harness asserts it step by step).
   config = {**_ACTIVATED, "rho0": 0.998, "sigma_sint": 1.0e8}
   path = [(np.zeros(6), 0.01 * (k + 1)) for k in range(4)]
-  rows_v, _, rhos = _run_path_parity(config, path, assert_active_band=False)
+  rows_v, _, rhos = _run_path_parity(config, path)
   # The first step jumps past the guard and pins rho = 1.0 exactly (the
   # upper clamp); the plateau branch then holds rho in the guard regime —
   # within a few ulps of 1.0, not bitwise, since the plateau's tiny but
@@ -555,7 +555,7 @@ def test_rho_guard_from_the_boundary_matches_legacy_bitwise() -> None:
   # exact pin is the bitwise legacy parity and the guard-regime bound.
   config = {**_ACTIVATED, "rho0": 0.999}
   path = [(np.zeros(6), 0.01 * (k + 1)) for k in range(3)]
-  rows_v, _, rhos = _run_path_parity(config, path, assert_active_band=False)
+  rows_v, _, rhos = _run_path_parity(config, path)
   assert all(rho >= 0.999 for rho in rhos)
   assert np.all(np.abs(rows_v[:, 12] - 0.999) < 1.0e-12)
 
@@ -566,9 +566,7 @@ def test_rho_clamps_match_legacy_bitwise() -> None:
   # reads the UNCLAMPED drho (SOVS.py:297) — pinned bitwise, and the
   # committed viscous strain equals the unclamped-drho reconstruction.
   config = {**_ACTIVATED, "sigma_sint": 1.0e12}
-  rows_v, _, _ = _run_path_parity(
-    config, [(np.zeros(6), 0.01)], assert_active_band=False
-  )
+  rows_v, _, _ = _run_path_parity(config, [(np.zeros(6), 0.01)])
   assert rows_v[0, 12] == 1.0
   eta_vol = skorohod_olevsky_calibration(*_parameters(config))[0] * (0.6**-2.0 - 1.0)
   drho_unclamped = (3.0 * 0.6 / (2.0 * eta_vol)) * (1.0e12 - 0.0) * 0.01
@@ -583,13 +581,19 @@ def test_rho_clamps_match_legacy_bitwise() -> None:
   assert rows_t[0, 12] == _ACTIVATED["rho0"]
 
 
-def test_activated_tangent_divergence_pin_by_fd() -> None:
+def test_activated_tangent_repair_confirmed_by_fd() -> None:
   # At the 20-step free-sintered state (rho = 0.6000062), probing at
-  # dtime = 0.01: the legacy coded tangent contradicts a central FD of the
-  # legacy law's own response by 9.41e-3 relative (and 9.94e-4 at
-  # dtime = 0.001 — the O(dt) inconsistency pinned at two scales), while the
-  # v3 closed form matches an FD of the kernel's own response to ~3e-15
-  # (the map is affine in the trial strain at fixed state).
+  # dtime = 0.01 and dtime = 0.001: the divergence was pinned here — the
+  # pre-repair coded legacy tangent (the implicit-step form) contradicted a
+  # central FD of the legacy law's own response by 9.41e-3 relative (9.94e-4
+  # at the smaller dtime — the O(dt) inconsistency at two scales), while the
+  # v3 closed form matched an FD of the kernel's own response to ~3e-15 (the
+  # map is affine in the trial strain at fixed state). Repair confirmed (M67
+  # commit 30a5f4e, the structured three-leg tangent): the legacy tangent is
+  # now bitwise the v3 tangent and matches the FD of its own response to the
+  # same rounding class; the coded recomputation, retained as the witness,
+  # still fails by the documented bounds — the probe states and the
+  # divergence record are unchanged.
   config = _ACTIVATED
   calibration = skorohod_olevsky_calibration(*_parameters(config))
   legacy = _legacy_law(config)
@@ -601,25 +605,30 @@ def test_activated_tangent_divergence_pin_by_fd() -> None:
     rows_v = _v3_step(calibration, rows_v, np.zeros(6), time).trial_rows
   assert rows_v[0, 12] == 0.6000061724180394
 
-  for probe_time, legacy_bound in ((0.21, 1.0e-3), (0.201, 1.0e-4)):
+  for probe_time, coded_bound in ((0.21, 1.0e-3), (0.201, 1.0e-4)):
     _, tangent_l = _legacy_probe(legacy, np.zeros(6), probe_time)
     base = _v3_step(calibration, rows_v, np.zeros(6), probe_time)
     coded, true, active = _sovs_tangents(calibration, rows_v[0], probe_time)
     assert active
-    assert np.array_equal(tangent_l, coded)
+    assert np.array_equal(tangent_l, true)
     assert np.array_equal(base.tangents[0], true)
+    assert np.array_equal(tangent_l, base.tangents[0])
     fd_v3 = _fd_tangent_v3(calibration, rows_v, np.zeros(6), probe_time)
     fd_l = _fd_tangent_legacy(legacy, np.zeros(6), probe_time)
     scale = float(np.max(np.abs(fd_v3)))
     np.testing.assert_allclose(fd_v3, fd_l, rtol=1.0e-9, atol=scale * 1.0e-9)
+    # Repair confirmed: both tangents are the exact derivative of the shared
+    # affine map (the pre-repair coded form failed this check materially;
+    # M67 commit 30a5f4e).
     legacy_error = float(np.max(np.abs(fd_l - tangent_l))) / scale
     v3_error = float(np.max(np.abs(fd_v3 - base.tangents[0]))) / scale
-    assert legacy_error > legacy_bound  # measured 9.41e-3 / 9.94e-4
+    assert legacy_error < 1.0e-9  # measured 3.3e-15 class, as v3
     assert v3_error < 1.0e-9  # measured 3.3e-15
-    gap = float(np.max(np.abs(tangent_l - base.tangents[0]))) / scale
-    assert gap > legacy_bound
-  # The true tangent is exactly symmetric by construction.
-  _, _, _ = coded, true, active
+    # The divergence record, reproduced by the retained coded form at these
+    # same states: the witness convicts the pre-repair form at both scales.
+    coded_error = float(np.max(np.abs(fd_l - coded))) / scale
+    assert coded_error > coded_bound  # measured 9.41e-3 / 9.94e-4
+  # The shared tangent is exactly symmetric by construction.
   assert np.array_equal(base.tangents[0], base.tangents[0].T)
 
 
