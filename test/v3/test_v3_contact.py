@@ -93,6 +93,24 @@ _PARAMETERS = np.array(
   dtype=np.float64,
 )
 
+# Cross-platform band for the kernel-vs-legacy force pin (M77): the
+# reference-platform branch of bitwise_pin asserts raw-uint64 identity; the
+# off-reference branch uses these tolerances. The legacy helper norms via
+# np.linalg.norm — sqrt(x.dot(x)) with the dot through CBLAS ddot —
+# while the v3 kernel norms via sqrt(sum(ds*ds)): different reductions
+# whose rounding drifts at the few-ulp class off the reference platform
+# (test/v3/conftest.py cites 4 ulps measured on ubuntu-latest). One norm
+# ulp at the engaged scale
+# |ds| < radius = 0.5 (ulp 1.1e-16) maps through the 1e6 penalty to
+# 1.1e-10 absolute in the force, so the 4-ulp class is 4.4e-10; atol=1e-9
+# covers it ~2.3x. The battery's max|force| is 4.5e5 (ulp 5.8e-11), and
+# rtol=1e-12 carries ~1000x over the few-ulp relative drift; both stay ~3
+# orders below the 1e-9-class order bug the pin must still catch. CI run
+# 38023817372 (ubuntu x86_64) failed this battery under the former raw
+# uint64 assertion.
+_FORCE_RTOL = 1.0e-12
+_FORCE_ATOL = 1.0e-9
+
 
 def _source(label: str) -> SourceContext:
   return SourceContext(source=label)
@@ -427,7 +445,9 @@ def test_compile_emits_the_declared_header_shape_and_manifest() -> None:
   assert twin.content_manifest.to_bytes() == manifest_bytes
 
 
-def test_kernel_force_is_bitwise_identical_to_the_legacy_force_law() -> None:
+def test_kernel_force_is_bitwise_identical_to_the_legacy_force_law(
+  bitwise_pin: object,
+) -> None:
   generator = np.random.default_rng(20261009)
   rows = np.zeros((16, 0), dtype=np.float64)
   for _ in range(25):
@@ -440,7 +460,7 @@ def test_kernel_force_is_bitwise_identical_to_the_legacy_force_law() -> None:
     result = penalty_disc_kernel(positions, rows, _PARAMETERS, (kernel_signal,))
     assert result.status is EvaluationStatus.OK
     legacy = _legacy_force_rows(positions, centre, _RADIUS, _PENALTY)
-    np.testing.assert_array_equal(result.force, legacy)
+    bitwise_pin(result.force, legacy, rtol=_FORCE_RTOL, atol=_FORCE_ATOL)
 
 
 def test_exact_tangent_matches_central_fd_at_the_probe_states() -> None:
