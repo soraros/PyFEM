@@ -485,6 +485,7 @@ def test_trial_workspace_views_are_reused_across_scopes() -> None:
   block_view = store.trial_block(0, "micro-cells")
   workspace[:] = 1.0
   block_view[:] = 2.0
+  store.trial_block(0, 7)[:] = 3.0
   store.trial_complete(0)
   store.commit_trial()
   store.begin_trial()
@@ -662,6 +663,121 @@ def test_owner_nested_store_binding_validation() -> None:
     StateTransactionOwner(system, nested_stores=(store, "foreign"))
   with pytest.raises(ValueError, match="distinct store instances"):
     StateTransactionOwner(system, nested_stores=(store, store))
+
+
+def test_partial_point_completion_is_a_coded_rejection() -> None:
+  # Regression (i): first-use partial completion — only coefficients written.
+  store = NestedStateStore(_micro_layout())
+  before = store.encode()
+  store.begin_trial()
+  store.write_trial_coefficients(0, np.full(18, 3.0))
+  with pytest.raises(
+    RuntimeError, match="point 0 is incomplete: unwritten state block"
+  ):
+    store.trial_complete(0)
+  # The point stays un-completed, so the commit path rejects it too.
+  with pytest.raises(RuntimeError, match="completed trial at point 0"):
+    store.commit_trial()
+  assert store.trial_open
+  store.reject_trial()
+  assert store.encode() == before
+
+
+def test_rejected_trial_bytes_never_resurface_through_partial_completion() -> None:
+  # Regression (ii): a partial trial following a REJECTED trial must not
+  # resurrect the rejected staged bytes.
+  store = NestedStateStore(_micro_layout())
+  store.begin_trial()
+  _drive_micro_point(store, 0, base=1.0)
+  store.commit_trial()
+  committed = store.encode()
+  store.begin_trial()
+  _drive_micro_point(store, 0, base=10.0)
+  store.reject_trial()
+  assert store.encode() == committed
+  # The exact sequence from the review finding: write only coefficients,
+  # claim completion — a coded rejection, and nothing moves.
+  store.begin_trial()
+  store.write_trial_coefficients(0, np.full(18, 3.0))
+  with pytest.raises(
+    RuntimeError, match="point 0 is incomplete: unwritten state block"
+  ):
+    store.trial_complete(0)
+  with pytest.raises(RuntimeError, match="completed trial at point 0"):
+    store.commit_trial()
+  store.reject_trial()
+  assert store.encode() == committed
+  # A following full trial commits exactly the current-scope values; the
+  # rejected 10.0-based bytes never resurface.
+  store.begin_trial()
+  _drive_micro_point(store, 0, base=5.0)
+  store.commit_trial()
+  np.testing.assert_array_equal(store.accepted_coefficients(0), np.full(18, 5.0))
+  np.testing.assert_array_equal(
+    store.accepted_block(0, "micro-cells"), np.full((16, 1), 5.5)
+  )
+  np.testing.assert_array_equal(store.accepted_block(0, 7), np.full((4, 2), 5.25))
+  payload = store.encode()
+  assert payload != committed
+  restored = NestedStateStore.decode(store.layout, store.generations, payload)
+  assert restored.encode() == payload
+
+
+def test_completion_message_names_point_and_each_unwritten_buffer_class() -> None:
+  # Regression (iv): the rejection names the point and the unwritten buffers.
+  store = NestedStateStore(_micro_layout())
+  store.begin_trial()
+  store.write_trial_block(1, "micro-cells", np.ones((16, 1)))
+  with pytest.raises(RuntimeError, match="point 1 is incomplete") as caught:
+    store.trial_complete(1)
+  message = str(caught.value)
+  assert "coefficients" in message
+  assert "state block 7" in message
+  assert "micro-cells" not in message
+  store.reject_trial()
+  store.begin_trial()
+  store.write_trial_coefficients(2, np.ones(18))
+  store.write_trial_block(2, 7, np.ones((4, 2)))
+  with pytest.raises(RuntimeError, match="point 2 is incomplete") as caught:
+    store.trial_complete(2)
+  message = str(caught.value)
+  assert "micro-cells" in message
+  assert "coefficients" not in message
+  store.reject_trial()
+
+
+def test_workspace_acquisition_declares_buffer_coverage() -> None:
+  # Regression (iii): the full-write happy path — staged through the
+  # zero-copy workspace views alone — still commits byte-identically.
+  store = NestedStateStore(_micro_layout())
+  reference = NestedStateStore(_micro_layout())
+  for target in (store, reference):
+    target.begin_trial()
+  store.trial_coefficients(1)[:] = 1.0
+  store.trial_block(1, "micro-cells")[:] = 0.5
+  store.trial_block(1, 7)[:] = 0.25
+  store.trial_complete(1)
+  store.commit_trial()
+  _drive_micro_point(reference, 1, base=0.0)
+  reference.commit_trial()
+  reference_bytes = reference.encode()
+  store.begin_trial()
+  store.trial_coefficients(1)[:] = 2.0
+  store.trial_block(1, "micro-cells")[:] = 1.5
+  store.trial_block(1, 7)[:] = 1.25
+  store.trial_complete(1)
+  store.commit_trial()
+  reference.begin_trial()
+  reference.write_trial_coefficients(1, np.full(18, 2.0))
+  reference.write_trial_block(1, "micro-cells", np.full((16, 1), 1.5))
+  reference.write_trial_block(1, 7, np.full((4, 2), 1.25))
+  reference.trial_complete(1)
+  reference.commit_trial()
+  # Same writes through the validated API and through workspace views commit
+  # the same accepted bytes (generation ordinals included).
+  assert store.encode() == reference.encode()
+  assert store.encode() != reference_bytes
+  assert [generation.ordinal for generation in store.generations] == [0, 2, 0]
 
 
 def test_decode_gates_payload_generations_against_the_live_lineage() -> None:

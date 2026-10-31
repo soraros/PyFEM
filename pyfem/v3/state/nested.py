@@ -40,11 +40,15 @@ Trial protocol, mirroring the owner's single-open-transaction discipline:
 - Evaluations read accepted views and write staged views (or use the
   validating ``write_trial_*`` staging calls); both mark the point touched.
 - ``trial_complete`` marks a touched point's nested solve converged and its
-  staged state complete. ``commit_trial`` requires the touched and completed
-  point sets to agree exactly, then validates finiteness, then copies the
-  staged rows into the accepted buffers and advances exactly the touched
-  points' generations. A nested non-convergence therefore forces a reject at
-  the macro boundary: an uncompleted point can never commit.
+  staged state complete. Completeness is whole-point: every buffer of the
+  point (coefficients and every state block) must have been written in the
+  current scope, so the preallocated staged buffers — reused across scopes —
+  can never carry stale or rejected bytes into a commit. ``commit_trial``
+  requires the touched and completed point sets to agree exactly, then
+  validates finiteness, then copies the staged rows into the accepted
+  buffers and advances exactly the touched points' generations. A nested
+  non-convergence therefore forces a reject at the macro boundary: an
+  uncompleted point can never commit.
 - ``reject_trial`` discards the staged trial and leaves every accepted
   buffer and generation byte-identical.
 
@@ -507,11 +511,19 @@ class NestedStateCodec:
 
 @dataclass(slots=True)
 class _TrialScope:
-  """One open nested trial scope: rooted generations plus progress masks."""
+  """One open nested trial scope: rooted generations plus progress masks.
+
+  ``written`` tracks per-point buffer coverage within the scope — column 0
+  is the coefficient buffer, column ``1 + slot`` the block in layout order.
+  A point's trial is complete only when every buffer was written in the
+  current scope, so staged-buffer reuse across scopes can never resurrect
+  stale (or rejected) bytes through a partially written point.
+  """
 
   rooted: tuple[StateGeneration, ...]
   touched: np.ndarray
   completed: np.ndarray
+  written: np.ndarray
 
 
 class NestedStateStore:
@@ -681,6 +693,9 @@ class NestedStateStore:
       rooted=tuple(self._generations),
       touched=np.zeros(self._layout.ip_count, dtype=bool),
       completed=np.zeros(self._layout.ip_count, dtype=bool),
+      written=np.zeros(
+        (self._layout.ip_count, 1 + len(self._layout.blocks)), dtype=bool
+      ),
     )
     opened: list[NestedStateStore] = []
     try:
@@ -697,21 +712,28 @@ class NestedStateStore:
   def trial_coefficients(self, ip_index: int) -> np.ndarray:
     """Return the writable staged coefficient view of one point (zero-copy).
 
-    Requesting the workspace marks the point touched; the caller must
-    overwrite the view completely and report convergence through
-    ``trial_complete`` before the point can commit.
+    Requesting the workspace marks the point touched and declares the
+    coefficient buffer written for this scope: the caller must overwrite the
+    view completely and report convergence through ``trial_complete`` before
+    the point can commit.
     """
     scope = self._require_trial()
     index = self._ip_index(ip_index)
     self._touch(scope, index)
+    scope.written[index, 0] = True
     return self._staged_coefficients[index]
 
   def trial_block(self, ip_index: int, block_id: str | int) -> np.ndarray:
-    """Return the writable staged block-row view of one point (zero-copy)."""
+    """Return the writable staged block-row view of one point (zero-copy).
+
+    Requesting the workspace declares the block written for this scope; the
+    caller must overwrite the view completely.
+    """
     scope = self._require_trial()
     index = self._ip_index(ip_index)
     block = self._block(block_id)
     self._touch(scope, index)
+    scope.written[index, 1 + block] = True
     return self._staged_blocks[block][index]
 
   def _stage_rows(
@@ -754,6 +776,7 @@ class NestedStateStore:
     )
     self._touch(scope, index)
     np.copyto(self._staged_coefficients[index], source)
+    scope.written[index, 0] = True
 
   def write_trial_block(
     self,
@@ -773,13 +796,35 @@ class NestedStateStore:
     )
     self._touch(scope, index)
     np.copyto(self._staged_blocks[block][index], source)
+    scope.written[index, 1 + block] = True
 
   def trial_complete(self, ip_index: int) -> None:
-    """Mark one touched point's nested solve converged and its trial complete."""
+    """Mark one touched point's nested solve converged and its trial complete.
+
+    Completeness is whole-point: every buffer of the point — the coefficient
+    buffer and every state block — must have been written in the current
+    scope. A workspace request declares its buffer written (the caller owns
+    the overwrite); the ``write_trial_*`` calls validate theirs. A partial
+    point trial is a coded rejection naming the point and each unwritten
+    buffer, so staged-buffer reuse across scopes can never resurrect stale
+    or rejected bytes.
+    """
     scope = self._require_trial()
     index = self._ip_index(ip_index)
     if not scope.touched[index]:
       msg = "nested-state trial completion requires a trial-written integration point"
+      raise RuntimeError(msg)
+    missing: list[str] = []
+    if not scope.written[index, 0]:
+      missing.append("coefficients")
+    for slot, block in enumerate(self._layout.blocks):
+      if not scope.written[index, 1 + slot]:
+        missing.append(f"state block {block.block_id!r}")
+    if missing:
+      msg = (
+        f"nested-state trial at point {index} is incomplete: "
+        f"unwritten {', '.join(missing)} in this scope"
+      )
       raise RuntimeError(msg)
     scope.completed[index] = True
 
