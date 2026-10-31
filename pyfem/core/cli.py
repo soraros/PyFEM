@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> None:
 
     args = argv if argv is not None else sys.argv[1:]
 
-    if '--help' in args or '-h' in args:
+    if not args or '--help' in args or '-h' in args:
         print_help()
         return
 
