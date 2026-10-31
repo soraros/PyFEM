@@ -60,7 +60,11 @@ implemented maps with class ``algorithmic-symmetric`` — the legacy coded
 tangents used to diverge from the maps they accompanied; M67 repaired the
 legacy sides (494f30c, 30a5f4e; merge 8a3eae8) and M76 flipped the v3 pins
 to repair-confirmed parity (b0ad9ed, merge 2ffcf20). The pre-repair
-divergence records are retained in the kernel modules.
+divergence records are retained in the kernel modules. The sixth is the fresh
+``crystal-plasticity`` law: complete 12-system FCC or BCC slip families,
+current-iterate saturation hardening, 55-float rows, a parameter-dependent
+``tau0`` initial state, and the derived ``dtime`` signal binding. Its measured
+general multislip tangent is ``algorithmic-nonsymmetric``.
 
 - ``total-lagrangian-continuum``: the finite-strain slice (serendipity-quad8
   only): one node displacement field and the plane-stress
