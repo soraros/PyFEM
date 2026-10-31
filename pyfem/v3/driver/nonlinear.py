@@ -54,6 +54,14 @@ Protocol summary:
 - Operator ``REJECT_ITERATION`` retries from the same accepted state with a
   damped iterate (half the last Newton increment), budgeted against
   ``max_iterations``; without a previous increment it escalates to cutback.
+- Driver-per-IP nested non-convergence rejects the macro attempt with a typed
+  ``NestedFailure`` naming the operator, integration point, and nested failure
+  class. The same scoped rejection discipline applies: no nested trial is
+  committed independently of the macro transaction. Per-IP nested iterations,
+  evaluations, factorizations, reuses, and linear solves are snapshotted around
+  every macro attempt and retained on its record, including rejected work;
+  ``DriverStatistics`` sums those records while its original counters remain
+  macro-only. At each level, fresh factorizations plus reuses equal solves.
 - Constraints apply exclusively through the M15 coordinate map
   (``full_coefficients``/``reduce_residual``/``reduce_tangent``); reactions
   and constraint work are observed from the FULL residual at commit.
@@ -157,9 +165,12 @@ from pyfem.v3.driver.contracts import (
   HomogenizationReduction,
   HomogenizationRequest,
   IterationRecord,
+  NestedFailure,
+  NestedSolveStatistics,
   NonlinearStaticResult,
   NonlinearStaticSettings,
   ParameterSensitivityObservation,
+  StepFailureClass,
   SubstepObservation,
   SubstepRecord,
   SubstepStatus,
@@ -224,7 +235,13 @@ class _DriverWorkspace:
     "evaluation_count",
     "factorization_count",
     "factorization_reuse_count",
+    "iteration_count",
     "linear_solve_count",
+    "nested_evaluation_count",
+    "nested_factorization_count",
+    "nested_factorization_reuse_count",
+    "nested_iteration_count",
+    "nested_linear_solve_count",
     "rejected_substep_count",
     "residual_assembly_count",
     "stashed_factorization",
@@ -238,11 +255,27 @@ class _DriverWorkspace:
     self.evaluation_count = 0
     self.factorization_count = 0
     self.factorization_reuse_count = 0
+    self.iteration_count = 0
     self.linear_solve_count = 0
+    self.nested_evaluation_count = 0
+    self.nested_factorization_count = 0
+    self.nested_factorization_reuse_count = 0
+    self.nested_iteration_count = 0
+    self.nested_linear_solve_count = 0
     self.rejected_substep_count = 0
     self.residual_assembly_count = 0
     self.stashed_factorization: object = None
     self.tangent_refill_count = 0
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class _NestedDriverCursor:
+  """One nested driver's counters at a macro substep boundary."""
+
+  driver: NonlinearStaticDriver
+  run_serial: int
+  iteration_count: int
+  statistics: DriverStatistics
 
 
 def _interpolate(
@@ -479,7 +512,27 @@ class NonlinearStaticDriver:
       None if declaration is None else NestedEvaluationInput(declaration.store)
       for declaration in declarations
     )
+    nested_drivers = []
+    for operator, declaration in zip(system.operators, declarations, strict=True):
+      if declaration is None:
+        nested_drivers.append(())
+        continue
+      drivers = getattr(operator, "drivers", None)
+      if (
+        type(drivers) is not tuple
+        or len(drivers) != declaration.store.ip_count
+        or any(type(driver) is not NonlinearStaticDriver for driver in drivers)
+      ):
+        msg = (
+          "driver-per-IP nested execution requires one exact "
+          "NonlinearStaticDriver per integration point"
+        )
+        raise TypeError(msg)
+      nested_drivers.append(drivers)
+    self._nested_drivers = tuple(nested_drivers)
     self._workspace = _DriverWorkspace()
+    self._run_serial = 0
+    self._last_result: NonlinearStaticResult | None = None
     self._requests = tuple(
       ChannelRequest(
         (operator.header.residual_channels[0].channel_id,),
@@ -517,6 +570,11 @@ class NonlinearStaticDriver:
       cutback_count=workspace.cutback_count,
       committed_substep_count=workspace.committed_substep_count,
       rejected_substep_count=workspace.rejected_substep_count,
+      nested_iteration_count=workspace.nested_iteration_count,
+      nested_evaluation_count=workspace.nested_evaluation_count,
+      nested_factorization_count=workspace.nested_factorization_count,
+      nested_factorization_reuse_count=workspace.nested_factorization_reuse_count,
+      nested_linear_solve_count=workspace.nested_linear_solve_count,
     )
 
   def _bound_point_values(self, point: ProgramPoint) -> tuple[float, ...]:
@@ -852,6 +910,108 @@ class NonlinearStaticDriver:
     for store in self._nested_stores:
       store.commit_trial()
 
+  def _snapshot_nested_drivers(self) -> tuple[tuple[_NestedDriverCursor, ...], ...]:
+    return tuple(
+      tuple(
+        _NestedDriverCursor(
+          driver=driver,
+          run_serial=driver._run_serial,
+          iteration_count=driver._workspace.iteration_count,
+          statistics=driver.statistics,
+        )
+        for driver in drivers
+      )
+      for drivers in self._nested_drivers
+    )
+
+  def _collect_nested_activity(
+    self,
+    cursors: tuple[tuple[_NestedDriverCursor, ...], ...],
+  ) -> tuple[tuple[NestedSolveStatistics, ...], NestedFailure | None]:
+    statistics = []
+    failure = None
+    for operator_index, operator_cursors in enumerate(cursors):
+      for ip_index, cursor in enumerate(operator_cursors):
+        driver = cursor.driver
+        before = cursor.statistics
+        after = driver.statistics
+        cost = NestedSolveStatistics(
+          operator_index=operator_index,
+          ip_index=ip_index,
+          iteration_count=driver._workspace.iteration_count - cursor.iteration_count,
+          evaluation_count=after.evaluation_count - before.evaluation_count,
+          factorization_count=after.factorization_count - before.factorization_count,
+          factorization_reuse_count=(
+            after.factorization_reuse_count - before.factorization_reuse_count
+          ),
+          linear_solve_count=after.linear_solve_count - before.linear_solve_count,
+        )
+        statistics.append(cost)
+        if failure is not None or driver._run_serial == cursor.run_serial:
+          continue
+        result = driver._last_result
+        if result is None:
+          failure_class = StepFailureClass.DRIVER_EVALUATION_ERROR
+        elif result.status is DriverStatus.STEP_FAILED:
+          terminal = result.records[-1] if result.records else None
+          failure_class = (
+            terminal.failure_class
+            if terminal is not None and terminal.failure_class is not None
+            else StepFailureClass.STEP_FAILED
+          )
+        else:
+          continue
+        failure = NestedFailure(
+          code="nested-non-convergence",
+          operator_index=operator_index,
+          ip_index=ip_index,
+          failure_class=failure_class,
+        )
+    return tuple(statistics), failure
+
+  def _accumulate_nested_statistics(
+    self, statistics: tuple[NestedSolveStatistics, ...]
+  ) -> None:
+    workspace = self._workspace
+    for cost in statistics:
+      workspace.nested_iteration_count += cost.iteration_count
+      workspace.nested_evaluation_count += cost.evaluation_count
+      workspace.nested_factorization_count += cost.factorization_count
+      workspace.nested_factorization_reuse_count += cost.factorization_reuse_count
+      workspace.nested_linear_solve_count += cost.linear_solve_count
+
+  def _classify_failure(
+    self,
+    iterations: tuple[IterationRecord, ...],
+    budget_exhaustion: BudgetExhaustionObservation | None,
+  ) -> StepFailureClass | None:
+    if not iterations:
+      return None
+    if budget_exhaustion is not None:
+      return StepFailureClass.ITERATION_BUDGET_EXHAUSTED
+    terminal = iterations[-1]
+    if terminal.status is EvaluationStatus.REJECT_STEP:
+      return StepFailureClass.OPERATOR_REJECT_STEP
+    if terminal.status is EvaluationStatus.REJECT_ITERATION:
+      return StepFailureClass.OPERATOR_REJECT_ITERATION
+    if terminal.increment_norm is not None:
+      return StepFailureClass.NON_FINITE_ITERATE
+    first = next(
+      (
+        max(iteration.residual_norm, _NORM_REFERENCE_FLOOR)
+        for iteration in iterations
+        if iteration.residual_norm is not None
+      ),
+      None,
+    )
+    if (
+      first is not None
+      and terminal.residual_norm is not None
+      and terminal.residual_norm > self._settings.divergence_ratio * first
+    ):
+      return StepFailureClass.DIVERGENCE
+    return StepFailureClass.LINEAR_SOLVE_FAILURE
+
   def _newton_substep(
     self,
     point: ProgramPoint,
@@ -1105,6 +1265,7 @@ class NonlinearStaticDriver:
         transaction.reject()
       raise
     finally:
+      workspace.iteration_count += len(iterations)
       if nested_open:
         self._reject_nested_trial()
 
@@ -1135,6 +1296,8 @@ class NonlinearStaticDriver:
     or reduction DOFs, out-of-range DOFs, and non-finite scales are
     rejected with coded diagnostics.
     """
+    self._run_serial += 1
+    self._last_result = None
     if type(target_points) is not tuple or any(
       type(point) is not ProgramPoint for point in target_points
     ):
@@ -1187,11 +1350,24 @@ class NonlinearStaticDriver:
           if requires_committed_point
           else None
         )
-        committed, iterations, observation, budget_exhaustion = self._newton_substep(
-          trial_point,
-          committed_point,
-          sensitivity_program,
-          homogenization_program,
+        nested_cursors = self._snapshot_nested_drivers()
+        try:
+          committed, iterations, observation, budget_exhaustion = self._newton_substep(
+            trial_point,
+            committed_point,
+            sensitivity_program,
+            homogenization_program,
+          )
+        except BaseException:
+          nested_statistics, _ = self._collect_nested_activity(nested_cursors)
+          self._accumulate_nested_statistics(nested_statistics)
+          raise
+        nested_statistics, nested_failure = self._collect_nested_activity(
+          nested_cursors
+        )
+        self._accumulate_nested_statistics(nested_statistics)
+        failure_class = (
+          None if committed else self._classify_failure(iterations, budget_exhaustion)
         )
         if committed:
           records.append(
@@ -1205,6 +1381,7 @@ class NonlinearStaticDriver:
               committed_ordinal=self._owner.generation.ordinal,
               observation=observation,
               budget_exhaustion=None,
+              nested_statistics=nested_statistics,
             )
           )
           progress_done = trial_progress
@@ -1213,6 +1390,8 @@ class NonlinearStaticDriver:
             break
           size = min(settings.growth_factor * size, 1.0 - progress_done)
           continue
+        if nested_failure is not None:
+          failure_class = StepFailureClass.NESTED_NON_CONVERGENCE
         cutback_level += 1
         if cutback_level > settings.max_cutbacks or size <= settings.min_substep_size:
           records.append(
@@ -1226,9 +1405,12 @@ class NonlinearStaticDriver:
               committed_ordinal=None,
               observation=None,
               budget_exhaustion=budget_exhaustion,
+              failure_class=failure_class,
+              nested_statistics=nested_statistics,
+              nested_failure=nested_failure,
             )
           )
-          return NonlinearStaticResult(
+          result = NonlinearStaticResult(
             status=DriverStatus.STEP_FAILED,
             base_point=base_point,
             target_points=target_points,
@@ -1238,6 +1420,8 @@ class NonlinearStaticDriver:
             final_generation=self._owner.generation,
             failed_target_index=target_index,
           )
+          self._last_result = result
+          return result
         records.append(
           SubstepRecord(
             target_index=target_index,
@@ -1249,12 +1433,15 @@ class NonlinearStaticDriver:
             committed_ordinal=None,
             observation=None,
             budget_exhaustion=budget_exhaustion,
+            failure_class=failure_class,
+            nested_statistics=nested_statistics,
+            nested_failure=nested_failure,
           )
         )
         workspace.cutback_count += 1
         size *= settings.cutback_factor
       committed_values = values
-    return NonlinearStaticResult(
+    result = NonlinearStaticResult(
       status=DriverStatus.COMPLETED,
       base_point=base_point,
       target_points=target_points,
@@ -1264,3 +1451,5 @@ class NonlinearStaticDriver:
       final_generation=self._owner.generation,
       failed_target_index=None,
     )
+    self._last_result = result
+    return result
