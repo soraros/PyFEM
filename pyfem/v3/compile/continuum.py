@@ -60,7 +60,11 @@ implemented maps with class ``algorithmic-symmetric`` — the legacy coded
 tangents used to diverge from the maps they accompanied; M67 repaired the
 legacy sides (494f30c, 30a5f4e; merge 8a3eae8) and M76 flipped the v3 pins
 to repair-confirmed parity (b0ad9ed, merge 2ffcf20). The pre-repair
-divergence records are retained in the kernel modules.
+divergence records are retained in the kernel modules. The sixth is the fresh
+``crystal-plasticity`` law: complete 12-system FCC or BCC slip families,
+current-iterate saturation hardening, 55-float rows, a parameter-dependent
+``tau0`` initial state, and the derived ``dtime`` signal binding. Its measured
+general multislip tangent is ``algorithmic-nonsymmetric``.
 
 - ``total-lagrangian-continuum``: the finite-strain slice (serendipity-quad8
   only): one node displacement field and the plane-stress
@@ -155,6 +159,10 @@ from pyfem.v3.fem.shapes import (
   serendipity_quad8,
   trilinear_hex8,
 )
+from pyfem.v3.materials.crystal_plasticity import (
+  CRYSTAL_PLASTICITY_BINDING,
+  crystal_plasticity_metadata,
+)
 from pyfem.v3.materials.isotropic import isotropic_matrix
 from pyfem.v3.materials.isotropic_hardening_plasticity import (
   ISOTROPIC_HARDENING_PLASTICITY_BINDING,
@@ -242,6 +250,7 @@ DAMAGE_MATERIAL_KEY: RegistryKey = ("material", "plane-strain-damage")
 VISCOELASTIC_MATERIAL_KEY: RegistryKey = ("material", "prony-viscoelasticity")
 VISCOPLASTIC_MATERIAL_KEY: RegistryKey = ("material", "perzyna-viscoplasticity")
 SOVS_MATERIAL_KEY: RegistryKey = ("material", "skorohod-olevsky")
+CRYSTAL_MATERIAL_KEY: RegistryKey = ("material", "crystal-plasticity")
 _PARAMETER_NAMES = ("youngs_modulus", "poisson_ratio")
 _THERMAL_PARAMETER_NAMES = ("conductivity",)
 _THERMO_PARAMETER_NAMES = (
@@ -1737,6 +1746,8 @@ def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
     return perzyna_viscoplasticity_metadata()
   if key == SOVS_MATERIAL_KEY:
     return skorohod_olevsky_metadata()
+  if key == CRYSTAL_MATERIAL_KEY:
+    return crystal_plasticity_metadata()
   if key in _BREADTH_DESCRIPTOR_KEYS:
     return breadth_descriptor_metadata(*key)
   return q8_descriptor_metadata(*key)
@@ -1971,6 +1982,26 @@ def sovs_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
     implementation_id="pyfem-v3-skorohod-olevsky-v1",
     metadata=skorohod_olevsky_metadata(),
     binding=SKOROHOD_OLEVSKY_BINDING,
+  )
+  registry[descriptor.key] = descriptor
+  return registry
+
+
+def crystal_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
+  """Build the Q8 registry plus the fresh complete-crystal law descriptor.
+
+  The crystal law uses the existing parameterized state widths and derived
+  ``dtime`` signal binding, so the frozen descriptor ABI needs no new field.
+  Its general multislip tangent is ``algorithmic-nonsymmetric``.
+  """
+  registry = dict(q8_reference_registry())
+  descriptor = RegistryDescriptor(
+    kind=CRYSTAL_MATERIAL_KEY[0],
+    name=CRYSTAL_MATERIAL_KEY[1],
+    version="1",
+    implementation_id="pyfem-v3-crystal-plasticity-v1",
+    metadata=crystal_plasticity_metadata(),
+    binding=CRYSTAL_PLASTICITY_BINDING,
   )
   registry[descriptor.key] = descriptor
   return registry

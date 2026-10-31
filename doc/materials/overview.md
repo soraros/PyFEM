@@ -24,6 +24,7 @@ The `type` parameter specifies which material model to use, and subsequent param
 ```{toctree}
 :maxdepth: 1
 
+crystal_plasticity.md
 dummy.md
 hookeslaw.md
 isokinematichardening.md
