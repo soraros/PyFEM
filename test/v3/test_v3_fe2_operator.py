@@ -96,6 +96,7 @@ def _deck(
   kappa_c: float = 2.5e-2,
   elastic: bool = False,
   micro_settings: NonlinearStaticSettings | None = None,
+  micro_loads: tuple = (),
 ) -> _Deck:
   micro_mesh = authoring.quad8_patch(2, 2, width=1.0, height=1.0)
   material = (
@@ -122,6 +123,7 @@ def _deck(
     "micro_system": micro_system,
     "micro_coordinate_map": micro_map,
     "homogenization": cell.homogenization_request(micro_system),
+    "micro_loads": micro_loads,
   }
   if micro_settings is not None:
     arguments["settings"] = micro_settings
@@ -287,6 +289,34 @@ def test_header_additions_and_virgin_nested_probe_are_additive() -> None:
   assert direct_base.content_fingerprint == again.content_fingerprint
   direct_manifest = direct_base.provenance.manifest.to_bytes()
   assert direct_manifest == again.provenance.manifest.to_bytes()
+
+
+def test_micro_loads_are_part_of_fe2_content_identity() -> None:
+  plain = _deck(elastic=True)
+  center = next(
+    node for node in plain.micro_mesh.nodes if node.coordinates == (0.5, 0.5)
+  )
+  load = authoring.nodal_load(center.id, "x", -10.0, coordinate="eps11")
+  loaded = _deck(elastic=True, micro_loads=(load,))
+  identical = _deck(elastic=True, micro_loads=(load,))
+
+  plain_bytes = plain.system.provenance.manifest.to_bytes()
+  loaded_bytes = loaded.system.provenance.manifest.to_bytes()
+  identical_bytes = identical.system.provenance.manifest.to_bytes()
+  assert plain_bytes != loaded_bytes
+  plain_digest = plain.system.content_fingerprint.digest
+  loaded_digest = loaded.system.content_fingerprint.digest
+  assert plain_digest != loaded_digest
+  assert loaded_bytes == identical_bytes
+  assert loaded_digest == identical.system.content_fingerprint.digest
+  assert (
+    loaded.system.operators[0].content_manifest.to_bytes()
+    == identical.system.operators[0].content_manifest.to_bytes()
+  )
+  assert not np.array_equal(
+    plain.system.operators[0].drivers[0].plan.loads.coordinate_coefficients.values,
+    loaded.system.operators[0].drivers[0].plan.loads.coordinate_coefficients.values,
+  )
 
 
 def test_macro_fe2_reported_ip_state_matches_legacy_sigma11() -> None:

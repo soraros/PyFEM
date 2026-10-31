@@ -477,6 +477,7 @@ def compile_fe2_continuum(
     nested_execution=nested_execution,
     tangent_class=FE2_TANGENT_CLASS,
   )
+  load_program = drivers[0].plan.loads
   manifest = CanonicalManifest(
     {
       "schema": FE2_SYSTEM_SCHEMA,
@@ -498,6 +499,12 @@ def compile_fe2_continuum(
       },
       "micro_system": micro_system.provenance.manifest,
       "micro_coordinate_map": micro_coordinate_map.provenance.manifest,
+      "micro_loads": {
+        "coordinate_names": load_program.coordinate_names,
+        "constant": load_program.constant.values,
+        "coordinate_coefficients": load_program.coordinate_coefficients.values,
+        "load_count": load_program.load_count,
+      },
       "homogenization": _homogenization_manifest(homogenization),
       "settings": {
         "tolerance": settings.tolerance,
