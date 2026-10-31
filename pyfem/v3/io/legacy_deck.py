@@ -57,14 +57,18 @@ Deck structure (``.pro`` side):
   must have exactly one end with every component prescribed to zero (the
   grounded end): it then reduces exactly to the v3 grounded point spring at
   the other node along the element chord, the consistent axial form the H1
-  decision pins (the legacy isotropic spring tangent is not the oracle — its
-  axial residual is). Each four-node interface element (bottom pair, then
-  top pair) emits into one
+  decision pins. Legacy formerly assembled an isotropic tangent that was not
+  the derivative of its axial residual; M55 repaired it to the same axial
+  tangent as v3 (ed798ae, merge 945a95d; pin flip 88c2f88), so the tangents
+  now match and residual parity is unchanged. Each four-node interface element
+  (bottom pair, then top pair) emits into one
   :class:`~pyfem.v3.compile.interface.InterfaceDeclaration` per group,
-  composed after the springs; the v3 operator ships the corrected
-  (non-reflecting) corotational frame and the exact tangent, so residual
-  parity is the contract on axis-aligned decks and the tangent divergence
-  from legacy is documented (see
+  composed after the springs; the v3 operator ships the proper-rotation
+  corotational frame and the exact tangent. M67 repaired the legacy reflecting
+  frame to the same proper rotation (9965442, merge 8a3eae8), so the frames
+  now agree on any geometry and axis-aligned residual parity is unchanged.
+  Legacy still omits the ``d(rot)/da`` geometric term, so its tangent
+  divergence from v3 remains documented (see
   :mod:`pyfem.v3.compile.interface`);
 - ``outputModules = [...]`` naming blocks whose ``type`` is a known legacy
   writer (``MeshWriter``, ``OutputWriter``, ``GraphWriter``, ``HDF5Writer``,
