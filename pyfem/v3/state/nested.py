@@ -547,6 +547,7 @@ class NestedStateStore:
     "_instance",
     "_layout",
     "_open",
+    "_scope_serial",
     "_staged_blocks",
     "_staged_coefficients",
   )
@@ -598,6 +599,7 @@ class NestedStateStore:
     self._staged_coefficients: np.ndarray | None = None
     self._staged_blocks: tuple[np.ndarray, ...] | None = None
     self._open: _TrialScope | None = None
+    self._scope_serial = 0
 
   @property
   def layout(self) -> NestedStateLayout:
@@ -628,6 +630,36 @@ class NestedStateStore:
   def trial_open(self) -> bool:
     """Return whether a trial scope is currently open on this store."""
     return self._open is not None
+
+  @property
+  def trial_scope_id(self) -> int:
+    """Identify the open scope so point-backed owners can re-root their lineage."""
+    self._require_trial()
+    return self._scope_serial
+
+  def current_coefficients(self, ip_index: int) -> np.ndarray:
+    """Return one point's current scope coefficients as a read-only view."""
+    scope = self._require_trial()
+    index = self._ip_index(ip_index)
+    source = (
+      self._staged_coefficients if scope.touched[index] else self._accepted_coefficients
+    )
+    assert source is not None
+    view = source[index]
+    view.setflags(write=False)
+    return view
+
+  def current_block(self, ip_index: int, block_id: str | int) -> np.ndarray:
+    """Return one point's current scope block rows as a read-only view."""
+    scope = self._require_trial()
+    index = self._ip_index(ip_index)
+    block = self._block(block_id)
+    staged = self._staged_blocks
+    assert staged is not None
+    source = staged[block] if scope.touched[index] else self._accepted_blocks[block]
+    view = source[index]
+    view.setflags(write=False)
+    return view
 
   @property
   def generations(self) -> tuple[StateGeneration, ...]:
@@ -708,6 +740,7 @@ class NestedStateStore:
       for child in opened:
         child.reject_trial()
       raise
+    self._scope_serial += 1
 
   def trial_coefficients(self, ip_index: int) -> np.ndarray:
     """Return the writable staged coefficient view of one point (zero-copy).
@@ -884,6 +917,10 @@ class NestedStateStore:
     for child in self._children:
       if child is not None:
         child._commit_validated(child._open)
+
+  def validate_trial(self) -> None:
+    """Validate the whole open trial tree before the macro owner commits."""
+    self._validate_trial(self._require_trial())
 
   def commit_trial(self) -> None:
     """Atomically accept every completed point's trial, recursively.

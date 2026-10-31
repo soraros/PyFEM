@@ -62,6 +62,7 @@ the typed per-parameter columns off the committed records::
 from pyfem.v3.authoring.compile import compile
 from pyfem.v3.authoring.contacts import penalty_contact
 from pyfem.v3.authoring.evaluate import evaluate, trial_vector
+from pyfem.v3.authoring.fe2 import fe2_continuum
 from pyfem.v3.authoring.interfaces import (
   dummy_interface,
   power_law_mode_i,
@@ -138,6 +139,7 @@ __all__ = [
   "damage_registry",
   "dummy_interface",
   "evaluate",
+  "fe2_continuum",
   "fixed",
   "line2_mesh",
   "linear_elastic",

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+  from pyfem.v3.state.nested import NestedStateReference, NestedStateStore
 
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.provenance import CanonicalManifest
@@ -75,6 +78,42 @@ class EvaluationStatus(Enum):
 
 class CouplingPolicy(Enum):
   FIXED = "fixed"
+
+
+class NestedExecutionModality(Enum):
+  DRIVER_PER_INTEGRATION_POINT = "driver-per-integration-point"
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class NestedExecutionDeclaration:
+  """The runtime store binding declared by a nested-execution operator header."""
+
+  modality: NestedExecutionModality
+  store: NestedStateStore
+
+  def __post_init__(self) -> None:
+    from pyfem.v3.state.nested import NestedStateStore
+
+    if type(self.modality) is not NestedExecutionModality:
+      msg = "nested execution requires an exact NestedExecutionModality"
+      raise TypeError(msg)
+    if type(self.store) is not NestedStateStore:
+      msg = "nested execution declarations require an exact NestedStateStore"
+      raise TypeError(msg)
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class NestedEvaluationInput:
+  """The store an evaluator may use; deliberately excludes the macro owner."""
+
+  store: NestedStateStore
+
+  def __post_init__(self) -> None:
+    from pyfem.v3.state.nested import NestedStateStore
+
+    if type(self.store) is not NestedStateStore:
+      msg = "nested evaluation requires an exact NestedStateStore"
+      raise TypeError(msg)
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
@@ -221,6 +260,8 @@ class OperatorHeader(CompilerConstructed):
   operators) leave both unset, and consumers read them as empty tuples —
   the ``OperatorStateLayout.initial_rows`` precedent. A header carrying no
   derivative channels admits no derivative channel requests.
+  ``nested_execution`` and ``tangent_class`` follow the same additive rule:
+  older and direct operators read them as ``None``.
   """
 
   block_id: SemanticId
@@ -234,6 +275,36 @@ class OperatorHeader(CompilerConstructed):
   coupling_policy: CouplingPolicy
   parameters: tuple[ParameterBinding, ...]
   derivative_channels: tuple[ResidualDerivativeChannel, ...]
+  nested_execution: NestedExecutionDeclaration | None = None
+  tangent_class: str | None = None
+
+
+def operator_nested_execution(
+  header: OperatorHeader,
+) -> NestedExecutionDeclaration | None:
+  """Read the additive nested-execution declaration, failing closed on foreign data."""
+  if type(header) is not OperatorHeader:
+    msg = "nested execution lookup requires an exact OperatorHeader"
+    raise TypeError(msg)
+  declaration = getattr(header, "nested_execution", None)
+  if declaration is not None and type(declaration) is not NestedExecutionDeclaration:
+    msg = "operator nested execution must be an exact declaration or None"
+    raise TypeError(msg)
+  return declaration
+
+
+def operator_tangent_class(header: OperatorHeader) -> str | None:
+  """Read the optional tangent class; direct operators default to ``None``."""
+  if type(header) is not OperatorHeader:
+    msg = "tangent-class lookup requires an exact OperatorHeader"
+    raise TypeError(msg)
+  tangent_class = getattr(header, "tangent_class", None)
+  if tangent_class is not None and (
+    type(tangent_class) is not str or not tangent_class
+  ):
+    msg = "operator tangent class must be a non-empty exact string or None"
+    raise TypeError(msg)
+  return tangent_class
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -299,6 +370,7 @@ class OperatorEvaluationInput:
   accepted_state: FinalizedArray
   signals: tuple[ProgramSignalInput, ...]
   request: ChannelRequest
+  nested_execution: NestedEvaluationInput | None = None
 
   def __post_init__(self) -> None:
     _exact_tuple(self.port_values, FinalizedArray, "operator port values")
@@ -308,6 +380,12 @@ class OperatorEvaluationInput:
       or type(self.request) is not ChannelRequest
     ):
       raise TypeError("operator input requires exact state and channel request")
+    if (
+      self.nested_execution is not None
+      and type(self.nested_execution) is not NestedEvaluationInput
+    ):
+      msg = "operator input nested execution must be an exact input or None"
+      raise TypeError(msg)
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
@@ -327,6 +405,7 @@ class OperatorEvaluation(CompilerConstructed):
   trial_state: FinalizedArray
   status: EvaluationStatus
   derivative_values: tuple[FinalizedArray, ...]
+  nested_references: tuple[NestedStateReference, ...] = ()
 
 
 def evaluation_status(evaluation: OperatorEvaluation) -> EvaluationStatus:
@@ -366,6 +445,24 @@ def evaluation_derivative_values(
     msg = "operator evaluation derivative values must be FinalizedArray tuples"
     raise TypeError(msg)
   return values
+
+
+def evaluation_nested_references(
+  evaluation: OperatorEvaluation,
+) -> tuple[NestedStateReference, ...]:
+  """Read typed nested references; non-nested evaluations default to empty."""
+  from pyfem.v3.state.nested import NestedStateReference
+
+  if type(evaluation) is not OperatorEvaluation:
+    msg = "evaluation nested references require an exact OperatorEvaluation"
+    raise TypeError(msg)
+  references = getattr(evaluation, "nested_references", ())
+  if type(references) is not tuple or any(
+    type(reference) is not NestedStateReference for reference in references
+  ):
+    msg = "operator evaluation nested references must be exact typed tuples"
+    raise TypeError(msg)
+  return references
 
 
 class StateCodec(Protocol):
