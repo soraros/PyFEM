@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from pyfem.v3.model.arrays import FinalizedArray
-from pyfem.v3.model.identity import StateGeneration
+from pyfem.v3.model.identity import IdentityMismatchError, StateGeneration
 from pyfem.v3.model.operator import (
   OperatorStateLayout,
   OperatorStateSlot,
@@ -29,6 +29,7 @@ from pyfem.v3.model.operator import (
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.state.codecs import Float64StateRowCodec
+from pyfem.v3.state.nested import NestedStateReference, NestedStateStore
 
 _TRANSACTION_SEAL = object()
 _FLOAT64_DTYPE = np.dtype(np.float64).str
@@ -45,6 +46,7 @@ class GenerationRecord:
   ordinal: int
   physical_staged: bool
   staged_block_ids: tuple[SemanticId, ...]
+  nested_references: tuple[NestedStateReference, ...] = ()
 
 
 def _validated_layout(value: object) -> OperatorStateLayout:
@@ -172,6 +174,8 @@ class StateTransaction:
     "_generation",
     "_owner",
     "_staged_blocks",
+    "_staged_nested",
+    "_staged_nested_keys",
     "_staged_physical",
   )
 
@@ -193,6 +197,8 @@ class StateTransaction:
     self._accepted_blocks = accepted_blocks
     self._staged_physical: np.ndarray | None = None
     self._staged_blocks: dict[SemanticId, np.ndarray] = {}
+    self._staged_nested: list[NestedStateReference] = []
+    self._staged_nested_keys: set[tuple[object, int]] = set()
     self._closed = False
 
   def _require_open(self) -> None:
@@ -237,6 +243,38 @@ class StateTransaction:
       "trial operator state rows",
     )
 
+  def stage_nested(self, reference: NestedStateReference) -> None:
+    """Stage one macro integration point's nested-state reference for commit.
+
+    The reference is a typed slot — the nested store's live instance
+    identity, the integration-point index, and the rooted nested generation —
+    never nested payload data. Staging validates the reference against the
+    owner's bound nested stores; committing or rejecting cannot mutate nested
+    state either way.
+    """
+    self._require_open()
+    if type(reference) is not NestedStateReference:
+      msg = "staged nested-state linkage must be an exact NestedStateReference"
+      raise TypeError(msg)
+    store = self._owner._nested_store_for(reference)
+    if reference.ip_index >= store.ip_count:
+      msg = (
+        f"nested-state reference index {reference.ip_index} lies outside the "
+        "bound nested store"
+      )
+      raise ValueError(msg)
+    key = (reference.store, reference.ip_index)
+    if key in self._staged_nested_keys:
+      msg = f"duplicate nested-state reference for point {reference.ip_index}"
+      raise ValueError(msg)
+    self._staged_nested_keys.add(key)
+    self._staged_nested.append(reference)
+
+  @property
+  def nested_references(self) -> tuple[NestedStateReference, ...]:
+    """Return the nested-state references staged so far (typed slots only)."""
+    return tuple(self._staged_nested)
+
   def commit(self) -> None:
     """Atomically commit every staged value as one generation transition."""
     self._require_open()
@@ -255,6 +293,7 @@ class StateTransactionOwner:
     "_blocks",
     "_generation",
     "_history",
+    "_nested_stores",
     "_open",
     "_physical",
     "_system",
@@ -265,10 +304,19 @@ class StateTransactionOwner:
     system: CompiledSystem,
     *,
     codecs: tuple[StateCodec, ...] = (),
+    nested_stores: tuple[NestedStateStore, ...] = (),
   ) -> None:
     if type(system) is not CompiledSystem:
       msg = "transaction owner requires an exact CompiledSystem"
       raise TypeError(msg)
+    if type(nested_stores) is not tuple or any(
+      type(store) is not NestedStateStore for store in nested_stores
+    ):
+      msg = "transaction owner nested stores must be an exact NestedStateStore tuple"
+      raise TypeError(msg)
+    if len({store.instance for store in nested_stores}) != len(nested_stores):
+      msg = "transaction owner nested stores must be distinct store instances"
+      raise ValueError(msg)
     if type(codecs) is not tuple:
       msg = "transaction owner codecs must be an exact tuple"
       raise TypeError(msg)
@@ -319,6 +367,7 @@ class StateTransactionOwner:
     self._system = system
     self._physical = np.zeros(system.coefficient_count, dtype=np.float64)
     self._blocks = blocks
+    self._nested_stores = nested_stores
     self._generation = StateGeneration.initial()
     self._history: tuple[GenerationRecord, ...] = ()
     self._open: StateTransaction | None = None
@@ -356,6 +405,18 @@ class StateTransactionOwner:
 
   def _binding(self, block_id: SemanticId) -> _BlockBinding:
     return self._blocks[self._block_key(block_id)]
+
+  @property
+  def nested_stores(self) -> tuple[NestedStateStore, ...]:
+    """Return the nested stores bound for reference validation."""
+    return self._nested_stores
+
+  def _nested_store_for(self, reference: NestedStateReference) -> NestedStateStore:
+    for store in self._nested_stores:
+      if store.instance == reference.store:
+        return store
+    msg = "nested-state staging requires a store bound to this transaction owner"
+    raise IdentityMismatchError(msg)
 
   def state_layout(self, block_id: SemanticId) -> OperatorStateLayout:
     """Return the compiled state layout bound for one block."""
@@ -416,7 +477,9 @@ class StateTransactionOwner:
       msg = "a state transaction commit requires at least one staged value"
       raise ValueError(msg)
     # Every staged value was validated and ownership-copied at staging time;
-    # the writes below cannot fail, so the transition is indivisible.
+    # the writes below cannot fail, so the transition is indivisible. Nested
+    # state is not written here: nested stores evolve on their own per-point
+    # generations, and the driver coordinates the nested trial commit.
     if staged_physical is not None:
       np.copyto(self._physical, staged_physical)
     for block_id, rows in staged_blocks.items():
@@ -428,6 +491,7 @@ class StateTransactionOwner:
         ordinal=self._generation.ordinal,
         physical_staged=staged_physical is not None,
         staged_block_ids=tuple(staged_blocks),
+        nested_references=tuple(transaction._staged_nested),
       ),
     )
     transaction._closed = True
@@ -439,5 +503,7 @@ class StateTransactionOwner:
       raise RuntimeError(msg)
     transaction._staged_physical = None
     transaction._staged_blocks = {}
+    transaction._staged_nested = []
+    transaction._staged_nested_keys = set()
     transaction._closed = True
     self._open = None
