@@ -137,9 +137,8 @@ _DX = _DY = 0.6
 
 # Damage deck (legacy micro_rve.pro: PlaneStrainDamage E = 1000, nu = 0.25,
 # k = 1, kappa0 = 7.5e-4 on the 1 x 1 cell with a 2x2 mesh). kappa_c is a
-# deck parameter: legacy's 2.5e-3 serves the fail-closed and reject-path
-# witnesses; the FD legs use the 10x ductile 2.5e-2 (see the module
-# docstring).
+# deck parameter: legacy's 2.5e-3 serves the fail-closed witness; the FD and
+# reject-path legs use the 10x ductile 2.5e-2 (see the module docstring).
 _DAMAGE_E, _DAMAGE_NU, _DAMAGE_KAPPA0, _DAMAGE_K = 1000.0, 0.25, 7.5e-4, 1.0
 _DAMAGE_KAPPAC_DUCTILE = 2.5e-2
 _DAMAGE_KAPPAC_LEGACY = 2.5e-3
@@ -955,15 +954,29 @@ def test_plateau_corner_factorizes_once_and_observes_the_unloading_branch() -> N
 
 
 def test_reject_path_records_carry_no_observation_and_match_the_plain_run() -> None:
-  """The legacy-parameter shear ramp fails past the onset; rejects stay clean."""
+  """Budget-driven rejects stay clean on a nonsingular shear ramp.
+
+  The legacy-kappa_c ramp is not a portable reject witness: by gamma12 =
+  7.5e-4 its 22x22 reduced tangent has numerical rank 19 (sigma_min =
+  7.8e-15), with macOS SuperLU accepting a 1.2e-13 roundoff pivot and CI
+  Ubuntu failing closed at the same committed point. The ductile deck's
+  committed sigma_min is 149.54; bounded budgets still produce both rejected
+  and failed records.
+  """
   strains = tuple((0.0, 0.0, 1.5e-3 * (k + 1) / 8) for k in range(8))
-  plain_driver, _ = _damage_deck(_DAMAGE_KAPPAC_LEGACY)
+  settings = NonlinearStaticSettings(
+    tolerance=1.0e-12, max_iterations=3, max_cutbacks=1
+  )
+  plain_driver, _ = _damage_deck(_DAMAGE_KAPPAC_DUCTILE, settings)
   plain = _run(plain_driver, strains)
-  requested_driver, request = _damage_deck(_DAMAGE_KAPPAC_LEGACY)
+  requested_driver, request = _damage_deck(_DAMAGE_KAPPAC_DUCTILE, settings)
   requested = _run(requested_driver, strains, request)
   assert plain.status is requested.status is DriverStatus.STEP_FAILED
   assert plain.failed_target_index == requested.failed_target_index
   assert len(plain.records) == len(requested.records)
+  statuses = [record.status for record in requested.records]
+  assert SubstepStatus.COMMITTED in statuses
+  assert SubstepStatus.REJECTED in statuses
   for first, second in zip(plain.records, requested.records, strict=True):
     assert first.status is second.status
     assert first.progress == second.progress
