@@ -64,10 +64,13 @@ Deck structure (``.pro`` side):
   (bottom pair, then top pair) emits into one
   :class:`~pyfem.v3.compile.interface.InterfaceDeclaration` per group,
   composed after the springs; the v3 operator ships the proper-rotation
-  corotational frame and the exact tangent. M67 repaired the legacy reflecting
-  frame to the same proper rotation (9965442, merge 8a3eae8), so the frames
-  now agree on any geometry and axis-aligned residual parity is unchanged.
-  Legacy still omits the ``d(rot)/da`` geometric term, so its tangent
+  corotational frame and the exact tangent. M67 repaired the legacy normal
+  candidate (9965442, merge 8a3eae8), so the normal candidates now agree and
+  the oblique normal/shear swap is fixed. Axis-aligned residual parity remains
+  bitwise per the M65 parity battery, but the shear-row handedness convention
+  still differs (legacy determinant -1, v3 determinant +1); full frame parity
+  on oblique geometries is not claimed. Legacy still omits the ``d(rot)/da``
+  geometric term, so its tangent
   divergence from v3 remains documented (see
   :mod:`pyfem.v3.compile.interface`);
 - ``outputModules = [...]`` naming blocks whose ``type`` is a known legacy
