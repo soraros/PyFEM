@@ -184,10 +184,13 @@ from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
   ChannelRequest,
   EvaluationStatus,
+  NestedEvaluationInput,
   OperatorEvaluationInput,
   ProgramSignalInput,
   evaluation_derivative_values,
+  evaluation_nested_references,
   evaluation_status,
+  operator_nested_execution,
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec.diagnostics import SourceContext, render_diagnostic_value
@@ -434,6 +437,8 @@ class NonlinearStaticDriver:
     coordinate_map: CompiledConstraintMap,
     loads: tuple[NodalLoadSpec, ...] = (),
     settings: NonlinearStaticSettings = NonlinearStaticSettings(),
+    *,
+    owner: StateTransactionOwner | None = None,
   ) -> None:
     if type(system) is not CompiledSystem:
       msg = "the nonlinear driver requires an exact CompiledSystem"
@@ -444,11 +449,36 @@ class NonlinearStaticDriver:
     if type(settings) is not NonlinearStaticSettings:
       msg = "the nonlinear driver requires exact NonlinearStaticSettings"
       raise TypeError(msg)
+    if owner is not None and type(owner) is not StateTransactionOwner:
+      msg = "the nonlinear driver owner must be an exact StateTransactionOwner or None"
+      raise TypeError(msg)
+    declarations = tuple(
+      operator_nested_execution(operator.header) for operator in system.operators
+    )
+    stores = tuple(
+      declaration.store for declaration in declarations if declaration is not None
+    )
+    if len({store.instance for store in stores}) != len(stores):
+      msg = "nested execution stores must be distinct per operator"
+      raise ValueError(msg)
+    if owner is None:
+      owner = StateTransactionOwner(system, nested_stores=stores)
+    else:
+      expected = {store.instance for store in stores}
+      bound = {store.instance for store in owner.nested_stores}
+      if bound != expected:
+        msg = "the supplied owner does not bind the declared nested execution stores"
+        raise ValueError(msg)
     self._system = system
     self._map = coordinate_map
     self._settings = settings
     self._plan = compile_driver_plan(system, coordinate_map, loads)
-    self._owner = StateTransactionOwner(system)
+    self._owner = owner
+    self._nested_stores = stores
+    self._nested_inputs = tuple(
+      None if declaration is None else NestedEvaluationInput(declaration.store)
+      for declaration in declarations
+    )
     self._workspace = _DriverWorkspace()
     self._requests = tuple(
       ChannelRequest(
@@ -799,6 +829,29 @@ class NonlinearStaticDriver:
       tangent=FinalizedArray(macro_tangent, dtype=np.float64),
     )
 
+  def _begin_nested_trial(self) -> None:
+    opened = []
+    try:
+      for store in self._nested_stores:
+        store.begin_trial()
+        opened.append(store)
+    except BaseException:
+      for store in reversed(opened):
+        store.reject_trial()
+      raise
+
+  def _reject_nested_trial(self) -> None:
+    for store in self._nested_stores:
+      store.reject_trial()
+
+  def _validate_nested_trial(self) -> None:
+    for store in self._nested_stores:
+      store.validate_trial()
+
+  def _commit_nested_trial(self) -> None:
+    for store in self._nested_stores:
+      store.commit_trial()
+
   def _newton_substep(
     self,
     point: ProgramPoint,
@@ -833,8 +886,11 @@ class NonlinearStaticDriver:
     free_dofs = coordinate_map.free_dofs.values
     transaction = self._owner.begin()
     closed = False
+    nested_open = False
     iterations: list[IterationRecord] = []
     try:
+      self._begin_nested_trial()
+      nested_open = True
       reduced = np.array(
         transaction.accepted_physical.values[free_dofs],
         dtype=np.float64,
@@ -852,10 +908,11 @@ class NonlinearStaticDriver:
       for iteration in range(1, settings.max_iterations + 1):
         full = full_coefficients(coordinate_map, reduced, point)
         evaluations = []
-        for operator, request, signals in zip(
+        for operator, request, signals, nested_input in zip(
           self._system.operators,
           self._requests,
           signal_inputs,
+          self._nested_inputs,
           strict=True,
         ):
           gather = operator.header.ports[0].coefficient_map.values
@@ -874,6 +931,7 @@ class NonlinearStaticDriver:
                 ),
                 signals=signals,
                 request=request,
+                nested_execution=nested_input,
               )
             )
           )
@@ -899,6 +957,10 @@ class NonlinearStaticDriver:
           increment = 0.5 * increment
           reduced = anchor + increment
           increment_norm = float(np.linalg.norm(increment))
+          self._reject_nested_trial()
+          nested_open = False
+          self._begin_nested_trial()
+          nested_open = True
           continue
         residual_batches = tuple(
           evaluation.residual_values[0].values for evaluation in evaluations
@@ -947,8 +1009,13 @@ class NonlinearStaticDriver:
               operator.header.state_layout.block_id,
               evaluation.trial_state,
             )
+            for reference in evaluation_nested_references(evaluation):
+              transaction.stage_nested(reference)
+          self._validate_nested_trial()
           transaction.commit()
           closed = True
+          self._commit_nested_trial()
+          nested_open = False
           workspace.committed_substep_count += 1
           full_residual = internal - external
           reactions = reaction_forces(coordinate_map, full_residual)
@@ -1015,6 +1082,10 @@ class NonlinearStaticDriver:
           closed = True
           workspace.rejected_substep_count += 1
           return False, tuple(iterations), None, None
+        self._reject_nested_trial()
+        nested_open = False
+        self._begin_nested_trial()
+        nested_open = True
         reduced = trial_reduced
         iterations.append(
           IterationRecord(
@@ -1033,6 +1104,9 @@ class NonlinearStaticDriver:
       if not closed:
         transaction.reject()
       raise
+    finally:
+      if nested_open:
+        self._reject_nested_trial()
 
   def run(
     self,

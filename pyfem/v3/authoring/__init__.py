@@ -62,6 +62,7 @@ the typed per-parameter columns off the committed records::
 from pyfem.v3.authoring.compile import compile
 from pyfem.v3.authoring.contacts import penalty_contact
 from pyfem.v3.authoring.evaluate import evaluate, trial_vector
+from pyfem.v3.authoring.fe2 import fe2_continuum
 from pyfem.v3.authoring.interfaces import (
   dummy_interface,
   power_law_mode_i,
@@ -97,6 +98,7 @@ from pyfem.v3.authoring.registry import (
   viscoplasticity_law,
   viscoplasticity_registry,
 )
+from pyfem.v3.authoring.rve import PeriodicCell, periodic_cell
 from pyfem.v3.authoring.springs import damage_envelope_spring, spring
 from pyfem.v3.authoring.transactions import (
   NonlinearStaticSession,
@@ -123,6 +125,7 @@ __all__ = [
   "NonlinearStaticSession",
   "NonlinearStaticSettings",
   "ParameterSensitivityObservation",
+  "PeriodicCell",
   "SpringKernelResult",
   "StateOwner",
   "StateSnapshot",
@@ -136,12 +139,14 @@ __all__ = [
   "damage_registry",
   "dummy_interface",
   "evaluate",
+  "fe2_continuum",
   "fixed",
   "line2_mesh",
   "linear_elastic",
   "nodal_load",
   "nonlinear_static",
   "penalty_contact",
+  "periodic_cell",
   "plane_stress_law",
   "plasticity",
   "plasticity_law",

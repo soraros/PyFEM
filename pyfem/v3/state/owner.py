@@ -293,6 +293,9 @@ class StateTransactionOwner:
     "_blocks",
     "_generation",
     "_history",
+    "_nested_block_ids",
+    "_nested_point",
+    "_nested_scope_id",
     "_nested_stores",
     "_open",
     "_physical",
@@ -368,9 +371,53 @@ class StateTransactionOwner:
     self._physical = np.zeros(system.coefficient_count, dtype=np.float64)
     self._blocks = blocks
     self._nested_stores = nested_stores
+    self._nested_point: tuple[NestedStateStore, int] | None = None
+    self._nested_block_ids: dict[SemanticId, str | int] = {}
+    self._nested_scope_id = -1
     self._generation = StateGeneration.initial()
     self._history: tuple[GenerationRecord, ...] = ()
     self._open: StateTransaction | None = None
+
+  @classmethod
+  def for_nested_point(
+    cls,
+    system: CompiledSystem,
+    *,
+    store: NestedStateStore,
+    ip_index: int,
+  ) -> StateTransactionOwner:
+    """Create a driver owner backed by one point of an open nested trial scope."""
+    if type(store) is not NestedStateStore:
+      msg = "point-backed owners require an exact NestedStateStore"
+      raise TypeError(msg)
+    store.generation(ip_index)
+    owner = cls(system)
+    layout = store.layout
+    if layout.coefficient_count != system.coefficient_count:
+      msg = "nested point coefficient width does not match the compiled system"
+      raise ValueError(msg)
+    if len(layout.blocks) != len(owner._blocks):
+      msg = "nested point state block count does not match the compiled system"
+      raise ValueError(msg)
+    block_ids: dict[SemanticId, str | int] = {}
+    for (block_id, binding), nested_block in zip(
+      owner._blocks.items(), layout.blocks, strict=True
+    ):
+      if (
+        binding.layout.entity_count != nested_block.entity_count
+        or binding.layout.row_width != nested_block.row_width
+      ):
+        msg = (
+          f"nested point state block {block_id!r} does not match the compiled layout"
+        )
+        raise ValueError(msg)
+      block_ids[block_id] = nested_block.block_id
+    owner._nested_point = (store, ip_index)
+    owner._nested_block_ids = block_ids
+    owner._physical = np.empty(0, dtype=np.float64)
+    for binding in owner._blocks.values():
+      binding.accepted = np.empty((0, 0), dtype=np.float64)
+    return owner
 
   @property
   def system(self) -> CompiledSystem:
@@ -426,18 +473,33 @@ class StateTransactionOwner:
     """Return the versioned state codec bound for one block."""
     return self._binding(block_id).codec
 
+  def _current_physical(self) -> np.ndarray:
+    if self._nested_point is None:
+      return self._physical
+    store, ip_index = self._nested_point
+    return store.current_coefficients(ip_index)
+
+  def _current_state(self, block_id: SemanticId) -> np.ndarray:
+    binding = self._binding(block_id)
+    if self._nested_point is None:
+      return binding.accepted
+    store, ip_index = self._nested_point
+    nested_id = self._nested_block_ids[binding.layout.block_id]
+    return store.current_block(ip_index, nested_id)
+
   def accepted_physical(self) -> FinalizedArray:
     """Return a detached read-only copy of the accepted physical vector."""
-    return _detached(self._physical)
+    return _detached(self._current_physical())
 
   def accepted_state(self, block_id: SemanticId) -> FinalizedArray:
     """Return a detached read-only copy of one block's accepted state rows."""
-    return _detached(self._binding(block_id).accepted)
+    return _detached(self._current_state(block_id))
 
   def encode_state(self, block_id: SemanticId) -> bytes:
     """Encode one block's accepted state rows with its versioned codec."""
     binding = self._binding(block_id)
-    return binding.codec.encode(binding.layout, _detached(binding.accepted))
+    rows = _detached(self._current_state(block_id))
+    return binding.codec.encode(binding.layout, rows)
 
   def decode_state(self, block_id: SemanticId, payload: bytes) -> FinalizedArray:
     """Decode one block's state-row payload, failing closed on foreign data."""
@@ -454,14 +516,20 @@ class StateTransactionOwner:
     if self._open is not None:
       msg = "a state transaction is already open for this owner"
       raise RuntimeError(msg)
+    if self._nested_point is not None:
+      store, ip_index = self._nested_point
+      scope_id = store.trial_scope_id
+      if self._nested_scope_id != scope_id:
+        self._generation = store.generation(ip_index)
+        self._history = ()
+        self._nested_scope_id = scope_id
     transaction = StateTransaction(
       _seal=_TRANSACTION_SEAL,
       owner=self,
       generation=self._generation,
-      accepted_physical=_detached(self._physical),
+      accepted_physical=_detached(self._current_physical()),
       accepted_blocks={
-        block_id: _detached(binding.accepted)
-        for block_id, binding in self._blocks.items()
+        block_id: _detached(self._current_state(block_id)) for block_id in self._blocks
       },
     )
     self._open = transaction
@@ -476,14 +544,20 @@ class StateTransactionOwner:
     if staged_physical is None and not staged_blocks:
       msg = "a state transaction commit requires at least one staged value"
       raise ValueError(msg)
-    # Every staged value was validated and ownership-copied at staging time;
-    # the writes below cannot fail, so the transition is indivisible. Nested
-    # state is not written here: nested stores evolve on their own per-point
-    # generations, and the driver coordinates the nested trial commit.
-    if staged_physical is not None:
-      np.copyto(self._physical, staged_physical)
-    for block_id, rows in staged_blocks.items():
-      np.copyto(self._blocks[block_id].accepted, rows)
+    # Every staged value was validated and ownership-copied at staging time.
+    # A point-backed microstep writes only its store's trial buffers; a macro
+    # owner writes its own accepted buffers and never writes nested payloads.
+    if self._nested_point is not None:
+      store, ip_index = self._nested_point
+      if staged_physical is not None:
+        store.write_trial_coefficients(ip_index, staged_physical)
+      for block_id, rows in staged_blocks.items():
+        store.write_trial_block(ip_index, self._nested_block_ids[block_id], rows)
+    else:
+      if staged_physical is not None:
+        np.copyto(self._physical, staged_physical)
+      for block_id, rows in staged_blocks.items():
+        np.copyto(self._blocks[block_id].accepted, rows)
     self._generation = self._generation.next_accepted()
     self._history = (
       *self._history,
