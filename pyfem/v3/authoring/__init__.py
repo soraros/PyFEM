@@ -97,6 +97,7 @@ from pyfem.v3.authoring.registry import (
   viscoplasticity_law,
   viscoplasticity_registry,
 )
+from pyfem.v3.authoring.rve import PeriodicCell, periodic_cell
 from pyfem.v3.authoring.springs import damage_envelope_spring, spring
 from pyfem.v3.authoring.transactions import (
   NonlinearStaticSession,
@@ -123,6 +124,7 @@ __all__ = [
   "NonlinearStaticSession",
   "NonlinearStaticSettings",
   "ParameterSensitivityObservation",
+  "PeriodicCell",
   "SpringKernelResult",
   "StateOwner",
   "StateSnapshot",
@@ -142,6 +144,7 @@ __all__ = [
   "nodal_load",
   "nonlinear_static",
   "penalty_contact",
+  "periodic_cell",
   "plane_stress_law",
   "plasticity",
   "plasticity_law",
