@@ -37,8 +37,6 @@ class Contact(BaseModel):
         self.direction = [0.0, 0.0]
         self.radius = 10.
         self.penalty = 1.e6
-        if self.type == "sphere":
-            self.dispDofs = ["u", "v", "w"]
         self.flag = True
         self.centre = np.array(props.centre)
         self.radius = props.radius

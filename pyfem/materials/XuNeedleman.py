@@ -2,7 +2,7 @@
 # Copyright (c) 2011–2026 Joris J.C. Remmers
 
 from pyfem.materials.BaseMaterial import BaseMaterial
-from numpy import zeros, dot, sqrt
+from numpy import zeros, dot
 from math import exp 
 
 class XuNeedleman( BaseMaterial ):
@@ -17,10 +17,7 @@ class XuNeedleman( BaseMaterial ):
     self.vnmax = self.Gc/(2.71828183*self.Tult);
     self.vtmax = self.q*self.Gc/(1.16580058*self.Tult);
 
-    if props.rank == 2:
-      self.outLabels = [ "Tn" , "Ts" ]
-    elif props.rank == 3:
-      self.outLabels = [ "Tn" , "Ts1" , "Ts2" ]
+    self.outLabels = [ "Tn" , "Ts" ]
     
     self.setHistoryParameter( 'dissipation', 0. )
     self.commitHistory()    
@@ -36,19 +33,6 @@ class XuNeedleman( BaseMaterial ):
     stress = zeros( rank )
     tang   = zeros( (rank,rank) )
     
-    if rank == 3:
-      beta = zeros(2)
-      shear = sqrt( dot( deformation.strain[1:,1:] , deformation.strain[1:,1:] ) )
-                                         
-      if shear > 1.0e-12:
-        beta[0] = deformation.strain[1] / shear
-        beta[1] = deformation.strain[2] / shear        
-      else:
-        beta[0] = 0.70710678
-        beta[1] = 0.70710678        
-      
-      deformation.strain[1] = shear  
-        
     t1 = 1.0/self.vnmax
     t3 = deformation.strain[0]*t1
     t4 = exp(-t3)
@@ -104,33 +88,8 @@ class XuNeedleman( BaseMaterial ):
       self.setHistoryParameter( 'dissipation', totalDiss )
       deformation.dgdstrain = 0.5 * ( stress - dot( deformation.strain , tang ) )
       
-    if rank == 2:  
-      self.outData = stress
-    elif rank == 3:
-      if shear > 1.0e-12:
-        Kss = stress[1] / shear
-      else:
-        Kss = tang[1,1]
-        
-      trac2D = stress[1]
-      tang01 = tang[0,1] 
-      tang11 = tang[1,1]       
-      
-      
-      stress[1] = beta[0] * trac2D
-      stress[2] = beta[1] * trac2D      
-      
-      tang[0,1] = beta[0] * tang01
-      tang[0,2] = beta[1] * tang01
-            
-      tang[1,0] = tang[0,1]
-      tang[1,1] = Kss + beta[0]*beta[1]*(tang11 - Kss )
-      tang[1,2] = beta[0]*beta[1]*(tang11 - Kss )
-      
-      tang[2,0] = tang[0,2]
-      tang[2,1] = tang[1,2]
-      tang[2,2] = Kss + beta[1]*beta[1]*(tang11 - Kss)
-                       
+    self.outData = stress
+
     return stress,tang
     
 #-------------------------------------------------------------------------------
