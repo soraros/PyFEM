@@ -25,9 +25,13 @@ generation-gated ``restore_accepted`` (see the rollback battery in
 ``test/v3/test_v3_state_nested_rollback.py``): with one contiguous staged
 buffer set reused across steps, a commit costs one touched-set copy and a
 reject costs nothing, while the checkpoint candidate pays a full-store
-snapshot every step plus a touched-set restore per reject. The staged design
-also keeps accepted-state reads valid throughout an open trial scope; the
-checkpoint design mutates the accepted buffers in place and cannot.
+snapshot every step plus a touched-set restore per reject. Measured on the
+micro_rve per-point volume (272 B, 1024 points, 30 steps at 25 commits +
+5 rejects): 6.96 MB copied here against 9.75 MB for restore_accepted and
+25.1 MB for legacy deepcopy-per-evaluation; on a ~195 KB-per-point refined
+RVE: 57.2 MB against 69.9 MB and 190.7 MB. The staged design also keeps
+accepted-state reads valid throughout an open trial scope; the checkpoint
+design mutates the accepted buffers in place and cannot.
 
 Trial protocol, mirroring the owner's single-open-transaction discipline:
 
