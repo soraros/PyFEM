@@ -127,6 +127,62 @@ def material_cases() -> list[MaterialKernelCase]:
 
 
 @dataclass(frozen=True)
+class FE2Workload:
+  """Periodic-microcell FE2 cantilever on an ``nx x ny`` macro Q8 grid."""
+
+  nx: int
+  ny: int
+
+  @property
+  def name(self) -> str:
+    return f"fe2/cantilever/{self.nx}x{self.ny}"
+
+  @property
+  def n_elems(self) -> int:
+    return self.nx * self.ny
+
+  @property
+  def n_ips(self) -> int:
+    return 9 * self.n_elems
+
+  @property
+  def n_dofs(self) -> int:
+    n_nodes = (2 * self.nx + 1) * (2 * self.ny + 1) - self.n_elems
+    return 2 * n_nodes
+
+
+FE2_SIZES: tuple[tuple[int, int], ...] = ((1, 1), (2, 2))
+
+
+def fe2_cases() -> list[FE2Workload]:
+  """All registered FE2 macro workloads."""
+  return [FE2Workload(nx, ny) for nx, ny in FE2_SIZES]
+
+
+@dataclass(frozen=True)
+class FE2MemoryCase:
+  """Micro-RVE state-volume curve over a documented macro-IP count."""
+
+  macro_ips: int
+
+  @property
+  def workload(self) -> str:
+    return f"fe2-memory/micro-rve/{self.macro_ips}"
+
+  @property
+  def per_ip_bytes(self) -> int:
+    return 8 * (18 + 16)
+
+
+FE2_MEMORY_IP_COUNTS: tuple[int, ...] = (9, 36, 144, 576)
+
+
+def fe2_memory_cases() -> list[FE2MemoryCase]:
+  """All registered nested-state memory workloads."""
+  return [FE2MemoryCase(count) for count in FE2_MEMORY_IP_COUNTS]
+
+
+@dataclass(frozen=True)
 class FiniteStrainWorkload:
   """Refined cantilever8 strip through the finite-strain TL deck stack.
 
