@@ -132,10 +132,14 @@ class FE2Workload:
 
   nx: int
   ny: int
+  micro_n: int = 2
+  elastic: bool = False
 
   @property
   def name(self) -> str:
-    return f"fe2/cantilever/{self.nx}x{self.ny}"
+    micro = "" if self.micro_n == 2 else f"/micro-{self.micro_n}x{self.micro_n}"
+    law = "/elastic" if self.elastic else ""
+    return f"fe2/cantilever/{self.nx}x{self.ny}{micro}{law}"
 
   @property
   def n_elems(self) -> int:
@@ -155,8 +159,10 @@ FE2_SIZES: tuple[tuple[int, int], ...] = ((1, 1), (2, 2))
 
 
 def fe2_cases() -> list[FE2Workload]:
-  """All registered FE2 macro workloads."""
-  return [FE2Workload(nx, ny) for nx, ny in FE2_SIZES]
+  """Damage/state anchors plus the compute-releasing elastic scale leg."""
+  return [FE2Workload(nx, ny) for nx, ny in FE2_SIZES] + [
+    FE2Workload(1, 1, micro_n=8, elastic=True)
+  ]
 
 
 @dataclass(frozen=True)

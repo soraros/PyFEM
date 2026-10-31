@@ -65,11 +65,19 @@ class _FE2Deck:
 
 def build_fe2_deck(workload: FE2Workload) -> _FE2Deck:
   """Compile the documented periodic-microcell FE2 cantilever."""
-  micro_mesh = authoring.quad8_patch(2, 2, width=1.0, height=1.0)
-  material = authoring.damage(_E, _NU, _KAPPA0, _KAPPA_C, _DAMAGE_K)
+  micro_mesh = authoring.quad8_patch(
+    workload.micro_n, workload.micro_n, width=1.0, height=1.0
+  )
+  material = (
+    authoring.linear_elastic(_E, _NU)
+    if workload.elastic
+    else authoring.damage(_E, _NU, _KAPPA0, _KAPPA_C, _DAMAGE_K)
+  )
+  registry = (
+    q8_reference_registry() if workload.elastic else damage_reference_registry()
+  )
   micro_system = compile_system(
-    authoring.small_strain_continuum(micro_mesh, material=material),
-    damage_reference_registry(),
+    authoring.small_strain_continuum(micro_mesh, material=material), registry
   )
   cell = authoring.periodic_cell(micro_mesh, width=1.0, height=1.0)
   micro_map = compile_constraint_map(
