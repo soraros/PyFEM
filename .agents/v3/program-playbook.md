@@ -7,6 +7,22 @@ truth, which disciplines compound, and which preconceptions died. Evidence refs
 are tower mission ids (M<n>) and findings; their full records live in
 .tower/comms/ (missions/, reviews/, findings/).
 
+## 0. The parity principle (human directive, 2026-10-31)
+
+Parity means SEMANTIC equivalence, never arithmetic fidelity. Legacy is
+evidence, not specification. Where legacy's structure is lousy, v3 chooses the
+better structure and proves the shared physics — converged-state parity at a
+documented tolerance, FD/symbolic/literature conviction — instead of replicating
+statement-for-statement. Do not get pinned in an awkward place because v1
+happened to divide the domain or solve a problem in a particular way.
+
+Corollary: the parity batteries and divergence pins exist to catch defects in
+US, never to preserve quirks in THEM. Where legacy is provably buggy, v3 pins
+corrected semantics and (per the M55/M67 precedent) repairs the legacy side
+too. Where legacy is merely clumsy, v3 is free to be better by design — the
+fresh-crystal mission (M81) is the template: literature-first, verified by
+instruments, no oracle required.
+
 ## 1. Instruments, not tests
 
 The parity battery is a measurement instrument, not a regression suite. Written
