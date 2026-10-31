@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 
 import numpy as np
 import pytest
@@ -23,6 +23,7 @@ from pyfem.v3.driver import (
   DriverStatus,
   NonlinearStaticDriver,
   NonlinearStaticSettings,
+  StepFailureClass,
 )
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
@@ -516,13 +517,15 @@ def test_retry_iteration_discards_and_reopens_the_nested_scope(
 
 
 def test_nested_nonconvergence_rejects_macro_without_state_resurrection() -> None:
-  # No macro cutback is allowed: the first nested singular/nonconvergent
-  # response must fail the target rather than committing a partial nested trial.
+  # One Newton iteration cannot advance this nonzero micro deck. Its six
+  # cutbacks plus terminal attempt must surface as one typed macro rejection.
   cantilever = _cantilever(
     kappa_c=2.5e-3,
+    micro_settings=NonlinearStaticSettings(max_iterations=1),
     macro_settings=NonlinearStaticSettings(max_cutbacks=0),
   )
-  store = cantilever.deck.system.operators[0].nested_store
+  operator = cantilever.deck.system.operators[0]
+  store = operator.nested_store
   nested_before = store.encode()
   owner = cantilever.driver.owner
   physical_before = owner.accepted_physical().values.tobytes()
@@ -530,13 +533,146 @@ def test_nested_nonconvergence_rejects_macro_without_state_resurrection() -> Non
     base_point=_load_point(0.0), target_points=(_load_point(1.0),)
   )
   assert result.status is DriverStatus.STEP_FAILED
+  (record,) = result.records
+  assert record.failure_class is StepFailureClass.NESTED_NON_CONVERGENCE
+  assert record.iterations[-1].status is EvaluationStatus.REJECT_STEP
+  failure = record.nested_failure
+  assert failure is not None
+  assert failure.code == "nested-non-convergence"
+  assert failure.operator_index == 0
+  assert failure.ip_index == 0
+  assert failure.failure_class is StepFailureClass.ITERATION_BUDGET_EXHAUSTED
+
+  # Every micro attempt evaluates once and factorizes once for its (unused)
+  # correction. IP 0 fails after seven attempts; the other IPs are never run.
+  assert astuple(record.nested_statistics[0])[2:] == (7, 7, 7, 0, 7)
+  assert all(
+    astuple(cost)[2:] == (0, 0, 0, 0, 0) for cost in record.nested_statistics[1:]
+  )
+  statistics = result.statistics
+  assert (
+    statistics.nested_iteration_count,
+    statistics.nested_evaluation_count,
+    statistics.nested_factorization_count,
+    statistics.nested_factorization_reuse_count,
+    statistics.nested_linear_solve_count,
+  ) == (7, 7, 7, 0, 7)
   assert owner.generation.ordinal == 0
   assert owner.history == ()
   assert owner.accepted_physical().values.tobytes() == physical_before
   assert store.encode() == nested_before
   assert not store.trial_open
-  assert any(
-    iteration.status is EvaluationStatus.REJECT_STEP
-    for record in result.records
-    for iteration in record.iterations
+
+  # A fresh zero trial completes every point from accepted storage; no rejected
+  # trial bytes can reappear through the reused scoped workspaces.
+  restarted = cantilever.driver.run(
+    base_point=_load_point(0.0), target_points=(_load_point(0.0),)
+  )
+  assert restarted.status is DriverStatus.COMPLETED
+  snapshot = store.snapshot()
+  assert not np.any(snapshot.coefficients.values)
+  assert all(not np.any(block.values) for block in snapshot.blocks)
+  assert not np.any(owner.accepted_state(operator.header.state_layout.block_id).values)
+
+
+def test_nested_costs_match_hand_counted_elastic_work() -> None:
+  cantilever = _cantilever(prescribed=2.0e-4, elastic=True)
+  result = cantilever.driver.run(
+    base_point=_load_point(0.0),
+    target_points=(_load_point(1.0), _load_point(2.0)),
+  )
+  assert result.status is DriverStatus.COMPLETED
+  assert len(result.records) == 2
+
+  # Each macro substep takes two evaluations. Each one runs every elastic micro
+  # driver through two Newton evaluations (one correction, one convergence).
+  # The compile-probed constant tangent is cached: each micro run contributes
+  # one Newton plus three homogenization back-substitutions, hence four reuses
+  # and solves with zero fresh factorizations. Two runs give (4, 4, 0, 8, 8).
+  for record in result.records:
+    assert len(record.iterations) == 2
+    assert record.nested_failure is None
+    assert len(record.nested_statistics) == 9
+    for cost in record.nested_statistics:
+      assert astuple(cost)[2:] == (4, 4, 0, 8, 8)
+      assert cost.factorization_count + cost.factorization_reuse_count == (
+        cost.linear_solve_count
+      )
+
+  statistics = result.statistics
+  assert (
+    statistics.nested_iteration_count,
+    statistics.nested_evaluation_count,
+    statistics.nested_factorization_count,
+    statistics.nested_factorization_reuse_count,
+    statistics.nested_linear_solve_count,
+  ) == (72, 72, 0, 144, 144)
+  assert (
+    statistics.factorization_count
+    + statistics.factorization_reuse_count
+    + (
+      statistics.nested_factorization_count
+      + statistics.nested_factorization_reuse_count
+    )
+    == statistics.linear_solve_count + statistics.nested_linear_solve_count
+  )
+
+
+def test_nested_accounting_is_primal_byte_transparent(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  control = _cantilever(prescribed=2.0e-4, elastic=True)
+  with monkeypatch.context() as disabled:
+    disabled.setattr(
+      NonlinearStaticDriver,
+      "_snapshot_nested_drivers",
+      lambda _self: (),
+    )
+    disabled.setattr(
+      NonlinearStaticDriver,
+      "_collect_nested_activity",
+      lambda _self, _cursors: ((), None),
+    )
+    plain = control.driver.run(
+      base_point=_load_point(0.0), target_points=(_load_point(1.0),)
+    )
+  observed = _cantilever(prescribed=2.0e-4, elastic=True)
+  counted = observed.driver.run(
+    base_point=_load_point(0.0), target_points=(_load_point(1.0),)
+  )
+  assert plain.status is counted.status is DriverStatus.COMPLETED
+  assert astuple(plain.statistics)[:9] == astuple(counted.statistics)[:9]
+  assert astuple(plain.statistics)[9:] == (0, 0, 0, 0, 0)
+  assert counted.statistics.nested_evaluation_count > 0
+
+  for first, second in zip(plain.records, counted.records, strict=True):
+    assert first.status is second.status
+    assert first.progress == second.progress
+    assert [
+      (item.status, item.residual_norm, item.increment_norm)
+      for item in first.iterations
+    ] == [
+      (item.status, item.residual_norm, item.increment_norm)
+      for item in second.iterations
+    ]
+    assert first.observation is not None and second.observation is not None
+    assert first.observation.reactions.values.tobytes() == (
+      second.observation.reactions.values.tobytes()
+    )
+    assert first.observation.constraint_work == second.observation.constraint_work
+
+  control_operator = control.deck.system.operators[0]
+  observed_operator = observed.deck.system.operators[0]
+  assert control.driver.owner.accepted_physical().values.tobytes() == (
+    observed.driver.owner.accepted_physical().values.tobytes()
+  )
+  control_state = control.driver.owner.accepted_state(
+    control_operator.header.state_layout.block_id
+  )
+  observed_state = observed.driver.owner.accepted_state(
+    observed_operator.header.state_layout.block_id
+  )
+  assert control_state.values.tobytes() == observed_state.values.tobytes()
+  assert control_operator.nested_store.encode() == (
+    observed_operator.nested_store.encode()
   )

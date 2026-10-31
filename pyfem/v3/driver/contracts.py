@@ -275,6 +275,50 @@ class BudgetExhaustionObservation:
   measured_step_count: int
 
 
+class StepFailureClass(Enum):
+  """Typed numerical failure behind one rejected or failed substep."""
+
+  NESTED_NON_CONVERGENCE = "nested-non-convergence"
+  OPERATOR_REJECT_STEP = "operator-reject-step"
+  OPERATOR_REJECT_ITERATION = "operator-reject-iteration"
+  ITERATION_BUDGET_EXHAUSTED = "iteration-budget-exhausted"
+  DIVERGENCE = "divergence"
+  LINEAR_SOLVE_FAILURE = "linear-solve-failure"
+  NON_FINITE_ITERATE = "non-finite-iterate"
+  DRIVER_EVALUATION_ERROR = "driver-evaluation-error"
+  STEP_FAILED = "step-failed"
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class NestedFailure:
+  """One nested driver's failure surfaced at the macro substep boundary."""
+
+  code: str
+  operator_index: int
+  ip_index: int
+  failure_class: StepFailureClass
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class NestedSolveStatistics:
+  """Work one nested driver performed during one macro substep.
+
+  ``iteration_count`` counts records in the nested Newton trails, while
+  ``evaluation_count`` counts operator evaluation rounds (including any
+  requested derivative sweeps). Fresh factorizations plus reuses equal linear
+  solves. Zero counters identify an integration point the macro evaluation did
+  not reach; rejected macro substeps retain the work performed before rejection.
+  """
+
+  operator_index: int
+  ip_index: int
+  iteration_count: int
+  evaluation_count: int
+  factorization_count: int
+  factorization_reuse_count: int
+  linear_solve_count: int
+
+
 @dataclass(frozen=True, slots=True, eq=False)
 class SubstepRecord:
   """One attempted substep: typed status, protocol trace, and observation.
@@ -283,6 +327,8 @@ class SubstepRecord:
   exhausting the iteration budget — never on ``COMMITTED`` records, and
   never on rejections with another typed cause (operator reject, singular
   or non-finite solve, non-finite iterate, or the divergence trip).
+  ``nested_statistics`` attributes every per-IP nested solve to this attempt.
+  ``nested_failure`` names the first nested non-convergent integration point.
   """
 
   target_index: int
@@ -294,11 +340,21 @@ class SubstepRecord:
   committed_ordinal: int | None
   observation: SubstepObservation | None
   budget_exhaustion: BudgetExhaustionObservation | None
+  failure_class: StepFailureClass | None = None
+  nested_statistics: tuple[NestedSolveStatistics, ...] = ()
+  nested_failure: NestedFailure | None = None
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class DriverStatistics:
-  """Workspace counters proving plan reuse and factorization caching."""
+  """Cumulative macro counters plus all immediate nested-driver work.
+
+  The original counters describe this driver's own workspace. ``nested_*``
+  counters sum the per-IP records over every attempted macro substep, including
+  rejected attempts, but exclude nested work outside those substeps (notably the
+  FE² compiler's virgin probe). The nested factorization-plus-reuse total equals
+  nested linear solves, matching the macro-level accounting rule.
+  """
 
   evaluation_count: int
   residual_assembly_count: int
@@ -309,6 +365,11 @@ class DriverStatistics:
   cutback_count: int
   committed_substep_count: int
   rejected_substep_count: int
+  nested_iteration_count: int = 0
+  nested_evaluation_count: int = 0
+  nested_factorization_count: int = 0
+  nested_factorization_reuse_count: int = 0
+  nested_linear_solve_count: int = 0
 
 
 @dataclass(frozen=True, slots=True, eq=False)
