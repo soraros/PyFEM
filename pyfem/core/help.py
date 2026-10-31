@@ -16,6 +16,7 @@ PyFEM Command Line Usage:
 
 Options:
   --help, -h        Show this help message and exit
+  --version         Show the PyFEM version and exit
 
 Description:
   Run a PyFEM analysis using the specified input file.
