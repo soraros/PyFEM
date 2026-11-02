@@ -16,19 +16,19 @@ with a coded diagnostic instead of evaluating silently wrong.
 Two decisions are pinned by the M62 survey (legacy evidence in
 pyfem/elements/Interface.py and pyfem/materials/):
 
-- Frame: legacy built a REFLECTING frame (``rot = [[n0, n1], [n1, -n0]]``,
-  determinant -1) with ``normal = (ds_y, ds_x)/|ds|`` — the normal/shear
-  components were exactly swapped on a 45-degree element (survey finding 1).
-  This family ships the proper-rotation frame
-  ``normal = (-ds_y, ds_x)/|ds|`` with ``rot = [[n0, n1], [-n1, n0]]``
-  (determinant +1); M67 repaired the legacy side to the same proper rotation
-  (commit 9965442, merge 8a3eae8), so the frames now agree on any geometry.
-  On axis-aligned horizontal decks the two frames always agreed on the
-  normal, and the pre-repair flipped shear row cancels pairwise through ``B``
-  and ``B.T`` for every shipped law (all odd in the shear jump), so element
-  residuals there are bitwise reproducible against legacy — the axis-aligned
-  parity scope is unchanged (pre-repair, oblique decks diverged by
-  construction and were outside it).
+- Frame: legacy builds a REFLECTING frame (``rot = [[n0, n1], [n1, -n0]]``,
+  determinant -1), while this family ships the proper-rotation frame
+  ``rot = [[n0, n1], [-n1, n0]]`` (determinant +1). Before M67, legacy used
+  ``normal = (ds_y, ds_x)/|ds|``, exactly swapping normal/shear components on
+  a 45-degree element (survey finding 1). M67 repaired the legacy normal
+  candidate to this family's ``normal = (-ds_y, ds_x)/|ds|`` (commit 9965442,
+  merge 8a3eae8), so the normal candidates now agree and the oblique
+  normal/shear swap is fixed. The legacy shear row retains the opposite
+  handedness, however; full frame parity on oblique geometries is not claimed.
+  On axis-aligned horizontal decks the shear-row sign cancels pairwise through
+  ``B`` and ``B.T`` for every shipped law (all odd in the shear jump), so
+  element residuals there remain bitwise reproducible against legacy — the
+  axis-aligned parity scope is unchanged.
 - Tangent: legacy assembles ``sum w * B.T @ D @ B`` and omits the
   ``d(rot)/da`` geometric term (survey: ~6e-3..1e-2 relative deviation from a
   finite difference of its own residual; the true Jacobian is ~1%
@@ -45,9 +45,9 @@ Parity integration is two-point Gauss (``gauss_legendre_1d(2)``): legacy's
 8a3eae8 — no Newton-Cotes rule exists in the code base, and unknown schemes
 now raise), so Gauss-2 IS the legacy behavior. A Newton-Cotes family is
 explicitly NOT-yet. All four shipped laws are stateless reversible potentials of the
-local jump (zero material history); irreversible laws, the rank-3/3D branch
-(dead+broken legacy-side, survey finding 3), dissipation channels, and
-traction output channels are NOT-yet.
+local jump (zero material history); irreversible laws, rank-3/3D support,
+dissipation channels, and traction output channels are NOT-yet. M80 removed
+the dead and broken legacy XuNeedleman rank-3 branch (503cefb; survey finding 3).
 """
 
 from __future__ import annotations
@@ -185,15 +185,15 @@ def xu_needleman_rank2_kernel(
   """Xu-Needleman exponential law, rank-2 (normal + single shear component).
 
   A transcription of the legacy rank-2 ``getStress`` path
-  (pyfem/materials/XuNeedleman.py:52-92) with the legacy-effective constants:
+  (pyfem/materials/XuNeedleman.py:36-76) with the legacy-effective constants:
   the legacy constructor hardcodes ``r = 0.0`` and ``q = 1.0`` AFTER reading
   the deck properties (:14-15), so deck-supplied ``q``/``r`` values never take
   effect and are rejected at the deck converter instead. ``vnmax``/``vtmax``
   use the legacy truncated constants 2.71828183 and 1.16580058. The tangent
   block recomputes its own temporaries exactly as the legacy second block
   does, so both outputs are bitwise-identical to legacy on the reference
-  platform. The rank-3 branch is dead and broken upstream (survey finding 3)
-  and is explicitly NOT-yet.
+  platform. M80 removed the legacy rank-3 branch as dead and broken
+  (503cefb; survey finding 3); rank-3 support is explicitly NOT-yet.
   """
   gc = float(parameters[0])
   tult = float(parameters[1])

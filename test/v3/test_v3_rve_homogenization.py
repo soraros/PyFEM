@@ -32,14 +32,15 @@ channel). This battery pins, per committed substep:
 - the reject path: rejected/failed records never carry the observation
   and stay byte-identical to the plain run's.
 
-AUTHORING SEAM (the M74 scope split): the ``periodic_cell`` authoring
-helper is deferred to the next authoring wave, so the periodic-cell spec
-declarations are built PROGRAMMATICALLY here — corner prescriptions as
+AUTHORING SEAM: M83 landed the ``periodic_cell`` authoring helper, whose
+equivalence to the M75 programmatic declarations is pinned in
+``test_v3_fe2_periodic_cell.py``. This battery intentionally retains
+programmatic construction as an independent oracle — corner prescriptions as
 ``AffineValueSpec`` columns bound to the named strain coordinates
-eps11/eps22/gamma12, periodic tie pairs via the landed
-``periodic_ties`` helper, and the boundary-group extraction below ports
-legacy ``RVE.getBoundaries``' validation (pairing, alignment, constant
-offsets) into the test setup.
+eps11/eps22/gamma12, periodic tie pairs via the landed ``periodic_ties``
+helper, and the boundary-group extraction below ports legacy
+``RVE.getBoundaries``' validation (pairing, alignment, constant offsets) into
+the test setup.
 
 Oracles, with the measured deviations every pin cites:
 
@@ -174,9 +175,9 @@ def _boundary_groups(
   Port of legacy ``RVE.getBoundaries`` (pyfem/models/RVE.py:240-343):
   opposite groups must pair one-to-one in the pairing coordinate with a
   constant offset (the cell's width/height), and corners are the shared
-  group endpoints. This is the authoring seam: the deferred
-  ``periodic_cell`` helper will own this extraction once the authoring
-  wave lands it.
+  group endpoints. This programmatic extraction remains an independent
+  oracle; M83's ``periodic_cell`` equivalence is pinned in
+  ``test_v3_fe2_periodic_cell.py``.
   """
   tolerance = 1.0e-9 * max(dx, dy)
   coordinates = {node.id: node.coordinates for node in mesh.nodes}
