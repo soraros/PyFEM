@@ -192,8 +192,8 @@ sizes, accepted macro-strain bytes and `nested_evaluation_copy=0`.
 
 These logical byte counts are accounting models, not measured allocator traffic
 or resident memory. `traced_step_peak` is a separate `tracemalloc` peak for one
-step, while `step.rss_delta_mb` is the process peak-RSS high-water-mark increase
-across the repetition block; neither is interchangeable with the logical copy
+step. `step.rss_delta_mb` is a hard-coded `0.0` placeholder from `measure_fixed`,
+not an RSS measurement; neither metric is interchangeable with the logical copy
 fields.
 
 **Family cases (`family/tl-cantilever/<nx>x<ny>`, `family/riks-fan/<n>`).**
@@ -265,10 +265,13 @@ stages (3 reps), FE² `load`/`e2e` (1 rep), and FE²-memory `step` (3 reps).
 Cold subprocess cells are single-shot by construction.
 
 **Memory.** Q8 `logical_bytes` report K_e batch, COO and CSR array sizes; FE²
-uses the nested-state and copy-accounting fields documented above. Per-stage
-`rss_delta_mb` is the process peak-RSS high-water-mark increase across that
-stage's rep block (not a per-rep allocation profile). Cold records carry the
-worker's peak RSS in the `wall` metric's `rss_delta_mb`.
+uses the nested-state and copy-accounting fields documented above. Adaptive
+`measure` metrics alone use `rss_delta_mb` for the process peak-RSS
+high-water-mark increase across the rep block (not a per-rep allocation
+profile). `measure_fixed` instead hard-codes `rss_delta_mb=0.0`; for FE²
+`load`/`e2e` and FE²-memory `step` this is explicitly a placeholder, not an RSS
+measurement. Cold records separately carry the worker's peak RSS in the `wall`
+metric's `rss_delta_mb`.
 
 **Cold modes** (`bench.run cold`). Each measurement is a fresh
 `<venv>/bin/python -m bench.cold_worker` subprocess with
