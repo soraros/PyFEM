@@ -48,6 +48,12 @@ from bench.family_v3 import (
   riks_fan_load,
   riks_fan_solve,
 )
+from bench.fe2_pipeline import (
+  FE2Pipeline,
+  gate_fe2,
+  run_fe2_memory_case,
+  solve_fresh_fe2,
+)
 from bench.gates import (
   CANONICAL_LEGACY_MAX_SIZE,
   GateResult,
@@ -76,11 +82,15 @@ from bench.v3_pipeline import V3Q8Pipeline
 from bench.workloads import (
   Q8_MATERIALS,
   Q8_SIZES,
+  FE2MemoryCase,
+  FE2Workload,
   FiniteStrainWorkload,
   MaterialKernelCase,
   Q8Workload,
   RiksFanWorkload,
   SkimCase,
+  fe2_cases,
+  fe2_memory_cases,
   finite_strain_cases,
   material_cases,
   q8_workloads,
@@ -89,8 +99,9 @@ from bench.workloads import (
 )
 
 # Stages with a threaded (numba parallel) code path are measured at every
-# sweep thread count; stages without one are measured once at the reference
-# count, inside that thread count's record.
+# sweep thread count. The other stages are measured once at the reference count;
+# dedup deliberately uses this reference-count sampling despite its size-gated
+# parallel implementation, while the remaining reference stages have no threaded path.
 SWEPT_STAGES = ("kernel", "scatter", "assemble_coo", "assemble", "e2e")
 REFERENCE_STAGES = (
   "meshgen",
@@ -449,6 +460,68 @@ def run_material_case(
   return records, gate
 
 
+def _solved_fe2(case: FE2Workload, threads: int) -> FE2Pipeline:
+  _set_numba_threads(threads)
+  with _threadpool_limits(threads):
+    pipeline = FE2Pipeline(case)
+    pipeline.solve()
+  return pipeline
+
+
+def run_fe2_case(
+  case: FE2Workload,
+  *,
+  threads: list[int],
+  budget_s: float,
+) -> tuple[list[BenchRecord], list[GateResult]]:
+  """Race-gate each FE2 thread count before recording its stage timings."""
+  records: list[BenchRecord] = []
+  gates: list[GateResult] = []
+  reference = _solved_fe2(case, 1)
+  for thread_count in threads:
+    candidate = _solved_fe2(case, thread_count)
+    _set_numba_threads(thread_count)
+    with _threadpool_limits(thread_count):
+      gate = gate_fe2(reference, candidate)
+      gates.append(gate)
+      if not gate.passed:
+        records.append(_failed_record("fe2", case.name, "v3", "warm", gate))
+        continue
+      nested_stats = measure(candidate.nested_evaluation, warmup=1, budget_s=budget_s)
+      nested_stats.note = "committed macro state; nested trial rejected after each call"
+      load_stats = measure_fixed(lambda: FE2Pipeline(case), warmup=0, reps=1)
+      load_stats.note = "compile + real virgin nested probe"
+      e2e_stats = measure_fixed(lambda: solve_fresh_fe2(case), warmup=0, reps=1)
+      e2e_stats.note = "fresh compile + virgin probe + macro nonlinear solve"
+    records.append(
+      BenchRecord(
+        category="fe2",
+        workload=case.name,
+        side="v3",
+        mode="warm",
+        threads=thread_count,
+        n_elems=case.n_elems,
+        n_dofs=case.n_dofs,
+        metrics={
+          "load": load_stats,
+          "nested_evaluation": nested_stats,
+          "e2e": e2e_stats,
+        },
+        logical_bytes=candidate.logical_bytes,
+        correctness=gate.to_json(),
+      )
+    )
+  return records, gates
+
+
+def run_fe2_memory_workload(
+  case: FE2MemoryCase,
+) -> tuple[list[BenchRecord], GateResult]:
+  """Record production/legacy allocation curves for one macro-IP count."""
+  production, legacy, gate = run_fe2_memory_case(case)
+  return [production, legacy], gate
+
+
 def run_finite_strain_case(
   case: FiniteStrainWorkload,
   *,
@@ -681,6 +754,18 @@ def do_gates(
       print(
         f"[{'PASS' if gate.passed else 'FAIL'}] {gate.workload} max_rel={worst:.3e}"
       )
+  for case in fe2_cases():
+    reference = _solved_fe2(case, 1)
+    candidate = _solved_fe2(case, 2)
+    _set_numba_threads(2)
+    with _threadpool_limits(2):
+      gate = gate_fe2(reference, candidate)
+    failures += 0 if gate.passed else 1
+    if verbose:
+      worst = max(c.max_rel_diff for c in gate.checks)
+      print(
+        f"[{'PASS' if gate.passed else 'FAIL'}] {gate.workload} max_rel={worst:.3e}"
+      )
   for case in material_cases():
     gate = gate_material(case)
     failures += 0 if gate.passed else 1
@@ -748,6 +833,24 @@ def do_warm(args: argparse.Namespace) -> list[BenchRecord]:
         f"[{'PASS' if gate.passed else 'FAIL'}] {case.workload} "
         f"({time.perf_counter() - t0:.1f}s)"
       )
+
+  for case in fe2_cases():
+    t0 = time.perf_counter()
+    recs, gates = run_fe2_case(case, threads=threads, budget_s=args.budget_s)
+    records.extend(recs)
+    passed = all(gate.passed for gate in gates)
+    print(
+      f"[{'PASS' if passed else 'FAIL'}] {case.name} ({time.perf_counter() - t0:.1f}s)"
+    )
+
+  for case in fe2_memory_cases():
+    t0 = time.perf_counter()
+    recs, gate = run_fe2_memory_workload(case)
+    records.extend(recs)
+    print(
+      f"[{'PASS' if gate.passed else 'FAIL'}] {case.workload} "
+      f"({time.perf_counter() - t0:.1f}s)"
+    )
 
   for case in material_cases():
     t0 = time.perf_counter()

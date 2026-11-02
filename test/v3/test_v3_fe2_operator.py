@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from dataclasses import astuple, dataclass
 
 import numpy as np
 import pytest
+from numba import get_num_threads, set_num_threads
 
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
@@ -53,6 +55,16 @@ from pyfem.v3.state import StateTransactionOwner
 
 _E, _NU, _KAPPA0, _K = 1000.0, 0.25, 7.5e-4, 1.0
 _STRAIN_NAMES = ("eps11", "eps22", "gamma12")
+
+
+@pytest.fixture
+def _one_numba_thread() -> Iterator[None]:
+  previous = get_num_threads()
+  set_num_threads(1)
+  try:
+    yield
+  finally:
+    set_num_threads(previous)
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,14 +132,15 @@ def _deck(
     ),
     q8_reference_registry(),
   )
+  if micro_settings is None:
+    micro_settings = NonlinearStaticSettings(nested_ip_thread_count=get_num_threads())
   arguments = {
     "micro_system": micro_system,
     "micro_coordinate_map": micro_map,
     "homogenization": cell.homogenization_request(micro_system),
     "micro_loads": micro_loads,
+    "settings": micro_settings,
   }
-  if micro_settings is not None:
-    arguments["settings"] = micro_settings
   system = authoring.fe2_continuum(base, **arguments)
   return _Deck(system, micro_system, micro_map, cell, macro_mesh, micro_mesh)
 
@@ -516,7 +529,9 @@ def test_retry_iteration_discards_and_reopens_the_nested_scope(
   }
 
 
-def test_nested_nonconvergence_rejects_macro_without_state_resurrection() -> None:
+def test_nested_nonconvergence_rejects_macro_without_state_resurrection(
+  _one_numba_thread: None,
+) -> None:
   # One Newton iteration cannot advance this nonzero micro deck. Its six
   # cutbacks plus terminal attempt must surface as one typed macro rejection.
   cantilever = _cantilever(
@@ -543,8 +558,8 @@ def test_nested_nonconvergence_rejects_macro_without_state_resurrection() -> Non
   assert failure.ip_index == 0
   assert failure.failure_class is StepFailureClass.ITERATION_BUDGET_EXHAUSTED
 
-  # Every micro attempt evaluates once and factorizes once for its (unused)
-  # correction. IP 0 fails after seven attempts; the other IPs are never run.
+  # Under the direct 1T schedule every micro attempt evaluates and factorizes
+  # once. IP 0 fails after seven attempts; the other IPs are never run.
   assert astuple(record.nested_statistics[0])[2:] == (7, 7, 7, 0, 7)
   assert all(
     astuple(cost)[2:] == (0, 0, 0, 0, 0) for cost in record.nested_statistics[1:]
@@ -676,3 +691,162 @@ def test_nested_accounting_is_primal_byte_transparent(
   assert control_operator.nested_store.encode() == (
     observed_operator.nested_store.encode()
   )
+
+
+def _assert_raw_uint64_equal(first: np.ndarray, second: np.ndarray) -> None:
+  assert first.shape == second.shape
+  np.testing.assert_array_equal(
+    np.ascontiguousarray(first, dtype=np.float64).view(np.uint64),
+    np.ascontiguousarray(second, dtype=np.float64).view(np.uint64),
+  )
+
+
+def _evaluate_with_ip_outputs(
+  deck: _Deck,
+  values: np.ndarray,
+  accepted: FinalizedArray,
+) -> tuple[OperatorEvaluation, list[tuple[np.ndarray, np.ndarray] | None]]:
+  operator = deck.system.operators[0]
+  outputs: list[tuple[np.ndarray, np.ndarray] | None] = [None] * len(operator.drivers)
+  for ip_index, driver in enumerate(operator.drivers):
+    original = driver.run
+
+    def capture(
+      *args: object,
+      _original: object = original,
+      _ip_index: int = ip_index,
+      **kwargs: object,
+    ) -> object:
+      result = _original(*args, **kwargs)
+      record = result.records[-1]
+      assert record.observation is not None
+      observation = record.observation.homogenization
+      assert observation is not None
+      outputs[_ip_index] = (
+        np.array(observation.stress.values, copy=True),
+        np.array(observation.tangent.values, copy=True),
+      )
+      return result
+
+    driver.run = capture
+  return _evaluate_port(deck, values, accepted), outputs
+
+
+def test_fe2_ip_pool_policy_defaults_to_serial_and_validates_width() -> None:
+  deck = _deck(elastic=True, micro_settings=NonlinearStaticSettings())
+  operator = deck.system.operators[0]
+  assert operator.task_pool.thread_count == 1
+  assert operator.task_pool.worker_count == 1
+  with pytest.raises(ValueError, match="nested IP thread count"):
+    NonlinearStaticSettings(nested_ip_thread_count=0)
+
+
+def test_ip_task_pool_matches_one_thread_raw_uint64_across_macro_steps() -> None:
+  previous_threads = get_num_threads()
+  try:
+    set_num_threads(1)
+    serial = _cantilever()
+    serial_result = serial.driver.run(
+      base_point=_load_point(0.0),
+      target_points=(_load_point(0.5), _load_point(1.0)),
+    )
+    set_num_threads(2)
+    parallel = _cantilever()
+    parallel_result = parallel.driver.run(
+      base_point=_load_point(0.0),
+      target_points=(_load_point(0.5), _load_point(1.0)),
+    )
+    assert serial_result.status is parallel_result.status is DriverStatus.COMPLETED
+    serial_operator = serial.deck.system.operators[0]
+    parallel_operator = parallel.deck.system.operators[0]
+    assert serial_operator.task_pool.thread_count == 1
+    assert parallel_operator.task_pool.thread_count == 2
+    assert parallel_operator.task_pool.worker_count == 2
+    assert parallel_operator.task_pool.chunks == ((0, 5), (5, 9))
+    assert (
+      serial.deck.system.content_fingerprint.digest
+      == parallel.deck.system.content_fingerprint.digest
+    )
+    block_id = serial_operator.header.state_layout.block_id
+    _assert_raw_uint64_equal(
+      serial.driver.owner.accepted_physical().values,
+      parallel.driver.owner.accepted_physical().values,
+    )
+    _assert_raw_uint64_equal(
+      serial.driver.owner.accepted_state(block_id).values,
+      parallel.driver.owner.accepted_state(block_id).values,
+    )
+    assert (
+      serial_operator.nested_store.encode() == parallel_operator.nested_store.encode()
+    )
+
+    set_num_threads(1)
+    serial_gather = serial_operator.header.ports[0].coefficient_map.values
+    serial_full = serial.driver.owner.accepted_physical().values
+    serial_accepted = serial.driver.owner.accepted_state(block_id)
+    serial_nested = serial_operator.nested_store.encode()
+    serial_evaluation, serial_outputs = _evaluate_with_ip_outputs(
+      serial.deck, serial_full[serial_gather], serial_accepted
+    )
+    assert serial_operator.nested_store.encode() == serial_nested
+
+    set_num_threads(2)
+    parallel_gather = parallel_operator.header.ports[0].coefficient_map.values
+    parallel_full = parallel.driver.owner.accepted_physical().values
+    parallel_accepted = parallel.driver.owner.accepted_state(block_id)
+    parallel_nested = parallel_operator.nested_store.encode()
+    parallel_evaluation, parallel_outputs = _evaluate_with_ip_outputs(
+      parallel.deck, parallel_full[parallel_gather], parallel_accepted
+    )
+    assert parallel_operator.nested_store.encode() == parallel_nested
+  finally:
+    set_num_threads(previous_threads)
+
+  assert evaluation_status(serial_evaluation) is EvaluationStatus.OK
+  assert evaluation_status(parallel_evaluation) is EvaluationStatus.OK
+  _assert_raw_uint64_equal(
+    serial_evaluation.residual_values[0].values,
+    parallel_evaluation.residual_values[0].values,
+  )
+  _assert_raw_uint64_equal(
+    serial_evaluation.jacobian_values[0].values,
+    parallel_evaluation.jacobian_values[0].values,
+  )
+  _assert_raw_uint64_equal(
+    serial_evaluation.trial_state.values, parallel_evaluation.trial_state.values
+  )
+  assert len(serial_outputs) == len(parallel_outputs) == 9
+  for serial_output, parallel_output in zip(
+    serial_outputs, parallel_outputs, strict=True
+  ):
+    assert serial_output is not None and parallel_output is not None
+    _assert_raw_uint64_equal(serial_output[0], parallel_output[0])
+    _assert_raw_uint64_equal(serial_output[1], parallel_output[1])
+
+
+def test_nested_staged_buffer_objects_survive_parallel_macro_steps() -> None:
+  previous_threads = get_num_threads()
+  try:
+    set_num_threads(2)
+    cantilever = _cantilever(prescribed=2.0e-4, elastic=True)
+    operator = cantilever.deck.system.operators[0]
+    store = operator.nested_store
+    block_id = store.layout.blocks[0].block_id
+    store.begin_trial()
+    coefficient_buffer = store.trial_coefficients(0).base
+    block_buffer = store.trial_block(0, block_id).base
+    store.reject_trial()
+    chunks = operator.task_pool.chunks
+    result = cantilever.driver.run(
+      base_point=_load_point(0.0),
+      target_points=(_load_point(0.5), _load_point(1.0)),
+    )
+    assert result.status is DriverStatus.COMPLETED
+    assert len(result.records) == 2
+    store.begin_trial()
+    assert store.trial_coefficients(0).base is coefficient_buffer
+    assert store.trial_block(0, block_id).base is block_buffer
+    store.reject_trial()
+    assert operator.task_pool.chunks == chunks
+  finally:
+    set_num_threads(previous_threads)

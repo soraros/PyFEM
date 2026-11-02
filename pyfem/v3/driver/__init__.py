@@ -50,6 +50,7 @@ from pyfem.v3.driver.plan import (
   refill_tangent,
 )
 from pyfem.v3.driver.riks import RiksDriver
+from pyfem.v3.driver.task_pool import IntegrationPointTaskPool
 
 __all__ = [
   "DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA",
@@ -70,6 +71,7 @@ __all__ = [
   "DriverPreparationError",
   "DriverStatistics",
   "DriverStatus",
+  "IntegrationPointTaskPool",
   "IterationRecord",
   "NonlinearStaticDriver",
   "NonlinearStaticResult",

@@ -20,6 +20,7 @@ from pyfem.v3.driver import (
 )
 from pyfem.v3.driver.contracts import HomogenizationRequest
 from pyfem.v3.driver.diagnostics import DriverEvaluationError
+from pyfem.v3.driver.task_pool import IntegrationPointTaskPool
 from pyfem.v3.fem.element import continuum_internal_force_batched
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import InstanceId, require_same_instance
@@ -130,9 +131,13 @@ def _seed_store(system: CompiledSystem, store: NestedStateStore) -> None:
     raise
 
 
+class _NestedIPRejected(Exception):
+  pass
+
+
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class FE2ContinuumOperator(CompilerConstructed):
-  """Macro Q8 geometry with one host-side nested driver per integration point."""
+  """Macro Q8 geometry with a deterministic host task pool over its micro drivers."""
 
   header: OperatorHeader
   entity_block: object
@@ -141,6 +146,7 @@ class FE2ContinuumOperator(CompilerConstructed):
   drivers: tuple[NonlinearStaticDriver, ...]
   nested_store: NestedStateStore
   homogenization: HomogenizationRequest
+  task_pool: IntegrationPointTaskPool
   base_system_instance: InstanceId
 
   def _rejected(
@@ -235,22 +241,22 @@ class FE2ContinuumOperator(CompilerConstructed):
     stresses = np.empty((layout.entity_count, 3), dtype=np.float64)
     tangents = np.empty((layout.entity_count, 3, 3), dtype=np.float64)
     store = nested.store
-    for ip_index, (driver, strain) in enumerate(
-      zip(self.drivers, ip_strains, strict=True)
-    ):
+
+    def evaluate_ip(ip_index: int) -> None:
+      driver = self.drivers[ip_index]
       try:
         result = driver.run(
           base_point=_point(accepted.values[ip_index]),
-          target_points=(_point(strain),),
+          target_points=(_point(ip_strains[ip_index]),),
           homogenization=self.homogenization,
         )
-      except DriverEvaluationError:
-        return self._rejected(accepted)
+      except DriverEvaluationError as exc:
+        raise _NestedIPRejected from exc
       if result.status is not DriverStatus.COMPLETED or not result.records:
-        return self._rejected(accepted)
+        raise _NestedIPRejected
       record = result.records[-1]
       if record.status is not SubstepStatus.COMMITTED or record.observation is None:
-        return self._rejected(accepted)
+        raise _NestedIPRejected
       observation = record.observation.homogenization
       if observation is None:
         msg = "FE2 nested driver completed without its homogenization observation"
@@ -258,6 +264,11 @@ class FE2ContinuumOperator(CompilerConstructed):
       stresses[ip_index] = observation.stress.values
       tangents[ip_index] = observation.tangent.values
       store.trial_complete(ip_index)
+
+    try:
+      self.task_pool.run(evaluate_ip)
+    except _NestedIPRejected:
+      return self._rejected(accepted)
 
     element_count = values.shape[0]
     stress3 = stresses.reshape(element_count, _POINT_COUNT, 3)
@@ -408,6 +419,7 @@ def compile_fe2_continuum(
     )
     for ip_index in range(ip_count)
   )
+  task_pool = IntegrationPointTaskPool(ip_count, settings.nested_ip_thread_count)
   index_dtype = base_operator.header.ports[0].coefficient_map.values.dtype
   state_layout = _new(
     OperatorStateLayout,
@@ -526,6 +538,7 @@ def compile_fe2_continuum(
     drivers=drivers,
     nested_store=store,
     homogenization=homogenization,
+    task_pool=task_pool,
     base_system_instance=base.instance_id,
   )
 

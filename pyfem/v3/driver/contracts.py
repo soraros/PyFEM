@@ -69,6 +69,9 @@ class NonlinearStaticSettings:
   ``cutback_factor ** max_cutbacks`` of the initial size, far above any
   honest floor, so the floor can only trip after micro-commits that make no
   real progress — never on a converging trajectory.
+  ``nested_ip_thread_count`` is the execution-only FE2 host-pool width. It
+  defaults to the direct one-thread schedule so nested Python/GIL-bound laws do
+  not inherit parallel overhead; opting in never changes numerical content.
   """
 
   tolerance: float = 1.0e-10
@@ -78,6 +81,7 @@ class NonlinearStaticSettings:
   growth_factor: float = 2.0
   divergence_ratio: float = 1.0e8
   min_substep_size: float = 1.0e-12
+  nested_ip_thread_count: int = 1
 
   def __post_init__(self) -> None:
     tolerance = self.tolerance
@@ -121,6 +125,9 @@ class NonlinearStaticSettings:
       or not 0.0 < min_substep_size < 1.0
     ):
       msg = "nonlinear static min_substep_size must lie strictly between zero and one"
+      raise ValueError(msg)
+    if type(self.nested_ip_thread_count) is not int or self.nested_ip_thread_count < 1:
+      msg = "nested IP thread count must be a positive exact int"
       raise ValueError(msg)
 
 
