@@ -67,17 +67,27 @@ The D2 compute cost model (M5) is the design governor, not a report. Every
 large win was an architecture correction at a model-named anti-pattern, and
 each post-win bottleneck migrated exactly where the model predicted
 (kernel 85×/203× M30 → fused continuum kernels 6-15× M51 → dedup 10-13× M59 →
-production CSR wiring next). If the abstraction is right, the code cannot be
-slow — measure against the model's floor, not against yesterday.
+production CSR and stable-reduction wiring in M64). If the abstraction is
+right, the code cannot be slow — measure against the model's floor, not against
+yesterday.
 
 Bitwise discipline pays compound interest: 1T-vs-nT raw-uint64 pins make races
 impossible to ship silently (disjoint-writes parallelism preserves bits), and
-canonical reduction orders make results platform-bitwise. Own your reduction
-orders: scipy's csr_sort_indices is an unstable std::sort (libc++/libstdc++
-bits differ) and numpy's add.reduceat inner loop is SIMD-dependent — neither is
-a valid canonical reference (M59; finding 20261009-agent-b6 for the remaining
-driver/plan.py case). Strict-sequential stable-order accumulation is the
-canonical form.
+canonical reduction orders remove ordering and SIMD ambiguity. They do not make
+an entire numerical pipeline bitwise-identical across platforms: BLAS selection
+and target code generation can still change rounding. Own your reduction orders:
+scipy's csr_sort_indices is an unstable std::sort (libc++/libstdc++ bits differ)
+and numpy's add.reduceat inner loop is SIMD-dependent — neither is a valid
+canonical reference (M59). M64 removed the remaining driver/plan.py reduceat
+case; strict-sequential stable-order accumulation is the canonical form.
+
+Raw-bit pins follow the contract in test/v3/conftest.py: on the one bench-
+manifest reference platform (macOS x86_64 Intel i9-9980HK, Python 3.13, pinned
+numba/numpy, Accelerate BLAS), assert_bitwise_pin compares raw uint64 values,
+including signed-zero distinctions. Off that platform the same assertion always runs with
+the call site's documented rtol/atol instead; the platform selects the
+comparison, never skips it. Each tolerance must exceed the observed
+cross-platform deviation and cite that deviation at the call site.
 
 Bench adjudication: environment is a first-class variable. The accepted
 evidence protocol is candidate run + base-revision control run under matched
@@ -133,21 +143,24 @@ test), and defer total propagation to an explicit v2 scope.
 
 ## 6. Implications for the remaining program
 
-Ordering constraints discovered (not preferences):
+The completed 2026-10 CSR, breadth and FE² sequence leaves durable ordering
+lessons, not another dispatch queue:
 
-- The production CSR wiring mission is ONE atomic mission: production assembly
-  consumes the pattern-cached CSR AND the duplicate pattern compilers
-  (driver/plan.py vs fem/assembly.py) consolidate AND driver/plan.py's
-  reduceat order canonicalizes (killing the SIMD-dependence finding) — with the
-  affected pins re-pinned in the same merge. Splitting it strands either the
-  duplication or the platform-nondeterminism.
-- Breadth order: cohesive/contact (M62) and ViscoPlasticity/SOVS (M63) surveys
-  first; crystal plasticity needs a per-IP typed-status design step before its
-  survey is actionable; FE² builds on the sensitivity channel's
-  declared-auxiliary-solve ABI (M56 follow-up note) — after the channel has
-  consumers, not before.
-- The operator-DSL decision stays deferred until sensitivity-modality scoping
-  forces it (M22 criteria); do not build it speculatively.
+- Keep coupled topology, production wiring, reduction-order changes and any
+  required re-pinning atomic. M64 completed exactly that combination for
+  pattern-cached CSR, the single canonical pattern compiler and stable-order
+  driver reductions; splitting such a change can strand duplication or
+  nondeterminism.
+- Survey capability-sized breadth work before building it, and establish
+  consumer semantics before adding layers. The M62/M63 surveys preceded their
+  landed cohesive/contact and ViscoPlasticity/SOVS implementations; M71 resolved
+  the crystal per-IP status question before M81's fresh law; M75-M84 then landed
+  RVE/FE² through map-level IFT, nested-state composition, the nested continuum
+  operator and typed cross-level failure propagation. These are completed
+  dependencies, not remaining work.
+
+The operator-DSL decision stays deferred until sensitivity-modality scoping
+forces it (M22 criteria); do not build it speculatively.
 
 ## 7. The deepest lesson
 
