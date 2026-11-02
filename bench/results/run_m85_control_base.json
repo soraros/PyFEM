@@ -3,8 +3,8 @@
   "kind": "benchmark-run",
   "coverage": "partial",
   "manifest": {
-    "created_utc": "2026-11-02T11:23:11+00:00",
-    "git_revision": "5f080a71e8f17680a0a714217833e14210f3ed3b",
+    "created_utc": "2026-11-02T11:48:14+00:00",
+    "git_revision": "5817f54ca3f44047f852106fb49b1e9010110855",
     "working_tree": {
       "clean": true,
       "dirty_files": []
@@ -108,325 +108,329 @@
       "n_dofs": 16,
       "metrics": {
         "load": {
-          "min_ms": 193.79284699971322,
-          "median_ms": 193.79284699971322,
-          "mean_ms": 193.79284699971322,
+          "min_ms": 188.42183599917917,
+          "median_ms": 188.42183599917917,
+          "mean_ms": 188.42183599917917,
           "reps": 1,
           "samples_ms": [
-            193.79284699971322
+            188.42183599917917
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 29.337707001104718,
-          "median_ms": 30.78245849974337,
-          "mean_ms": 31.270920055249007,
+          "min_ms": 28.529225000966107,
+          "median_ms": 29.569065998657607,
+          "mean_ms": 29.93461354981264,
+          "reps": 20,
+          "samples_ms": [
+            29.479183998773806,
+            30.03211299801478,
+            30.051587000343716,
+            32.68276300150319,
+            30.94753800178296,
+            28.662366999924416,
+            29.255920999275986,
+            28.752463997079758,
+            28.773252000974026,
+            30.94744700138108,
+            31.90097699916805,
+            29.658947998541407,
+            28.81875299863168,
+            29.222338998806663,
+            32.38958099973388,
+            28.529225000966107,
+            28.89369599870406,
+            29.674697001610184,
+            30.678397000883706,
+            29.341022000153316
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 10126.465877998271,
+          "median_ms": 10126.465877998271,
+          "mean_ms": 10126.465877998271,
+          "reps": 1,
+          "samples_ms": [
+            10126.465877998271
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 5616,
+        "staged_nested": 5616,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 2,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 150.70588600065093,
+          "median_ms": 150.70588600065093,
+          "mean_ms": 150.70588600065093,
+          "reps": 1,
+          "samples_ms": [
+            150.70588600065093
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 29.23580300193862,
+          "median_ms": 32.12748750047467,
+          "mean_ms": 32.72304519996396,
+          "reps": 20,
+          "samples_ms": [
+            29.45035800075857,
+            29.23580300193862,
+            29.525605001254007,
+            32.14520799883758,
+            30.300896996777738,
+            29.6282790004625,
+            29.650377000507433,
+            32.93585700157564,
+            43.05438400115236,
+            41.857206997519825,
+            35.589881998021156,
+            32.56895799859194,
+            32.472569997480605,
+            32.10976700211177,
+            34.313528001803206,
+            36.21991999898455,
+            32.25829100119881,
+            30.59575899897027,
+            30.58711400080938,
+            29.9611400005233
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 10261.416040000768,
+          "median_ms": 10261.416040000768,
+          "mean_ms": 10261.416040000768,
+          "reps": 1,
+          "samples_ms": [
+            10261.416040000768
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 5616,
+        "staged_nested": 5616,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 4,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 149.07156000117538,
+          "median_ms": 149.07156000117538,
+          "mean_ms": 149.07156000117538,
+          "reps": 1,
+          "samples_ms": [
+            149.07156000117538
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 29.12513699993724,
+          "median_ms": 29.96032899864076,
+          "mean_ms": 30.13160900001013,
           "reps": 18,
           "samples_ms": [
-            31.58965900001931,
-            29.38380299747223,
-            29.836754998541437,
-            29.52633599852561,
-            29.45627399822115,
-            29.337707001104718,
-            29.656403999979375,
-            34.63844500220148,
-            34.912315000838134,
-            32.11146600006032,
-            29.87555300205713,
-            30.36317900114227,
-            34.777524997480214,
-            33.03717900053016,
-            31.581830997311044,
-            31.322451002779417,
-            31.20173799834447,
-            30.267940997873666
+            31.692423999629682,
+            31.35615599967423,
+            30.832667998765828,
+            29.155256001104135,
+            29.12513699993724,
+            30.452016999333864,
+            33.27622199867619,
+            29.24629500193987,
+            29.245279998576734,
+            29.91717599797994,
+            30.492234000121243,
+            30.009583999344613,
+            29.404131000774214,
+            29.16349800216267,
+            30.039634002605453,
+            29.777877000014996,
+            29.179891000239877,
+            30.003481999301584
           ],
           "rss_delta_mb": 0.0,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 10483.741143998486,
-          "median_ms": 10483.741143998486,
-          "mean_ms": 10483.741143998486,
+          "min_ms": 10289.317065999057,
+          "median_ms": 10289.317065999057,
+          "mean_ms": 10289.317065999057,
           "reps": 1,
           "samples_ms": [
-            10483.741143998486
-          ],
-          "rss_delta_mb": 0.0,
-          "note": "fresh compile + virgin probe + macro nonlinear solve"
-        }
-      },
-      "logical_bytes": {
-        "accepted_nested": 5616,
-        "staged_nested": 5616,
-        "accepted_macro_strain": 216,
-        "nested_evaluation_copy": 0
-      },
-      "correctness": {
-        "workload": "fe2/cantilever/1x1",
-        "passed": true,
-        "checks": [
-          {
-            "name": "completed-macro-solves",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
-          },
-          {
-            "name": "committed-macro-physical",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "raw-uint64 identity; max_abs=0.000e+00"
-          },
-          {
-            "name": "committed-macro-strain",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "raw-uint64 identity; max_abs=0.000e+00"
-          },
-          {
-            "name": "committed-nested-store",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "versioned accepted-state payload byte identity"
-          },
-          {
-            "name": "nested-evaluation-status",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "both rejected-trial homogenized evaluations completed"
-          },
-          {
-            "name": "homogenized-internal-force",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "raw-uint64 identity; max_abs=0.000e+00"
-          },
-          {
-            "name": "homogenized-material-tangent",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "raw-uint64 identity; max_abs=0.000e+00"
-          },
-          {
-            "name": "trial-macro-strain",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "raw-uint64 identity; max_abs=0.000e+00"
-          }
-        ]
-      }
-    },
-    {
-      "category": "fe2",
-      "workload": "fe2/cantilever/1x1",
-      "side": "v3",
-      "mode": "warm",
-      "threads": 2,
-      "n_elems": 1,
-      "n_dofs": 16,
-      "metrics": {
-        "load": {
-          "min_ms": 153.86783400026616,
-          "median_ms": 153.86783400026616,
-          "mean_ms": 153.86783400026616,
-          "reps": 1,
-          "samples_ms": [
-            153.86783400026616
-          ],
-          "rss_delta_mb": 0.0,
-          "note": "compile + real virgin nested probe"
-        },
-        "nested_evaluation": {
-          "min_ms": 29.220633001386886,
-          "median_ms": 31.00707500198041,
-          "mean_ms": 31.109494684833887,
-          "reps": 19,
-          "samples_ms": [
-            31.138532001932617,
-            34.40037700056564,
-            33.8630859987461,
-            31.511817000136944,
-            31.751513000926934,
-            30.647343999589793,
-            29.928100000688573,
-            30.775540999457007,
-            31.009817001176998,
-            29.578860001493013,
-            30.12634499827982,
-            29.29640300135361,
-            29.723207000643015,
-            29.220633001386886,
-            31.94212400194374,
-            30.699948998517357,
-            31.984115001250757,
-            32.47556100177462,
-            31.00707500198041
-          ],
-          "rss_delta_mb": 0.0,
-          "note": "committed macro state; nested trial rejected after each call"
-        },
-        "e2e": {
-          "min_ms": 10512.422547002643,
-          "median_ms": 10512.422547002643,
-          "mean_ms": 10512.422547002643,
-          "reps": 1,
-          "samples_ms": [
-            10512.422547002643
-          ],
-          "rss_delta_mb": 0.0,
-          "note": "fresh compile + virgin probe + macro nonlinear solve"
-        }
-      },
-      "logical_bytes": {
-        "accepted_nested": 5616,
-        "staged_nested": 5616,
-        "accepted_macro_strain": 216,
-        "nested_evaluation_copy": 0
-      },
-      "correctness": {
-        "workload": "fe2/cantilever/1x1",
-        "passed": true,
-        "checks": [
-          {
-            "name": "completed-macro-solves",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
-          },
-          {
-            "name": "committed-macro-physical",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "raw-uint64 identity; max_abs=0.000e+00"
-          },
-          {
-            "name": "committed-macro-strain",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "raw-uint64 identity; max_abs=0.000e+00"
-          },
-          {
-            "name": "committed-nested-store",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "versioned accepted-state payload byte identity"
-          },
-          {
-            "name": "nested-evaluation-status",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "both rejected-trial homogenized evaluations completed"
-          },
-          {
-            "name": "homogenized-internal-force",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "raw-uint64 identity; max_abs=0.000e+00"
-          },
-          {
-            "name": "homogenized-material-tangent",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "raw-uint64 identity; max_abs=0.000e+00"
-          },
-          {
-            "name": "trial-macro-strain",
-            "passed": true,
-            "max_rel_diff": 0.0,
-            "rtol": 0.0,
-            "atol": 0.0,
-            "detail": "raw-uint64 identity; max_abs=0.000e+00"
-          }
-        ]
-      }
-    },
-    {
-      "category": "fe2",
-      "workload": "fe2/cantilever/1x1",
-      "side": "v3",
-      "mode": "warm",
-      "threads": 4,
-      "n_elems": 1,
-      "n_dofs": 16,
-      "metrics": {
-        "load": {
-          "min_ms": 167.33814799954416,
-          "median_ms": 167.33814799954416,
-          "mean_ms": 167.33814799954416,
-          "reps": 1,
-          "samples_ms": [
-            167.33814799954416
-          ],
-          "rss_delta_mb": 0.0,
-          "note": "compile + real virgin nested probe"
-        },
-        "nested_evaluation": {
-          "min_ms": 30.43730100034736,
-          "median_ms": 34.57039600107237,
-          "mean_ms": 34.890034940711786,
-          "reps": 17,
-          "samples_ms": [
-            33.62877199833747,
-            30.43730100034736,
-            31.938504002027912,
-            40.11910899862414,
-            35.77485899950261,
-            33.75262999907136,
-            36.57264600042254,
-            37.131783999939216,
-            31.67726500032586,
-            34.335837997787166,
-            36.52653199969791,
-            32.19411000100081,
-            37.41535199878854,
-            36.10613899945747,
-            34.57039600107237,
-            34.43181599868694,
-            36.517540997010656
-          ],
-          "rss_delta_mb": 0.0,
-          "note": "committed macro state; nested trial rejected after each call"
-        },
-        "e2e": {
-          "min_ms": 10416.369141999894,
-          "median_ms": 10416.369141999894,
-          "mean_ms": 10416.369141999894,
-          "reps": 1,
-          "samples_ms": [
-            10416.369141999894
+            10289.317065999057
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -519,52 +523,52 @@
       "n_dofs": 16,
       "metrics": {
         "load": {
-          "min_ms": 147.37113899900578,
-          "median_ms": 147.37113899900578,
-          "mean_ms": 147.37113899900578,
+          "min_ms": 147.7997719994164,
+          "median_ms": 147.7997719994164,
+          "mean_ms": 147.7997719994164,
           "reps": 1,
           "samples_ms": [
-            147.37113899900578
+            147.7997719994164
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 29.34018299856689,
-          "median_ms": 30.24724500210141,
-          "mean_ms": 31.08885731623894,
+          "min_ms": 28.72975799982669,
+          "median_ms": 29.894069997681072,
+          "mean_ms": 30.431396473623433,
           "reps": 19,
           "samples_ms": [
-            30.776689000049373,
-            34.34872300204006,
-            30.68266500122263,
-            38.213618001464056,
-            30.51556900027208,
-            30.01869099898613,
-            30.09539000049699,
-            30.164227002387634,
-            30.24724500210141,
-            29.85785599958035,
-            29.561807998106815,
-            30.353362002642825,
-            34.31437399922288,
-            29.34018299856689,
-            31.158742000116035,
-            29.403815999103244,
-            29.80501799902413,
-            31.843834000028437,
-            29.986479003127897
+            30.333496997627662,
+            28.892038000776665,
+            29.42642000198248,
+            29.638903000886785,
+            29.894069997681072,
+            31.589858001098037,
+            29.728006000368623,
+            29.599653000332182,
+            29.537030997744296,
+            30.744072999368655,
+            37.39904099711566,
+            28.72975799982669,
+            32.97441200265894,
+            29.94659700198099,
+            29.260658000566764,
+            30.36668999993708,
+            30.675690999487415,
+            30.280374998255866,
+            29.179762001149356
           ],
-          "rss_delta_mb": 0.03125,
+          "rss_delta_mb": 0.2109375,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 10197.20047699957,
-          "median_ms": 10197.20047699957,
-          "mean_ms": 10197.20047699957,
+          "min_ms": 10202.166072998807,
+          "median_ms": 10202.166072998807,
+          "mean_ms": 10202.166072998807,
           "reps": 1,
           "samples_ms": [
-            10197.20047699957
+            10202.166072998807
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -657,50 +661,53 @@
       "n_dofs": 16,
       "metrics": {
         "load": {
-          "min_ms": 152.97052699679625,
-          "median_ms": 152.97052699679625,
-          "mean_ms": 152.97052699679625,
+          "min_ms": 147.91505099856295,
+          "median_ms": 147.91505099856295,
+          "mean_ms": 147.91505099856295,
           "reps": 1,
           "samples_ms": [
-            152.97052699679625
+            147.91505099856295
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 29.82822200283408,
-          "median_ms": 34.47334000156843,
-          "mean_ms": 37.464976176338766,
-          "reps": 17,
+          "min_ms": 28.751756999554345,
+          "median_ms": 29.75061999859463,
+          "mean_ms": 29.946504450163047,
+          "reps": 20,
           "samples_ms": [
-            33.944991999305785,
-            43.05214699706994,
-            45.91259300286765,
-            45.42671099989093,
-            45.31845599922235,
-            45.2154509985121,
-            45.41504399821861,
-            41.102865998254856,
-            33.241093002288835,
-            30.21250099845929,
-            30.530430001817876,
-            30.02283300156705,
-            29.82822200283408,
-            30.924087997846073,
-            34.47334000156843,
-            37.936356999125564,
-            34.34747099890956
+            28.820826999435667,
+            29.16016299786861,
+            30.03777099729632,
+            29.928197000117507,
+            31.114884000999155,
+            31.664040001487592,
+            29.836792997230077,
+            28.891632002341794,
+            30.840268002066296,
+            32.070164001197554,
+            29.460490000928985,
+            29.143757998099318,
+            31.130227998801274,
+            28.854560001491336,
+            28.751756999554345,
+            29.207663999841316,
+            29.45149900187971,
+            29.664446999959182,
+            30.42721500241896,
+            30.473732000245946
           ],
           "rss_delta_mb": 0.0,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 10393.647552002221,
-          "median_ms": 10393.647552002221,
-          "mean_ms": 10393.647552002221,
+          "min_ms": 10226.501174001896,
+          "median_ms": 10226.501174001896,
+          "mean_ms": 10226.501174001896,
           "reps": 1,
           "samples_ms": [
-            10393.647552002221
+            10226.501174001896
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -793,38 +800,38 @@
       "n_dofs": 42,
       "metrics": {
         "load": {
-          "min_ms": 279.48870500040357,
-          "median_ms": 279.48870500040357,
-          "mean_ms": 279.48870500040357,
+          "min_ms": 281.9537860013952,
+          "median_ms": 281.9537860013952,
+          "mean_ms": 281.9537860013952,
           "reps": 1,
           "samples_ms": [
-            279.48870500040357
+            281.9537860013952
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 117.24227599916048,
-          "median_ms": 121.65343800006667,
-          "mean_ms": 122.16784159973031,
+          "min_ms": 119.14755899852025,
+          "median_ms": 122.577498001192,
+          "mean_ms": 121.44309620052809,
           "reps": 5,
           "samples_ms": [
-            121.65343800006667,
-            122.89445799979148,
-            117.24227599916048,
-            127.61514100202476,
-            121.43389499760815
+            123.20764700052678,
+            122.577498001192,
+            119.62045399923227,
+            119.14755899852025,
+            122.66232300316915
           ],
-          "rss_delta_mb": 0.00390625,
+          "rss_delta_mb": 0.0,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 14077.601165998203,
-          "median_ms": 14077.601165998203,
-          "mean_ms": 14077.601165998203,
+          "min_ms": 14085.919073000696,
+          "median_ms": 14085.919073000696,
+          "mean_ms": 14085.919073000696,
           "reps": 1,
           "samples_ms": [
-            14077.601165998203
+            14085.919073000696
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -917,38 +924,38 @@
       "n_dofs": 42,
       "metrics": {
         "load": {
-          "min_ms": 285.86155399898416,
-          "median_ms": 285.86155399898416,
-          "mean_ms": 285.86155399898416,
+          "min_ms": 280.53682900281274,
+          "median_ms": 280.53682900281274,
+          "mean_ms": 280.53682900281274,
           "reps": 1,
           "samples_ms": [
-            285.86155399898416
+            280.53682900281274
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 122.07056399711291,
-          "median_ms": 124.22373699882883,
-          "mean_ms": 126.41076339859865,
+          "min_ms": 116.66951399820391,
+          "median_ms": 119.84762799693272,
+          "mean_ms": 119.08629699973972,
           "reps": 5,
           "samples_ms": [
-            135.03125100032776,
-            126.86300999848754,
-            123.8652549982362,
-            124.22373699882883,
-            122.07056399711291
+            120.4616850009188,
+            119.84762799693272,
+            116.66951399820391,
+            121.63160300042364,
+            116.82105500221951
           ],
-          "rss_delta_mb": 0.0078125,
+          "rss_delta_mb": 0.0,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 13942.814770998666,
-          "median_ms": 13942.814770998666,
-          "mean_ms": 13942.814770998666,
+          "min_ms": 14155.512928002281,
+          "median_ms": 14155.512928002281,
+          "mean_ms": 14155.512928002281,
           "reps": 1,
           "samples_ms": [
-            13942.814770998666
+            14155.512928002281
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -1041,38 +1048,38 @@
       "n_dofs": 42,
       "metrics": {
         "load": {
-          "min_ms": 289.9989139987156,
-          "median_ms": 289.9989139987156,
-          "mean_ms": 289.9989139987156,
+          "min_ms": 276.4150500006508,
+          "median_ms": 276.4150500006508,
+          "mean_ms": 276.4150500006508,
           "reps": 1,
           "samples_ms": [
-            289.9989139987156
+            276.4150500006508
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 125.20520200268948,
-          "median_ms": 127.7331810015312,
-          "mean_ms": 128.5039828013396,
+          "min_ms": 118.92421599986847,
+          "median_ms": 119.8487080000632,
+          "mean_ms": 121.41248140032985,
           "reps": 5,
           "samples_ms": [
-            125.98731500111171,
-            127.7331810015312,
-            134.897459000058,
-            128.69675700130756,
-            125.20520200268948
+            120.29200400138507,
+            128.29150800098432,
+            118.92421599986847,
+            119.70597099934821,
+            119.8487080000632
           ],
           "rss_delta_mb": 0.0,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 14214.75366699815,
-          "median_ms": 14214.75366699815,
-          "mean_ms": 14214.75366699815,
+          "min_ms": 14274.979128000268,
+          "median_ms": 14274.979128000268,
+          "mean_ms": 14274.979128000268,
           "reps": 1,
           "samples_ms": [
-            14214.75366699815
+            14274.979128000268
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -1165,38 +1172,38 @@
       "n_dofs": 42,
       "metrics": {
         "load": {
-          "min_ms": 295.8794759979355,
-          "median_ms": 295.8794759979355,
-          "mean_ms": 295.8794759979355,
+          "min_ms": 290.2799250005046,
+          "median_ms": 290.2799250005046,
+          "mean_ms": 290.2799250005046,
           "reps": 1,
           "samples_ms": [
-            295.8794759979355
+            290.2799250005046
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 134.81256999875768,
-          "median_ms": 140.90597999893362,
-          "mean_ms": 141.0407329996815,
+          "min_ms": 115.72961400088388,
+          "median_ms": 117.93212100019446,
+          "mean_ms": 118.11061500120559,
           "reps": 5,
           "samples_ms": [
-            134.81256999875768,
-            145.17214800071088,
-            147.37210599923856,
-            140.90597999893362,
-            136.94086100076674
+            115.72961400088388,
+            117.93212100019446,
+            121.79616100183921,
+            116.74613500144915,
+            118.34904400166124
           ],
           "rss_delta_mb": 0.0,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 14296.641359000205,
-          "median_ms": 14296.641359000205,
-          "mean_ms": 14296.641359000205,
+          "min_ms": 14098.259641999903,
+          "median_ms": 14098.259641999903,
+          "mean_ms": 14098.259641999903,
           "reps": 1,
           "samples_ms": [
-            14296.641359000205
+            14098.259641999903
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -1289,38 +1296,38 @@
       "n_dofs": 42,
       "metrics": {
         "load": {
-          "min_ms": 290.80473399881157,
-          "median_ms": 290.80473399881157,
-          "mean_ms": 290.80473399881157,
+          "min_ms": 288.615720000962,
+          "median_ms": 288.615720000962,
+          "mean_ms": 288.615720000962,
           "reps": 1,
           "samples_ms": [
-            290.80473399881157
+            288.615720000962
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 123.95873599962215,
-          "median_ms": 124.36294000144699,
-          "mean_ms": 125.50158160011051,
+          "min_ms": 116.97478200221667,
+          "median_ms": 120.22365700249793,
+          "mean_ms": 119.94169960016734,
           "reps": 5,
           "samples_ms": [
-            127.59136699969531,
-            124.18315700051608,
-            123.95873599962215,
-            127.41170799927204,
-            124.36294000144699
+            116.97478200221667,
+            118.99647299651406,
+            121.86926100184792,
+            121.64432499776012,
+            120.22365700249793
           ],
           "rss_delta_mb": 0.0,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 14225.249867002276,
-          "median_ms": 14225.249867002276,
-          "mean_ms": 14225.249867002276,
+          "min_ms": 14207.870715999888,
+          "median_ms": 14207.870715999888,
+          "mean_ms": 14207.870715999888,
           "reps": 1,
           "samples_ms": [
-            14225.249867002276
+            14207.870715999888
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -1413,45 +1420,45 @@
       "n_dofs": 16,
       "metrics": {
         "load": {
-          "min_ms": 459.87832700120634,
-          "median_ms": 459.87832700120634,
-          "mean_ms": 459.87832700120634,
+          "min_ms": 442.0498330000555,
+          "median_ms": 442.0498330000555,
+          "mean_ms": 442.0498330000555,
           "reps": 1,
           "samples_ms": [
-            459.87832700120634
+            442.0498330000555
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 45.259345999511424,
-          "median_ms": 48.336953499529045,
-          "mean_ms": 48.46457366572091,
+          "min_ms": 44.489711999631254,
+          "median_ms": 48.76254799819435,
+          "mean_ms": 51.99752633294944,
           "reps": 12,
           "samples_ms": [
-            48.20599999948172,
-            45.259345999511424,
-            46.92298800000572,
-            45.308676999411546,
-            49.26448499827529,
-            52.92613699930371,
-            49.375727998267394,
-            51.878081998438574,
-            47.488205000263406,
-            46.931632998166606,
-            48.46790699957637,
-            49.545695997949224
+            48.54118499861215,
+            45.471254001313355,
+            46.42097200121498,
+            47.899231998599134,
+            60.05835699761519,
+            65.19492000006721,
+            62.304202998348046,
+            55.381395999575034,
+            54.06491300163907,
+            48.98391099777655,
+            45.160261001001345,
+            44.489711999631254
           ],
-          "rss_delta_mb": 1.1015625,
+          "rss_delta_mb": 2.046875,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 588.0302310033585,
-          "median_ms": 588.0302310033585,
-          "mean_ms": 588.0302310033585,
+          "min_ms": 608.6756219992822,
+          "median_ms": 608.6756219992822,
+          "mean_ms": 608.6756219992822,
           "reps": 1,
           "samples_ms": [
-            588.0302310033585
+            608.6756219992822
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -1544,45 +1551,45 @@
       "n_dofs": 16,
       "metrics": {
         "load": {
-          "min_ms": 462.4783710023621,
-          "median_ms": 462.4783710023621,
-          "mean_ms": 462.4783710023621,
+          "min_ms": 432.32732500109705,
+          "median_ms": 432.32732500109705,
+          "mean_ms": 432.32732500109705,
           "reps": 1,
           "samples_ms": [
-            462.4783710023621
+            432.32732500109705
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 46.434826999757206,
-          "median_ms": 49.28403449957841,
-          "mean_ms": 49.97863433315312,
+          "min_ms": 44.16708999997354,
+          "median_ms": 46.492332499838085,
+          "mean_ms": 46.86500158337973,
           "reps": 12,
           "samples_ms": [
-            49.37023599995882,
-            48.9063700006227,
-            51.91753400140442,
-            51.13845599771594,
-            47.1545700020215,
-            46.434826999757206,
-            46.452456001134124,
-            54.797880999103654,
-            53.977763000148116,
-            51.56950099990354,
-            48.826184996869415,
-            49.197832999198
+            46.69360900152242,
+            45.38082300132373,
+            44.16708999997354,
+            46.79527699772734,
+            50.26177900072071,
+            47.115109002334066,
+            45.57707500134711,
+            44.67416799889179,
+            49.15875699953176,
+            46.29105599815375,
+            45.65707499932614,
+            50.60820099970442
           ],
-          "rss_delta_mb": 1.47265625,
+          "rss_delta_mb": 0.45703125,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 723.9570409983571,
-          "median_ms": 723.9570409983571,
-          "mean_ms": 723.9570409983571,
+          "min_ms": 596.8565510011103,
+          "median_ms": 596.8565510011103,
+          "mean_ms": 596.8565510011103,
           "reps": 1,
           "samples_ms": [
-            723.9570409983571
+            596.8565510011103
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -1675,44 +1682,46 @@
       "n_dofs": 16,
       "metrics": {
         "load": {
-          "min_ms": 448.5727080027573,
-          "median_ms": 448.5727080027573,
-          "mean_ms": 448.5727080027573,
+          "min_ms": 479.35635300018475,
+          "median_ms": 479.35635300018475,
+          "mean_ms": 479.35635300018475,
           "reps": 1,
           "samples_ms": [
-            448.5727080027573
+            479.35635300018475
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 45.242805001180386,
-          "median_ms": 50.093227000616025,
-          "mean_ms": 50.9693898192464,
-          "reps": 11,
+          "min_ms": 45.334116999583784,
+          "median_ms": 46.56239900214132,
+          "mean_ms": 47.04611507678727,
+          "reps": 13,
           "samples_ms": [
-            53.121535001992015,
-            45.89746700003161,
-            56.28623600205174,
-            56.54305200005183,
-            48.06059100155835,
-            49.247963001107564,
-            51.33443000158877,
-            45.242805001180386,
-            50.093227000616025,
-            49.42155900062062,
-            55.41442300091148
+            46.06018599952222,
+            47.203425001498545,
+            47.86091099958867,
+            47.11339899949962,
+            52.39019799773814,
+            47.2589759992843,
+            45.334116999583784,
+            46.493312998791225,
+            47.76287699860404,
+            45.740269000816625,
+            45.93278900210862,
+            46.56239900214132,
+            45.88663699905737
           ],
-          "rss_delta_mb": 0.109375,
+          "rss_delta_mb": 0.80859375,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 602.7469680011563,
-          "median_ms": 602.7469680011563,
-          "mean_ms": 602.7469680011563,
+          "min_ms": 585.7233200003975,
+          "median_ms": 585.7233200003975,
+          "mean_ms": 585.7233200003975,
           "reps": 1,
           "samples_ms": [
-            602.7469680011563
+            585.7233200003975
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -1805,44 +1814,45 @@
       "n_dofs": 16,
       "metrics": {
         "load": {
-          "min_ms": 497.468891000608,
-          "median_ms": 497.468891000608,
-          "mean_ms": 497.468891000608,
+          "min_ms": 442.4066680003307,
+          "median_ms": 442.4066680003307,
+          "mean_ms": 442.4066680003307,
           "reps": 1,
           "samples_ms": [
-            497.468891000608
+            442.4066680003307
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 46.374994999496266,
-          "median_ms": 48.44328800027142,
-          "mean_ms": 48.394249090713195,
-          "reps": 11,
+          "min_ms": 44.183384998177644,
+          "median_ms": 46.16104699925927,
+          "mean_ms": 46.05257675060178,
+          "reps": 12,
           "samples_ms": [
-            50.08593400270911,
-            47.56701799851726,
-            47.704511001938954,
-            48.73831000077189,
-            46.374994999496266,
-            49.32401399855735,
-            48.60072899828083,
-            48.44328800027142,
-            48.07997999887448,
-            47.053316000528866,
-            50.36464499789872
+            46.5873350003676,
+            44.37285300082294,
+            46.537162001186516,
+            46.93885300002876,
+            44.183384998177644,
+            46.08818599808728,
+            44.63555500115035,
+            47.912845002429094,
+            46.233908000431256,
+            44.186292001541005,
+            45.123493000573944,
+            49.831054002424935
           ],
-          "rss_delta_mb": 1.078125,
+          "rss_delta_mb": 0.5546875,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 600.6700209982228,
-          "median_ms": 600.6700209982228,
-          "mean_ms": 600.6700209982228,
+          "min_ms": 617.2699839989946,
+          "median_ms": 617.2699839989946,
+          "mean_ms": 617.2699839989946,
           "reps": 1,
           "samples_ms": [
-            600.6700209982228
+            617.2699839989946
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -1935,45 +1945,45 @@
       "n_dofs": 16,
       "metrics": {
         "load": {
-          "min_ms": 450.8164030012267,
-          "median_ms": 450.8164030012267,
-          "mean_ms": 450.8164030012267,
+          "min_ms": 422.00543899889453,
+          "median_ms": 422.00543899889453,
+          "mean_ms": 422.00543899889453,
           "reps": 1,
           "samples_ms": [
-            450.8164030012267
+            422.00543899889453
           ],
           "rss_delta_mb": 0.0,
           "note": "compile + real virgin nested probe"
         },
         "nested_evaluation": {
-          "min_ms": 45.86478700002772,
-          "median_ms": 51.45039200033352,
-          "mean_ms": 50.93284466693149,
+          "min_ms": 44.08708000119077,
+          "median_ms": 47.12024999935238,
+          "mean_ms": 48.595616167100765,
           "reps": 12,
           "samples_ms": [
-            48.61552900183597,
-            51.12669300069683,
-            46.20023399911588,
-            51.77409099997021,
-            48.64480600008392,
-            49.909465000382625,
-            45.86478700002772,
-            54.95124700246379,
-            52.914689000317594,
-            53.641685997718014,
-            55.19386900050449,
-            52.357040000060806
+            46.84834900035639,
+            46.71441599930404,
+            49.223000001802575,
+            46.931049997510854,
+            50.83667500002775,
+            45.30992500076536,
+            47.30945000119391,
+            54.70633200093289,
+            53.93829999957234,
+            50.69683300098404,
+            46.545984001568286,
+            44.08708000119077
           ],
-          "rss_delta_mb": 0.046875,
+          "rss_delta_mb": 0.51953125,
           "note": "committed macro state; nested trial rejected after each call"
         },
         "e2e": {
-          "min_ms": 645.729312000185,
-          "median_ms": 645.729312000185,
-          "mean_ms": 645.729312000185,
+          "min_ms": 605.7162140023138,
+          "median_ms": 605.7162140023138,
+          "mean_ms": 605.7162140023138,
           "reps": 1,
           "samples_ms": [
-            645.729312000185
+            605.7162140023138
           ],
           "rss_delta_mb": 0.0,
           "note": "fresh compile + virgin probe + macro nonlinear solve"
@@ -2066,14 +2076,14 @@
       "n_dofs": 162,
       "metrics": {
         "step": {
-          "min_ms": 0.12137600060668774,
-          "median_ms": 0.12596400119946338,
-          "mean_ms": 0.1252993339827905,
+          "min_ms": 0.12457200136850588,
+          "median_ms": 0.1309690014750231,
+          "mean_ms": 0.12898133475876725,
           "reps": 3,
           "samples_ms": [
-            0.1285580001422204,
-            0.12596400119946338,
-            0.12137600060668774
+            0.13140300143277273,
+            0.1309690014750231,
+            0.12457200136850588
           ],
           "rss_delta_mb": 0.0,
           "note": "3 evaluations + 1 commit; preallocated scoped-sub-transaction buffers"
@@ -2123,14 +2133,14 @@
       "n_dofs": 162,
       "metrics": {
         "step": {
-          "min_ms": 0.18541199824539945,
-          "median_ms": 0.18587200247566216,
-          "mean_ms": 0.1871839995146729,
+          "min_ms": 0.19039299877476878,
+          "median_ms": 0.19044100190512836,
+          "mean_ms": 0.19122833449121876,
           "reps": 3,
           "samples_ms": [
-            0.1902679978229571,
-            0.18541199824539945,
-            0.18587200247566216
+            0.1928510027937591,
+            0.19039299877476878,
+            0.19044100190512836
           ],
           "rss_delta_mb": 0.0,
           "note": "3 evaluations + 1 commit; MicroModel.py:181/:241 deepcopy stand-in"
@@ -2180,14 +2190,14 @@
       "n_dofs": 648,
       "metrics": {
         "step": {
-          "min_ms": 0.36449300023377873,
-          "median_ms": 0.3658130008261651,
-          "mean_ms": 0.36737533325018984,
+          "min_ms": 0.37859499934711494,
+          "median_ms": 0.37885900019318797,
+          "mean_ms": 0.3791986661478101,
           "reps": 3,
           "samples_ms": [
-            0.37181999869062565,
-            0.3658130008261651,
-            0.36449300023377873
+            0.37859499934711494,
+            0.3801419989031274,
+            0.37885900019318797
           ],
           "rss_delta_mb": 0.0,
           "note": "3 evaluations + 1 commit; preallocated scoped-sub-transaction buffers"
@@ -2237,14 +2247,14 @@
       "n_dofs": 648,
       "metrics": {
         "step": {
-          "min_ms": 0.71954500162974,
-          "median_ms": 0.7218609971459955,
-          "mean_ms": 0.7221406667667907,
+          "min_ms": 0.7019889999355655,
+          "median_ms": 0.7080449977365788,
+          "mean_ms": 0.706740332437524,
           "reps": 3,
           "samples_ms": [
-            0.7218609971459955,
-            0.71954500162974,
-            0.7250160015246365
+            0.7101869996404275,
+            0.7080449977365788,
+            0.7019889999355655
           ],
           "rss_delta_mb": 0.0,
           "note": "3 evaluations + 1 commit; MicroModel.py:181/:241 deepcopy stand-in"
@@ -2294,14 +2304,14 @@
       "n_dofs": 2592,
       "metrics": {
         "step": {
-          "min_ms": 1.3042479986324906,
-          "median_ms": 1.3048019973211922,
-          "mean_ms": 1.3047019989850621,
+          "min_ms": 1.349410002148943,
+          "median_ms": 1.3504650014510844,
+          "mean_ms": 1.356842333431511,
           "reps": 3,
           "samples_ms": [
-            1.3048019973211922,
-            1.3042479986324906,
-            1.3050560010015033
+            1.3706519966945052,
+            1.349410002148943,
+            1.3504650014510844
           ],
           "rss_delta_mb": 0.0,
           "note": "3 evaluations + 1 commit; preallocated scoped-sub-transaction buffers"
@@ -2351,14 +2361,14 @@
       "n_dofs": 2592,
       "metrics": {
         "step": {
-          "min_ms": 2.7644419969874434,
-          "median_ms": 2.789955000480404,
-          "mean_ms": 2.7881109999725595,
+          "min_ms": 2.7253869993728586,
+          "median_ms": 2.730828000494512,
+          "mean_ms": 2.731144333665725,
           "reps": 3,
           "samples_ms": [
-            2.809936002449831,
-            2.7644419969874434,
-            2.789955000480404
+            2.730828000494512,
+            2.7253869993728586,
+            2.737218001129804
           ],
           "rss_delta_mb": 0.0,
           "note": "3 evaluations + 1 commit; MicroModel.py:181/:241 deepcopy stand-in"
@@ -2408,14 +2418,14 @@
       "n_dofs": 10368,
       "metrics": {
         "step": {
-          "min_ms": 4.390608999528922,
-          "median_ms": 4.4122989966126624,
-          "mean_ms": 4.405348665992885,
+          "min_ms": 5.952075000095647,
+          "median_ms": 6.550326001161011,
+          "mean_ms": 6.356046333773217,
           "reps": 3,
           "samples_ms": [
-            4.390608999528922,
-            4.4122989966126624,
-            4.413138001837069
+            6.550326001161011,
+            6.565738000062993,
+            5.952075000095647
           ],
           "rss_delta_mb": 0.0,
           "note": "3 evaluations + 1 commit; preallocated scoped-sub-transaction buffers"
@@ -2430,7 +2440,7 @@
         "production_commit_copy": 156672,
         "legacy_evaluation_copy": 470016,
         "legacy_commit_copy": 156672,
-        "traced_step_peak": 40049
+        "traced_step_peak": 40073
       },
       "correctness": {
         "workload": "fe2-memory/micro-rve/576",
@@ -2465,14 +2475,14 @@
       "n_dofs": 10368,
       "metrics": {
         "step": {
-          "min_ms": 9.045752001838991,
-          "median_ms": 9.412759998667752,
-          "mean_ms": 9.485637000276862,
+          "min_ms": 9.960837000107858,
+          "median_ms": 10.958609000226716,
+          "mean_ms": 10.70756433303662,
           "reps": 3,
           "samples_ms": [
-            9.998399000323843,
-            9.412759998667752,
-            9.045752001838991
+            11.203246998775285,
+            10.958609000226716,
+            9.960837000107858
           ],
           "rss_delta_mb": 0.0,
           "note": "3 evaluations + 1 commit; MicroModel.py:181/:241 deepcopy stand-in"
