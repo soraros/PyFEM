@@ -1,0 +1,2521 @@
+{
+  "schema": 1,
+  "kind": "benchmark-run",
+  "coverage": "partial",
+  "manifest": {
+    "created_utc": "2026-11-02T11:17:31+00:00",
+    "git_revision": "e203a93c639c2ea6a63ced0e9316732b06c93289",
+    "working_tree": {
+      "clean": true,
+      "dirty_files": []
+    },
+    "cpu": "Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz",
+    "machine": "x86_64",
+    "os": "Darwin 25.6.0 (Darwin Kernel Version 25.6.0: Thu Oct  1 22:11:40 PDT 2026; root:xnu-12377.161.15.701.39~1/RELEASE_X86_64)",
+    "python": "3.13.11",
+    "python_executable": "/Users/sora/Projects/python/PyFEM/.venv/bin/python",
+    "numpy": "2.3.5",
+    "scipy": "1.18.0",
+    "numba": "0.62.1",
+    "linalg_backend": {
+      "blas": {
+        "name": "accelerate",
+        "version": "unknown"
+      },
+      "lapack": {
+        "name": "accelerate",
+        "version": "unknown"
+      }
+    },
+    "thread_env": {
+      "NUMBA_NUM_THREADS": "",
+      "OMP_NUM_THREADS": "",
+      "OPENBLAS_NUM_THREADS": "",
+      "MKL_NUM_THREADS": "",
+      "VECLIB_MAXIMUM_THREADS": "",
+      "NUMBA_CACHE_DIR": ""
+    },
+    "numba_threads_default": 16,
+    "threadpoolctl_available": false,
+    "numba_cache_coherence": {
+      "coherent": true,
+      "pairs": [
+        {
+          "caller": "pyfem/v3/fem/element.py",
+          "callee": "pyfem/v3/fem/quadrature.py",
+          "callee_source_mtime_utc": "2026-10-31T10:04:15.385275+00:00",
+          "caller_cache_entries": 1,
+          "caller_cache_live_entries": 1,
+          "caller_cache_oldest_live_mtime_utc": "2026-10-31T10:45:01.713958+00:00",
+          "coherent": true
+        },
+        {
+          "caller": "pyfem/v3/fem/element.py",
+          "callee": "pyfem/v3/fem/shapes.py",
+          "callee_source_mtime_utc": "2026-10-31T10:04:15.385538+00:00",
+          "caller_cache_entries": 1,
+          "caller_cache_live_entries": 1,
+          "caller_cache_oldest_live_mtime_utc": "2026-10-31T10:45:01.713958+00:00",
+          "coherent": true
+        },
+        {
+          "caller": "pyfem/v3/fem/element.py",
+          "callee": "pyfem/v3/fem/kinematics.py",
+          "callee_source_mtime_utc": "2026-10-31T10:04:15.384784+00:00",
+          "caller_cache_entries": 1,
+          "caller_cache_live_entries": 1,
+          "caller_cache_oldest_live_mtime_utc": "2026-10-31T10:45:01.713958+00:00",
+          "coherent": true
+        },
+        {
+          "caller": "pyfem/v3/fem/tl_element.py",
+          "callee": "pyfem/v3/fem/quadrature.py",
+          "callee_source_mtime_utc": "2026-10-31T10:04:15.385275+00:00",
+          "caller_cache_entries": 0,
+          "caller_cache_live_entries": 0,
+          "caller_cache_oldest_live_mtime_utc": null,
+          "coherent": true
+        },
+        {
+          "caller": "pyfem/v3/fem/tl_element.py",
+          "callee": "pyfem/v3/fem/shapes.py",
+          "callee_source_mtime_utc": "2026-10-31T10:04:15.385538+00:00",
+          "caller_cache_entries": 0,
+          "caller_cache_live_entries": 0,
+          "caller_cache_oldest_live_mtime_utc": null,
+          "coherent": true
+        },
+        {
+          "caller": "pyfem/v3/fem/tl_element.py",
+          "callee": "pyfem/v3/fem/tl_kinematics.py",
+          "callee_source_mtime_utc": "2026-10-31T10:04:15.386049+00:00",
+          "caller_cache_entries": 0,
+          "caller_cache_live_entries": 0,
+          "caller_cache_oldest_live_mtime_utc": null,
+          "coherent": true
+        }
+      ]
+    }
+  },
+  "records": [
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 191.33719000092242,
+          "median_ms": 191.33719000092242,
+          "mean_ms": 191.33719000092242,
+          "reps": 1,
+          "samples_ms": [
+            191.33719000092242
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 29.0771420004603,
+          "median_ms": 29.822669001077884,
+          "mean_ms": 30.05889699998079,
+          "reps": 20,
+          "samples_ms": [
+            29.086510003253352,
+            29.21236499969382,
+            33.339919998979894,
+            30.5127249994257,
+            29.885721000027843,
+            30.016618002264295,
+            29.814211000484647,
+            29.481072000635322,
+            31.33041099863476,
+            29.437181998218875,
+            29.83112700167112,
+            32.16787899873452,
+            29.911024998000357,
+            29.0771420004603,
+            29.87736999784829,
+            30.76160099953995,
+            29.360725999140413,
+            29.699708000407554,
+            29.187313000875292,
+            29.187314001319464
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 10158.27617800096,
+          "median_ms": 10158.27617800096,
+          "mean_ms": 10158.27617800096,
+          "reps": 1,
+          "samples_ms": [
+            10158.27617800096
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 5616,
+        "staged_nested": 5616,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 2,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 160.70421699987492,
+          "median_ms": 160.70421699987492,
+          "mean_ms": 160.70421699987492,
+          "reps": 1,
+          "samples_ms": [
+            160.70421699987492
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 33.200456000486156,
+          "median_ms": 36.42711649808916,
+          "mean_ms": 36.616514375054976,
+          "reps": 16,
+          "samples_ms": [
+            36.956652998924255,
+            38.72270899955765,
+            39.644386000873055,
+            36.81235200201627,
+            34.0022560012585,
+            35.289510000438895,
+            35.00784700008808,
+            35.99049100012053,
+            35.24198599916417,
+            33.200456000486156,
+            38.92328700021608,
+            36.32044099867926,
+            39.39010099929874,
+            36.533791997499065,
+            36.260517001210246,
+            37.567446001048665
+          ],
+          "rss_delta_mb": 0.09375,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 11249.12412699996,
+          "median_ms": 11249.12412699996,
+          "mean_ms": 11249.12412699996,
+          "reps": 1,
+          "samples_ms": [
+            11249.12412699996
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 5616,
+        "staged_nested": 5616,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 4,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 155.87719900213415,
+          "median_ms": 155.87719900213415,
+          "mean_ms": 155.87719900213415,
+          "reps": 1,
+          "samples_ms": [
+            155.87719900213415
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 34.25039399735397,
+          "median_ms": 35.37759599930723,
+          "mean_ms": 35.998745732892225,
+          "reps": 15,
+          "samples_ms": [
+            38.12116699918988,
+            37.5957100004598,
+            37.15621799710789,
+            36.94328300116467,
+            35.740422001254046,
+            36.17028299777303,
+            34.25039399735397,
+            34.816788996977266,
+            34.68675600015558,
+            35.00542400070117,
+            34.539835000032326,
+            35.37759599930723,
+            39.43863899985445,
+            34.87386900087586,
+            35.26480100117624
+          ],
+          "rss_delta_mb": 0.80078125,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 12057.119721001072,
+          "median_ms": 12057.119721001072,
+          "mean_ms": 12057.119721001072,
+          "reps": 1,
+          "samples_ms": [
+            12057.119721001072
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 5616,
+        "staged_nested": 5616,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 8,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 155.35925700169173,
+          "median_ms": 155.35925700169173,
+          "mean_ms": 155.35925700169173,
+          "reps": 1,
+          "samples_ms": [
+            155.35925700169173
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 35.12866900200606,
+          "median_ms": 36.663576000137255,
+          "mean_ms": 36.78646024968657,
+          "reps": 16,
+          "samples_ms": [
+            36.56028399927891,
+            36.7668680009956,
+            39.895742000226164,
+            36.350382997625275,
+            37.55574500246439,
+            35.82233699853532,
+            35.13331899739569,
+            37.76696500062826,
+            36.90628500044113,
+            36.3490309973713,
+            35.54406499824836,
+            35.12866900200606,
+            37.00621499956469,
+            35.94960299960803,
+            38.53284700016957,
+            37.315006000426365
+          ],
+          "rss_delta_mb": 0.96875,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 12472.031223001977,
+          "median_ms": 12472.031223001977,
+          "mean_ms": 12472.031223001977,
+          "reps": 1,
+          "samples_ms": [
+            12472.031223001977
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 5616,
+        "staged_nested": 5616,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 160.50159799851826,
+          "median_ms": 160.50159799851826,
+          "mean_ms": 160.50159799851826,
+          "reps": 1,
+          "samples_ms": [
+            160.50159799851826
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 34.830344000511104,
+          "median_ms": 36.04618350072997,
+          "mean_ms": 36.65385706244706,
+          "reps": 16,
+          "samples_ms": [
+            35.6515200001013,
+            36.00353599904338,
+            35.432296001090435,
+            38.32564399999683,
+            35.34295500139706,
+            34.830344000511104,
+            36.06917000070098,
+            36.60026400029892,
+            36.023197000758955,
+            38.769004997448064,
+            39.03119099777541,
+            38.49703500236501,
+            37.84614600226632,
+            35.76191699903575,
+            36.556808998284396,
+            35.72068399807904
+          ],
+          "rss_delta_mb": 1.54296875,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 12445.159873001103,
+          "median_ms": 12445.159873001103,
+          "mean_ms": 12445.159873001103,
+          "reps": 1,
+          "samples_ms": [
+            12445.159873001103
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 5616,
+        "staged_nested": 5616,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/2x2",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 4,
+      "n_dofs": 42,
+      "metrics": {
+        "load": {
+          "min_ms": 334.67607999773463,
+          "median_ms": 334.67607999773463,
+          "mean_ms": 334.67607999773463,
+          "reps": 1,
+          "samples_ms": [
+            334.67607999773463
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 119.37246699744719,
+          "median_ms": 123.2498490026046,
+          "mean_ms": 122.82496760089998,
+          "reps": 5,
+          "samples_ms": [
+            123.2498490026046,
+            123.62737800140167,
+            119.37246699744719,
+            125.33586100107641,
+            122.53928300197003
+          ],
+          "rss_delta_mb": 0.06640625,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 14643.851836000977,
+          "median_ms": 14643.851836000977,
+          "mean_ms": 14643.851836000977,
+          "reps": 1,
+          "samples_ms": [
+            14643.851836000977
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 22464,
+        "staged_nested": 22464,
+        "accepted_macro_strain": 864,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/2x2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/2x2",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 2,
+      "n_elems": 4,
+      "n_dofs": 42,
+      "metrics": {
+        "load": {
+          "min_ms": 327.7867949982465,
+          "median_ms": 327.7867949982465,
+          "mean_ms": 327.7867949982465,
+          "reps": 1,
+          "samples_ms": [
+            327.7867949982465
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 138.12174299891922,
+          "median_ms": 139.49509599842713,
+          "mean_ms": 140.30204319933546,
+          "reps": 5,
+          "samples_ms": [
+            139.49509599842713,
+            138.12174299891922,
+            138.22880500083556,
+            139.96417399903294,
+            145.70039799946244
+          ],
+          "rss_delta_mb": 0.109375,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 16962.651562000246,
+          "median_ms": 16962.651562000246,
+          "mean_ms": 16962.651562000246,
+          "reps": 1,
+          "samples_ms": [
+            16962.651562000246
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 22464,
+        "staged_nested": 22464,
+        "accepted_macro_strain": 864,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/2x2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/2x2",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 4,
+      "n_elems": 4,
+      "n_dofs": 42,
+      "metrics": {
+        "load": {
+          "min_ms": 314.4637160003185,
+          "median_ms": 314.4637160003185,
+          "mean_ms": 314.4637160003185,
+          "reps": 1,
+          "samples_ms": [
+            314.4637160003185
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 139.57092300188378,
+          "median_ms": 145.3435930015985,
+          "mean_ms": 145.64250020048348,
+          "reps": 5,
+          "samples_ms": [
+            145.8489680007915,
+            139.57092300188378,
+            144.1709680002532,
+            145.3435930015985,
+            153.27804899789044
+          ],
+          "rss_delta_mb": 0.33984375,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 18815.468045999296,
+          "median_ms": 18815.468045999296,
+          "mean_ms": 18815.468045999296,
+          "reps": 1,
+          "samples_ms": [
+            18815.468045999296
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 22464,
+        "staged_nested": 22464,
+        "accepted_macro_strain": 864,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/2x2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/2x2",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 8,
+      "n_elems": 4,
+      "n_dofs": 42,
+      "metrics": {
+        "load": {
+          "min_ms": 310.7331630017143,
+          "median_ms": 310.7331630017143,
+          "mean_ms": 310.7331630017143,
+          "reps": 1,
+          "samples_ms": [
+            310.7331630017143
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 143.48613200127147,
+          "median_ms": 146.49475600162987,
+          "mean_ms": 146.3705682013824,
+          "reps": 5,
+          "samples_ms": [
+            143.48613200127147,
+            144.59798200186924,
+            148.72950900098658,
+            148.5444620011549,
+            146.49475600162987
+          ],
+          "rss_delta_mb": 0.4921875,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 19705.13794499857,
+          "median_ms": 19705.13794499857,
+          "mean_ms": 19705.13794499857,
+          "reps": 1,
+          "samples_ms": [
+            19705.13794499857
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 22464,
+        "staged_nested": 22464,
+        "accepted_macro_strain": 864,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/2x2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/2x2",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 4,
+      "n_dofs": 42,
+      "metrics": {
+        "load": {
+          "min_ms": 321.8042330008757,
+          "median_ms": 321.8042330008757,
+          "mean_ms": 321.8042330008757,
+          "reps": 1,
+          "samples_ms": [
+            321.8042330008757
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 146.2744250020478,
+          "median_ms": 148.1165069999406,
+          "mean_ms": 148.23239900142653,
+          "reps": 5,
+          "samples_ms": [
+            148.1165069999406,
+            146.2744250020478,
+            146.29352300107712,
+            151.00097400136292,
+            149.4765660027042
+          ],
+          "rss_delta_mb": 0.71875,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 20035.00100400197,
+          "median_ms": 20035.00100400197,
+          "mean_ms": 20035.00100400197,
+          "reps": 1,
+          "samples_ms": [
+            20035.00100400197
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 22464,
+        "staged_nested": 22464,
+        "accepted_macro_strain": 864,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/2x2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1/micro-8x8/elastic",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 428.7738650018582,
+          "median_ms": 428.7738650018582,
+          "mean_ms": 428.7738650018582,
+          "reps": 1,
+          "samples_ms": [
+            428.7738650018582
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 43.61969400270027,
+          "median_ms": 44.36189699845272,
+          "mean_ms": 44.84510438543601,
+          "reps": 13,
+          "samples_ms": [
+            43.61969400270027,
+            45.52980000153184,
+            44.11855700163869,
+            44.280542999331374,
+            44.36189699845272,
+            45.487772000342375,
+            44.32881200045813,
+            46.885734001989476,
+            46.6659370031266,
+            44.68405099760275,
+            44.00388800058863,
+            43.74093600199558,
+            45.2787360009097
+          ],
+          "rss_delta_mb": 1.11328125,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 613.9018489993759,
+          "median_ms": 613.9018489993759,
+          "mean_ms": 613.9018489993759,
+          "reps": 1,
+          "samples_ms": [
+            613.9018489993759
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 32400,
+        "staged_nested": 32400,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1/micro-8x8/elastic",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1/micro-8x8/elastic",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 2,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 419.3886590001057,
+          "median_ms": 419.3886590001057,
+          "mean_ms": 419.3886590001057,
+          "reps": 1,
+          "samples_ms": [
+            419.3886590001057
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 39.91232200132799,
+          "median_ms": 42.113608000363456,
+          "mean_ms": 42.3056122007741,
+          "reps": 15,
+          "samples_ms": [
+            39.91329000200494,
+            39.95557700181962,
+            41.26310699939495,
+            42.97037800279213,
+            42.34773599819164,
+            40.8809510008723,
+            42.73929000191856,
+            42.92836500098929,
+            46.484095000778325,
+            49.277625999820884,
+            39.91232200132799,
+            40.080520000628894,
+            41.554192001058254,
+            42.113608000363456,
+            42.16312599965022
+          ],
+          "rss_delta_mb": 0.41796875,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 533.5269659990445,
+          "median_ms": 533.5269659990445,
+          "mean_ms": 533.5269659990445,
+          "reps": 1,
+          "samples_ms": [
+            533.5269659990445
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 32400,
+        "staged_nested": 32400,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1/micro-8x8/elastic",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1/micro-8x8/elastic",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 4,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 403.93915999811725,
+          "median_ms": 403.93915999811725,
+          "mean_ms": 403.93915999811725,
+          "reps": 1,
+          "samples_ms": [
+            403.93915999811725
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 39.00078700098675,
+          "median_ms": 40.79070300031162,
+          "mean_ms": 41.36828971422801,
+          "reps": 14,
+          "samples_ms": [
+            41.076646997680655,
+            41.18068900061189,
+            39.63941699839779,
+            41.890249001880875,
+            45.564018000732176,
+            47.99385899968911,
+            40.13621199919726,
+            39.925834997120546,
+            40.8810570006608,
+            41.751089000172215,
+            39.38280200236477,
+            40.033045999734895,
+            39.00078700098675,
+            40.70034899996244
+          ],
+          "rss_delta_mb": 0.48046875,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 530.8565459999954,
+          "median_ms": 530.8565459999954,
+          "mean_ms": 530.8565459999954,
+          "reps": 1,
+          "samples_ms": [
+            530.8565459999954
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 32400,
+        "staged_nested": 32400,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1/micro-8x8/elastic",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1/micro-8x8/elastic",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 8,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 469.21165400272,
+          "median_ms": 469.21165400272,
+          "mean_ms": 469.21165400272,
+          "reps": 1,
+          "samples_ms": [
+            469.21165400272
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 38.93456699734088,
+          "median_ms": 40.50949499833223,
+          "mean_ms": 40.81313899977041,
+          "reps": 14,
+          "samples_ms": [
+            41.18868599834968,
+            41.65280400047777,
+            39.77944000143907,
+            42.9842510020535,
+            41.70608699860168,
+            39.78064300099504,
+            41.14636400117888,
+            39.98140399926342,
+            39.49488299986115,
+            39.966157000890234,
+            38.93456699734088,
+            40.6327999990026,
+            40.38618999766186,
+            43.749669999670004
+          ],
+          "rss_delta_mb": 0.875,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 526.7626239983656,
+          "median_ms": 526.7626239983656,
+          "mean_ms": 526.7626239983656,
+          "reps": 1,
+          "samples_ms": [
+            526.7626239983656
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 32400,
+        "staged_nested": 32400,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1/micro-8x8/elastic",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2",
+      "workload": "fe2/cantilever/1x1/micro-8x8/elastic",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 1,
+      "n_dofs": 16,
+      "metrics": {
+        "load": {
+          "min_ms": 425.23967700253706,
+          "median_ms": 425.23967700253706,
+          "mean_ms": 425.23967700253706,
+          "reps": 1,
+          "samples_ms": [
+            425.23967700253706
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "compile + real virgin nested probe"
+        },
+        "nested_evaluation": {
+          "min_ms": 39.09461399962311,
+          "median_ms": 40.27741150093789,
+          "mean_ms": 40.47321764327145,
+          "reps": 14,
+          "samples_ms": [
+            40.15759300091304,
+            41.2984239992511,
+            43.3309760010161,
+            41.111177000857424,
+            41.066531997785205,
+            39.11530400000629,
+            41.131093003059505,
+            40.248943001643056,
+            40.34864099958213,
+            40.15673299727496,
+            39.44246800165274,
+            39.09461399962311,
+            39.81666900290293,
+            40.30588000023272
+          ],
+          "rss_delta_mb": 0.37109375,
+          "note": "committed macro state; nested trial rejected after each call"
+        },
+        "e2e": {
+          "min_ms": 573.4832480011391,
+          "median_ms": 573.4832480011391,
+          "mean_ms": 573.4832480011391,
+          "reps": 1,
+          "samples_ms": [
+            573.4832480011391
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "fresh compile + virgin probe + macro nonlinear solve"
+        }
+      },
+      "logical_bytes": {
+        "accepted_nested": 32400,
+        "staged_nested": 32400,
+        "accepted_macro_strain": 216,
+        "nested_evaluation_copy": 0
+      },
+      "correctness": {
+        "workload": "fe2/cantilever/1x1/micro-8x8/elastic",
+        "passed": true,
+        "checks": [
+          {
+            "name": "completed-macro-solves",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "reference=DriverStatus.COMPLETED, candidate=DriverStatus.COMPLETED"
+          },
+          {
+            "name": "committed-macro-physical",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "committed-nested-store",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "versioned accepted-state payload byte identity"
+          },
+          {
+            "name": "nested-evaluation-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "both rejected-trial homogenized evaluations completed"
+          },
+          {
+            "name": "homogenized-internal-force",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "homogenized-material-tangent",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          },
+          {
+            "name": "trial-macro-strain",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "raw-uint64 identity; max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2-memory",
+      "workload": "fe2-memory/micro-rve/9",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 9,
+      "n_dofs": 162,
+      "metrics": {
+        "step": {
+          "min_ms": 0.10326899791834876,
+          "median_ms": 0.10668399772839621,
+          "mean_ms": 0.10624966550191554,
+          "reps": 3,
+          "samples_ms": [
+            0.10668399772839621,
+            0.10326899791834876,
+            0.10879600085900165
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "3 evaluations + 1 commit; preallocated scoped-sub-transaction buffers"
+        }
+      },
+      "logical_bytes": {
+        "macro_ip_count": 9,
+        "per_ip_bytes": 272,
+        "accepted_or_committed": 2448,
+        "staged_or_trial": 2448,
+        "production_evaluation_copy": 0,
+        "production_commit_copy": 2448,
+        "legacy_evaluation_copy": 7344,
+        "legacy_commit_copy": 2448,
+        "traced_step_peak": 1760
+      },
+      "correctness": {
+        "workload": "fe2-memory/micro-rve/9",
+        "passed": true,
+        "checks": [
+          {
+            "name": "scoped-buffer-object-identity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "coefficient and state-block base objects persist across committed steps"
+          },
+          {
+            "name": "legacy-copy-model-state-parity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "production and deepcopy protocols commit identical float64 rows"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2-memory",
+      "workload": "fe2-memory/micro-rve/9",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 9,
+      "n_dofs": 162,
+      "metrics": {
+        "step": {
+          "min_ms": 0.1472689982620068,
+          "median_ms": 0.14808699779678136,
+          "mean_ms": 0.14902333108087382,
+          "reps": 3,
+          "samples_ms": [
+            0.15171399718383327,
+            0.14808699779678136,
+            0.1472689982620068
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "3 evaluations + 1 commit; MicroModel.py:181/:241 deepcopy stand-in"
+        }
+      },
+      "logical_bytes": {
+        "macro_ip_count": 9,
+        "per_ip_bytes": 272,
+        "accepted_or_committed": 2448,
+        "staged_or_trial": 2448,
+        "production_evaluation_copy": 0,
+        "production_commit_copy": 2448,
+        "legacy_evaluation_copy": 7344,
+        "legacy_commit_copy": 2448,
+        "traced_step_peak": 11784
+      },
+      "correctness": {
+        "workload": "fe2-memory/micro-rve/9",
+        "passed": true,
+        "checks": [
+          {
+            "name": "scoped-buffer-object-identity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "coefficient and state-block base objects persist across committed steps"
+          },
+          {
+            "name": "legacy-copy-model-state-parity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "production and deepcopy protocols commit identical float64 rows"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2-memory",
+      "workload": "fe2-memory/micro-rve/36",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 36,
+      "n_dofs": 648,
+      "metrics": {
+        "step": {
+          "min_ms": 0.3101379988947883,
+          "median_ms": 0.3155880003760103,
+          "mean_ms": 0.32267133307565626,
+          "reps": 3,
+          "samples_ms": [
+            0.3155880003760103,
+            0.3101379988947883,
+            0.3422879999561701
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "3 evaluations + 1 commit; preallocated scoped-sub-transaction buffers"
+        }
+      },
+      "logical_bytes": {
+        "macro_ip_count": 36,
+        "per_ip_bytes": 272,
+        "accepted_or_committed": 9792,
+        "staged_or_trial": 9792,
+        "production_evaluation_copy": 0,
+        "production_commit_copy": 9792,
+        "legacy_evaluation_copy": 29376,
+        "legacy_commit_copy": 9792,
+        "traced_step_peak": 3297
+      },
+      "correctness": {
+        "workload": "fe2-memory/micro-rve/36",
+        "passed": true,
+        "checks": [
+          {
+            "name": "scoped-buffer-object-identity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "coefficient and state-block base objects persist across committed steps"
+          },
+          {
+            "name": "legacy-copy-model-state-parity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "production and deepcopy protocols commit identical float64 rows"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2-memory",
+      "workload": "fe2-memory/micro-rve/36",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 36,
+      "n_dofs": 648,
+      "metrics": {
+        "step": {
+          "min_ms": 0.5787980007880833,
+          "median_ms": 0.582430002395995,
+          "mean_ms": 0.5820350015710574,
+          "reps": 3,
+          "samples_ms": [
+            0.582430002395995,
+            0.5787980007880833,
+            0.5848770015290938
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "3 evaluations + 1 commit; MicroModel.py:181/:241 deepcopy stand-in"
+        }
+      },
+      "logical_bytes": {
+        "macro_ip_count": 36,
+        "per_ip_bytes": 272,
+        "accepted_or_committed": 9792,
+        "staged_or_trial": 9792,
+        "production_evaluation_copy": 0,
+        "production_commit_copy": 9792,
+        "legacy_evaluation_copy": 29376,
+        "legacy_commit_copy": 9792,
+        "traced_step_peak": 46872
+      },
+      "correctness": {
+        "workload": "fe2-memory/micro-rve/36",
+        "passed": true,
+        "checks": [
+          {
+            "name": "scoped-buffer-object-identity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "coefficient and state-block base objects persist across committed steps"
+          },
+          {
+            "name": "legacy-copy-model-state-parity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "production and deepcopy protocols commit identical float64 rows"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2-memory",
+      "workload": "fe2-memory/micro-rve/144",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 144,
+      "n_dofs": 2592,
+      "metrics": {
+        "step": {
+          "min_ms": 1.1002249993907753,
+          "median_ms": 1.1041350007872097,
+          "mean_ms": 1.104954334247547,
+          "reps": 3,
+          "samples_ms": [
+            1.1041350007872097,
+            1.1105030025646556,
+            1.1002249993907753
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "3 evaluations + 1 commit; preallocated scoped-sub-transaction buffers"
+        }
+      },
+      "logical_bytes": {
+        "macro_ip_count": 144,
+        "per_ip_bytes": 272,
+        "accepted_or_committed": 39168,
+        "staged_or_trial": 39168,
+        "production_evaluation_copy": 0,
+        "production_commit_copy": 39168,
+        "legacy_evaluation_copy": 117504,
+        "legacy_commit_copy": 39168,
+        "traced_step_peak": 10641
+      },
+      "correctness": {
+        "workload": "fe2-memory/micro-rve/144",
+        "passed": true,
+        "checks": [
+          {
+            "name": "scoped-buffer-object-identity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "coefficient and state-block base objects persist across committed steps"
+          },
+          {
+            "name": "legacy-copy-model-state-parity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "production and deepcopy protocols commit identical float64 rows"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2-memory",
+      "workload": "fe2-memory/micro-rve/144",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 144,
+      "n_dofs": 2592,
+      "metrics": {
+        "step": {
+          "min_ms": 2.28573200001847,
+          "median_ms": 2.296417998877587,
+          "mean_ms": 2.308583332099564,
+          "reps": 3,
+          "samples_ms": [
+            2.3435999974026345,
+            2.28573200001847,
+            2.296417998877587
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "3 evaluations + 1 commit; MicroModel.py:181/:241 deepcopy stand-in"
+        }
+      },
+      "logical_bytes": {
+        "macro_ip_count": 144,
+        "per_ip_bytes": 272,
+        "accepted_or_committed": 39168,
+        "staged_or_trial": 39168,
+        "production_evaluation_copy": 0,
+        "production_commit_copy": 39168,
+        "legacy_evaluation_copy": 117504,
+        "legacy_commit_copy": 39168,
+        "traced_step_peak": 233528
+      },
+      "correctness": {
+        "workload": "fe2-memory/micro-rve/144",
+        "passed": true,
+        "checks": [
+          {
+            "name": "scoped-buffer-object-identity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "coefficient and state-block base objects persist across committed steps"
+          },
+          {
+            "name": "legacy-copy-model-state-parity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "production and deepcopy protocols commit identical float64 rows"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2-memory",
+      "workload": "fe2-memory/micro-rve/576",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 576,
+      "n_dofs": 10368,
+      "metrics": {
+        "step": {
+          "min_ms": 4.375851996883284,
+          "median_ms": 4.4667760012089275,
+          "mean_ms": 4.442936665630744,
+          "reps": 3,
+          "samples_ms": [
+            4.4667760012089275,
+            4.375851996883284,
+            4.486181998800021
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "3 evaluations + 1 commit; preallocated scoped-sub-transaction buffers"
+        }
+      },
+      "logical_bytes": {
+        "macro_ip_count": 576,
+        "per_ip_bytes": 272,
+        "accepted_or_committed": 156672,
+        "staged_or_trial": 156672,
+        "production_evaluation_copy": 0,
+        "production_commit_copy": 156672,
+        "legacy_evaluation_copy": 470016,
+        "legacy_commit_copy": 156672,
+        "traced_step_peak": 40049
+      },
+      "correctness": {
+        "workload": "fe2-memory/micro-rve/576",
+        "passed": true,
+        "checks": [
+          {
+            "name": "scoped-buffer-object-identity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "coefficient and state-block base objects persist across committed steps"
+          },
+          {
+            "name": "legacy-copy-model-state-parity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "production and deepcopy protocols commit identical float64 rows"
+          }
+        ]
+      }
+    },
+    {
+      "category": "fe2-memory",
+      "workload": "fe2-memory/micro-rve/576",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 576,
+      "n_dofs": 10368,
+      "metrics": {
+        "step": {
+          "min_ms": 9.21496500086505,
+          "median_ms": 9.320230001321761,
+          "mean_ms": 9.386705334084885,
+          "reps": 3,
+          "samples_ms": [
+            9.320230001321761,
+            9.624921000067843,
+            9.21496500086505
+          ],
+          "rss_delta_mb": 0.0,
+          "note": "3 evaluations + 1 commit; MicroModel.py:181/:241 deepcopy stand-in"
+        }
+      },
+      "logical_bytes": {
+        "macro_ip_count": 576,
+        "per_ip_bytes": 272,
+        "accepted_or_committed": 156672,
+        "staged_or_trial": 156672,
+        "production_evaluation_copy": 0,
+        "production_commit_copy": 156672,
+        "legacy_evaluation_copy": 470016,
+        "legacy_commit_copy": 156672,
+        "traced_step_peak": 955060
+      },
+      "correctness": {
+        "workload": "fe2-memory/micro-rve/576",
+        "passed": true,
+        "checks": [
+          {
+            "name": "scoped-buffer-object-identity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "coefficient and state-block base objects persist across committed steps"
+          },
+          {
+            "name": "legacy-copy-model-state-parity",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "production and deepcopy protocols commit identical float64 rows"
+          }
+        ]
+      }
+    }
+  ]
+}
