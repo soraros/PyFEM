@@ -1,31 +1,27 @@
 # PyFEM v3 migration execution
 
-Live state checked on 2026-11-02 against `v3` at `04a51be`. This file is the
-only current migration status surface. [migration-history.md](migration-history.md)
-is the archive of earlier decisions, evidence and superseded dispatch cards; its
-"current" and "next" instructions are historical, not work to resume.
+Live state checked on 2026-11-02 against `v3` at `735d064`, the M85 merge.
+This file is the only current migration status surface.
+[migration-history.md](migration-history.md) is the archive of earlier decisions,
+evidence and superseded dispatch cards; its "current" and "next" instructions
+are historical, not work to resume.
 
 ## Exact next safe action
 
-Resume the paused M85 FE² scale mission on `feat/fe9-fe2-scale` from its clean,
-unmerged `6073fc5`, based on `04a51be`. No agent, benchmark or other background
-process is running, and no resumable result JSON exists. The old full-harness
-log is historical evidence only; do not repeat `bench.run all`.
+No M85 process or task remains, and this record dispatches no FE² recovery or
+benchmark phase. M85 merged at `735d064` after a clean review of `06caa7d`; the
+earlier paused state at `6073fc5` and its recovery instructions are superseded.
 
-The deterministic per-IP task pool, raw-uint64 N-thread/1-thread pins and
-retained nested-buffer identity pins are implemented. Only these evidence and
-gate tasks remain:
+The committed performance evidence is the controlled pair
+`bench/results/run_m85_candidate.json` (candidate `397849f`) and
+`bench/results/run_m85_control_base.json` (control `4bf24ae`). Both are
+clean-tree, explicitly partial runs covering all four FE² workloads at
+1/2/4/8/16 threads and all four FE²-memory sizes, with every recorded
+correctness gate passing. They are targeted candidate/control evidence, not a
+full-harness run or a promoted baseline; `bench/results/baseline_m3.json` is
+unchanged.
 
-1. Run identical targeted warm candidate and serial-control measurements,
-   preserving every FE² and FE²-memory workload and the full required thread
-   sweep. Commit both as new result JSONs, compare candidate against control,
-   report the memory-vs-IP evidence and honestly label the partial benchmark
-   coverage. Leave `baseline_m3.json` unchanged.
-2. Run the full repository suite in default and `PYTHONINTMAXSTRDIGITS=640`
-   modes, then all whole-tree Ruff gates: the four exact CI check invocations
-   and the bench check/format pair.
-
-## Merged capability state at `04a51be`
+## Merged capability state at `735d064`
 
 - The generic-spine migration and public cut are landed. The ancient G1
   candidate reviews, G1-G4 dispatch sequence and `agnet/*` refs in the archive
@@ -37,11 +33,15 @@ gate tasks remain:
   its candidate/control benchmark evidence.
 - The M71 crystal per-IP status study is complete. Following M80's removal of
   the dead legacy implementation, M81 landed the fresh stateful crystal law.
-- The M75-M84 wave is merged through M84's `5ec8f0b`: RVE homogenization,
-  repair reconciliation, nested-state composition and rollback, periodic-cell
-  authoring, the nested FE² continuum operator, and typed cross-level failure
-  and cost propagation are current source and test capabilities, not remaining
-  dispatch items.
+- M75-M85 are complete. The merged FE² capabilities include RVE homogenization,
+  nested-state composition and rollback, periodic-cell authoring, the nested
+  continuum operator, typed cross-level failure and cost propagation, and M85's
+  deterministic opt-in integration-point host pool with stable result order.
+  `nested_ip_thread_count` defaults to the direct serial schedule; the scoped
+  nested trial buffers are retained across evaluations and steps. Raw-uint64
+  1-thread/n-thread gates and retained-buffer identity checks pin those
+  execution policies. The partial candidate/control artifacts above are the
+  scale and memory evidence, not proof of universal threading speedups.
 
 Reconcile refs and source before dispatching new work. Current architecture and
 behavior are defined by [generic_core.md](generic_core.md),
