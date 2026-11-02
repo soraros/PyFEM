@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
+from numba import get_num_threads
 
 from bench.gates import CheckResult, GateResult
 from bench.workloads import FE2MemoryCase, FE2Workload
@@ -95,6 +96,9 @@ def build_fe2_deck(workload: FE2Workload) -> _FE2Deck:
     micro_system=micro_system,
     micro_coordinate_map=micro_map,
     homogenization=cell.homogenization_request(micro_system),
+    settings=NonlinearStaticSettings(
+      nested_ip_thread_count=get_num_threads() if workload.elastic else 1
+    ),
   )
   left = tuple(node.id for node in macro_mesh.nodes if abs(node.coordinates[0]) < 1e-12)
   right = tuple(
