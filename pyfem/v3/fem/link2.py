@@ -113,10 +113,12 @@ def _spring_local(a: F64, stiffness_k: float) -> tuple[F64, F64]:
   # Axial spring semantics: the tangent carries stiffness k along the element
   # axis only and is the exact derivative of the axial residual (globally
   # K = k * b b^T and f = -k * (b.a) * b with b = (c, s, -c, -s)); relative
-  # transverse motion is unresisted. Legacy pyfem/elements/Spring.py assembles
-  # an isotropic k * eye(2) block tangent that is NOT the derivative of its
-  # own axial residual, so the legacy spring tangent is deliberately not
-  # matched; the legacy axial residual remains the parity oracle.
+  # transverse motion is unresisted. Before M55, legacy
+  # pyfem/elements/Spring.py assembled an isotropic k * eye(2) block tangent
+  # that was not the derivative of its axial residual. M55 repaired legacy to
+  # this same axial tangent (ed798ae), leaving the residual unchanged;
+  # test_spring_legacy_tangent_repaired_matches_v3 in test/v3/test_link2_element.py
+  # now pins both residual and tangent parity.
   elong = a[2] - a[0]
   force = elong * stiffness_k
   k_bar = np.zeros((4, 4), dtype=np.float64)

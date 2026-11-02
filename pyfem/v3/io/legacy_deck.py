@@ -46,8 +46,9 @@ Deck structure (``.pro`` side):
   parameter sets: ``Tult``/``Gc``, ``Tult``/``Gc``, ``Tult``/``Gc``/
   ``d1d3``/``d2d3``, and ``D`` respectively; the legacy ``XuNeedleman``
   constructor silently overwrites deck-supplied ``q``/``r`` with ``1.0``/
-  ``0.0``, so those keys reject rather than convert dishonestly, and the
-  legacy rank-3 branch — dead and broken upstream — is not admitted);
+  ``0.0``, so those keys reject rather than convert dishonestly; M80 removed
+  the dead and broken legacy rank-3 branch (503cefb), and rank-3 decks are not
+  admitted);
 - exactly one region-routed element group (``SmallStrainContinuum``,
   ``FiniteStrainContinuum``, or ``Truss``) plus any number of ``Spring``
   and ``Interface`` groups; the region-routed group forms the base
@@ -114,10 +115,9 @@ a 2D mesh; the ``Isotropic`` law requires a 3D mesh;
 zero-state tangent once, while the v3 driver integrates the finite-strain
 residual by Newton iteration — the combination has no faithful mapping).
 ``Spring`` groups require a 2D mesh and a Newton-based solver block
-(``NonlinearSolver`` or ``RiksSolver``): the legacy ``LinearSolver``
-assembles the legacy isotropic spring tangent once, while the v3 spring
-family ships the consistent axial tangent, so the single linear solve has no
-faithful mapping.
+(``NonlinearSolver`` or ``RiksSolver``). Grounded ``Spring`` +
+``LinearSolver`` conversion remains outside the supported subset and rejects
+with ``incompatible-solver-type``.
 
 Rejection codes
 ---------------
@@ -162,10 +162,9 @@ context — never a silent skip. Known legacy constructs and their codes:
   solver block is a ``LinearSolver`` (legacy assembles the zero-state
   tangent once; the v3 driver only integrates the finite-strain residual by
   Newton iteration, so the combination has no faithful mapping), a deck
-  with ``Spring`` groups whose solver block is a ``LinearSolver`` (legacy
-  assembles its isotropic spring tangent once — not the oracle per the H1
-  decision — while the v3 spring family ships the consistent axial tangent,
-  so the single linear solve has no faithful mapping), or a deck whose
+  with ``Spring`` groups whose solver block is a ``LinearSolver`` (grounded
+  ``Spring`` + ``LinearSolver`` conversion remains outside the supported
+  subset), or a deck whose
   ``Interface`` groups carry a nonlinear law (``XuNeedleman``,
   ``PowerLawModeI``, ``ThoulessModeI``) under a ``LinearSolver`` (the same
   one-shot mismatch; the linear ``Dummy`` law converts, since its assembled
@@ -2716,9 +2715,9 @@ def _legacy_spring_kernel(
   ``parameters`` is ``(k, d0_x, d0_y, d1_x, d1_y, ...)``: the group's shared
   stiffness plus each spring's unit chord direction. The response is the
   consistent axial pair ``k (u.d) d`` / ``k d d^T`` the H1 decision pins —
-  the legacy element's residual restricted to a grounded end (the legacy
-  isotropic tangent is not the oracle). The spring is stateless, so the
-  trial rows echo the accepted rows.
+  the M55-repaired legacy element's residual and tangent restricted to a
+  grounded end (ed798ae). The spring is stateless, so the trial rows echo the
+  accepted rows.
   """
   stiffness = parameters[0]
   directions = parameters[1:].reshape(-1, 2)
@@ -3089,10 +3088,8 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
         _diagnostic(
           "incompatible-solver-type",
           "a deck with 'Spring' groups requires a NonlinearSolver or "
-          "RiksSolver block: the legacy LinearSolver assembles the legacy "
-          "isotropic spring tangent once — not the oracle per the H1 "
-          "decision — while the v3 spring family ships the consistent axial "
-          "tangent, so the single linear solve has no faithful mapping",
+          "RiksSolver block: grounded Spring + LinearSolver conversion is "
+          "outside the supported deck subset",
           (
             pro_deck.solver_block.source
             if pro_deck.solver_block is not None
