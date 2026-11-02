@@ -6,11 +6,12 @@ exists so that future work cannot quietly give that property back. Two rules
 govern everything below:
 
 1. **Correctness before timing.** Every benchmark first proves the candidate
-   (v3) solution against the legacy reference (rtol 1e-10 for generated
-   patches and linear skims; nonlinear finite-strain and Riks skims use their
-   own `skims/*/parity.toml`, the repo's established oracle). A failed gate
-   means no timings are recorded for that workload — a faster wrong result is
-   a failed benchmark.
+   under its documented gate. Generated patches and linear skims use legacy
+   parity at rtol 1e-10; nonlinear finite-strain and Riks skims use their own
+   `skims/*/parity.toml` oracle. FE² instead uses the raw 1-thread/n-thread
+   identity gate, and FE²-memory uses the buffer-identity/final-state gates
+   described below. A failed gate invalidates that workload's timings — a
+   faster wrong result is a failed benchmark.
 2. **Gate on ratios, not absolutes.** Absolute times move with machines;
    regressions are judged as `candidate_median / baseline_median` against the
    committed baseline JSON.
@@ -117,6 +118,84 @@ predictor) before any timing is recorded. The reference side is timed once
 legacy cells); the optimized side sweeps the thread counts like the other
 threaded stages.
 
+**FE² nested solves (`fe2/cantilever/...`).** `bench/fe2_pipeline.py` builds a
+Q8 macro cantilever with one periodic Q8 microcell problem per macro
+integration point (9 per macro element). The damage/state anchors are
+`fe2/cantilever/1x1` and `fe2/cantilever/2x2`, using the default 2x2 microcell;
+they have 1 and 4 macro elements, 9 and 36 macro integration points, and 16 and
+42 macro DOFs. The compute-releasing elastic scale cases are
+`fe2/cantilever/1x1/micro-8x8/elastic` and
+`fe2/cantilever/1x1/micro-16x16/elastic`: one macro element and 16 macro DOFs,
+with 8x8 or 16x16 microelements in each nested cell. These are v3-only warm
+workloads, not legacy-versus-v3 timing comparisons.
+
+For each case, the harness solves one fresh 1-thread reference and a fresh
+candidate at every requested thread count. Before recording that candidate's
+timings, `gate_fe2` requires both macro solves to complete and compares the
+1-thread and n-thread results: committed macro physical values and macro strain
+are raw-uint64 identical, the versioned accepted nested-store payloads are byte
+identical, and a rejected-trial nested evaluation completes with raw-uint64
+identical homogenized internal force, material tangent and trial macro strain.
+A failed gate produces a failed record, not timings. `bench.run gates` exercises
+the same gate at 1 versus 2 threads for every FE² case.
+
+The FE² stage envelope is deliberately small:
+
+- `load` compiles the macro/micro systems and performs the real virgin nested
+  probe; it is a fixed one-shot measurement.
+- `nested_evaluation` evaluates homogenized outputs at the committed macro
+  state and rejects the nested trial after every call; it uses the normal warm
+  adaptive repetitions.
+- `e2e` performs a fresh compilation, virgin nested probe and complete macro
+  nonlinear solve; it is also a fixed one-shot measurement.
+
+`bench.run warm` runs all four FE² cases followed by all four FE²-memory cases;
+`bench.run all` includes the same warm records before its separate cold phase.
+There are no FE² cold records. The FE² cases honor `--threads`; a `warm`-only
+artifact is still stamped `partial`, while a default full-matrix `all` run
+includes FE² as part of its full coverage.
+
+**FE² integration-point threading.** Production
+`NonlinearStaticSettings.nested_ip_thread_count` defaults to 1, which uses the
+direct serial loop with no executor overhead. A value greater than 1 explicitly
+opts into the deterministic host-side Python task pool: workers own fixed,
+contiguous integration-point chunks, the worker set and chunk boundaries persist
+across evaluations, and results are observed in stable integration-point order.
+This is not a free-threaded Numba path and does not change numerical content.
+The benchmark opts only the elastic cases into the pool, setting their nested
+count from the current Numba thread count; damage cases keep
+`nested_ip_thread_count=1` throughout the sweep because their nested Python law
+is GIL-bound. Consequently, an n-thread damage record is not evidence of nested
+IP parallelism, and the elastic results are case-specific scaling evidence, not
+a universal threading speedup claim.
+
+**FE² nested-state memory (`fe2-memory/micro-rve/<n>`).** The registered sizes
+are 9, 36, 144 and 576 macro integration points. This is a synthetic state/copy
+protocol benchmark, not another physical FE² solve: each point owns 18
+coefficients and one 16-row float64 state block, or 272 bytes. One timed `step`
+performs three evaluations and one commit. The production side reuses scoped,
+preallocated staged buffers; the legacy side separately models legacy
+`MicroModel.py`'s deepcopy per evaluation and deepcopy at commit. Gates require
+the coefficient and state-block base objects to retain their identity across
+committed steps and require the final production and legacy-model float64 state
+rows to match exactly.
+
+Let `V = 272 * macro_ip_count`. Each production and legacy memory record carries
+the logical accounting fields `accepted_or_committed=V` and
+`staged_or_trial=V`, plus separate copy models:
+`production_evaluation_copy=0`, `production_commit_copy=V` (all points are
+touched in this model), `legacy_evaluation_copy=3V`, and
+`legacy_commit_copy=V`. Production therefore has no per-evaluation nested-state
+copy; its commit copy is not folded into or confused with legacy evaluation
+copies. Ordinary FE² records likewise report accepted/staged nested payload
+sizes, accepted macro-strain bytes and `nested_evaluation_copy=0`.
+
+These logical byte counts are accounting models, not measured allocator traffic
+or resident memory. `traced_step_peak` is a separate `tracemalloc` peak for one
+step, while `step.rss_delta_mb` is the process peak-RSS high-water-mark increase
+across the repetition block; neither is interchangeable with the logical copy
+fields.
+
 **Family cases (`family/tl-cantilever/<nx>x<ny>`, `family/riks-fan/<n>`).**
 The M47 breadth cases for the landed compile+driver families, which the
 skims do not exercise (skims drive the prototype `solver/` path):
@@ -147,7 +226,7 @@ including the cache=False TL kernel's per-process JIT recompile.
 
 ## What is measured
 
-**Stage decomposition** (v3, per workload; `bench/v3_pipeline.py`):
+**Stage decomposition** (v3 Q8; `bench/v3_pipeline.py`):
 `meshgen`, `load` (pack), `kernel` (batched numba element stiffness),
 `scatter` (COO fill), `dedup` (COO→CSR), `assemble_coo` (the public
 `assemble_loaded` = kernel+scatter+COO, matching M3's "asm" envelope),
@@ -155,38 +234,41 @@ including the cache=False TL kernel's per-process JIT recompile.
 `backsolve` (cached-factorization repeat solve), `solve` (single-shot
 constrained solve), `e2e` (public `prepare_cached_linear(...).solve()`).
 Stages scale differently (D2 §7.3); totals hide regressions. Legacy records
-`load`, `assemble_coo`, `solve` — the stages its architecture exposes.
+`load`, `assemble_coo`, `solve` — the stages its architecture exposes. FE²
+uses its separate `load`/`nested_evaluation`/`e2e` envelope documented above.
 
-**Thread sweep 1/2/4/8/16.** Stages with a threaded code path (`kernel`,
-`scatter`, `assemble_coo`, `assemble`, `e2e`) are measured at every sweep
-count via `numba.set_num_threads`. Assembly's COO→CSR deduplication also has
-a size-gated parallel implementation, but the harness deliberately samples
-the standalone `dedup` stage only once at the reference count (16), inside
-that record; this sampling is not a claim that dedup is serial. The stages
-with no threaded code path (`meshgen`, `load`, `constrain`, `factor`,
-`backsolve`, `solve`) are also measured once at the reference count. Legacy
-is single-threaded (threads=1) — its per-element Python loop does not
-thread, and its solve is single-threaded SuperLU like v3's. BLAS pinning in
-the warm phase uses `threadpoolctl`'s `threadpool_limits` **when installed**
-— it is optional and currently absent from the project venv, so the warm
-phase degrades to numba pinning alone (printed once per run and recorded in
-the manifest as `threadpoolctl_available`). Impact is nil today: the
-threaded stages are numba kernels, and the scipy/SuperLU stages are
-single-threaded on both sides. Cold subprocesses always pin the BLAS thread
-environment variables explicitly, independent of `threadpoolctl`.
+**Thread sweep 1/2/4/8/16.** Outside the FE²-specific policy above, stages
+with a threaded code path (`kernel`, `scatter`, `assemble_coo`, `assemble`,
+`e2e`) are measured at every sweep count via `numba.set_num_threads`.
+Assembly's COO→CSR deduplication also has a size-gated parallel
+implementation, but the harness deliberately samples the standalone `dedup`
+stage only once at the reference count (16), inside that record; this sampling
+is not a claim that dedup is serial. The stages with no threaded code path
+(`meshgen`, `load`, `constrain`, `factor`, `backsolve`, `solve`) are also
+measured once at the reference count. Legacy is single-threaded (threads=1) —
+its per-element Python loop does not thread, and its solve is single-threaded
+SuperLU like v3's. BLAS pinning in the warm phase uses `threadpoolctl`'s
+`threadpool_limits` **when installed** — it is optional and currently absent
+from the project venv, so the warm phase degrades to numba pinning alone
+(printed once per run and recorded in the manifest as
+`threadpoolctl_available`). Impact is nil today: the threaded stages are numba
+kernels, and the scipy/SuperLU stages are single-threaded on both sides. Cold
+subprocesses always pin the BLAS thread environment variables explicitly,
+independent of `threadpoolctl`.
 
-**Repetitions and statistics.** Warm timings use warmup + adaptive reps
-(minimum 5, up to 30, targeting `--budget-s` seconds of measured time per
-cell) and report min/median/mean plus all samples. Two documented exceptions
-match the M3 envelope: legacy assembly in its superlinear regime uses 5
-reps ≤16x16, 3 at 32x32, 1 at 64x64 (marked in the cell's `note`), and the
-pure-Python `meshgen`/`load` stages use 3 fixed reps. Cold subprocess cells
-are single-shot by construction.
+**Repetitions and statistics.** Adaptive warm timings use warmup + adaptive
+reps (minimum 5, up to 30, targeting `--budget-s` seconds of measured time per
+cell) and report min/median/mean plus all samples. Fixed-repetition exceptions
+include legacy assembly in its superlinear regime (5 reps ≤16x16, 3 at 32x32,
+1 at 64x64, marked in the cell's `note`), the pure-Python `meshgen`/`load`
+stages (3 reps), FE² `load`/`e2e` (1 rep), and FE²-memory `step` (3 reps).
+Cold subprocess cells are single-shot by construction.
 
-**Memory.** Per record: `logical_bytes` (K_e batch, COO, CSR array sizes)
-and per-stage `rss_delta_mb` — the process peak-RSS high-water-mark increase
-across that stage's rep block (not a per-rep allocation profile). Cold
-records carry the worker's peak RSS in the `wall` metric's `rss_delta_mb`.
+**Memory.** Q8 `logical_bytes` report K_e batch, COO and CSR array sizes; FE²
+uses the nested-state and copy-accounting fields documented above. Per-stage
+`rss_delta_mb` is the process peak-RSS high-water-mark increase across that
+stage's rep block (not a per-rep allocation profile). Cold records carry the
+worker's peak RSS in the `wall` metric's `rss_delta_mb`.
 
 **Cold modes** (`bench.run cold`). Each measurement is a fresh
 `<venv>/bin/python -m bench.cold_worker` subprocess with
@@ -219,6 +301,17 @@ Prefer `clean: true` runs for adjudication and baseline promotion.
 `bench/results/baseline_m3.json` is the committed seed: the M3 baseline
 (agent-g1p, 2026-09-29, i9-9980HK), transcribed into the same schema with
 provenance notes. `bench/results/run_*.json` are harness runs.
+
+The committed M85 FE² evidence is the controlled pair
+`bench/results/run_m85_candidate.json` (candidate `397849f`) and
+`bench/results/run_m85_control_base.json` (control `4bf24ae`). Both manifests
+record a clean tree on the reference machine and `coverage: "partial"`. Each
+contains the same 28-record targeted matrix — four FE² workloads at
+1/2/4/8/16 threads plus v3 and modeled-legacy records for four FE²-memory
+sizes — and every recorded correctness gate passes. They are candidate/control
+evidence for those workloads and conditions, not full-harness coverage or a
+promoted baseline; `baseline_m3.json` and the historical scaling records remain
+unchanged.
 
 `bench.run check` compares a candidate against a baseline per cell
 (`category, workload, side, mode, threads, metric`):
@@ -307,13 +400,14 @@ old file; baselines are history).
 bench/
   run.py             CLI: gates | warm | cold | all | check | manifest
   v3_pipeline.py     stage-decomposed v3 timed callables (uniform Q8)
+  fe2_pipeline.py    FE2 drivers, raw identity gate and nested-state memory model
   family_v3.py       v3 family case drivers (finite-strain deck stack, Riks fan)
   legacy_cases.py    generated legacy .dat/.pro writer + legacy drivers (numba-free)
   legacy_settings.py numba-free replica of the v3 skim solver-settings parsers
   gates.py           correctness gates (legacy parity + analytic patch field)
   cold_worker.py     one fresh-subprocess cold measurement, JSON on stdout
   db.py              cell flattening, ratio-gate comparison, provenance reads
-  workloads.py       workload registry (Q8 sizes/materials, skim, material, family)
+  workloads.py       workload registry (Q8, skim, material, FE2 and family)
   manifest.py        environment manifest (incl. working-tree state)
   common.py          timing core (adaptive reps, stats, RSS), run JSON IO
   results/           committed regression DB (baseline_m3.json + runs)
