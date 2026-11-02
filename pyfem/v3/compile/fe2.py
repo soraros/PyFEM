@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from numba import get_num_threads
 
 from pyfem.v3.compile.continuum import Q8ContinuumOperator, Q8ContinuumPayload
 from pyfem.v3.compile.diagnostics import (
@@ -420,7 +419,7 @@ def compile_fe2_continuum(
     )
     for ip_index in range(ip_count)
   )
-  task_pool = IntegrationPointTaskPool(ip_count, get_num_threads())
+  task_pool = IntegrationPointTaskPool(ip_count, settings.nested_ip_thread_count)
   index_dtype = base_operator.header.ports[0].coefficient_map.values.dtype
   state_layout = _new(
     OperatorStateLayout,

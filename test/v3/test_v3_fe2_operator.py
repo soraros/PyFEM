@@ -132,14 +132,15 @@ def _deck(
     ),
     q8_reference_registry(),
   )
+  if micro_settings is None:
+    micro_settings = NonlinearStaticSettings(nested_ip_thread_count=get_num_threads())
   arguments = {
     "micro_system": micro_system,
     "micro_coordinate_map": micro_map,
     "homogenization": cell.homogenization_request(micro_system),
     "micro_loads": micro_loads,
+    "settings": micro_settings,
   }
-  if micro_settings is not None:
-    arguments["settings"] = micro_settings
   system = authoring.fe2_continuum(base, **arguments)
   return _Deck(system, micro_system, micro_map, cell, macro_mesh, micro_mesh)
 
@@ -731,6 +732,15 @@ def _evaluate_with_ip_outputs(
   return _evaluate_port(deck, values, accepted), outputs
 
 
+def test_fe2_ip_pool_policy_defaults_to_serial_and_validates_width() -> None:
+  deck = _deck(elastic=True, micro_settings=NonlinearStaticSettings())
+  operator = deck.system.operators[0]
+  assert operator.task_pool.thread_count == 1
+  assert operator.task_pool.worker_count == 1
+  with pytest.raises(ValueError, match="nested IP thread count"):
+    NonlinearStaticSettings(nested_ip_thread_count=0)
+
+
 def test_ip_task_pool_matches_one_thread_raw_uint64_across_macro_steps() -> None:
   previous_threads = get_num_threads()
   try:
@@ -753,6 +763,10 @@ def test_ip_task_pool_matches_one_thread_raw_uint64_across_macro_steps() -> None
     assert parallel_operator.task_pool.thread_count == 2
     assert parallel_operator.task_pool.worker_count == 2
     assert parallel_operator.task_pool.chunks == ((0, 5), (5, 9))
+    assert (
+      serial.deck.system.content_fingerprint.digest
+      == parallel.deck.system.content_fingerprint.digest
+    )
     block_id = serial_operator.header.state_layout.block_id
     _assert_raw_uint64_equal(
       serial.driver.owner.accepted_physical().values,
