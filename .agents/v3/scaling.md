@@ -15,6 +15,12 @@ The original notes did not completely capture hardware identity, dependency
 versions, or CPU-thread settings. Treat every timing as directional evidence, not
 as a reproducible performance gate.
 
+**All prototype command blocks below are archival.** They record the dated
+prototype invocations, not the current benchmark workflow. For current
+benchmark work, use [bench/README.md](../../bench/README.md) and its
+`python -m bench.run` commands from the actual checkout root. The historical
+commands and measurements below are retained only as evidence.
+
 ## Historical scale-first policy
 
 The prototype pass targeted **mid-to-large meshes** (hundreds to thousands of

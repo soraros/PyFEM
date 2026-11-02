@@ -32,11 +32,14 @@ plumbing, not the new compiler contract:
 
 ## Running parity
 
+Run from the checkout root with module invocation so the tests import this
+checkout's code:
+
 ```bash
 uv sync
-uv run pytest test/v3/test_parity_linear.py -q
+uv run python -m pytest test/v3/test_parity_linear.py -q
 # or all v3 tests:
-uv run pytest test/v3 -q
+uv run python -m pytest test/v3 -q
 ```
 
 ## Expected result

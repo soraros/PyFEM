@@ -58,11 +58,13 @@ pyfem --help
 
 ### Development setup
 
-`uv sync` also installs dev tools (pytest, coverage, ruff, sympy):
+`uv sync` also installs dev tools (pytest, coverage, ruff, sympy). Run tests
+from the checkout root with module invocation, not bare `pytest` or
+`uv run pytest`:
 
 ```bash
 uv sync
-uv run pytest
+uv run python -m pytest
 uv run coverage run -m pytest -q
 uv run coverage report
 uv build

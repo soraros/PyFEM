@@ -13,6 +13,27 @@
   root `pyproject.toml`. Diagnostic benchmarks use `_bench_*.py` and stay out of
   ordinary pytest collection.
 
+## Worktree environments
+
+A git worktree can reuse the primary checkout's environment; it does not need
+its own `.venv`. Activate the primary checkout's `.venv` and then change to
+the actual checkout root, or use that environment's absolute `python` and
+`ruff` binaries while remaining in the actual checkout root. For example:
+
+```bash
+cd /path/to/actual/checkout
+/path/to/primary/.venv/bin/python -m pytest -q
+/path/to/primary/.venv/bin/python -m bench.run gates
+/path/to/primary/.venv/bin/ruff check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+```
+
+Always invoke tests as `python -m pytest` and benchmarks as
+`python -m bench.run` from the checkout being tested, never bare `pytest` or
+`uv run pytest`: module invocation puts that checkout first on `sys.path`,
+whereas the path-style editable install can otherwise import the primary
+checkout's code. Ruff must still come from the pinned project environment,
+not `PATH`; keep its existing per-tree configuration arguments unchanged.
+
 ## Commands
 
 Run the affected tests for a local change; the suite commands below are available
