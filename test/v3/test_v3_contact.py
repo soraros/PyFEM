@@ -604,7 +604,8 @@ def test_compile_is_fail_closed() -> None:
   assert diagnostic.code == "unknown-contact-support-node"
 
   # The dimension-generic kernel is pinned to two-component spaces by a coded
-  # rejection until a 3D oracle exists (the legacy sphere branch is dead).
+  # rejection until an independent 3D oracle exists; M80 435244b removed the
+  # dead legacy sphere branch.
   hex8 = compile_system(_hex8_model(), continuum_reference_registry())
   with pytest.raises(ModelCompilationError) as excinfo:
     compile_contact_operator(hex8, _declaration())

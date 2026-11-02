@@ -33,8 +33,8 @@ disengaged, and boundary-adjacent states placed deterministically around the
 declared obstacle, clear of the non-differentiable kink at ``d = radius`` by
 orders of magnitude more than the finite-difference step. The kernel is
 dimension-generic, but compilation is pinned to two-component spaces by a
-coded rejection until a 3D oracle exists (legacy's sphere branch is
-unreachable through its ModelManager import — M62 finding 4). NOT-yet:
+coded rejection until an independent 3D oracle exists; M80 435244b removed
+legacy's dead sphere branch. NOT-yet:
 friction, finite sliding with contact search, Lagrange-multiplier or
 augmented-Lagrange constraint enforcement, and gap/status observation
 channels.
@@ -781,8 +781,8 @@ def compile_contact_operator(
       "unsupported-contact-space",
       "penalty contact requires a two-component displacement space: the "
       "kernel is dimension-generic, but no three-dimensional oracle exists "
-      "(the legacy sphere branch is unreachable), so 3D compilation is "
-      "rejected until one lands",
+      "(M80 435244b removed the dead legacy sphere branch), so 3D "
+      "compilation is rejected until an independent oracle lands",
       source,
     )
   support = next(

@@ -1,9 +1,9 @@
 # Contact Mechanics Model
 
 ## Overview
-The contact model in PyFEM implements a penalty-based contact algorithm for simulating mechanical interactions between deformable bodies and rigid obstacles. The model supports both 2D (disc) and 3D (sphere) contact geometries with a simple penalty method that enforces non-penetration constraints.
+The contact model in PyFEM implements a penalty-based contact algorithm for simulating mechanical interactions between deformable bodies and a moving rigid disc in 2D. A simple penalty method enforces non-penetration constraints.
 
-The contact model is implemented as a special model type that can be added to any structural analysis to impose contact constraints between the mesh and a moving rigid obstacle.
+The contact model is implemented as a special model type that can be added to a two-dimensional structural analysis to impose contact constraints between the mesh and the moving obstacle. The legacy 3D sphere-contact branch was removed by M80 (commit `435244b`). Three-dimensional contact compilation is currently rejected with the `unsupported-contact-space` diagnostic pending an independent 3D numerical oracle.
 
 ## Theory
 ### Penalty Method
@@ -18,7 +18,7 @@ where:
 - $\mathbf{n}$ is the outward normal direction from the obstacle surface
 
 ### Contact Detection
-For a rigid obstacle (disc in 2D or sphere in 3D) with center $\mathbf{c}$ and radius $R$, contact is detected when:
+For a rigid disc in 2D with center $\mathbf{c}$ and radius $R$, contact is detected when:
 
 $$
 g = R - \|\mathbf{x} - \mathbf{c}\| > 0
