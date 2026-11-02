@@ -102,18 +102,18 @@ Branch names such as `feature/add-new-element`, `fix/newton-convergence`,
 Run the full suite from the repository root:
 
 ```bash
-uv run pytest
+uv run python -m pytest
 ```
 
-or a focused subset, e.g. `uv run pytest test/v3 -q`.
+or a focused subset, e.g. `uv run python -m pytest test/v3 -q`.
 
 The v3 compiler and identity diagnostics have regressions for Python's
 integer-string conversion limit. When those paths change, run the affected
 tests in **both digit modes** — once normally and once with the limit raised:
 
 ```bash
-uv run pytest
-PYTHONINTMAXSTRDIGITS=640 uv run pytest
+uv run python -m pytest
+PYTHONINTMAXSTRDIGITS=640 uv run python -m pytest
 ```
 
 Numerical pins (byte-identity assertions) are defined on the reference
