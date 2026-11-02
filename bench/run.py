@@ -99,8 +99,9 @@ from bench.workloads import (
 )
 
 # Stages with a threaded (numba parallel) code path are measured at every
-# sweep thread count; stages without one are measured once at the reference
-# count, inside that thread count's record.
+# sweep thread count. The other stages are measured once at the reference count;
+# dedup deliberately uses this reference-count sampling despite its size-gated
+# parallel implementation, while the remaining reference stages have no threaded path.
 SWEPT_STAGES = ("kernel", "scatter", "assemble_coo", "assemble", "e2e")
 REFERENCE_STAGES = (
   "meshgen",
