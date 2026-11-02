@@ -17,7 +17,7 @@ govern everything below:
 
 ## Running it
 
-All commands run from the repository root with the project venv (numba,
+All commands run from the actual checkout root with the project venv (numba,
 numpy, scipy are already in it; the harness adds no dependencies):
 
 ```bash
@@ -31,6 +31,16 @@ numpy, scipy are already in it; the harness adds no dependencies):
 .venv/bin/python -m bench.run check --candidate bench/results/<run>.json
 .venv/bin/python -m bench.run manifest   # print the environment manifest
 ```
+
+In a git worktree, activate the primary checkout's `.venv` or use its absolute
+`python` and `ruff` binaries; do not assume the worktree has its own
+environment. Keep the working directory at the actual worktree root and invoke
+tests as `python -m pytest` and benchmarks as `python -m bench.run` (replace
+`.venv/bin/python` above with the primary environment's absolute interpreter
+when it is not activated). Never use bare `pytest` or `uv run pytest`: the
+path-style editable install can otherwise import the primary checkout instead
+of the worktree. The absolute or activated Ruff must likewise be the pinned
+project environment's binary, with the existing per-tree configs unchanged.
 
 A full run takes roughly 20–30 minutes on the reference machine, dominated by
 the legacy side's superlinear assembly cost at 64x64 and the refined-
@@ -149,9 +159,12 @@ Stages scale differently (D2 §7.3); totals hide regressions. Legacy records
 
 **Thread sweep 1/2/4/8/16.** Stages with a threaded code path (`kernel`,
 `scatter`, `assemble_coo`, `assemble`, `e2e`) are measured at every sweep
-count via `numba.set_num_threads`; stages with no threaded code path
-(`meshgen`, `load`, `dedup`, `constrain`, `factor`, `backsolve`, `solve`)
-are measured once at the reference count (16), inside that record. Legacy
+count via `numba.set_num_threads`. Assembly's COO→CSR deduplication also has
+a size-gated parallel implementation, but the harness deliberately samples
+the standalone `dedup` stage only once at the reference count (16), inside
+that record; this sampling is not a claim that dedup is serial. The stages
+with no threaded code path (`meshgen`, `load`, `constrain`, `factor`,
+`backsolve`, `solve`) are also measured once at the reference count. Legacy
 is single-threaded (threads=1) — its per-element Python loop does not
 thread, and its solve is single-threaded SuperLU like v3's. BLAS pinning in
 the warm phase uses `threadpoolctl`'s `threadpool_limits` **when installed**

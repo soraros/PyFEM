@@ -1,6 +1,6 @@
 # PyFEM: A Python Finite Element Code
 
-[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/jjcremmers/PyFEM/actions/workflows/ci.yml/badge.svg)](https://github.com/jjcremmers/PyFEM/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-readthedocs-brightgreen.svg)](https://pyfem.readthedocs.io/)
@@ -36,7 +36,7 @@ The code is open source and intended for educational and scientific purposes. If
 
 ### Requirements
 
-- Python 3.11 or newer
+- Python 3.13 or newer
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - Git (for cloning the repository)
 
@@ -63,13 +63,13 @@ uv run pyfem PatchTest.pro
 
 ### Development Installation
 
-For contributors, `uv sync` installs PyFEM in editable mode together with dev tools (pytest, coverage, ruff):
+For contributors, `uv sync` installs PyFEM in editable mode together with dev tools (pytest, coverage, ruff). Run tests from the checkout root with module invocation, not bare `pytest` or `uv run pytest`:
 
 ```bash
 git clone https://github.com/jjcremmers/PyFEM.git
 cd PyFEM
 uv sync
-uv run pytest
+uv run python -m pytest
 uv run coverage run -m pytest -q
 uv run coverage report
 uv run ruff check pyfem test
