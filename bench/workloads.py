@@ -161,7 +161,8 @@ FE2_SIZES: tuple[tuple[int, int], ...] = ((1, 1), (2, 2))
 def fe2_cases() -> list[FE2Workload]:
   """Damage/state anchors plus the compute-releasing elastic scale leg."""
   return [FE2Workload(nx, ny) for nx, ny in FE2_SIZES] + [
-    FE2Workload(1, 1, micro_n=8, elastic=True)
+    FE2Workload(1, 1, micro_n=8, elastic=True),
+    FE2Workload(1, 1, micro_n=16, elastic=True),
   ]
 
 
