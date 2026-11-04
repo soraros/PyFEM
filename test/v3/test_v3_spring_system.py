@@ -27,7 +27,6 @@ the shallow-truss-with-spring configuration of the M18/M32 decks:
 
 from __future__ import annotations
 
-import platform
 import sys
 from collections.abc import Callable
 from dataclasses import replace
@@ -970,21 +969,23 @@ def test_exact_mixed_solution_and_attributed_balance(
 
 
 def test_spring_residual_bitwise_pin_has_teeth(
-  monkeypatch: pytest.MonkeyPatch,
   bitwise_pin: Callable[..., None],
   reference_platform_probe: Callable[[], bool],
+  reference_platform_fingerprint: dict[str, object],
+  platform_fingerprint_override: Callable[[dict[str, object]], None],
 ) -> None:
   expected = np.array([[_Q4_REFERENCE_SPRING, 0.0]])
   one_ulp_off = expected.copy()
   one_ulp_off[0, 0] = np.nextafter(one_ulp_off[0, 0], 1.0)
 
-  monkeypatch.setattr(sys, "platform", "darwin")
-  monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+  platform_fingerprint_override(reference_platform_fingerprint)
   assert reference_platform_probe()
   with pytest.raises(AssertionError):
     bitwise_pin(one_ulp_off, expected, rtol=0.0, atol=2.0e-15)
 
-  monkeypatch.setattr(sys, "platform", "linux")
+  unknown_fingerprint = dict(reference_platform_fingerprint)
+  unknown_fingerprint["cpu"] = "unrecorded test CPU"
+  platform_fingerprint_override(unknown_fingerprint)
   assert not reference_platform_probe()
   bitwise_pin(one_ulp_off, expected, rtol=0.0, atol=2.0e-15)
   large_drift = expected.copy()
