@@ -591,7 +591,7 @@ def run_fresh_fe2_subprocess(case: FE2Workload, *, true_cold: bool) -> BenchReco
 
 
 def run_damage_jit_subprocess(*, true_cold: bool) -> BenchRecord:
-  """Isolate first-call JIT from second-call cache-present kernel execution."""
+  """Isolate first-call JIT from second-call warm kernel execution."""
   payload, wall_ms = _fe2_subprocess(["--jit-worker"], threads=1, true_cold=true_cold)
   passed = payload["status"] == "OK" and payload["repeat_identical"]
   mode = "truecold" if true_cold else "cache-present"

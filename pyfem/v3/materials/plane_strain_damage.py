@@ -89,8 +89,9 @@ retains the independent NumPy entity loop above. The production public kernel
 passes preallocated output buffers to ``_plane_strain_damage_batched``, a
 same-file Numba port with the same branch and arithmetic order; its only
 compiled callee is the same-file ``_damage_njit``. Both compiled functions use
-``cache=True`` under NUMBA_CACHING.md §5(a), and the batch pass uses ``nogil``
-only after the raw-uint64 reference and 1T/nT determinism gates. No parallel
+``cache=False`` while disk-cache enablement is deferred (NUMBA_CACHING.md), and
+the batch pass uses ``nogil`` only after the raw-uint64 reference and 1T/nT
+determinism gates. No parallel
 entity scheduling is introduced. The descriptor binding and all accepted/trial,
 tangent, rejection, and default-serial FE2 semantics are unchanged.
 """
@@ -224,7 +225,8 @@ def _damage(kappa: float, kappa_0: float, kappa_c: float) -> tuple[float, float]
   return 1.0, 0.0
 
 
-@njit(cache=True)
+# NUMBA_CACHING.md: disk caching is deferred for this compiled graph.
+@njit(cache=False)
 def _damage_njit(kappa: float, kappa_0: float, kappa_c: float) -> tuple[float, float]:
   if kappa <= kappa_0:
     return 0.0, 0.0
@@ -377,7 +379,8 @@ def plane_strain_damage_kernel_reference(
   )
 
 
-@njit(cache=True, nogil=True)
+# NUMBA_CACHING.md: disk caching is deferred for this compiled graph.
+@njit(cache=False, nogil=True)
 def _plane_strain_damage_batched(
   strains: np.ndarray,
   accepted_rows: np.ndarray,

@@ -40,9 +40,6 @@ compiles through the generic v2 stateful path with honest
 from __future__ import annotations
 
 import ast
-import json
-import os
-import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -451,7 +448,7 @@ def test_compiled_kernel_is_raw_uint64_deterministic_across_numba_threads() -> N
     set_num_threads(previous)
 
 
-def test_compiled_cache_graph_is_same_file_and_canary_clean(
+def test_compiled_cache_is_explicitly_disabled_and_canary_clean(
   numba_cache_policy_scanner: Callable[[Path], list[str]],
 ) -> None:
   source_path = Path(damage_module.__file__).resolve()
@@ -461,8 +458,8 @@ def test_compiled_cache_graph_is_same_file_and_canary_clean(
     node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
   }
   expected = {
-    "_damage_njit": {"cache": True},
-    "_plane_strain_damage_batched": {"cache": True, "nogil": True},
+    "_damage_njit": {"cache": False},
+    "_plane_strain_damage_batched": {"cache": False, "nogil": True},
   }
   for name, expected_options in expected.items():
     (decorator,) = functions[name].decorator_list
@@ -475,73 +472,6 @@ def test_compiled_cache_graph_is_same_file_and_canary_clean(
     }
     for option, value in expected_options.items():
       assert options[option] is value
-
-
-def test_same_file_callee_mutation_invalidates_disk_cache(
-  tmp_path: Path,
-) -> None:
-  source_path = Path(damage_module.__file__).resolve()
-  source = source_path.read_text(encoding="utf-8")
-  probe = tmp_path / "damage_cache_probe.py"
-  probe.write_text(source, encoding="utf-8")
-  cache_dir = tmp_path / "numba-cache"
-  cache_dir.mkdir()
-  env = os.environ.copy()
-  env["NUMBA_CACHE_DIR"] = str(cache_dir)
-  env["NUMBA_NUM_THREADS"] = "1"
-  root = Path(__file__).resolve().parents[2]
-  runner = """
-import importlib.util
-import json
-import sys
-import numpy as np
-spec = importlib.util.spec_from_file_location("damage_cache_probe", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = module
-spec.loader.exec_module(module)
-strains = np.zeros((1, 6))
-strains[0, 0] = 0.5e-6
-rows = np.zeros((1, 1))
-calibration = module.plane_strain_damage_calibration(100.0, 0.3, 1.0e-6, 1.0e-5, 1.0)
-result = module.plane_strain_damage_kernel(strains, rows, calibration)
-arrays = tuple(
-  getattr(result, name).tobytes().hex()
-  for name in ("stresses", "tangents", "trial_rows")
-)
-print(json.dumps({
-  "status": result.status.name,
-  "stress00": float(result.stresses[0, 0]),
-  "tangent00": float(result.tangents[0, 0, 0]),
-  "arrays": arrays,
-}))
-"""
-
-  def invoke() -> dict[str, object]:
-    completed = subprocess.run(
-      [sys.executable, "-c", runner, str(probe)],
-      cwd=root,
-      env=env,
-      capture_output=True,
-      text=True,
-      check=True,
-    )
-    return json.loads(completed.stdout.strip().splitlines()[-1])
-
-  first = invoke()
-  assert first["status"] == "OK"
-  assert list(cache_dir.rglob("*.nbi"))
-  second = invoke()
-  assert second == first
-
-  marker = "def _damage_njit("
-  prefix, suffix = source.split(marker, 1)
-  suffix = suffix.replace("return 0.0, 0.0", "return 0.25, 0.0", 1)
-  probe.write_text(prefix + marker + suffix, encoding="utf-8")
-  mutated = invoke()
-  assert mutated["status"] == "OK"
-  assert mutated["arrays"] != first["arrays"]
-  assert float(mutated["stress00"]) == 0.75 * float(first["stress00"])
-  assert float(mutated["tangent00"]) == 0.75 * float(first["tangent00"])
 
 
 def test_progressive_tangent_matches_stress_finite_difference() -> None:
