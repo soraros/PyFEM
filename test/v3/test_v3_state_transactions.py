@@ -16,6 +16,8 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
+from test_v3_state_nested import _q8_model
+
 from pyfem.v3.compile.continuum import (
   Q8ContinuumOperator,
   plasticity_reference_registry,
@@ -78,62 +80,6 @@ _SLIP_BUDGET = {"iterations": 64}
 
 def _source(label: str) -> SourceContext:
   return SourceContext(source=label)
-
-
-def _q8_model() -> ModelSpec:
-  nodes = tuple(
-    NodeSpec(
-      id=index + 1,
-      coordinates=point,
-      source=_source(f"node-source-{index + 1}"),
-    )
-    for index, point in enumerate(_UNIT_COORDINATES)
-  )
-  cell = CellSpec(
-    id="cell-1",
-    node_ids=tuple(node.id for node in nodes),
-    source=_source("cell-source"),
-  )
-  block = CellBlockSpec(
-    id="cells",
-    reference_topology="quadrilateral",
-    topological_dimension=2,
-    embedding_dimension=2,
-    geometry_interpolation="serendipity-quad8",
-    cells=(cell,),
-    source=_source("block-source"),
-  )
-  field = FieldSpec(
-    id="displacement",
-    components=("x", "y"),
-    location="node",
-    source=_source("field-source"),
-  )
-  material = MaterialSpec(
-    id="elastic",
-    model="plane-stress-linear-elastic",
-    parameters=(
-      MaterialParameterSpec("youngs_modulus", 1.0, _source("material:E")),
-      MaterialParameterSpec("poisson_ratio", 0.0, _source("material:nu")),
-    ),
-    source=_source("material-source"),
-  )
-  region = RegionSpec(
-    id="domain",
-    cell_refs=(CellRef(block.id, cell.id),),
-    field_ids=(field.id,),
-    material_id=material.id,
-    formulation="small-strain-continuum",
-    quadrature="gauss-3x3",
-    source=_source("region-source"),
-  )
-  return ModelSpec(
-    mesh=MeshSpec(nodes=(nodes), cell_blocks=(block,), source=_source("mesh-source")),
-    fields=(field,),
-    materials=(material,),
-    regions=(region,),
-    source=_source("model-source"),
-  )
 
 
 def _damage_declaration() -> SpringDeclaration:

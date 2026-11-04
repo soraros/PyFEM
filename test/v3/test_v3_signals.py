@@ -24,8 +24,8 @@ quantity is hand-derived:
 
 A recording kernel proves the driver forwards the substep's bound point; a
 signal-free variant of the same law driven under two different time schedules
-yields byte-identical results, proving isolation: without declared ports no
-schedule value can reach the law.
+yields byte-identical displacements, state rows, and constraint reactions,
+proving isolation: without declared ports no schedule value can reach the law.
 
 The second mock law is the derived-signal (increment binding) oracle: a
 rate-form law ``sigma = E * eps + sigma_evol`` whose internal variable
@@ -942,6 +942,10 @@ def test_port_free_law_results_are_signal_independent() -> None:
     assert (
       first.owner.accepted_state(block_id).values.tobytes()
       == second.owner.accepted_state(block_id).values.tobytes()
+    )
+    assert (
+      first_result.records[-1].observation.reactions.values.tobytes()
+      == second_result.records[-1].observation.reactions.values.tobytes()
     )
     first_base = _point(first_time, eps)
     second_base = _point(second_time, eps)

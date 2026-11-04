@@ -58,14 +58,13 @@ form.
 The driver battery proves schedule-owned time flows through the M29 identity
 signal port: committed state rows equal the kernel oracle stepped on the
 committed integration-point strains (bitwise), the ``time`` and ``rho`` slots
-record the bound time and the densification at every integration point, a
+record the bound time and the densification at every integration point, and a
 slower time schedule densifies less (positive control — SOVS is genuinely
-rate-dependent), and a port-free law driven under two different time
-schedules yields byte-identical results (isolation). The ABI proof is the
-frozen validator accepting the law's v2 metadata unchanged plus
-``pyfem/v3/compile/contracts.py`` carrying no diff for this mission; the
-``rho = rho0`` initial rows are the first parameter-dependent initial state
-of the stateful family (M25 G2 binding), pinned at compile level below.
+rate-dependent). The ABI proof is the frozen validator accepting the law's v2
+metadata unchanged plus ``pyfem/v3/compile/contracts.py`` carrying no diff for
+this mission; the ``rho = rho0`` initial rows are the first parameter-dependent
+initial state of the stateful family (M25 G2 binding), pinned at compile level
+below.
 """
 
 from __future__ import annotations
@@ -84,10 +83,7 @@ if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
 from pyfem.materials.SOVS import SkorohodOlevsky
-from pyfem.v3.compile.continuum import (
-  q8_reference_registry,
-  sovs_reference_registry,
-)
+from pyfem.v3.compile.continuum import sovs_reference_registry
 from pyfem.v3.compile.contracts import (
   STATEFUL_MATERIAL_DESCRIPTOR_SCHEMA,
   StatefulContinuumKernelResult,
@@ -1053,39 +1049,6 @@ def _sovs_model(config: dict = _ACTIVATED) -> ModelSpec:
   )
 
 
-def _elastic_model() -> ModelSpec:
-  """The same one-element mesh with the port-free plane-stress linear law."""
-  base = _sovs_model()
-  return ModelSpec(
-    mesh=base.mesh,
-    fields=base.fields,
-    materials=(
-      MaterialSpec(
-        id="steel",
-        model="plane-stress-linear-elastic",
-        parameters=(
-          MaterialParameterSpec("youngs_modulus", 2.0e5),
-          MaterialParameterSpec("poisson_ratio", 0.3),
-        ),
-        source=_source("material"),
-      ),
-    ),
-    regions=base.regions[:-1]
-    + (
-      RegionSpec(
-        id="domain",
-        cell_refs=(CellRef("cells", "cell-1"),),
-        field_ids=("displacement",),
-        material_id="steel",
-        formulation="small-strain-continuum",
-        quadrature="gauss-3x3",
-        source=_source("region"),
-      ),
-    ),
-    source=_source("model"),
-  )
-
-
 def _compiled(model: ModelSpec, registry: dict) -> CompiledSystem:
   return compile_system(model, registry)
 
@@ -1427,37 +1390,6 @@ def test_driver_response_depends_on_the_time_schedule() -> None:
     first_result.records[-1].observation.reactions.values.tobytes()
     != second_result.records[-1].observation.reactions.values.tobytes()
   )
-
-
-def test_port_free_law_results_are_signal_independent() -> None:
-  first = _ramp_driver(_elastic_model(), q8_reference_registry())
-  second = _ramp_driver(_elastic_model(), q8_reference_registry())
-  eps_path = (2.0e-4, 5.0e-4, 1.1e-3)
-  first_base = _point(0.0, 0.0)
-  second_base = _point(0.0, 0.0)
-  for first_time, second_time, eps in (
-    (0.0, 3.0, eps_path[0]),
-    (0.0, 7.5, eps_path[1]),
-    (0.0, 11.25, eps_path[2]),
-  ):
-    first_result = first.run(
-      base_point=first_base, target_points=(_point(first_time, eps),)
-    )
-    second_result = second.run(
-      base_point=second_base, target_points=(_point(second_time, eps),)
-    )
-    assert first_result.status is DriverStatus.COMPLETED
-    assert second_result.status is DriverStatus.COMPLETED
-    assert (
-      first.owner.accepted_physical().values.tobytes()
-      == second.owner.accepted_physical().values.tobytes()
-    )
-    assert (
-      first_result.records[-1].observation.reactions.values.tobytes()
-      == second_result.records[-1].observation.reactions.values.tobytes()
-    )
-    first_base = _point(first_time, eps)
-    second_base = _point(second_time, eps)
 
 
 def test_state_codec_round_trips_and_rejects_foreign_schemas() -> None:

@@ -13,6 +13,7 @@ if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
 from scipy.sparse import coo_matrix
+from test_v3_driver_nonlinear import _truss_model
 
 from pyfem.v3.compile.continuum import q8_reference_registry
 from pyfem.v3.compile.spring import (
@@ -73,58 +74,6 @@ _UNIT_COORDINATES = (
 
 def _source(label: str) -> SourceContext:
   return SourceContext(source=label)
-
-
-def _truss_model() -> ModelSpec:
-  nodes = (
-    NodeSpec(id=0, coordinates=(-10.0, 0.0), source=_source("n0")),
-    NodeSpec(id=1, coordinates=(10.0, 0.0), source=_source("n1")),
-    NodeSpec(id=2, coordinates=(0.0, 0.5), source=_source("n2")),
-  )
-  cells = (
-    CellSpec(id="left", node_ids=(0, 2), source=_source("c0")),
-    CellSpec(id="right", node_ids=(1, 2), source=_source("c1")),
-  )
-  block = CellBlockSpec(
-    id="bars",
-    reference_topology="line",
-    topological_dimension=1,
-    embedding_dimension=2,
-    geometry_interpolation="line2",
-    cells=cells,
-    source=_source("block"),
-  )
-  field = FieldSpec(
-    id="displacement",
-    components=("x", "y"),
-    location="node",
-    source=_source("field"),
-  )
-  material = MaterialSpec(
-    id="steel",
-    model="uniaxial-linear-elastic",
-    parameters=(
-      MaterialParameterSpec("youngs_modulus", 5.0e6),
-      MaterialParameterSpec("area", 1.0),
-    ),
-    source=_source("material"),
-  )
-  region = RegionSpec(
-    id="domain",
-    cell_refs=(CellRef("bars", "left"), CellRef("bars", "right")),
-    field_ids=("displacement",),
-    material_id="steel",
-    formulation="total-lagrangian-truss",
-    quadrature="none",
-    source=_source("region"),
-  )
-  return ModelSpec(
-    mesh=MeshSpec(nodes=nodes, cell_blocks=(block,), source=_source("mesh")),
-    fields=(field,),
-    materials=(material,),
-    regions=(region,),
-    source=_source("model"),
-  )
 
 
 def _q8_model() -> ModelSpec:
