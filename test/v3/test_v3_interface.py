@@ -978,9 +978,16 @@ def test_interface_deck_compiles_and_runs(tmp_path: Path) -> None:
 
   deck = _convert(tmp_path, _mini_pro(_LAW_BLOCKS[0][1]))
   compiled = compile_deck(deck)
-  assert [type(operator).__name__ for operator in compiled.system.operators] == [
-    "Q8ContinuumOperator",
-    "InterfaceOperator",
+  assert [
+    (
+      operator.header.entity_block_id,
+      tuple(channel.channel_id for channel in operator.header.residual_channels),
+      tuple(channel.channel_id for channel in operator.header.jacobian_channels),
+    )
+    for operator in compiled.system.operators
+  ] == [
+    ("ContElem", ("internal-force",), ("material-tangent",)),
+    ("InterfaceElem", ("interface-traction",), ("interface-tangent",)),
   ]
   run = run_deck(deck)
   assert run.result.status is DriverStatus.COMPLETED

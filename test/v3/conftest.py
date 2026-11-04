@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import ast
 import io
+import os
 import platform
+import subprocess
 import sys
 import tokenize
 from collections.abc import Callable
@@ -313,8 +315,8 @@ def _numba_cache_policy_canary(
 # Byte-identity pins (raw-uint64 equality, signed-zero distinctions included)
 # are defined on ONE reference platform: the machine the bench manifests
 # record (bench/manifest.py collect_manifest, bench/results/*.json) — macOS
-# on x86_64 (Intel i9-9980HK), Python 3.13, the pyproject-pinned numba
-# (>=0.62.1,<0.63) and numpy, Accelerate BLAS. Off that platform the same
+# on x86_64 (Intel i9-9980HK), Python 3.13.11, numba 0.62.1, numpy 2.3.5,
+# Accelerate BLAS/LAPACK. Off that platform the same
 # physics holds but the bits need not: numpy's non-macOS wheels bundle
 # OpenBLAS instead of Accelerate, and LLVM lowers numba kernels per target,
 # so BLAS path selection and codegen round differently at ulp level.
@@ -330,19 +332,77 @@ def _numba_cache_policy_canary(
 # deviation, with that deviation cited in a comment at the call site.
 
 REFERENCE_PLATFORM = (
-  "macOS x86_64 (bench-manifest reference: Intel i9-9980HK, numba 0.62.1, "
-  "pinned numpy, Accelerate BLAS)"
+  "macOS x86_64 (bench-manifest reference: Intel i9-9980HK, Python 3.13.11, "
+  "numba 0.62.1, numpy 2.3.5, Accelerate BLAS/LAPACK)"
 )
 """Human-readable description of the bitwise-reference platform."""
 
+_REFERENCE_PLATFORM_FINGERPRINT: dict[str, object] = {
+  "sys_platform": "darwin",
+  "machine": "x86_64",
+  "cpu": "Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz",
+  "python": "3.13.11",
+  "numba": "0.62.1",
+  "numpy": "2.3.5",
+  "blas": "accelerate",
+  "lapack": "accelerate",
+}
+_FORCE_OFF_REFERENCE_ENV = "PYFEM_TEST_FORCE_OFF_REFERENCE"
+
+
+def _cpu_brand() -> str | None:
+  if sys.platform != "darwin":
+    return platform.processor() or platform.machine()
+  try:
+    completed = subprocess.run(
+      ["sysctl", "-n", "machdep.cpu.brand_string"],
+      capture_output=True,
+      text=True,
+      check=True,
+      timeout=2,
+    )
+  except (OSError, subprocess.SubprocessError):
+    return None
+  return completed.stdout.strip()
+
+
+def _runtime_fingerprint() -> dict[str, object]:
+  try:
+    import numba
+
+    numba_version = numba.__version__
+  except ImportError:
+    numba_version = None
+  try:
+    config = np.__config__.show(mode="dicts")
+    dependencies = config.get("Build Dependencies", {})
+    blas_name = dependencies.get("blas", {}).get("name")
+    lapack_name = dependencies.get("lapack", {}).get("name")
+  except Exception:
+    # Exotic or incomplete NumPy builds are unknown stacks, never references.
+    blas_name = lapack_name = None
+  return {
+    "sys_platform": sys.platform,
+    "machine": platform.machine(),
+    "cpu": _cpu_brand(),
+    "python": sys.version.split()[0],
+    "numba": numba_version,
+    "numpy": np.__version__,
+    "blas": blas_name,
+    "lapack": lapack_name,
+  }
+
 
 def on_reference_platform() -> bool:
-  """True on the bitwise-reference platform (see the contract above).
+  """True only for the complete documented reference fingerprint.
 
-  Reads ``sys.platform``/``platform.machine()`` at call time so tests can
-  force either branch with ``monkeypatch``.
+  The environment can force the safe off-reference branch for test validation;
+  no override can force an unknown stack into reference mode. Tests replace
+  ``_runtime_fingerprint`` to exercise complete and incomplete fingerprints.
   """
-  return sys.platform == "darwin" and platform.machine() == "x86_64"
+  if os.environ.get(_FORCE_OFF_REFERENCE_ENV) == "1":
+    return False
+  return _runtime_fingerprint() == _REFERENCE_PLATFORM_FINGERPRINT
 
 
 def assert_bitwise_pin(
@@ -388,9 +448,29 @@ def bitwise_pin() -> Callable[..., None]:
 
 @pytest.fixture(scope="session")
 def reference_platform_probe() -> Callable[[], bool]:
-  """The ``on_reference_platform`` probe as a function, not a bool.
-
-  Tests monkeypatch ``sys.platform``/``platform.machine()`` and then call the
-  probe to prove the gate follows — a resolved bool could not.
-  """
+  """The call-time ``on_reference_platform`` probe."""
   return on_reference_platform
+
+
+@pytest.fixture
+def reference_platform_fingerprint() -> dict[str, object]:
+  """A mutable copy of the complete reference fingerprint for branch canaries."""
+  return dict(_REFERENCE_PLATFORM_FINGERPRINT)
+
+
+@pytest.fixture
+def platform_fingerprint_override(
+  monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[dict[str, object]], None]:
+  """Replace the complete runtime fingerprint and clear forced-off test mode."""
+  module = sys.modules[__name__]
+
+  def override(fingerprint: dict[str, object]) -> None:
+    monkeypatch.delenv(_FORCE_OFF_REFERENCE_ENV, raising=False)
+    monkeypatch.setattr(
+      module,
+      "_runtime_fingerprint",
+      lambda: dict(fingerprint),
+    )
+
+  return override

@@ -744,10 +744,18 @@ def test_compose_is_fail_closed_and_deterministic() -> None:
   base = _base_system()
   block, operator = compile_contact_operator(base, _declaration())
   composed = compose_contact_system(base, block, operator)
-  assert tuple(type(item).__name__ for item in composed.operators) == (
-    "Q8ContinuumOperator",
-    "PenaltyContactOperator",
-  )
+  assert [
+    (
+      item.header.entity_block_id,
+      tuple(channel.channel_id for channel in item.header.residual_channels),
+      tuple(channel.channel_id for channel in item.header.jacobian_channels),
+    )
+    for item in composed.operators
+  ] == [
+    ("cells", ("internal-force",), ("material-tangent",)),
+    ("obstacle-contact", ("contact-force",), ("contact-tangent",)),
+  ]
+  assert composed.operators[-1] is operator
   assert composed.point_blocks[-1].block_id == "obstacle-contact"
   # A second network with the same block id collides on the composed system.
   twin_block, twin_operator = compile_contact_operator(composed, _declaration())
