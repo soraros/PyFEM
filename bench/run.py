@@ -4,6 +4,7 @@ Usage (from the repository root, with the project venv)::
 
   .venv/bin/python -m bench.run all       # gates, warm, cold, write JSON, check
   .venv/bin/python -m bench.run warm      # stage-decomposed warm benchmarks
+  .venv/bin/python -m bench.run fe2       # matched damage FE2 + JIT evidence
   .venv/bin/python -m bench.run cold      # fresh-subprocess cold benchmarks
   .venv/bin/python -m bench.run gates     # correctness gates only
   .venv/bin/python -m bench.run check --candidate results/<run>.json
@@ -473,6 +474,7 @@ def run_fe2_case(
   *,
   threads: list[int],
   budget_s: float,
+  e2e_reps: int = 1,
 ) -> tuple[list[BenchRecord], list[GateResult]]:
   """Race-gate each FE2 thread count before recording its stage timings."""
   records: list[BenchRecord] = []
@@ -491,8 +493,9 @@ def run_fe2_case(
       nested_stats.note = "committed macro state; nested trial rejected after each call"
       load_stats = measure_fixed(lambda: FE2Pipeline(case), warmup=0, reps=1)
       load_stats.note = "compile + real virgin nested probe"
-      e2e_stats = measure_fixed(lambda: solve_fresh_fe2(case), warmup=0, reps=1)
-      e2e_stats.note = "fresh compile + virgin probe + macro nonlinear solve"
+      e2e_stats = measure_fixed(lambda: solve_fresh_fe2(case), warmup=0, reps=e2e_reps)
+      e2e_stats.note = "fresh-e2e: fresh compile + virgin probe + macro nonlinear solve"
+      evidence = candidate.evidence()
     records.append(
       BenchRecord(
         category="fe2",
@@ -508,10 +511,107 @@ def run_fe2_case(
           "e2e": e2e_stats,
         },
         logical_bytes=candidate.logical_bytes,
-        correctness=gate.to_json(),
+        correctness={**gate.to_json(), "evidence": evidence},
       )
     )
   return records, gates
+
+
+def _single_sample(milliseconds: float, note: str = "") -> MetricStats:
+  return MetricStats(
+    min_ms=milliseconds,
+    median_ms=milliseconds,
+    mean_ms=milliseconds,
+    reps=1,
+    samples_ms=[milliseconds],
+    note=note,
+  )
+
+
+def _fe2_subprocess(
+  arguments: list[str], *, threads: int, true_cold: bool
+) -> tuple[dict[str, Any], float]:
+  env = os.environ.copy()
+  env["NUMBA_NUM_THREADS"] = str(threads)
+  for var in BLAS_ENV_VARS:
+    env[var] = str(threads)
+  temporary = (
+    tempfile.TemporaryDirectory(prefix="pyfem-fe2-jit-") if true_cold else None
+  )
+  if temporary is not None:
+    env["NUMBA_CACHE_DIR"] = temporary.name
+  try:
+    start = time.perf_counter()
+    output = subprocess.run(
+      [sys.executable, "-m", "bench.fe2_pipeline", *arguments],
+      env=env,
+      cwd=REPO_ROOT,
+      capture_output=True,
+      text=True,
+      check=True,
+    )
+    wall_ms = (time.perf_counter() - start) * 1e3
+  finally:
+    if temporary is not None:
+      temporary.cleanup()
+  return json.loads(output.stdout.strip().splitlines()[-1]), wall_ms
+
+
+def run_fresh_fe2_subprocess(case: FE2Workload, *, true_cold: bool) -> BenchRecord:
+  """Measure a fresh-process FE2 solve with cache present or an empty cache."""
+  payload, wall_ms = _fe2_subprocess(
+    ["--fresh-worker", case.name, "--threads", "1"], threads=1, true_cold=true_cold
+  )
+  evidence = payload["evidence"]
+  passed = (
+    payload["status"] == "COMPLETED"
+    and evidence["accepted_nested_sha256"] == evidence["rejected_nested_sha256"]
+  )
+  mode = "truecold" if true_cold else "cache-present"
+  return BenchRecord(
+    category="fe2-fresh",
+    workload=case.name,
+    side="v3",
+    mode=mode,
+    threads=1,
+    n_elems=case.n_elems,
+    n_dofs=case.n_dofs,
+    metrics={
+      "load": _single_sample(
+        payload["load_ms"], "fresh-process compile + virgin probe"
+      ),
+      "solve": _single_sample(payload["solve_ms"], "fresh-process macro solve"),
+      "fresh_e2e": _single_sample(
+        payload["fresh_e2e_ms"], "fresh-process compile + virgin probe + macro solve"
+      ),
+      "wall": _single_sample(wall_ms, "parent-measured subprocess wall"),
+    },
+    correctness={"passed": passed, "evidence": evidence},
+  )
+
+
+def run_damage_jit_subprocess(*, true_cold: bool) -> BenchRecord:
+  """Isolate first-call JIT from second-call cache-present kernel execution."""
+  payload, wall_ms = _fe2_subprocess(["--jit-worker"], threads=1, true_cold=true_cold)
+  passed = payload["status"] == "OK" and payload["repeat_identical"]
+  mode = "truecold" if true_cold else "cache-present"
+  return BenchRecord(
+    category="damage-jit",
+    workload="damage/plane-strain-public-kernel",
+    side="v3",
+    mode=mode,
+    threads=1,
+    n_elems=0,
+    n_dofs=16,
+    metrics={
+      "jit": _single_sample(
+        payload["jit_ms"], "first public kernel call in a fresh interpreter"
+      ),
+      "kernel": _single_sample(payload["warm_ms"], "second public kernel call"),
+      "wall": _single_sample(wall_ms, "parent-measured subprocess wall"),
+    },
+    correctness={"passed": passed, "response_sha256": payload["response_sha256"]},
+  )
 
 
 def run_fe2_memory_workload(
@@ -793,6 +893,33 @@ def do_gates(
   return failures
 
 
+def do_fe2(args: argparse.Namespace) -> list[BenchRecord]:
+  """Run the matched public damage FE2 evidence matrix and startup probes."""
+  threads = _parse_ints(args.threads)
+  if not threads or any(count < 1 for count in threads) or args.e2e_reps < 1:
+    raise SystemExit("FE2 threads and --e2e-reps must be positive")
+  records: list[BenchRecord] = []
+  for case in fe2_cases(damage_only=True):
+    start = time.perf_counter()
+    case_records, gates = run_fe2_case(
+      case,
+      threads=threads,
+      budget_s=args.budget_s,
+      e2e_reps=args.e2e_reps,
+    )
+    records.extend(case_records)
+    for true_cold in (False, True):
+      records.append(run_fresh_fe2_subprocess(case, true_cold=true_cold))
+    passed = all(gate.passed for gate in gates)
+    print(
+      f"[{'PASS' if passed else 'FAIL'}] {case.name} "
+      f"({time.perf_counter() - start:.1f}s)"
+    )
+  for true_cold in (False, True):
+    records.append(run_damage_jit_subprocess(true_cold=true_cold))
+  return records
+
+
 def do_warm(args: argparse.Namespace) -> list[BenchRecord]:
   """Run the warm phase: selftest, per-workload gates, stage timings.
 
@@ -1007,6 +1134,11 @@ def cmd_warm(args: argparse.Namespace) -> int:
   return _write_and_maybe_check(records, args)
 
 
+def cmd_fe2(args: argparse.Namespace) -> int:
+  records = do_fe2(args)
+  return _write_and_maybe_check(records, args)
+
+
 def cmd_cold(args: argparse.Namespace) -> int:
   records = do_cold(args)
   return _write_and_maybe_check(records, args)
@@ -1063,6 +1195,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=True,
         help="also run one cache-cleared (true JIT cold) case",
       )
+  focused_fe2 = sub.add_parser(
+    "fe2", help="matched damage-only FE2 warm, fresh-process, and JIT evidence"
+  )
+  focused_fe2.add_argument("--threads", default="1")
+  focused_fe2.add_argument("--budget-s", type=float, default=0.6)
+  focused_fe2.add_argument("--e2e-reps", type=int, default=1)
+  focused_fe2.add_argument("--baseline", default=str(RESULTS_DIR / "baseline_m3.json"))
+  focused_fe2.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
+  focused_fe2.add_argument("--out", default="")
+  focused_fe2.add_argument("--no-check", action="store_true")
   gates = sub.add_parser("gates")
   gates.add_argument("--sizes", default=",".join(str(n) for n in Q8_SIZES))
   gates.add_argument("--materials", default=",".join(Q8_MATERIALS))
@@ -1101,6 +1243,7 @@ def main() -> int:
   handlers = {
     "all": cmd_all,
     "warm": cmd_warm,
+    "fe2": cmd_fe2,
     "cold": cmd_cold,
     "gates": cmd_gates,
     "check": cmd_check,
