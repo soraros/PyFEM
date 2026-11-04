@@ -25,8 +25,18 @@ if sys.version_info < (3, 13):
 
 from _legacy_parity import legacy_element_stiffness
 
-from pyfem.v3.compile.continuum import plasticity_reference_registry
-from pyfem.v3.compile.contracts import continuum_reference_registry
+from pyfem.v3.compile.continuum import (
+  Q8_FORMULATION_KEY,
+  Q8_MATERIAL_KEY,
+  plasticity_reference_registry,
+)
+from pyfem.v3.compile.contracts import (
+  QUAD4_QUADRATURE_KEY,
+  QUAD4_TOPOLOGY_KEY,
+  TRIA3_QUADRATURE_KEY,
+  TRIA3_TOPOLOGY_KEY,
+  continuum_reference_registry,
+)
 from pyfem.v3.compile.diagnostics import ModelCompilationError
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.driver import DriverStatus
@@ -37,6 +47,7 @@ from pyfem.v3.io.legacy_deck import (
   read_legacy_deck,
   run_deck,
 )
+from pyfem.v3.materials.plane_stress import plane_stress_matrix
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import ChannelRequest, OperatorEvaluationInput
 from pyfem.v3.model.system import CompiledSystem
@@ -66,6 +77,30 @@ BREADTH_SKIMS = (
 
 _KE_ATOL = 1e-8
 _SOURCE = SourceContext()
+_Q4_INTEGER_OPERATOR = np.array(
+  [
+    [4, 1, -2, -1, -2, -1, 0, 1],
+    [1, 4, 1, 0, -1, -2, -1, -2],
+    [-2, 1, 4, -1, 0, -1, -2, 1],
+    [-1, 0, -1, 4, 1, -2, 1, -2],
+    [-2, -1, 0, 1, 4, 1, -2, -1],
+    [-1, -2, -1, -2, 1, 4, 1, 0],
+    [0, -1, -2, 1, -2, 1, 4, -1],
+    [1, -2, 1, -2, -1, 0, -1, 4],
+  ],
+  dtype=np.float64,
+)
+_T3_INTEGER_OPERATOR = np.array(
+  [
+    [3, 1, -2, -1, -1, 0],
+    [1, 3, 0, -1, -1, -2],
+    [-2, 0, 2, 0, 0, 0],
+    [-1, -1, 0, 1, 1, 0],
+    [-1, -1, 0, 1, 1, 0],
+    [0, -2, 0, 0, 0, 2],
+  ],
+  dtype=np.float64,
+)
 
 
 def _node_state_map(
@@ -339,8 +374,7 @@ def _hex8_model(**overrides: object) -> ModelSpec:
   return _single_element_model(**options)  # type: ignore[arg-type]
 
 
-def _compiled_tangent(model: ModelSpec) -> np.ndarray:
-  system = compile_system(model, continuum_reference_registry())
+def _system_tangent(system: CompiledSystem) -> np.ndarray:
   operator = system.operators[0]
   evaluation = operator.evaluate(
     OperatorEvaluationInput(
@@ -358,6 +392,84 @@ def _compiled_tangent(model: ModelSpec) -> np.ndarray:
     )
   )
   return evaluation.jacobian_values[0].values[0]
+
+
+def _compiled_tangent(model: ModelSpec) -> np.ndarray:
+  system = compile_system(model, continuum_reference_registry())
+  return _system_tangent(system)
+
+
+def test_q4_t3_literal_operators_and_descriptor_identity() -> None:
+  parameters = (("youngs_modulus", 1.0), ("poisson_ratio", 0.0))
+  quad = _quad4_model(parameters=parameters)
+  tria = _tria3_model(
+    nodes=(
+      NodeSpec(id=0, coordinates=(0.0, 0.0), source=_SOURCE),
+      NodeSpec(id=1, coordinates=(1.0, 0.0), source=_SOURCE),
+      NodeSpec(id=2, coordinates=(0.0, 1.0), source=_SOURCE),
+    ),
+    parameters=parameters,
+  )
+  quad_system = compile_system(quad, continuum_reference_registry())
+  tria_system = compile_system(tria, continuum_reference_registry())
+  literal = np.diag(np.array([1.0, 1.0, 0.5], dtype=np.float64))
+  np.testing.assert_array_equal(plane_stress_matrix(1.0, 0.0), literal)
+
+  cases = (
+    (
+      quad_system,
+      _Q4_INTEGER_OPERATOR / 8.0,
+      4.0e-16,
+      QUAD4_TOPOLOGY_KEY,
+      QUAD4_QUADRATURE_KEY,
+      "pyfem-v3-bilinear-quad4-v1",
+      "pyfem-v3-gauss-tensor-product-2d-order-2-v1",
+    ),
+    (
+      tria_system,
+      _T3_INTEGER_OPERATOR / 4.0,
+      2.0e-16,
+      TRIA3_TOPOLOGY_KEY,
+      TRIA3_QUADRATURE_KEY,
+      "pyfem-v3-linear-tria3-v1",
+      "pyfem-v3-gauss-tria3-order-1-v1",
+    ),
+  )
+  for (
+    system,
+    expected,
+    atol,
+    topology_key,
+    quadrature_key,
+    topology_id,
+    quadrature_id,
+  ) in cases:
+    operator = system.operators[0]
+    np.testing.assert_array_equal(operator.payload.constitutive.values, literal)
+    np.testing.assert_allclose(_system_tangent(system), expected, rtol=0.0, atol=atol)
+    assert system.registry_snapshot.resolve(*topology_key).implementation_id == (
+      topology_id
+    )
+    assert system.registry_snapshot.resolve(*quadrature_key).implementation_id == (
+      quadrature_id
+    )
+    header_ids = {
+      (item.kind, item.name): item.implementation_id
+      for item in operator.header.implementations
+    }
+    assert header_ids[topology_key] == topology_id
+    assert header_ids[quadrature_key] == quadrature_id
+
+  assert type(quad_system.operators[0]) is type(tria_system.operators[0])
+  assert (
+    quad_system.registry_snapshot.resolve(*QUAD4_TOPOLOGY_KEY).binding
+    is not tria_system.registry_snapshot.resolve(*TRIA3_TOPOLOGY_KEY).binding
+  )
+  for key in (Q8_FORMULATION_KEY, Q8_MATERIAL_KEY):
+    quad_descriptor = quad_system.registry_snapshot.resolve(*key)
+    tria_descriptor = tria_system.registry_snapshot.resolve(*key)
+    assert quad_descriptor.implementation_id == tria_descriptor.implementation_id
+    assert quad_descriptor.binding is tria_descriptor.binding
 
 
 @pytest.mark.parametrize(
@@ -576,3 +688,29 @@ def test_compiler_geometry_material_mismatches_are_coded(
 ) -> None:
   with pytest.raises(ModelCompilationError, match=code):
     compile_system(model, registry)
+
+
+def test_inverted_q4_orientation_failure_names_the_cell_source() -> None:
+  source = SourceContext(source="mesh:clockwise")
+  model = _quad4_model(
+    block=_block(
+      (
+        CellSpec(
+          id="cell-clockwise",
+          node_ids=(0, 3, 2, 1),
+          source=source,
+        ),
+      ),
+      topology="quadrilateral",
+      topological_dimension=2,
+      embedding_dimension=2,
+      interpolation="bilinear-quad4",
+    )
+  )
+  with pytest.raises(ModelCompilationError) as captured:
+    compile_system(model, continuum_reference_registry())
+  (diagnostic,) = captured.value.diagnostics
+  assert diagnostic.code == "inverted-reference-geometry"
+  assert diagnostic.source == source
+  assert "negative reference orientation" in str(captured.value)
+  assert "mesh:clockwise" in str(captured.value)
