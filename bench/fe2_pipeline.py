@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import time
 import tracemalloc
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numba import get_num_threads
+from numba import get_num_threads, set_num_threads
 
 from bench.gates import CheckResult, GateResult
-from bench.workloads import FE2MemoryCase, FE2Workload
+from bench.workloads import FE2MemoryCase, FE2Workload, fe2_cases
 from pyfem.v3 import authoring
 from pyfem.v3.compile.continuum import damage_reference_registry, q8_reference_registry
 from pyfem.v3.compile.system import compile_system
@@ -192,6 +194,39 @@ class FE2Pipeline:
       if store.trial_open:
         store.reject_trial()
 
+  def evidence(self) -> dict[str, object]:
+    """Return cross-revision state hashes, payload sizes, and schedule counters."""
+    if self.driver is None:
+      msg = "FE2 evidence requires a solved pipeline"
+      raise RuntimeError(msg)
+    operator = self.system.operators[0]
+    store = operator.nested_store
+    if store.trial_open:
+      msg = "FE2 evidence requires a closed nested trial"
+      raise RuntimeError(msg)
+    accepted_payload = store.encode()
+    evaluation = self.nested_evaluation()
+    if evaluation_status(evaluation) is not EvaluationStatus.OK:
+      msg = "FE2 evidence requires a successful rejected-trial evaluation"
+      raise RuntimeError(msg)
+    rejected_payload = store.encode()
+    if rejected_payload != accepted_payload:
+      msg = "FE2 rejected trial did not restore the accepted nested payload"
+      raise RuntimeError(msg)
+    owner = self.driver.owner
+    block_id = operator.header.state_layout.block_id
+    physical = np.ascontiguousarray(owner.accepted_physical().values).tobytes()
+    macro = np.ascontiguousarray(owner.accepted_state(block_id).values).tobytes()
+    return {
+      "accepted_nested_bytes": len(accepted_payload),
+      "rejected_nested_bytes": len(rejected_payload),
+      "accepted_nested_sha256": hashlib.sha256(accepted_payload).hexdigest(),
+      "rejected_nested_sha256": hashlib.sha256(rejected_payload).hexdigest(),
+      "accepted_macro_physical_sha256": hashlib.sha256(physical).hexdigest(),
+      "accepted_macro_strain_sha256": hashlib.sha256(macro).hexdigest(),
+      "statistics": asdict(self.result.statistics),
+    }
+
 
 def solve_fresh_fe2(workload: FE2Workload) -> object:
   """Compile and solve a fresh FE2 case, including the virgin nested probe."""
@@ -263,9 +298,9 @@ def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> GateResult:
       candidate_driver.owner.accepted_state(block_id).values,
     )
   )
-  nested_equal = (
-    reference_operator.nested_store.encode() == candidate_operator.nested_store.encode()
-  )
+  reference_accepted = reference_operator.nested_store.encode()
+  candidate_accepted = candidate_operator.nested_store.encode()
+  nested_equal = reference_accepted == candidate_accepted
   checks.append(
     CheckResult(
       name="committed-nested-store",
@@ -273,7 +308,23 @@ def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> GateResult:
       max_rel_diff=0.0 if nested_equal else np.inf,
       rtol=0.0,
       atol=0.0,
-      detail="versioned accepted-state payload byte identity",
+      detail=(
+        f"accepted bytes={len(reference_accepted)}; "
+        f"sha256={hashlib.sha256(reference_accepted).hexdigest()}"
+      ),
+    )
+  )
+  reference_counters = asdict(reference_result.statistics)
+  candidate_counters = asdict(candidate_result.statistics)
+  counters_equal = reference_counters == candidate_counters
+  checks.append(
+    CheckResult(
+      name="iteration-and-cutback-counts",
+      passed=counters_equal,
+      max_rel_diff=0.0 if counters_equal else np.inf,
+      rtol=0.0,
+      atol=0.0,
+      detail=f"reference={reference_counters}; candidate={candidate_counters}",
     )
   )
   reference_evaluation = reference.nested_evaluation()
@@ -290,6 +341,25 @@ def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> GateResult:
       rtol=0.0,
       atol=0.0,
       detail="both rejected-trial homogenized evaluations completed",
+    )
+  )
+  reference_rejected = reference_operator.nested_store.encode()
+  candidate_rejected = candidate_operator.nested_store.encode()
+  rejected_equal = (
+    reference_rejected == candidate_rejected == reference_accepted == candidate_accepted
+  )
+  checks.append(
+    CheckResult(
+      name="rejected-nested-store-restoration",
+      passed=rejected_equal,
+      max_rel_diff=0.0 if rejected_equal else np.inf,
+      rtol=0.0,
+      atol=0.0,
+      detail=(
+        f"accepted bytes={len(reference_accepted)}, "
+        f"rejected bytes={len(reference_rejected)}; "
+        f"sha256={hashlib.sha256(reference_rejected).hexdigest()}"
+      ),
     )
   )
   if evaluation_passed:
@@ -490,3 +560,86 @@ def run_fe2_memory_case(case: FE2MemoryCase) -> tuple[object, object, GateResult
     correctness=gate.to_json(),
   )
   return production_record, legacy_record, gate
+
+
+def _fresh_worker(case_name: str, threads: int) -> dict[str, object]:
+  """Measure one fresh interpreter's cache-present or true-cold FE2 solve."""
+  (case,) = [item for item in fe2_cases(damage_only=True) if item.name == case_name]
+  set_num_threads(threads)
+  start = time.perf_counter()
+  load_start = time.perf_counter()
+  pipeline = FE2Pipeline(case)
+  load_ms = (time.perf_counter() - load_start) * 1e3
+  solve_start = time.perf_counter()
+  result = pipeline.solve()
+  solve_ms = (time.perf_counter() - solve_start) * 1e3
+  fresh_e2e_ms = (time.perf_counter() - start) * 1e3
+  return {
+    "case": case_name,
+    "threads": threads,
+    "load_ms": load_ms,
+    "solve_ms": solve_ms,
+    "fresh_e2e_ms": fresh_e2e_ms,
+    "status": result.status.name,
+    "evidence": pipeline.evidence(),
+  }
+
+
+def _jit_worker() -> dict[str, object]:
+  """Time first and second public damage-kernel calls in a fresh interpreter."""
+  from pyfem.v3.materials.plane_strain_damage import (
+    plane_strain_damage_calibration,
+    plane_strain_damage_kernel,
+  )
+
+  strains = np.zeros((16, 6), dtype=np.float64)
+  strains[:, 0] = np.linspace(0.0, 2.0e-3, 16)
+  strains[::3, 5] = 5.0e-4
+  accepted_rows = np.zeros((16, 1), dtype=np.float64)
+  calibration = plane_strain_damage_calibration(_E, _NU, _KAPPA0, _KAPPA_C, _DAMAGE_K)
+  first_start = time.perf_counter()
+  first = plane_strain_damage_kernel(strains, accepted_rows, calibration)
+  first_ms = (time.perf_counter() - first_start) * 1e3
+  second_start = time.perf_counter()
+  second = plane_strain_damage_kernel(strains, accepted_rows, calibration)
+  second_ms = (time.perf_counter() - second_start) * 1e3
+  first_arrays = tuple(
+    np.ascontiguousarray(getattr(first, name)).tobytes()
+    for name in ("stresses", "tangents", "trial_rows")
+  )
+  second_arrays = tuple(
+    np.ascontiguousarray(getattr(second, name)).tobytes()
+    for name in ("stresses", "tangents", "trial_rows")
+  )
+  identical = first.status is second.status and first_arrays == second_arrays
+  digest = hashlib.sha256()
+  for payload in first_arrays:
+    digest.update(payload)
+  return {
+    "jit_ms": first_ms,
+    "warm_ms": second_ms,
+    "status": first.status.name,
+    "response_sha256": digest.hexdigest(),
+    "repeat_identical": identical,
+  }
+
+
+def main() -> None:
+  """Run the subprocess side of the focused FE2 evidence measurements."""
+  import argparse
+  import json
+
+  parser = argparse.ArgumentParser(description=__doc__)
+  worker = parser.add_mutually_exclusive_group(required=True)
+  worker.add_argument("--fresh-worker", metavar="CASE")
+  worker.add_argument("--jit-worker", action="store_true")
+  parser.add_argument("--threads", type=int, default=1)
+  args = parser.parse_args()
+  payload = (
+    _jit_worker() if args.jit_worker else _fresh_worker(args.fresh_worker, args.threads)
+  )
+  print(json.dumps(payload))
+
+
+if __name__ == "__main__":
+  main()

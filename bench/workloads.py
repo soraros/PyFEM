@@ -158,9 +158,12 @@ class FE2Workload:
 FE2_SIZES: tuple[tuple[int, int], ...] = ((1, 1), (2, 2))
 
 
-def fe2_cases() -> list[FE2Workload]:
+def fe2_cases(*, damage_only: bool = False) -> list[FE2Workload]:
   """Damage/state anchors plus the compute-releasing elastic scale leg."""
-  return [FE2Workload(nx, ny) for nx, ny in FE2_SIZES] + [
+  damage = [FE2Workload(nx, ny) for nx, ny in FE2_SIZES]
+  if damage_only:
+    return damage
+  return damage + [
     FE2Workload(1, 1, micro_n=8, elastic=True),
     FE2Workload(1, 1, micro_n=16, elastic=True),
   ]
