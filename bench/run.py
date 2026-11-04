@@ -18,10 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import subprocess
 import sys
-import tempfile
 import time
 import warnings
 from collections.abc import Callable
@@ -33,13 +30,16 @@ from typing import Any
 from scipy.sparse import SparseEfficiencyWarning
 
 from bench.common import (
-  REPO_ROOT,
   RESULTS_DIR,
   BenchRecord,
   MetricStats,
   measure,
   measure_fixed,
   read_run,
+  run_fresh_worker,
+  single_sample,
+  stats_from_samples,
+  time_call,
   write_run,
 )
 from bench.db import DEFAULT_THRESHOLD, compare
@@ -124,13 +124,6 @@ DEFAULT_COLD_SKIMS = ("patch_test8", "cantilever8", "shallow_truss_riks")
 DEFAULT_COLD_FAMILY = ("family:tl-cantilever:16x2", "family:riks-fan:32")
 TRUE_COLD_CASE = "skim:patch_test8"
 
-BLAS_ENV_VARS = (
-  "OMP_NUM_THREADS",
-  "OPENBLAS_NUM_THREADS",
-  "MKL_NUM_THREADS",
-  "VECLIB_MAXIMUM_THREADS",
-)
-
 
 def _threadpool_limits(threads: int) -> AbstractContextManager:
   try:
@@ -197,13 +190,8 @@ def _per_rep_solver_loop(
     t0 = time.perf_counter()
     solve(handle)
     samples.append((time.perf_counter() - t0) * 1e3)
-  return MetricStats(
-    min_ms=min(samples),
-    median_ms=sorted(samples)[len(samples) // 2],
-    mean_ms=sum(samples) / len(samples),
-    reps=len(samples),
-    samples_ms=samples,
-    note="solver loop only; per-rep load excluded (M3 envelope)",
+  return stats_from_samples(
+    samples, note="solver loop only; per-rep load excluded (M3 envelope)"
   )
 
 
@@ -461,12 +449,19 @@ def run_material_case(
   return records, gate
 
 
-def _solved_fe2(case: FE2Workload, threads: int) -> FE2Pipeline:
+def _solved_fe2(case: FE2Workload, threads: int) -> tuple[FE2Pipeline, float, float]:
   _set_numba_threads(threads)
   with _threadpool_limits(threads):
+    start = time.perf_counter()
     pipeline = FE2Pipeline(case)
-    pipeline.solve()
-  return pipeline
+    load_ms = (time.perf_counter() - start) * 1e3
+    try:
+      pipeline.solve()
+    except Exception:
+      pipeline.close()
+      raise
+    e2e_ms = (time.perf_counter() - start) * 1e3
+  return pipeline, load_ms, e2e_ms
 
 
 def run_fe2_case(
@@ -477,90 +472,69 @@ def run_fe2_case(
   e2e_reps: int = 1,
 ) -> tuple[list[BenchRecord], list[GateResult]]:
   """Race-gate each FE2 thread count before recording its stage timings."""
+  if e2e_reps < 1:
+    raise ValueError("e2e_reps must be positive")
   records: list[BenchRecord] = []
   gates: list[GateResult] = []
-  reference = _solved_fe2(case, 1)
-  for thread_count in threads:
-    candidate = _solved_fe2(case, thread_count)
-    _set_numba_threads(thread_count)
-    with _threadpool_limits(thread_count):
-      gate = gate_fe2(reference, candidate)
-      gates.append(gate)
-      if not gate.passed:
-        records.append(_failed_record("fe2", case.name, "v3", "warm", gate))
-        continue
-      nested_stats = measure(candidate.nested_evaluation, warmup=1, budget_s=budget_s)
-      nested_stats.note = "committed macro state; nested trial rejected after each call"
-      load_stats = measure_fixed(lambda: FE2Pipeline(case), warmup=0, reps=1)
-      load_stats.note = "compile + real virgin nested probe"
-      e2e_stats = measure_fixed(lambda: solve_fresh_fe2(case), warmup=0, reps=e2e_reps)
-      e2e_stats.note = "fresh-e2e: fresh compile + virgin probe + macro nonlinear solve"
-      evidence = candidate.evidence()
-    records.append(
-      BenchRecord(
-        category="fe2",
-        workload=case.name,
-        side="v3",
-        mode="warm",
-        threads=thread_count,
-        n_elems=case.n_elems,
-        n_dofs=case.n_dofs,
-        metrics={
-          "load": load_stats,
-          "nested_evaluation": nested_stats,
-          "e2e": e2e_stats,
-        },
-        logical_bytes=candidate.logical_bytes,
-        correctness={**gate.to_json(), "evidence": evidence},
-      )
-    )
-  return records, gates
-
-
-def _single_sample(milliseconds: float, note: str = "") -> MetricStats:
-  return MetricStats(
-    min_ms=milliseconds,
-    median_ms=milliseconds,
-    mean_ms=milliseconds,
-    reps=1,
-    samples_ms=[milliseconds],
-    note=note,
-  )
-
-
-def _fe2_subprocess(
-  arguments: list[str], *, threads: int, true_cold: bool
-) -> tuple[dict[str, Any], float]:
-  env = os.environ.copy()
-  env["NUMBA_NUM_THREADS"] = str(threads)
-  for var in BLAS_ENV_VARS:
-    env[var] = str(threads)
-  temporary = (
-    tempfile.TemporaryDirectory(prefix="pyfem-fe2-jit-") if true_cold else None
-  )
-  if temporary is not None:
-    env["NUMBA_CACHE_DIR"] = temporary.name
+  reference, _, _ = _solved_fe2(case, 1)
   try:
-    start = time.perf_counter()
-    output = subprocess.run(
-      [sys.executable, "-m", "bench.fe2_pipeline", *arguments],
-      env=env,
-      cwd=REPO_ROOT,
-      capture_output=True,
-      text=True,
-      check=True,
-    )
-    wall_ms = (time.perf_counter() - start) * 1e3
+    for thread_count in threads:
+      candidate, load_ms, first_e2e_ms = _solved_fe2(case, thread_count)
+      try:
+        _set_numba_threads(thread_count)
+        with _threadpool_limits(thread_count):
+          gate = gate_fe2(reference, candidate)
+          gates.append(gate)
+          if not gate.passed:
+            records.append(_failed_record("fe2", case.name, "v3", "warm", gate))
+            continue
+          nested_stats = measure(
+            candidate.nested_evaluation, warmup=1, budget_s=budget_s
+          )
+          nested_stats.note = (
+            "committed macro state; nested trial rejected after each call"
+          )
+          load_stats = single_sample(load_ms, "compile + real virgin nested probe")
+          e2e_samples = [first_e2e_ms] + [
+            time_call(lambda: solve_fresh_fe2(case)) for _ in range(e2e_reps - 1)
+          ]
+          e2e_stats = stats_from_samples(
+            e2e_samples,
+            note="fresh-e2e: fresh compile + virgin probe + macro nonlinear solve",
+          )
+        records.append(
+          BenchRecord(
+            category="fe2",
+            workload=case.name,
+            side="v3",
+            mode="warm",
+            threads=thread_count,
+            n_elems=case.n_elems,
+            n_dofs=case.n_dofs,
+            metrics={
+              "load": load_stats,
+              "nested_evaluation": nested_stats,
+              "e2e": e2e_stats,
+            },
+            logical_bytes=candidate.logical_bytes,
+            correctness={**gate.to_json(), "evidence": gate.evidence},
+          )
+        )
+      finally:
+        candidate.close()
   finally:
-    if temporary is not None:
-      temporary.cleanup()
-  return json.loads(output.stdout.strip().splitlines()[-1]), wall_ms
+    reference.close()
+  return records, gates
 
 
 def run_fresh_fe2_subprocess(case: FE2Workload, *, true_cold: bool) -> BenchRecord:
   """Measure a fresh-process FE2 solve with cache present or an empty cache."""
-  payload, wall_ms = _fe2_subprocess(
-    ["--fresh-worker", case.name, "--threads", "1"], threads=1, true_cold=true_cold
+  payload, wall_ms = run_fresh_worker(
+    "bench.cold_worker",
+    ["--fe2-case", case.name, "--threads", "1"],
+    threads=1,
+    true_cold=true_cold,
+    cache_prefix="pyfem-fe2-jit-",
   )
   evidence = payload["evidence"]
   passed = (
@@ -577,14 +551,12 @@ def run_fresh_fe2_subprocess(case: FE2Workload, *, true_cold: bool) -> BenchReco
     n_elems=case.n_elems,
     n_dofs=case.n_dofs,
     metrics={
-      "load": _single_sample(
-        payload["load_ms"], "fresh-process compile + virgin probe"
-      ),
-      "solve": _single_sample(payload["solve_ms"], "fresh-process macro solve"),
-      "fresh_e2e": _single_sample(
+      "load": single_sample(payload["load_ms"], "fresh-process compile + virgin probe"),
+      "solve": single_sample(payload["solve_ms"], "fresh-process macro solve"),
+      "fresh_e2e": single_sample(
         payload["fresh_e2e_ms"], "fresh-process compile + virgin probe + macro solve"
       ),
-      "wall": _single_sample(wall_ms, "parent-measured subprocess wall"),
+      "wall": single_sample(wall_ms, "parent-measured subprocess wall"),
     },
     correctness={"passed": passed, "evidence": evidence},
   )
@@ -592,7 +564,13 @@ def run_fresh_fe2_subprocess(case: FE2Workload, *, true_cold: bool) -> BenchReco
 
 def run_damage_jit_subprocess(*, true_cold: bool) -> BenchRecord:
   """Isolate first-call JIT from second-call warm kernel execution."""
-  payload, wall_ms = _fe2_subprocess(["--jit-worker"], threads=1, true_cold=true_cold)
+  payload, wall_ms = run_fresh_worker(
+    "bench.cold_worker",
+    ["--damage-jit"],
+    threads=1,
+    true_cold=true_cold,
+    cache_prefix="pyfem-fe2-jit-",
+  )
   passed = payload["status"] == "OK" and payload["repeat_identical"]
   mode = "truecold" if true_cold else "cache-present"
   return BenchRecord(
@@ -604,11 +582,11 @@ def run_damage_jit_subprocess(*, true_cold: bool) -> BenchRecord:
     n_elems=0,
     n_dofs=16,
     metrics={
-      "jit": _single_sample(
+      "jit": single_sample(
         payload["jit_ms"], "first public kernel call in a fresh interpreter"
       ),
-      "kernel": _single_sample(payload["warm_ms"], "second public kernel call"),
-      "wall": _single_sample(wall_ms, "parent-measured subprocess wall"),
+      "kernel": single_sample(payload["warm_ms"], "second public kernel call"),
+      "wall": single_sample(wall_ms, "parent-measured subprocess wall"),
     },
     correctness={"passed": passed, "response_sha256": payload["response_sha256"]},
   )
@@ -764,29 +742,13 @@ def run_cold_case(
   gate_passed: bool = True,
 ) -> BenchRecord:
   """Spawn one fresh-subprocess cold measurement and pack it as a record."""
-  env = os.environ.copy()
-  env["NUMBA_NUM_THREADS"] = str(threads)
-  for var in BLAS_ENV_VARS:
-    env[var] = str(threads)
-  tmp_dir = None
-  if true_cold:
-    tmp_dir = tempfile.TemporaryDirectory(prefix="pyfem-truecold-")
-    env["NUMBA_CACHE_DIR"] = tmp_dir.name
-  try:
-    wall0 = time.perf_counter()
-    out = subprocess.run(
-      [sys.executable, "-m", "bench.cold_worker", "--case", case, "--side", side],
-      env=env,
-      cwd=REPO_ROOT,
-      capture_output=True,
-      text=True,
-      check=True,
-    )
-    wall_ms = (time.perf_counter() - wall0) * 1e3
-  finally:
-    if tmp_dir is not None:
-      tmp_dir.cleanup()
-  payload = json.loads(out.stdout.strip().splitlines()[-1])
+  payload, wall_ms = run_fresh_worker(
+    "bench.cold_worker",
+    ["--case", case, "--side", side],
+    threads=threads,
+    true_cold=true_cold,
+    cache_prefix="pyfem-truecold-",
+  )
 
   metrics: dict[str, MetricStats] = {}
   for key, metric in (
@@ -797,15 +759,9 @@ def run_cold_case(
   ):
     ms = payload.get(key)
     if ms is not None:
-      metrics[metric] = MetricStats(
-        min_ms=ms, median_ms=ms, mean_ms=ms, reps=1, samples_ms=[ms]
-      )
-  metrics["wall"] = MetricStats(
-    min_ms=wall_ms,
-    median_ms=wall_ms,
-    mean_ms=wall_ms,
-    reps=1,
-    samples_ms=[wall_ms],
+      metrics[metric] = single_sample(ms)
+  metrics["wall"] = stats_from_samples(
+    [wall_ms],
     rss_delta_mb=float(payload.get("peak_rss_mb", 0.0)),
     note="parent-measured subprocess wall; rss_delta_mb = worker peak RSS",
   )
@@ -855,11 +811,17 @@ def do_gates(
         f"[{'PASS' if gate.passed else 'FAIL'}] {gate.workload} max_rel={worst:.3e}"
       )
   for case in fe2_cases():
-    reference = _solved_fe2(case, 1)
-    candidate = _solved_fe2(case, 2)
-    _set_numba_threads(2)
-    with _threadpool_limits(2):
-      gate = gate_fe2(reference, candidate)
+    reference, _, _ = _solved_fe2(case, 1)
+    try:
+      candidate, _, _ = _solved_fe2(case, 2)
+      try:
+        _set_numba_threads(2)
+        with _threadpool_limits(2):
+          gate = gate_fe2(reference, candidate)
+      finally:
+        candidate.close()
+    finally:
+      reference.close()
     failures += 0 if gate.passed else 1
     if verbose:
       worst = max(c.max_rel_diff for c in gate.checks)

@@ -171,6 +171,11 @@ class FE2Pipeline:
     self.result = result
     return result
 
+  def close(self) -> None:
+    """Release this pipeline's prepared nested runtimes."""
+    if self.driver is not None:
+      self.driver.close()
+
   def nested_evaluation(self) -> OperatorEvaluation:
     """Evaluate homogenized outputs at the committed state, then reject the trial."""
     if self.driver is None:
@@ -201,29 +206,16 @@ class FE2Pipeline:
       if store.trial_open:
         runtime.reject_trial()
 
-  def evidence(self) -> dict[str, object]:
-    """Return cross-revision state hashes, payload sizes, and schedule counters."""
+  def _evidence(
+    self, accepted_payload: bytes, rejected_payload: bytes
+  ) -> dict[str, object]:
     if self.driver is None:
       msg = "FE2 evidence requires a solved pipeline"
       raise RuntimeError(msg)
-    runtime = self.driver.nested_executions[0]
-    if runtime is None:
-      msg = "FE2 evidence requires its prepared nested runtime"
-      raise RuntimeError(msg)
-    operator = self.system.operators[0]
-    store = runtime.store
-    if store.trial_open:
-      msg = "FE2 evidence requires a closed nested trial"
-      raise RuntimeError(msg)
-    accepted_payload = store.encode()
-    evaluation = self.nested_evaluation()
-    if evaluation_status(evaluation) is not EvaluationStatus.OK:
-      msg = "FE2 evidence requires a successful rejected-trial evaluation"
-      raise RuntimeError(msg)
-    rejected_payload = store.encode()
     if rejected_payload != accepted_payload:
       msg = "FE2 rejected trial did not restore the accepted nested payload"
       raise RuntimeError(msg)
+    operator = self.system.operators[0]
     owner = self.driver.owner
     block_id = operator.header.state_layout.block_id
     physical = np.ascontiguousarray(owner.accepted_physical().values).tobytes()
@@ -238,11 +230,34 @@ class FE2Pipeline:
       "statistics": asdict(self.result.statistics),
     }
 
+  def evidence(self) -> dict[str, object]:
+    """Return cross-revision state hashes, payload sizes, and schedule counters."""
+    if self.driver is None:
+      msg = "FE2 evidence requires a solved pipeline"
+      raise RuntimeError(msg)
+    runtime = self.driver.nested_executions[0]
+    if runtime is None:
+      msg = "FE2 evidence requires its prepared nested runtime"
+      raise RuntimeError(msg)
+    store = runtime.store
+    if store.trial_open:
+      msg = "FE2 evidence requires a closed nested trial"
+      raise RuntimeError(msg)
+    accepted_payload = store.encode()
+    evaluation = self.nested_evaluation()
+    if evaluation_status(evaluation) is not EvaluationStatus.OK:
+      msg = "FE2 evidence requires a successful rejected-trial evaluation"
+      raise RuntimeError(msg)
+    return self._evidence(accepted_payload, store.encode())
+
 
 def solve_fresh_fe2(workload: FE2Workload) -> object:
-  """Compile and solve a fresh FE2 case, including the virgin nested probe."""
+  """Compile, solve, and close a fresh FE2 case, including its virgin probe."""
   pipeline = FE2Pipeline(workload)
-  return pipeline.solve()
+  try:
+    return pipeline.solve()
+  finally:
+    pipeline.close()
 
 
 def _uint64(values: np.ndarray) -> np.ndarray:
@@ -266,8 +281,13 @@ def _identity_check(name: str, first: np.ndarray, second: np.ndarray) -> CheckRe
   )
 
 
-def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> GateResult:
-  """Apply the nested D2 race gate to committed states and homogenized outputs."""
+@dataclass
+class FE2GateResult(GateResult):
+  evidence: dict[str, object] | None = None
+
+
+def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> FE2GateResult:
+  """Apply the nested D2 race gate and retain its candidate evidence."""
   workload = candidate.workload.name
   reference_result = reference.result
   candidate_result = candidate.result
@@ -288,7 +308,7 @@ def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> GateResult:
     )
   ]
   if not status_passed:
-    return GateResult(workload, False, checks)
+    return FE2GateResult(workload, False, checks)
   reference_driver = reference.driver
   candidate_driver = candidate.driver
   assert reference_driver is not None and candidate_driver is not None
@@ -388,7 +408,11 @@ def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> GateResult:
         second.values if name == "trial-macro-strain" else second[0].values
       )
       checks.append(_identity_check(name, first_values, second_values))
-  return GateResult(workload, all(check.passed for check in checks), checks)
+  passed = all(check.passed for check in checks)
+  evidence = (
+    candidate._evidence(candidate_accepted, candidate_rejected) if passed else None
+  )
+  return FE2GateResult(workload, passed, checks, evidence)
 
 
 def _memory_layout(macro_ips: int) -> NestedStateLayout:
@@ -582,20 +606,23 @@ def _fresh_worker(case_name: str, threads: int) -> dict[str, object]:
   start = time.perf_counter()
   load_start = time.perf_counter()
   pipeline = FE2Pipeline(case)
-  load_ms = (time.perf_counter() - load_start) * 1e3
-  solve_start = time.perf_counter()
-  result = pipeline.solve()
-  solve_ms = (time.perf_counter() - solve_start) * 1e3
-  fresh_e2e_ms = (time.perf_counter() - start) * 1e3
-  return {
-    "case": case_name,
-    "threads": threads,
-    "load_ms": load_ms,
-    "solve_ms": solve_ms,
-    "fresh_e2e_ms": fresh_e2e_ms,
-    "status": result.status.name,
-    "evidence": pipeline.evidence(),
-  }
+  try:
+    load_ms = (time.perf_counter() - load_start) * 1e3
+    solve_start = time.perf_counter()
+    result = pipeline.solve()
+    solve_ms = (time.perf_counter() - solve_start) * 1e3
+    fresh_e2e_ms = (time.perf_counter() - start) * 1e3
+    return {
+      "case": case_name,
+      "threads": threads,
+      "load_ms": load_ms,
+      "solve_ms": solve_ms,
+      "fresh_e2e_ms": fresh_e2e_ms,
+      "status": result.status.name,
+      "evidence": pipeline.evidence(),
+    }
+  finally:
+    pipeline.close()
 
 
 def _jit_worker() -> dict[str, object]:
@@ -635,24 +662,3 @@ def _jit_worker() -> dict[str, object]:
     "response_sha256": digest.hexdigest(),
     "repeat_identical": identical,
   }
-
-
-def main() -> None:
-  """Run the subprocess side of the focused FE2 evidence measurements."""
-  import argparse
-  import json
-
-  parser = argparse.ArgumentParser(description=__doc__)
-  worker = parser.add_mutually_exclusive_group(required=True)
-  worker.add_argument("--fresh-worker", metavar="CASE")
-  worker.add_argument("--jit-worker", action="store_true")
-  parser.add_argument("--threads", type=int, default=1)
-  args = parser.parse_args()
-  payload = (
-    _jit_worker() if args.jit_worker else _fresh_worker(args.fresh_worker, args.threads)
-  )
-  print(json.dumps(payload))
-
-
-if __name__ == "__main__":
-  main()

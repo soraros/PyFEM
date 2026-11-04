@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import resource
 import statistics
+import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -46,7 +49,7 @@ class MetricStats:
   mean_ms: float
   reps: int
   samples_ms: list[float] = field(repr=False)
-  rss_delta_mb: float = 0.0
+  rss_delta_mb: float | None = None
   note: str = ""
 
   def to_json(self) -> dict[str, Any]:
@@ -84,6 +87,26 @@ class BenchRecord:
     }
 
 
+def stats_from_samples(
+  samples_ms: list[float], *, rss_delta_mb: float | None = None, note: str = ""
+) -> MetricStats:
+  """Summarize measured samples; ``None`` means that RSS was not measured."""
+  return MetricStats(
+    min_ms=min(samples_ms),
+    median_ms=statistics.median(samples_ms),
+    mean_ms=statistics.fmean(samples_ms),
+    reps=len(samples_ms),
+    samples_ms=samples_ms,
+    rss_delta_mb=rss_delta_mb,
+    note=note,
+  )
+
+
+def single_sample(milliseconds: float, note: str = "") -> MetricStats:
+  """Construct one fixed measurement with unknown RSS."""
+  return stats_from_samples([milliseconds], note=note)
+
+
 def rss_mb() -> float:
   """Process peak RSS (high-water mark) in MiB."""
   usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -97,6 +120,44 @@ def time_call(fn: Callable[[], Any]) -> float:
   t0 = time.perf_counter()
   fn()
   return (time.perf_counter() - t0) * 1e3
+
+
+def run_fresh_worker(
+  module: str,
+  arguments: list[str],
+  *,
+  threads: int,
+  true_cold: bool,
+  cache_prefix: str,
+) -> tuple[dict[str, Any], float]:
+  """Run one pinned worker process and decode its final JSON stdout line."""
+  env = os.environ.copy()
+  env["NUMBA_NUM_THREADS"] = str(threads)
+  for var in (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+  ):
+    env[var] = str(threads)
+  temporary = tempfile.TemporaryDirectory(prefix=cache_prefix) if true_cold else None
+  if temporary is not None:
+    env["NUMBA_CACHE_DIR"] = temporary.name
+  try:
+    start = time.perf_counter()
+    output = subprocess.run(
+      [sys.executable, "-m", module, *arguments],
+      env=env,
+      cwd=REPO_ROOT,
+      capture_output=True,
+      text=True,
+      check=True,
+    )
+    wall_ms = (time.perf_counter() - start) * 1e3
+  finally:
+    if temporary is not None:
+      temporary.cleanup()
+  return json.loads(output.stdout.strip().splitlines()[-1]), wall_ms
 
 
 def measure(
@@ -125,14 +186,7 @@ def measure(
   for _ in range(reps - 1):
     samples.append(time_call(fn))
   rss_after = rss_mb()
-  return MetricStats(
-    min_ms=min(samples),
-    median_ms=statistics.median(samples),
-    mean_ms=statistics.fmean(samples),
-    reps=reps,
-    samples_ms=samples,
-    rss_delta_mb=max(0.0, rss_after - rss_before),
-  )
+  return stats_from_samples(samples, rss_delta_mb=max(0.0, rss_after - rss_before))
 
 
 def measure_fixed(
@@ -142,19 +196,11 @@ def measure_fixed(
   reps: int,
   note: str = "",
 ) -> MetricStats:
-  """Time ``fn`` with a fixed repetition count (for expensive legacy cells)."""
+  """Time fixed repetitions; RSS remains unknown rather than a zero delta."""
   for _ in range(warmup):
     fn()
   samples = [time_call(fn) for _ in range(reps)]
-  return MetricStats(
-    min_ms=min(samples),
-    median_ms=statistics.median(samples),
-    mean_ms=statistics.fmean(samples),
-    reps=reps,
-    samples_ms=samples,
-    rss_delta_mb=0.0,
-    note=note,
-  )
+  return stats_from_samples(samples, note=note)
 
 
 def write_run(
