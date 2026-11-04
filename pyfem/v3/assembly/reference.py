@@ -29,25 +29,17 @@ from pyfem.v3.assembly.prepare import (
   _raise_boundary,
   _validate_model_program_compatibility,
   _validate_plan_compatibility,
-  _validated_array_values,
-  _validated_fingerprint,
-  _validated_instance_id,
 )
 from pyfem.v3.compile.contracts import Q8_FORMULATION_KEY, Q8_MATERIAL_KEY
-from pyfem.v3.compile.program import (
-  _BoundaryError,
-  _validated_model,
-  _validated_program,
-  evaluate_program,
-)
+from pyfem.v3.compile.program import evaluate_program
 from pyfem.v3.compile.program_diagnostics import (
   ProgramEvaluationDiagnostic,
   ProgramEvaluationError,
 )
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.compiled import CompiledModel, DomainBlock
-from pyfem.v3.model.identity import IdentityMismatchError, require_same_instance
-from pyfem.v3.model.program import CompiledProgram, ProgramEvaluation
+from pyfem.v3.model.identity import IdentityMismatchError
+from pyfem.v3.model.program import CompiledProgram
 from pyfem.v3.spec.diagnostics import SourceContext
 from pyfem.v3.spec.program import ProgramPoint
 
@@ -708,136 +700,6 @@ def _difference_matrix(
   return result
 
 
-def _validate_program_evaluation(
-  value: object,
-  model: CompiledModel,
-  program: CompiledProgram,
-  *,
-  source: SourceContext,
-) -> ProgramEvaluation:
-  if type(value) is not ProgramEvaluation:
-    _evaluation_boundary(
-      "malformed-program-evaluation",
-      "P1-A evaluation must return an exact ProgramEvaluation",
-      source,
-    )
-  names = (
-    "program_instance_id",
-    "program_content_fingerprint",
-    "compatible_model_instance_id",
-    "compatible_model_content_fingerprint",
-    "coordinate_names",
-    "coordinate_values",
-    "prescribed_offsets",
-    "prescribed_offset_derivatives",
-    "nodal_force",
-    "nodal_force_derivatives",
-  )
-  try:
-    slots = tuple(object.__getattribute__(value, name) for name in names)
-  except AttributeError:
-    _evaluation_boundary(
-      "malformed-program-evaluation",
-      "P1-A evaluation must initialize every canonical slot",
-      source,
-    )
-  fields = dict(zip(names, slots, strict=True))
-  program_instance = _validated_instance_id(
-    fields["program_instance_id"],
-    label="program-evaluation program instance identity",
-    source=source,
-  )
-  model_instance = _validated_instance_id(
-    fields["compatible_model_instance_id"],
-    label="program-evaluation model instance identity",
-    source=source,
-  )
-  program_fingerprint = _validated_fingerprint(
-    fields["program_content_fingerprint"],
-    label="program-evaluation program content fingerprint",
-    source=source,
-  )
-  model_fingerprint = _validated_fingerprint(
-    fields["compatible_model_content_fingerprint"],
-    label="program-evaluation model content fingerprint",
-    source=source,
-  )
-  require_same_instance(
-    program.instance_id,
-    program_instance,
-    context="assembly program evaluation",
-  )
-  require_same_instance(
-    model.instance_id,
-    model_instance,
-    context="assembly model evaluation",
-  )
-  coordinate_names = fields["coordinate_names"]
-  if type(coordinate_names) is not tuple or any(
-    type(item) is not str for item in coordinate_names
-  ):
-    _evaluation_boundary(
-      "malformed-program-evaluation",
-      "P1-A evaluation coordinate names must be an exact string tuple",
-      source,
-    )
-  if (
-    program_fingerprint != program.content_fingerprint
-    or model_fingerprint != model.content_fingerprint
-    or coordinate_names != program.coordinate_names
-  ):
-    _evaluation_boundary(
-      "program-evaluation-compatibility-mismatch",
-      "P1-A evaluation identities or coordinate schema do not match assembly",
-      source,
-    )
-  full_count = model.dofs.global_size
-  coordinate_count = len(program.coordinate_names)
-  arrays = (
-    (
-      "coordinate values",
-      fields["coordinate_values"],
-      (coordinate_count,),
-    ),
-    ("prescribed offsets", fields["prescribed_offsets"], (full_count,)),
-    (
-      "prescribed offset derivatives",
-      fields["prescribed_offset_derivatives"],
-      (full_count, coordinate_count),
-    ),
-    ("nodal force", fields["nodal_force"], (full_count,)),
-    (
-      "nodal force derivatives",
-      fields["nodal_force_derivatives"],
-      (full_count, coordinate_count),
-    ),
-  )
-  validated: list[tuple[str, FinalizedArray, np.ndarray]] = []
-  for label, carrier, shape in arrays:
-    values = _validated_array_values(
-      carrier,
-      dtype=_FLOATING_DTYPE,
-      shape=shape,
-      label=f"program-evaluation {label}",
-      source=source,
-      finite=True,
-    )
-    validated.append((label, carrier, values))
-  for index, (left_label, left, left_values) in enumerate(validated):
-    for right_label, right, right_values in validated[index + 1 :]:
-      if (
-        left is right
-        or left_values is right_values
-        or np.shares_memory(left_values, right_values)
-      ):
-        _evaluation_boundary(
-          "malformed-program-evaluation",
-          f"program-evaluation {left_label} and {right_label} require separate storage",
-          source,
-        )
-  return value
-
-
 def _translate_program_evaluation_error(error: ProgramEvaluationError) -> NoReturn:
   translated: list[AssemblyEvaluationDiagnostic] = []
   try:
@@ -893,8 +755,20 @@ def _evaluate(
   plan: object,
   program_point: object,
 ) -> LinearStaticContributions:
-  validated_model = _validated_model(model)
-  validated_program = _validated_program(program)
+  if type(model) is not CompiledModel:
+    _evaluation_boundary(
+      "invalid-compiled-model",
+      "assembly evaluation requires an exact CompiledModel",
+      _EVALUATION_SOURCE,
+    )
+  if type(program) is not CompiledProgram:
+    _evaluation_boundary(
+      "invalid-compiled-program",
+      "assembly evaluation requires an exact CompiledProgram",
+      _EVALUATION_SOURCE,
+    )
+  validated_model = model
+  validated_program = program
   program_source = _program_source(
     validated_program,
     fallback=_EVALUATION_SOURCE,
@@ -918,15 +792,9 @@ def _evaluate(
     source=_EVALUATION_SOURCE,
   )
   try:
-    raw_program_evaluation = evaluate_program(validated_program, program_point)
+    evaluation = evaluate_program(validated_program, program_point)
   except ProgramEvaluationError as error:
     _translate_program_evaluation_error(error)
-  evaluation = _validate_program_evaluation(
-    raw_program_evaluation,
-    validated_model,
-    validated_program,
-    source=program_source,
-  )
 
   block = validated_model.domain_blocks[0]
   domain_plan = validated_plan.domain_coo_plan
@@ -1116,16 +984,6 @@ def assemble_reference_linear(
     return _evaluate(model, program, plan, program_point)
   except AssemblyEvaluationError:
     raise
-  except _BoundaryError as error:
-    raise AssemblyEvaluationError(
-      (
-        AssemblyEvaluationDiagnostic(
-          code=error.code,
-          message=error.message,
-          source=_EVALUATION_SOURCE,
-        ),
-      )
-    ) from None
   except IdentityMismatchError:
     raise AssemblyEvaluationError(
       (

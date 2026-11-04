@@ -19,11 +19,6 @@ from pyfem.v3.assembly import (
   assemble_reference_linear,
   prepare_assembly_plan,
 )
-from pyfem.v3.compile.program import (
-  _BoundaryError,
-  _validated_model,
-  _validated_program,
-)
 from pyfem.v3.model import (
   EVOLUTION_STATE_SCHEMA,
   PHYSICAL_STATE_SCHEMA,
@@ -1617,14 +1612,6 @@ def _verify_record_data(
   if type(model) is not CompiledModel or type(program) is not CompiledProgram:
     _malformed(
       "malformed-solution-owner", "solution model/program carriers are not exact"
-    )
-  try:
-    _validated_model(model)
-    _validated_program(program)
-  except _BoundaryError:
-    _malformed(
-      "malformed-solution-owner",
-      "solution model/program carriers fail complete exact validation",
     )
   if type(request) is not LinearStatic:
     _malformed(

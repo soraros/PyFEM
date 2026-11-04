@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 from typing import NoReturn
-from uuid import UUID
 
 import numpy as np
 
@@ -26,18 +25,9 @@ from pyfem.v3.compile.contracts import (
   Q8_TOPOLOGY_KEY,
   q8_descriptor_metadata,
 )
-from pyfem.v3.compile.program import (
-  _BoundaryError,
-  _validated_model,
-  _validated_program,
-)
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.compiled import CompiledModel, CompiledSource, DomainBlock
-from pyfem.v3.model.identity import (
-  IdentityMismatchError,
-  InstanceId,
-  require_same_instance,
-)
+from pyfem.v3.model.identity import IdentityMismatchError, require_same_instance
 from pyfem.v3.model.program import CompiledProgram
 from pyfem.v3.model.provenance import CanonicalManifest, ContentFingerprint
 from pyfem.v3.spec.diagnostics import SourceContext
@@ -87,23 +77,6 @@ def _read_slot(value: object, name: str) -> object:
     return _MISSING
 
 
-def _required_slots(
-  value: object,
-  names: tuple[str, ...],
-  *,
-  label: str,
-  source: SourceContext,
-) -> tuple[object, ...]:
-  values = tuple(_read_slot(value, name) for name in names)
-  if any(item is _MISSING for item in values):
-    _raise_boundary(
-      "malformed-assembly-carrier",
-      f"{label} must initialize every canonical slot",
-      source,
-    )
-  return values
-
-
 def _copy_compiled_source(value: CompiledSource) -> SourceContext:
   return SourceContext(source=value.source, line=value.line, column=value.column)
 
@@ -132,74 +105,6 @@ def _program_source(
   except (KeyError, TypeError, ValueError):
     return fallback
   return _copy_compiled_source(source)
-
-
-def _validated_fingerprint(
-  value: object,
-  *,
-  label: str,
-  source: SourceContext,
-) -> ContentFingerprint:
-  if type(value) is not ContentFingerprint:
-    _raise_boundary(
-      "malformed-assembly-carrier",
-      f"{label} must be an exact ContentFingerprint",
-      source,
-    )
-  try:
-    str(value)
-  except (TypeError, ValueError):
-    _raise_boundary(
-      "malformed-assembly-carrier",
-      f"{label} contains a malformed digest",
-      source,
-    )
-  return value
-
-
-def _validated_manifest(
-  value: object,
-  *,
-  label: str,
-  source: SourceContext,
-) -> CanonicalManifest:
-  if type(value) is not CanonicalManifest:
-    _raise_boundary(
-      "malformed-assembly-carrier",
-      f"{label} must be an exact CanonicalManifest",
-      source,
-    )
-  try:
-    value.to_bytes()
-  except (OverflowError, RecursionError, TypeError, ValueError):
-    _raise_boundary(
-      "malformed-assembly-carrier",
-      f"{label} contains malformed canonical bytes",
-      source,
-    )
-  return value
-
-
-def _validated_instance_id(
-  value: object,
-  *,
-  label: str,
-  source: SourceContext,
-) -> InstanceId:
-  if type(value) is not InstanceId:
-    _raise_boundary(
-      "malformed-assembly-carrier",
-      f"{label} must be an exact InstanceId",
-      source,
-    )
-  token = _read_slot(value, "_token")
-  if token is _MISSING or type(token) is not UUID:
-    _raise_boundary(
-      "malformed-assembly-carrier",
-      f"{label} contains a malformed opaque token",
-      source,
-    )
-  return value
 
 
 def _validated_array_values(
@@ -1104,8 +1009,20 @@ def _prepare(
       "assembly request must be exactly LinearStaticContributionRequest",
       _PREPARATION_SOURCE,
     )
-  validated_model = _validated_model(model)
-  validated_program = _validated_program(program)
+  if type(model) is not CompiledModel:
+    _raise_boundary(
+      "invalid-compiled-model",
+      "assembly preparation requires an exact CompiledModel",
+      _PREPARATION_SOURCE,
+    )
+  if type(program) is not CompiledProgram:
+    _raise_boundary(
+      "invalid-compiled-program",
+      "assembly preparation requires an exact CompiledProgram",
+      _PREPARATION_SOURCE,
+    )
+  validated_model = model
+  validated_program = program
   program_source = _program_source(
     validated_program,
     fallback=_PREPARATION_SOURCE,
@@ -1182,16 +1099,6 @@ def prepare_assembly_plan(
     return _prepare(model, program, request)
   except AssemblyPreparationError:
     raise
-  except _BoundaryError as error:
-    raise AssemblyPreparationError(
-      (
-        AssemblyPreparationDiagnostic(
-          code=error.code,
-          message=error.message,
-          source=_PREPARATION_SOURCE,
-        ),
-      )
-    ) from None
   except IdentityMismatchError:
     raise AssemblyPreparationError(
       (
