@@ -177,29 +177,6 @@ def arc_length_continuation_from_evolution(
   )
 
 
-def continuation_evolution_from_arc_length(
-  state: ArcLengthContinuationState,
-) -> ContinuationEvolutionState:
-  """Adapt one driver-surface continuation state into the codec state.
-
-  The two types share one field set and semantics; the immutable
-  ``da_prev`` carrier passes through without copying.
-  """
-  if type(state) is not ArcLengthContinuationState:
-    msg = (
-      "continuation evolution adaptation requires an exact ArcLengthContinuationState"
-    )
-    raise TypeError(msg)
-  return ContinuationEvolutionState(
-    lam=state.lam,
-    da_prev=state.da_prev,
-    dlam_prev=state.dlam_prev,
-    factor=state.factor,
-    total_factor=state.total_factor,
-    cycle=state.cycle,
-  )
-
-
 @dataclass(frozen=True, slots=True, eq=False)
 class ArcLengthIterationRecord:
   """One Newton evaluation inside a cycle attempt.

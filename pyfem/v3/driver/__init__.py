@@ -8,7 +8,6 @@ from pyfem.v3.driver.continuation import (
   ArcLengthStepRecord,
   ArcLengthTermination,
   arc_length_continuation_from_evolution,
-  continuation_evolution_from_arc_length,
 )
 from pyfem.v3.driver.contracts import (
   BudgetExhaustionObservation,
@@ -94,7 +93,6 @@ __all__ = [
   "assemble_parameter_rhs",
   "compile_driver_plan",
   "compile_sensitivity_program",
-  "continuation_evolution_from_arc_length",
   "evaluate_loads",
   "evaluate_signals",
   "refill_tangent",

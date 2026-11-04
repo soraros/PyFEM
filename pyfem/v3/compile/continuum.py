@@ -773,25 +773,6 @@ class Hex8ContinuumPayload(CompilerConstructed):
   constitutive: FinalizedArray
   material_parameters: FinalizedArray
 
-  def physical_gradients(self) -> FinalizedArray:
-    values = (
-      self.normalized_gradients.values
-      / self.geometry_scales.values[:, None, None, None]
-    )
-    return FinalizedArray(values, dtype=np.float64)
-
-  def physical_strain_displacement(self) -> FinalizedArray:
-    values = (
-      self.normalized_strain_displacement.values
-      / self.geometry_scales.values[:, None, None, None]
-    )
-    return FinalizedArray(values, dtype=np.float64)
-
-  def physical_integration_weights(self) -> FinalizedArray:
-    scales = self.geometry_scales.values[:, None]
-    values = self.normalized_integration_weights.values * scales * scales * scales
-    return FinalizedArray(values, dtype=np.float64)
-
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class Hex8ContinuumOperator(CompilerConstructed):
@@ -901,25 +882,6 @@ class Q8ThermalPayload(CompilerConstructed):
   normalized_integration_weights: FinalizedArray
   conductivity: FinalizedArray
   material_parameters: FinalizedArray
-
-  def physical_gradients(self) -> FinalizedArray:
-    values = (
-      self.normalized_gradients.values
-      / self.geometry_scales.values[:, None, None, None]
-    )
-    return FinalizedArray(values, dtype=np.float64)
-
-  def physical_temperature_gradients(self) -> FinalizedArray:
-    values = (
-      self.normalized_temperature_gradients.values
-      / self.geometry_scales.values[:, None, None, None]
-    )
-    return FinalizedArray(values, dtype=np.float64)
-
-  def physical_integration_weights(self) -> FinalizedArray:
-    scales = self.geometry_scales.values[:, None]
-    values = self.normalized_integration_weights.values * scales * scales
-    return FinalizedArray(values, dtype=np.float64)
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
@@ -1042,32 +1004,6 @@ class Q8ThermoElasticPayload(CompilerConstructed):
   thermal_expansion: FinalizedArray
   conductivity: FinalizedArray
   material_parameters: FinalizedArray
-
-  def physical_gradients(self) -> FinalizedArray:
-    values = (
-      self.normalized_gradients.values
-      / self.geometry_scales.values[:, None, None, None]
-    )
-    return FinalizedArray(values, dtype=np.float64)
-
-  def physical_strain_displacement(self) -> FinalizedArray:
-    values = (
-      self.normalized_strain_displacement.values
-      / self.geometry_scales.values[:, None, None, None]
-    )
-    return FinalizedArray(values, dtype=np.float64)
-
-  def physical_temperature_gradients(self) -> FinalizedArray:
-    values = (
-      self.normalized_temperature_gradients.values
-      / self.geometry_scales.values[:, None, None, None]
-    )
-    return FinalizedArray(values, dtype=np.float64)
-
-  def physical_integration_weights(self) -> FinalizedArray:
-    scales = self.geometry_scales.values[:, None]
-    values = self.normalized_integration_weights.values * scales * scales
-    return FinalizedArray(values, dtype=np.float64)
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
@@ -1239,25 +1175,6 @@ class Q8StatefulContinuumPayload(CompilerConstructed):
   normalized_integration_weights: FinalizedArray
   calibration: FinalizedArray
   material_parameters: FinalizedArray
-
-  def physical_gradients(self) -> FinalizedArray:
-    values = (
-      self.normalized_gradients.values
-      / self.geometry_scales.values[:, None, None, None]
-    )
-    return FinalizedArray(values, dtype=np.float64)
-
-  def physical_strain_displacement(self) -> FinalizedArray:
-    values = (
-      self.normalized_strain_displacement.values
-      / self.geometry_scales.values[:, None, None, None]
-    )
-    return FinalizedArray(values, dtype=np.float64)
-
-  def physical_integration_weights(self) -> FinalizedArray:
-    scales = self.geometry_scales.values[:, None]
-    values = self.normalized_integration_weights.values * scales * scales
-    return FinalizedArray(values, dtype=np.float64)
 
 
 def _validated_stateful_kernel_result(

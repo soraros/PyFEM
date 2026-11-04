@@ -755,14 +755,6 @@ def _typed_id(value: str | int) -> tuple[str, str | int]:
   return ("int", value) if type(value) is int else ("str", value)
 
 
-def _dof_key(value: DofRef) -> tuple[tuple[str, str | int], ...]:
-  return (
-    _typed_id(value.node_id),
-    _typed_id(value.field_id),
-    ("str", value.component),
-  )
-
-
 def _validate_dof_ref(
   value: DofRef,
   *,

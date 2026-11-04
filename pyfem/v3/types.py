@@ -33,30 +33,6 @@ def dof_types_for_rank(rank: int) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True)
-class PlaneStressMaterial:
-  """Linear plane-stress Hooke material (I/O only)."""
-
-  youngs_modulus: float
-  poisson_ratio: float
-
-
-@dataclass(frozen=True)
-class PlaneStrainMaterial:
-  """Linear plane-strain Hooke material (I/O only)."""
-
-  youngs_modulus: float
-  poisson_ratio: float
-
-
-@dataclass(frozen=True)
-class IsotropicMaterial:
-  """Linear 3D isotropic Hooke material (I/O only)."""
-
-  youngs_modulus: float
-  poisson_ratio: float
-
-
-@dataclass(frozen=True)
 class PrescribedDof:
   """Prescribed displacement on a node (I/O only)."""
 
