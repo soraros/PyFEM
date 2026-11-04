@@ -1,4 +1,11 @@
-"""Typed, data-oriented PyFEM core (v3). Requires Python 3.13+."""
+"""Typed, data-oriented PyFEM core (v3). Requires Python 3.13+.
+
+Root exports are deliberately limited to the legacy loader, numerical solvers,
+and ``ProblemDefinition``. Dtype aliases and packing helpers stay in their
+owning modules rather than adding unused facade surface. The former ``api``
+one-shot facade is intentionally absent: compose the compile, analysis, and
+result implementations directly.
+"""
 
 from __future__ import annotations
 
@@ -9,19 +16,14 @@ if sys.version_info < (3, 13):
   raise ImportError(msg)
 
 from pyfem.v3.loader import load_problem
-from pyfem.v3.pack import pack_problem
 from pyfem.v3.solver.linear import solve_linear
 from pyfem.v3.solver.nonlinear import solve_nonlinear
 from pyfem.v3.solver.riks import solve_riks
-from pyfem.v3.types import F64, I32, LoadedProblem, ProblemDefinition
+from pyfem.v3.types import ProblemDefinition
 
 __all__ = [
-  "F64",
-  "I32",
-  "LoadedProblem",
   "ProblemDefinition",
   "load_problem",
-  "pack_problem",
   "solve_linear",
   "solve_nonlinear",
   "solve_riks",

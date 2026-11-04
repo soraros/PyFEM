@@ -35,6 +35,9 @@ from pyfem.v3.compile.truss import (
   truss_descriptor_metadata,
   truss_reference_registry,
 )
+from pyfem.v3.driver import DriverEvaluationError
+from pyfem.v3.model.arrays import FinalizedArray
+from pyfem.v3.model.operator import ChannelRequest, OperatorEvaluationInput
 from pyfem.v3.model.provenance import CanonicalManifest
 from pyfem.v3.model.registry import RegistryDescriptor
 from pyfem.v3.spec import (
@@ -813,6 +816,29 @@ def _q8_system() -> object:
   )
 
 
+def _direct_spring_evaluation(
+  system: object,
+  displacements: dict[int, tuple[float, float]],
+  accepted_state: np.ndarray,
+) -> object:
+  selected = system.operators[1]
+  port = selected.header.ports[0]
+  trial = authoring.trial_vector(system, displacements, space_id=port.space_id)
+  return selected.evaluate(
+    OperatorEvaluationInput(
+      port_values=(
+        FinalizedArray(trial[port.coefficient_map.values], dtype=np.float64),
+      ),
+      accepted_state=FinalizedArray(accepted_state, dtype=np.float64),
+      signals=(),
+      request=ChannelRequest(
+        tuple(channel.channel_id for channel in selected.header.residual_channels),
+        tuple(channel.channel_id for channel in selected.header.jacobian_channels),
+      ),
+    )
+  )
+
+
 def test_damage_envelope_spring_compose_and_evaluate_oracle() -> None:
   system = authoring.damage_envelope_spring(
     _q8_system(),
@@ -826,7 +852,12 @@ def test_damage_envelope_spring_compose_and_evaluate_oracle() -> None:
   assert layout.row_shape == (2, 1)
   assert layout.slots[0].name == "max_extension"
 
-  result = authoring.evaluate(system, {1: (0.3, 0.0)}, operator=1)
+  result = authoring.evaluate(
+    system,
+    {1: (0.3, 0.0)},
+    operator=1,
+    accepted_state=np.zeros(layout.row_shape),
+  )
   # Landed oracle from the state-transaction battery: kappa = 0.3 grows the
   # envelope to omega = 0.15, so the secant force is 0.85 * 2.0 * 0.3.
   np.testing.assert_allclose(
@@ -879,6 +910,7 @@ def test_student_spring_kernel_compiles_and_runs_with_state() -> None:
     system,
     {1: (0.5, 0.0), 2: (0.0, -0.25)},
     operator=1,
+    accepted_state=np.zeros(operator.header.state_layout.row_shape),
   )
   np.testing.assert_array_equal(
     result.residual_values[0].values,
@@ -889,6 +921,39 @@ def test_student_spring_kernel_compiles_and_runs_with_state() -> None:
     3.0 * np.tile(np.eye(2), (2, 1, 1)),
   )
   np.testing.assert_array_equal(result.trial_state.values, [[0.5], [0.25]])
+
+
+def test_stateful_evaluate_requires_explicit_accepted_state() -> None:
+  system = authoring.damage_envelope_spring(
+    _q8_system(),
+    nodes=(1, 2),
+    stiffness=2.0,
+    critical_extension=2.0,
+    max_increment=0.5,
+  )
+  displacements = {1: (0.3, 0.0)}
+  with pytest.raises(DriverEvaluationError) as captured:
+    authoring.evaluate(system, displacements, operator=1)
+  (diagnostic,) = captured.value.diagnostics
+  assert diagnostic.code == "accepted-state-required"
+  assert "nonzero accepted-state layout (2, 1)" in diagnostic.message
+
+  accepted_state = np.zeros((2, 1), dtype=np.float64)
+  result = authoring.evaluate(
+    system,
+    displacements,
+    operator=1,
+    accepted_state=accepted_state,
+  )
+  reference = _direct_spring_evaluation(system, displacements, accepted_state)
+  assert result.status is reference.status
+  for channel in ("residual_values", "jacobian_values"):
+    actual_values = getattr(result, channel)
+    reference_values = getattr(reference, channel)
+    assert len(actual_values) == len(reference_values)
+    for actual, expected in zip(actual_values, reference_values, strict=True):
+      np.testing.assert_array_equal(actual.values, expected.values)
+  np.testing.assert_array_equal(result.trial_state.values, reference.trial_state.values)
 
 
 def test_spring_authoring_rejects_bad_inputs_early() -> None:
@@ -980,3 +1045,53 @@ def test_evaluate_zero_state_and_input_validation() -> None:
     authoring.evaluate(system, operator=5)
   with pytest.raises(ValueError, match="float64 array of shape"):
     authoring.evaluate(system, np.zeros(4, dtype=np.float64))
+
+
+def test_mixed_material_default_registry_requires_explicit_choice() -> None:
+  mesh = authoring.quad8_patch(2, 1)
+  (block,) = mesh.cell_blocks
+  elastic_cell, plastic_cell = block.cells
+  split_mesh = replace(
+    mesh,
+    cell_blocks=(
+      replace(block, id="elastic-cells", cells=(elastic_cell,)),
+      replace(block, id="plastic-cells", cells=(plastic_cell,)),
+    ),
+  )
+  elastic = authoring.linear_elastic(2.0e5, 0.25, id="elastic")
+  plastic = authoring.plasticity(2.0e5, 0.25, 200.0, 1000.0, id="plastic")
+  base = authoring.small_strain_continuum(mesh, material=elastic)
+  region = base.regions[0]
+  model = replace(
+    base,
+    mesh=split_mesh,
+    materials=(elastic, plastic),
+    regions=(
+      replace(
+        region,
+        id="elastic-region",
+        cell_refs=(CellRef("elastic-cells", elastic_cell.id),),
+        material_id="elastic",
+      ),
+      replace(
+        region,
+        id="plastic-region",
+        cell_refs=(CellRef("plastic-cells", plastic_cell.id),),
+        material_id="plastic",
+      ),
+    ),
+  )
+
+  with pytest.raises(ModelCompilationError) as captured:
+    authoring.compile(model)
+  (diagnostic,) = captured.value.diagnostics
+  assert diagnostic.code == "ambiguous-default-registry"
+  assert "plane-stress-linear-elastic" in diagnostic.message
+  assert "isotropic-hardening-plasticity" in diagnostic.message
+
+  system = authoring.compile(model, authoring.plasticity_registry())
+  assert len(system.operators) == 2
+  assert {operator.header.state_layout.row_width for operator in system.operators} == {
+    0,
+    19,
+  }
