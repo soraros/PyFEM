@@ -203,7 +203,7 @@ class PhaseField( Element ):
     '''Copies the new history parameters (maximum internal energy for each 
        integration point) to the old history parameters.'''
 
-    self.hisOld = self.hisNew
+    self.hisOld = self.hisNew.copy()
    
 #-------------------------------------------------------------------------------
 #  getBmatrix
