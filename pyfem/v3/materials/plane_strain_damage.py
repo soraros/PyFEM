@@ -83,13 +83,25 @@ oracle (exercised by ``test/v3/test_v3_damage.py``):
   with byte-equal trial rows, never an exception. Beyond kappac the law
   returns omega = 1 with a zero stress and zero tangent (legacy semantics);
   the driver owns the resulting singular-tangent cutback.
+
+Throughput implementation (M102). ``plane_strain_damage_kernel_reference``
+retains the independent NumPy entity loop above. The production public kernel
+passes preallocated output buffers to ``_plane_strain_damage_batched``, a
+same-file Numba port with the same branch and arithmetic order; its only
+compiled callee is the same-file ``_damage_njit``. Both compiled functions use
+``cache=True`` under NUMBA_CACHING.md §5(a), and the batch pass uses ``nogil``
+only after the raw-uint64 reference and 1T/nT determinism gates. No parallel
+entity scheduling is introduced. The descriptor binding and all accepted/trial,
+tangent, rejection, and default-serial FE2 semantics are unchanged.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
+from numba import njit
 
 from pyfem.v3.compile.contracts import (
   STATEFUL_MATERIAL_DESCRIPTOR_SCHEMA,
@@ -212,6 +224,18 @@ def _damage(kappa: float, kappa_0: float, kappa_c: float) -> tuple[float, float]
   return 1.0, 0.0
 
 
+@njit(cache=True)
+def _damage_njit(kappa: float, kappa_0: float, kappa_c: float) -> tuple[float, float]:
+  if kappa <= kappa_0:
+    return 0.0, 0.0
+  if kappa_0 < kappa < kappa_c:
+    fac = kappa_c / kappa
+    omega = fac * (kappa - kappa_0) / (kappa_c - kappa_0)
+    domegadkappa = fac / (kappa_c - kappa_0) - (omega / kappa)
+    return omega, domegadkappa
+  return 1.0, 0.0
+
+
 def _reject(accepted_rows: np.ndarray) -> StatefulContinuumKernelResult:
   entity_count = accepted_rows.shape[0]
   return StatefulContinuumKernelResult(
@@ -222,12 +246,12 @@ def _reject(accepted_rows: np.ndarray) -> StatefulContinuumKernelResult:
   )
 
 
-def plane_strain_damage_kernel(
+def plane_strain_damage_kernel_reference(
   strains: np.ndarray,
   accepted_rows: np.ndarray,
   calibration: np.ndarray,
 ) -> StatefulContinuumKernelResult:
-  """Evaluate the batched isotropic damage law over flattened state entities.
+  """Evaluate the independent NumPy reference over flattened state entities.
 
   ``strains`` holds total engineering 6-Voigt strain per entity (the
   plane-strain embedding ``[xx, yy, 0, 0, 0, xy]``); ``accepted_rows`` holds
@@ -345,6 +369,145 @@ def plane_strain_damage_kernel(
         tangents[index, row6, column6] = tang3[row, column]
     trial_rows[index, 0] = kappa
 
+  return StatefulContinuumKernelResult(
+    stresses=stresses,
+    tangents=tangents,
+    trial_rows=trial_rows,
+    status=EvaluationStatus.OK,
+  )
+
+
+@njit(cache=True, nogil=True)
+def _plane_strain_damage_batched(
+  strains: np.ndarray,
+  accepted_rows: np.ndarray,
+  calibration: np.ndarray,
+  square_exponent: float,
+  stresses: np.ndarray,
+  tangents: np.ndarray,
+  trial_rows: np.ndarray,
+) -> int:
+  """Compiled entity loop; nonzero return rejects the whole batch."""
+  kappa_0 = calibration[0]
+  kappa_c = calibration[1]
+  a1 = calibration[2]
+  a2 = calibration[3]
+  a3 = calibration[4]
+  a4 = calibration[5]
+  c = calibration[6]
+  de = calibration[7:16].reshape(3, 3)
+  sc = 1.0 / 3.0
+  o4 = np.array([a4, a4, 2.0 * a3])
+
+  for index in range(strains.shape[0]):
+    strain = strains[index]
+    exx = strain[0]
+    eyy = strain[1]
+    exy = strain[5]
+    ezz = c * (exx + eyy)
+    i1 = exx + eyy + ezz
+    # A runtime float exponent selects libm pow, matching NumPy scalar ``x**2``;
+    # a literal exponent folds to multiplication and can shift kappa by one ulp.
+    j2 = (
+      math.pow(exx, square_exponent)
+      + math.pow(eyy, square_exponent)
+      + math.pow(ezz, square_exponent)
+      - exx * eyy
+      - eyy * ezz
+      - exx * ezz
+    ) / 3.0 + math.pow(exy, square_exponent)
+
+    dexxdstrain = np.array([1.0, 0.0, 0.0])
+    deyydstrain = np.array([0.0, 1.0, 0.0])
+    dexydstrain = np.array([0.0, 0.0, 1.0])
+    dezzdstrain = c * (dexxdstrain + deyydstrain)
+    d_i1_dstrain = dexxdstrain + deyydstrain + dezzdstrain
+
+    d_j2_dstrain = sc * (2.0 * exx - eyy - ezz) * dexxdstrain
+    d_j2_dstrain += sc * (2.0 * eyy - exx - ezz) * deyydstrain
+    d_j2_dstrain += sc * (2.0 * ezz - exx - eyy) * dezzdstrain
+    d_j2_dstrain += 2.0 * exy * dexydstrain
+
+    disc = math.pow(a2 * i1, square_exponent) + a3 * j2
+    ddiscd_i1 = 2.0 * math.pow(a2, square_exponent) * i1
+    ddiscd_j2 = a3
+    if disc < 1e-16:
+      tmp = 0.0
+      dtmpdstrain = o4
+      eps = a1 * (a2 * i1 + tmp)
+      detad_i1 = a1 * a2
+      detadstrain = detad_i1 * d_i1_dstrain + a1 * dtmpdstrain
+    else:
+      tmp = np.sqrt(disc)
+      dtmpd_i1 = (0.5 / tmp) * ddiscd_i1
+      dtmpd_j2 = (0.5 / tmp) * ddiscd_j2
+      eps = a1 * (a2 * i1 + tmp)
+      detad_i1 = a1 * (a2 + dtmpd_i1)
+      detad_j2 = a1 * dtmpd_j2
+      detadstrain = detad_i1 * d_i1_dstrain + detad_j2 * d_j2_dstrain
+
+    if not np.isfinite(eps):
+      return 1
+    kappa = accepted_rows[index, 0]
+    if eps > kappa:
+      progressive = True
+      kappa = eps
+    else:
+      progressive = False
+    omega, domegadkappa = _damage_njit(kappa, kappa_0, kappa_c)
+
+    strain3 = np.array([exx, eyy, exy])
+    eff_stress = np.dot(de, strain3)
+    stress3 = (1.0 - omega) * eff_stress
+    tang3 = (1.0 - omega) * de
+    if progressive:
+      tang3 += -domegadkappa * np.outer(eff_stress, detadstrain)
+    if not bool(np.isfinite(stress3).all()) or not bool(np.isfinite(tang3).all()):
+      return 1
+
+    stresses[index, 0] = stress3[0]
+    stresses[index, 1] = stress3[1]
+    stresses[index, 5] = stress3[2]
+    for row, row6 in enumerate((0, 1, 5)):
+      for column, column6 in enumerate((0, 1, 5)):
+        tangents[index, row6, column6] = tang3[row, column]
+    trial_rows[index, 0] = kappa
+  return 0
+
+
+def plane_strain_damage_kernel(
+  strains: np.ndarray,
+  accepted_rows: np.ndarray,
+  calibration: np.ndarray,
+) -> StatefulContinuumKernelResult:
+  """Evaluate the compiled law with reference-identical arithmetic and status."""
+  if calibration.shape != (_CALIBRATION_SIZE,):
+    msg = "plane-strain damage kernel requires the packed calibration vector"
+    raise TypeError(msg)
+  if not bool(np.isfinite(strains).all()):
+    return _reject(accepted_rows)
+  entity_count = strains.shape[0]
+  if strains.shape != (entity_count, 6) or accepted_rows.shape != (
+    entity_count,
+    _ROW_WIDTH,
+  ):
+    msg = "plane-strain damage kernel requires (n, 6) strains and (n, 1) rows"
+    raise ValueError(msg)
+
+  stresses = np.zeros((entity_count, 6), dtype=np.float64)
+  tangents = np.zeros((entity_count, 6, 6), dtype=np.float64)
+  trial_rows = np.empty((entity_count, _ROW_WIDTH), dtype=np.float64)
+  rejected = _plane_strain_damage_batched(
+    np.ascontiguousarray(strains, dtype=np.float64),
+    np.ascontiguousarray(accepted_rows, dtype=np.float64),
+    np.ascontiguousarray(calibration, dtype=np.float64),
+    2.0,
+    stresses,
+    tangents,
+    trial_rows,
+  )
+  if rejected:
+    return _reject(accepted_rows)
   return StatefulContinuumKernelResult(
     stresses=stresses,
     tangents=tangents,

@@ -208,3 +208,16 @@ size-gated dispatcher and added the fused `_dedup_coo_values_serial` /
 onto them with no new cached kernels. All seven are same-file
 numpy/numba-only, so they stay in the §5 (a) cache-friendly class, enforced
 by the AST canary in the test suite.
+
+Update (2026-11-04, M102): `plane_strain_damage.py` adds the cached caller
+`_plane_strain_damage_batched` and its only compiled callee, `_damage_njit`, in
+the same file. The caller uses `nogil=True` but no parallel entity schedule;
+its outputs are preallocated by the public Python wrapper. The materials AST
+canary covers the graph, and `test_v3_damage.py` additionally checks the
+decorators and performs a real temporary-source/temporary-cache subprocess
+test: a cache-present repeat is identical, then a callee-only source mutation
+changes the caller's stress and tangent to the newly required values. This
+pins same-file invalidation without editing or clearing any cache. The matched
+`run_m102_control_base.json` / `run_m102_candidate.json` partial artifacts
+separate second-call warm execution, first-call cache-present loading, and
+true-cold JIT (a deliberate empty `NUMBA_CACHE_DIR`) from the public FE2 solve.

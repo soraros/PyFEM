@@ -39,16 +39,24 @@ compiles through the generic v2 stateful path with honest
 
 from __future__ import annotations
 
+import ast
+import json
+import os
+import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from numba import get_num_threads, set_num_threads
 
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
+import pyfem.v3.materials.plane_strain_damage as damage_module
 from pyfem.materials.PlaneStrainDamage import PlaneStrainDamage
 from pyfem.v3.compile.continuum import (
   damage_reference_registry,
@@ -69,6 +77,7 @@ from pyfem.v3.materials.plane_strain_damage import (
   PLANE_STRAIN_DAMAGE_BINDING,
   plane_strain_damage_calibration,
   plane_strain_damage_kernel,
+  plane_strain_damage_kernel_reference,
   plane_strain_damage_metadata,
 )
 from pyfem.v3.model.arrays import FinalizedArray
@@ -112,6 +121,11 @@ _KAPPA0 = 1.0e-6
 _KAPPAC = 1.0e-5
 _FD_RTOL = 1.0e-6
 _FD_ATOL = 1.0e-8
+# Off-reference headroom for LLVM/BLAS lowering differences: ubuntu-latest
+# runs 37440534665/37441926273 observed 32 ulps (~7.1e-15 relative) for the
+# analogous M30 compiled material path; 1e-12 is over 100x that deviation.
+_CROSS_PLATFORM_RTOL = 1.0e-12
+_CROSS_PLATFORM_ATOL = 1.0e-12
 
 _UNIT_COORDINATES = (
   (0.0, 0.0),
@@ -314,6 +328,220 @@ def test_full_softening_zeros_the_response_bitwise() -> None:
     assert np.all(tang_v == 0.0)
   # The envelope keeps tracking the equivalent strain past kappac.
   assert float(rows_v[0, 0]) > _KAPPAC
+
+
+def _assert_compiled_matches_reference(
+  strains: np.ndarray,
+  accepted_rows: np.ndarray,
+  calibration: np.ndarray,
+  bitwise_pin: Callable[..., None],
+) -> None:
+  with np.errstate(over="ignore", invalid="ignore"):
+    reference = plane_strain_damage_kernel_reference(
+      strains, accepted_rows, calibration
+    )
+    compiled = plane_strain_damage_kernel(strains, accepted_rows, calibration)
+  assert compiled.status is reference.status
+  for name in ("stresses", "tangents", "trial_rows"):
+    bitwise_pin(
+      getattr(compiled, name),
+      getattr(reference, name),
+      rtol=_CROSS_PLATFORM_RTOL,
+      atol=_CROSS_PLATFORM_ATOL,
+    )
+
+
+def test_compiled_kernel_matches_reference_on_all_branch_and_reject_batches(
+  bitwise_pin: Callable[..., None],
+) -> None:
+  calibration = plane_strain_damage_calibration(_E, _NU, _KAPPA0, _KAPPAC, _K)
+  strains = np.array(
+    [
+      [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      [0.5e-6, 0.0, 0.0, 0.0, 0.0, 0.0],
+      [0.8e-6, 0.0, 0.0, 0.0, 0.0, 0.0],
+      [2.0e-6, 0.0, 0.0, 0.0, 0.0, 0.0],
+      [4.0e-6, 0.0, 0.0, 0.0, 0.0, 1.0e-6],
+      [4.0e-6, 0.0, 0.0, 0.0, 0.0, 4.0e-6],
+      [8.0e-6, 0.0, 0.0, 0.0, 0.0, 0.0],
+      [2.0e-5, 0.0, 0.0, 0.0, 0.0, 0.0],
+    ]
+  )
+  virgin = np.zeros((strains.shape[0], 1))
+  _assert_compiled_matches_reference(strains, virgin, calibration, bitwise_pin)
+
+  stepped = plane_strain_damage_kernel_reference(
+    strains, virgin, calibration
+  ).trial_rows
+  unload_reload = strains.copy()
+  unload_reload[:, 0] = np.array([0.3, 0.4, 0.5, 3.0, 9.0, 2.0, 12.0, 20.0]) * 1e-6
+  _assert_compiled_matches_reference(unload_reload, stepped, calibration, bitwise_pin)
+
+  rng = np.random.default_rng(102)
+  random_strains = np.zeros((256, 6))
+  random_strains[:, [0, 1, 5]] = rng.normal(size=(256, 3)) * 4.0e-6
+  random_virgin = np.zeros((256, 1))
+  _assert_compiled_matches_reference(
+    random_strains, random_virgin, calibration, bitwise_pin
+  )
+  random_stepped = plane_strain_damage_kernel_reference(
+    random_strains, random_virgin, calibration
+  ).trial_rows
+  _assert_compiled_matches_reference(
+    random_strains * 1.5, random_stepped, calibration, bitwise_pin
+  )
+
+  for value in (np.inf, np.nan, 1.0e200):
+    rejecting = np.zeros((8, 6))
+    rejecting[3, 0] = value
+    _assert_compiled_matches_reference(
+      rejecting, np.zeros((8, 1)), calibration, bitwise_pin
+    )
+  overflowing_stress_calibration = plane_strain_damage_calibration(
+    1.0e308, _NU, 1.0e300, 1.0e301, _K
+  )
+  overflowing_stress = np.zeros((2, 6))
+  overflowing_stress[1, 0] = 10.0
+  _assert_compiled_matches_reference(
+    overflowing_stress,
+    np.zeros((2, 1)),
+    overflowing_stress_calibration,
+    bitwise_pin,
+  )
+
+
+def test_compiled_kernel_matches_reference_at_fe2_calibration_and_kinks(
+  bitwise_pin: Callable[..., None],
+) -> None:
+  calibration = plane_strain_damage_calibration(1000.0, 0.25, 7.5e-4, 2.5e-2, 1.0)
+  rng = np.random.default_rng(102)
+  for scale in (1.0e-6, 1.0e-4, 1.0e-3, 1.0e-2):
+    strains = np.zeros((1024, 6))
+    strains[:, [0, 1, 5]] = rng.normal(size=(1024, 3)) * scale
+    accepted = np.zeros((1024, 1))
+    for _ in range(3):
+      _assert_compiled_matches_reference(strains, accepted, calibration, bitwise_pin)
+      accepted = plane_strain_damage_kernel_reference(
+        strains, accepted, calibration
+      ).trial_rows
+
+
+def test_compiled_kernel_is_raw_uint64_deterministic_across_numba_threads() -> None:
+  calibration = plane_strain_damage_calibration(_E, _NU, _KAPPA0, _KAPPAC, _K)
+  rng = np.random.default_rng(103)
+  strains = np.zeros((256, 6))
+  strains[:, [0, 1, 5]] = rng.normal(size=(256, 3)) * 4.0e-6
+  virgin = np.zeros((256, 1))
+  accepted = plane_strain_damage_kernel_reference(
+    strains, virgin, calibration
+  ).trial_rows
+  previous = get_num_threads()
+  try:
+    set_num_threads(1)
+    expected = plane_strain_damage_kernel(strains, accepted, calibration)
+    for count in sorted({1, min(2, previous), previous}):
+      set_num_threads(count)
+      actual = plane_strain_damage_kernel(strains, accepted, calibration)
+      assert actual.status is expected.status
+      for name in ("stresses", "tangents", "trial_rows"):
+        first = np.ascontiguousarray(getattr(expected, name)).view(np.uint64)
+        second = np.ascontiguousarray(getattr(actual, name)).view(np.uint64)
+        np.testing.assert_array_equal(second, first)
+  finally:
+    set_num_threads(previous)
+
+
+def test_compiled_cache_graph_is_same_file_and_canary_clean(
+  numba_cache_policy_scanner: Callable[[Path], list[str]],
+) -> None:
+  source_path = Path(damage_module.__file__).resolve()
+  assert numba_cache_policy_scanner(source_path.parent) == []
+  tree = ast.parse(source_path.read_text(encoding="utf-8"))
+  functions = {
+    node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
+  }
+  expected = {
+    "_damage_njit": {"cache": True},
+    "_plane_strain_damage_batched": {"cache": True, "nogil": True},
+  }
+  for name, expected_options in expected.items():
+    (decorator,) = functions[name].decorator_list
+    assert isinstance(decorator, ast.Call)
+    assert isinstance(decorator.func, ast.Name) and decorator.func.id == "njit"
+    options = {
+      keyword.arg: keyword.value.value
+      for keyword in decorator.keywords
+      if isinstance(keyword.value, ast.Constant)
+    }
+    for option, value in expected_options.items():
+      assert options[option] is value
+
+
+def test_same_file_callee_mutation_invalidates_disk_cache(
+  tmp_path: Path,
+) -> None:
+  source_path = Path(damage_module.__file__).resolve()
+  source = source_path.read_text(encoding="utf-8")
+  probe = tmp_path / "damage_cache_probe.py"
+  probe.write_text(source, encoding="utf-8")
+  cache_dir = tmp_path / "numba-cache"
+  cache_dir.mkdir()
+  env = os.environ.copy()
+  env["NUMBA_CACHE_DIR"] = str(cache_dir)
+  env["NUMBA_NUM_THREADS"] = "1"
+  root = Path(__file__).resolve().parents[2]
+  runner = """
+import importlib.util
+import json
+import sys
+import numpy as np
+spec = importlib.util.spec_from_file_location("damage_cache_probe", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+strains = np.zeros((1, 6))
+strains[0, 0] = 0.5e-6
+rows = np.zeros((1, 1))
+calibration = module.plane_strain_damage_calibration(100.0, 0.3, 1.0e-6, 1.0e-5, 1.0)
+result = module.plane_strain_damage_kernel(strains, rows, calibration)
+arrays = tuple(
+  getattr(result, name).tobytes().hex()
+  for name in ("stresses", "tangents", "trial_rows")
+)
+print(json.dumps({
+  "status": result.status.name,
+  "stress00": float(result.stresses[0, 0]),
+  "tangent00": float(result.tangents[0, 0, 0]),
+  "arrays": arrays,
+}))
+"""
+
+  def invoke() -> dict[str, object]:
+    completed = subprocess.run(
+      [sys.executable, "-c", runner, str(probe)],
+      cwd=root,
+      env=env,
+      capture_output=True,
+      text=True,
+      check=True,
+    )
+    return json.loads(completed.stdout.strip().splitlines()[-1])
+
+  first = invoke()
+  assert first["status"] == "OK"
+  assert list(cache_dir.rglob("*.nbi"))
+  second = invoke()
+  assert second == first
+
+  marker = "def _damage_njit("
+  prefix, suffix = source.split(marker, 1)
+  suffix = suffix.replace("return 0.0, 0.0", "return 0.25, 0.0", 1)
+  probe.write_text(prefix + marker + suffix, encoding="utf-8")
+  mutated = invoke()
+  assert mutated["status"] == "OK"
+  assert mutated["arrays"] != first["arrays"]
+  assert float(mutated["stress00"]) == 0.75 * float(first["stress00"])
+  assert float(mutated["tangent00"]) == 0.75 * float(first["tangent00"])
 
 
 def test_progressive_tangent_matches_stress_finite_difference() -> None:
