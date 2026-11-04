@@ -31,8 +31,6 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
-from test_v3_driver_nonlinear import _truss_model
-
 from pyfem.v3.compile.spring import (
   SpringDeclaration,
   SpringKernelResult,
@@ -90,6 +88,10 @@ from pyfem.v3.state import (
   StateCodecError,
   StateTransactionOwner,
 )
+
+# isort: split
+
+from test_v3_driver_nonlinear import _truss_model
 
 _BASE_POINT = ProgramPoint()
 

@@ -13,8 +13,6 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
-from test_v3_state_nested import _q8_model
-
 import pyfem.v3.compile.spring as spring_compile
 from pyfem.v3.compile.continuum import q8_reference_registry
 from pyfem.v3.compile.diagnostics import ModelCompilationError
@@ -32,6 +30,10 @@ from pyfem.v3.compile.system import compile_system
 from pyfem.v3.model.operator import EvaluationStatus
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec import SourceContext
+
+# isort: split
+
+from test_v3_state_nested import _q8_model
 
 _SLIP_BUDGET = {"iterations": 64}
 

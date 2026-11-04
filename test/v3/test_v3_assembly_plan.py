@@ -14,8 +14,6 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
-from test_v3_linear_analysis import _Q8_INTEGER_OPERATOR
-
 from pyfem.v3.assembly import (
   AssemblyEvaluationError,
   AssemblyPreparationError,
@@ -73,6 +71,10 @@ from pyfem.v3.spec import (
   RegionSpec,
   SourceContext,
 )
+
+# isort: split
+
+from test_v3_linear_analysis import _Q8_INTEGER_OPERATOR
 
 _UNIT_COORDINATES = (
   (0.0, 0.0),

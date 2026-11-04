@@ -21,9 +21,6 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
-from test_v3_driver_nonlinear import _truss_model
-from test_v3_state_nested import _q8_model
-
 from pyfem.v3.compile.continuum import q8_reference_registry
 from pyfem.v3.compile.diagnostics import ModelCompilationError
 from pyfem.v3.compile.spring import (
@@ -63,6 +60,11 @@ from pyfem.v3.spec.program import (
   ProgramCoordinateValue,
   ProgramPoint,
 )
+
+# isort: split
+
+from test_v3_driver_nonlinear import _truss_model
+from test_v3_state_nested import _q8_model
 
 _LOAD_PORT = SpringSignalPort(port_id="load-factor", signal_id="load")
 
