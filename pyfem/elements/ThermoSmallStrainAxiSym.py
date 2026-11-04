@@ -77,8 +77,9 @@ class ThermoSmallStrainAxiSym( Element ):
       elemdat.stiff[ix_(dDofs,dDofs)] += \
         dot ( B.transpose() , dot ( t4 , B ) ) * weight
               
+      dsdt = -1.0 * dot( t4 , self.alpha )
       elemdat.stiff[ix_(dDofs,tDofs)] += \
-        dot ( B.transpose() , outer ( -self.alpha , iData.h ) ) * weight
+        dot ( B.transpose() , outer ( dsdt , iData.h ) ) * weight
       
       elemdat.stiff[ix_(tDofs,tDofs)] += \
         dot ( iData.dhdx , dot( self.D , iData.dhdx.transpose() ) ) * weight
@@ -95,7 +96,7 @@ class ThermoSmallStrainAxiSym( Element ):
       ktt0 = invdtime * ctt - elemdat.stiff[ix_(tDofs,tDofs)] * \
         ( 1.0-self.theta )
       
-      elemdat.stiff *= self.theta
+      elemdat.stiff[ix_(tDofs,tDofs)] *= self.theta
       
       elemdat.stiff[ix_(tDofs,tDofs)] += invdtime * ctt 
         
@@ -125,10 +126,16 @@ class ThermoSmallStrainAxiSym( Element ):
                  
     for iInt,iData in enumerate(sData):
       
-      B = self.getBmatrix( iData.dhdx )
+      r      = dot( elemdat.coords[:,0] , iData.h )
+      weight = 2.0*pi*r*iData.weight
 
-      self.kin.strain  = dot ( B , elemdat.state [dDofs] )
-      self.kin.dstrain = dot ( B , elemdat.Dstate[dDofs] )
+      B = self.getBmatrix( iData.dhdx , iData.h , r )
+
+      strain  = dot ( B , elemdat.state [dDofs] )
+      dstrain = dot ( B , elemdat.Dstate[dDofs] )
+
+      self.kin.strain  = self.axisymTo3D( strain  )
+      self.kin.dstrain = self.axisymTo3D( dstrain )
       
       temp     = sum( iData.h * elemdat.state [tDofs] )
       dtemp    = sum( iData.h * elemdat.Dstate[tDofs] )
@@ -138,19 +145,22 @@ class ThermoSmallStrainAxiSym( Element ):
       self.kin.dstrain[:3] += -self.alpha[:3] * dtemp 
             
       sigma,tang = self.mat.getStress( self.kin )
+
+      s4 = self.stress6to4( sigma )
             
-      stiff[ix_(tDofs,tDofs)] += \
-        dot ( iData.dhdx , dot( self.D , iData.dhdx.transpose() ) ) * iData.weight
+      stiff += \
+        dot ( iData.dhdx , dot( self.D , iData.dhdx.transpose() ) ) * weight
   
-      elemdat.fint[dDofs] += dot ( B.transpose() , sigma ) * iData.weight
+      elemdat.fint[dDofs] += dot ( B.transpose() , s4 ) * weight
       
       if self.transient:
-        ctt += self.capac * outer( iData.h , iData.h ) * iData.weight
+        ctt += self.capac * outer( iData.h , iData.h ) * weight
               
       self.appendNodalOutput( self.mat.outLabels() , self.mat.outData() )
       self.appendNodalOutput( self.labels , dot(self.D,gradTemp) ) 
     
-    if self.transient:  
+    if self.transient:
+      ktt0 = invdtime * ctt - stiff * ( 1.0-self.theta )
       stiff *= self.theta
       
       stiff += invdtime * ctt 
