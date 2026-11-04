@@ -27,7 +27,9 @@ the shallow-truss-with-spring configuration of the M18/M32 decks:
 
 from __future__ import annotations
 
+import platform
 import sys
+from collections.abc import Callable
 from dataclasses import replace
 
 import numpy as np
@@ -797,6 +799,31 @@ def _single_topology_driver(
   )
 
 
+_Q4_REFERENCE_SPRING = float.fromhex("0x1.b6db6db6db6ddp-1")
+
+
+def _independent_spring_residual(kind: str) -> np.ndarray:
+  if kind == "quad4":
+    reduced_operator = (
+      np.array(
+        [
+          [20, -1, 0, -1],
+          [-1, 4, 1, -2],
+          [0, 1, 4, 1],
+          [-1, -2, 1, 4],
+        ],
+        dtype=np.float64,
+      )
+      / 8.0
+    )
+  else:
+    reduced_operator = np.array([[10, 0], [0, 1]], dtype=np.float64) / 4.0
+  right_hand_side = np.zeros(len(reduced_operator), dtype=np.float64)
+  right_hand_side[0] = 1.0
+  solution = np.linalg.solve(reduced_operator, right_hand_side)
+  return np.array([[2.0 * solution[0], 0.0]])
+
+
 @pytest.mark.parametrize(
   ("kind", "expected_state", "expected_continuum", "expected_spring", "reaction"),
   [
@@ -824,6 +851,8 @@ def test_exact_mixed_solution_and_attributed_balance(
   expected_continuum: np.ndarray,
   expected_spring: np.ndarray,
   reaction: np.ndarray,
+  bitwise_pin: Callable[..., None],
+  reference_platform_probe: Callable[[], bool],
 ) -> None:
   system, coordinate_map, loads, driver = _single_topology_driver(kind)
   point = _ramp_points((1.0,))[0]
@@ -847,6 +876,21 @@ def test_exact_mixed_solution_and_attributed_balance(
   np.testing.assert_allclose(
     spring.residual_values[0].values,
     expected_spring,
+    rtol=0.0,
+    atol=2.0e-15,
+  )
+  expected_bits = _independent_spring_residual(kind)
+  if reference_platform_probe():
+    reference_value = _Q4_REFERENCE_SPRING if kind == "quad4" else 4.0 / 5.0
+    assert expected_bits[0, 0] == reference_value
+  # The independent dense literal solve supplies reference bits: Q4 lands two
+  # ULPs above 6/7 at 0x1.b6db6db6db6ddp-1; T3 lands exactly on 4/5. Off the
+  # reference platform, the deleted generic-core spring oracle observed 8.9e-16
+  # deviation on ubuntu-latest (4 ULPs at 1.0; CI runs 37440534665 and
+  # 37441926273), so this pin retains 2.0e-15 (~2.2x that deviation).
+  bitwise_pin(
+    spring.residual_values[0].values,
+    expected_bits,
     rtol=0.0,
     atol=2.0e-15,
   )
@@ -923,6 +967,30 @@ def test_exact_mixed_solution_and_attributed_balance(
   assert system.source_for("operator", operator_id).source == "region:domain"
   assert system.source_for("cell", ("cells", "cell-1")).source == "mesh:cell-1"
   assert system.source_for("spring", "support-1").source == "spring:support"
+
+
+def test_spring_residual_bitwise_pin_has_teeth(
+  monkeypatch: pytest.MonkeyPatch,
+  bitwise_pin: Callable[..., None],
+  reference_platform_probe: Callable[[], bool],
+) -> None:
+  expected = np.array([[_Q4_REFERENCE_SPRING, 0.0]])
+  one_ulp_off = expected.copy()
+  one_ulp_off[0, 0] = np.nextafter(one_ulp_off[0, 0], 1.0)
+
+  monkeypatch.setattr(sys, "platform", "darwin")
+  monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+  assert reference_platform_probe()
+  with pytest.raises(AssertionError):
+    bitwise_pin(one_ulp_off, expected, rtol=0.0, atol=2.0e-15)
+
+  monkeypatch.setattr(sys, "platform", "linux")
+  assert not reference_platform_probe()
+  bitwise_pin(one_ulp_off, expected, rtol=0.0, atol=2.0e-15)
+  large_drift = expected.copy()
+  large_drift[0, 0] += 1.0e-14
+  with pytest.raises(AssertionError):
+    bitwise_pin(large_drift, expected, rtol=0.0, atol=2.0e-15)
 
 
 def _mixed_topology_model() -> ModelSpec:
