@@ -768,10 +768,11 @@ def _validated_map(value: object) -> CompiledConstraintMap:
   return value
 
 
-def _bound_coordinate_values(
+def bound_coordinate_values(
   coordinate_map: CompiledConstraintMap,
   point: ProgramPoint,
 ) -> tuple[float, ...]:
+  """Return validated point values in declared coordinate order."""
   if type(point) is not ProgramPoint:
     msg = "offset evaluation requires an exact ProgramPoint binding"
     raise TypeError(msg)
@@ -821,6 +822,13 @@ def _bound_coordinate_values(
   return tuple(values[name] for name in names)
 
 
+def offset_coordinate_derivatives(
+  coordinate_map: CompiledConstraintMap,
+) -> FinalizedArray:
+  """Return the immutable compiled ``du_bar/dp`` matrix without copying it."""
+  return _validated_map(coordinate_map).offset_coordinate_coefficients
+
+
 def evaluate_offsets(
   coordinate_map: CompiledConstraintMap,
   point: ProgramPoint,
@@ -832,7 +840,7 @@ def evaluate_offsets(
   load or continuation factor only re-binds the point.
   """
   coordinate_map = _validated_map(coordinate_map)
-  values = _bound_coordinate_values(coordinate_map, point)
+  values = bound_coordinate_values(coordinate_map, point)
   constants = coordinate_map.offset_constant.values
   coefficient_matrix = coordinate_map.offset_coordinate_coefficients.values
   offsets = np.empty(coordinate_map.full_dof_count, dtype=_FLOATING_DTYPE)

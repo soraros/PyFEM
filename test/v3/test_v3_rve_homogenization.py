@@ -95,6 +95,7 @@ import sympy as sp
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
+import pyfem.v3.driver.nonlinear as nonlinear_driver
 from pyfem.v3 import authoring
 from pyfem.v3.compile.continuum import (
   damage_reference_registry,
@@ -102,6 +103,11 @@ from pyfem.v3.compile.continuum import (
 )
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.constraints import compile_constraint_map, periodic_ties
+from pyfem.v3.constraints.compile import (
+  bound_coordinate_values,
+  evaluate_offsets,
+  offset_coordinate_derivatives,
+)
 from pyfem.v3.driver import (
   DriverEvaluationError,
   DriverPreparationError,
@@ -820,6 +826,76 @@ def _statistics_delta(
     - getattr(plain.statistics, field.name)
     for field in fields(plain.statistics)
   }
+
+
+def test_lightweight_binding_skips_full_offsets_and_preserves_raw_results(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  control_driver, request = _elastic_deck()
+  coordinate_map = control_driver._map
+  point = _point(0.034, 0.15, 0.01)
+  old_evaluation = evaluate_offsets(coordinate_map, point)
+  old_coordinates = tuple(
+    float(value) for value in old_evaluation.coordinate_values.values
+  )
+  assert bound_coordinate_values(coordinate_map, point) == old_coordinates
+
+  derivatives = offset_coordinate_derivatives(coordinate_map)
+  assert derivatives is coordinate_map.offset_coordinate_coefficients
+  assert derivatives.values is coordinate_map.offset_coordinate_coefficients.values
+  assert derivatives.values is not old_evaluation.derivatives.values
+  assert not derivatives.values.flags.writeable
+  np.testing.assert_array_equal(
+    derivatives.values.view(np.uint64),
+    old_evaluation.derivatives.values.view(np.uint64),
+  )
+  with pytest.raises(ValueError, match="read-only"):
+    derivatives.values[0, 0] = 1.0
+
+  control = _run(control_driver, ((0.034, 0.15, 0.01),), request)
+  candidate_driver, candidate_request = _elastic_deck()
+
+  def forbidden_offset_evaluation(*_args: object, **_kwargs: object) -> None:
+    raise AssertionError("driver binding constructed full affine offsets")
+
+  monkeypatch.setattr(
+    nonlinear_driver, "evaluate_offsets", forbidden_offset_evaluation, raising=False
+  )
+  candidate = _run(candidate_driver, ((0.034, 0.15, 0.01),), candidate_request)
+  assert control.status is candidate.status is DriverStatus.COMPLETED
+  assert all(value == 0 for value in _statistics_delta(control, candidate).values())
+  (control_record,) = control.records
+  (candidate_record,) = candidate.records
+  assert candidate_record.status is control_record.status
+  assert candidate_record.progress == control_record.progress
+  assert candidate_record.cutback_level == control_record.cutback_level
+  assert [
+    (item.iteration, item.status, item.residual_norm, item.increment_norm)
+    for item in candidate_record.iterations
+  ] == [
+    (item.iteration, item.status, item.residual_norm, item.increment_norm)
+    for item in control_record.iterations
+  ]
+  np.testing.assert_array_equal(
+    candidate_driver.owner.accepted_physical().values.view(np.uint64),
+    control_driver.owner.accepted_physical().values.view(np.uint64),
+  )
+  control_observation = control_record.observation
+  candidate_observation = candidate_record.observation
+  assert control_observation is not None and candidate_observation is not None
+  np.testing.assert_array_equal(
+    candidate_observation.reactions.values.view(np.uint64),
+    control_observation.reactions.values.view(np.uint64),
+  )
+  assert candidate_observation.constraint_work == control_observation.constraint_work
+  control_homogenization = control_observation.homogenization
+  candidate_homogenization = candidate_observation.homogenization
+  assert control_homogenization is not None and candidate_homogenization is not None
+  for name in ("stress", "tangent"):
+    np.testing.assert_array_equal(
+      getattr(candidate_homogenization, name).values.view(np.uint64),
+      getattr(control_homogenization, name).values.view(np.uint64),
+    )
 
 
 def test_cost_pins_constant_tangent_deck() -> None:

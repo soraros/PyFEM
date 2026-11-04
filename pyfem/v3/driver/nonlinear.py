@@ -148,8 +148,9 @@ from scipy.sparse.linalg import splu
 from pyfem.v3.constraints.compile import (
   CompiledConstraintMap,
   admissible_increment,
-  evaluate_offsets,
+  bound_coordinate_values,
   full_coefficients,
+  offset_coordinate_derivatives,
   reaction_forces,
   reduce_residual,
   reduce_tangent,
@@ -601,9 +602,9 @@ class NonlinearStaticDriver:
     if type(point) is not ProgramPoint:
       msg = "driver program points must be exact ProgramPoint values"
       raise TypeError(msg)
-    evaluation = evaluate_offsets(self._map, point)
+    values = bound_coordinate_values(self._map, point)
     evaluate_loads(self._plan.loads, point)
-    return tuple(float(value) for value in evaluation.coordinate_values.values)
+    return values
 
   def _solve_reduced(
     self,
@@ -791,7 +792,6 @@ class NonlinearStaticDriver:
   def _solve_homogenization(
     self,
     program: _CompiledHomogenizationProgram,
-    point: ProgramPoint,
     jacobian_batches: tuple[np.ndarray, ...],
     reactions: FinalizedArray,
     *,
@@ -841,7 +841,7 @@ class NonlinearStaticDriver:
       fresh = True
       if plan.constant_tangent:
         workspace.cached_factorization = factorization
-    derivatives = evaluate_offsets(coordinate_map, point).derivatives.values
+    derivatives = offset_coordinate_derivatives(coordinate_map).values
     load_coefficients = plan.loads.coordinate_coefficients.values
     constrained = coordinate_map.constrained_dofs.values
     reaction_values = reactions.values
@@ -1148,7 +1148,6 @@ class NonlinearStaticDriver:
           homogenization = (
             self._solve_homogenization(
               homogenization_program,
-              point,
               jacobian_batches,
               reactions,
               solved=increment is not None,
