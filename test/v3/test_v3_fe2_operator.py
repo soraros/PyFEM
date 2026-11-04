@@ -1147,3 +1147,74 @@ def test_riks_nested_nonconvergence_is_typed_and_rolls_back() -> None:
     assert not runtime.store.trial_open
   finally:
     driver.close()
+
+
+def test_fe2_benchmark_pipeline_gate_smoke_matches_1t_and_2t_raw_science() -> None:
+  from bench.fe2_pipeline import FE2Pipeline, gate_fe2
+  from bench.workloads import FE2Workload
+
+  previous_threads = get_num_threads()
+  reference = candidate = None
+  try:
+    set_num_threads(1)
+    reference = FE2Pipeline(FE2Workload(1, 1, elastic=True))
+    logical_bytes = reference.logical_bytes
+    assert logical_bytes["accepted_nested"] == logical_bytes["staged_nested"] > 0
+    assert logical_bytes["accepted_macro_strain"] > 0
+    assert logical_bytes["nested_evaluation_copy"] == 0
+    reference.solve()
+
+    set_num_threads(2)
+    candidate = FE2Pipeline(FE2Workload(1, 1, elastic=True))
+    assert candidate.logical_bytes == logical_bytes
+    candidate.solve()
+    reference_driver = reference.driver
+    candidate_driver = candidate.driver
+    assert reference_driver is not None and candidate_driver is not None
+    reference_runtime = reference_driver.nested_executions[0]
+    candidate_runtime = candidate_driver.nested_executions[0]
+    assert reference_runtime is not None and candidate_runtime is not None
+    assert reference_runtime.recipe.provenance.to_bytes() == (
+      candidate_runtime.recipe.provenance.to_bytes()
+    )
+    assert reference_runtime.store is not candidate_runtime.store
+    assert reference_runtime.task_pool.thread_count == 1
+    assert candidate_runtime.task_pool.thread_count == 2
+
+    reference_accepted = reference_runtime.store.encode()
+    candidate_accepted = candidate_runtime.store.encode()
+    reference_evaluation = reference.nested_evaluation()
+    candidate_evaluation = candidate.nested_evaluation()
+    assert evaluation_status(reference_evaluation) is EvaluationStatus.OK
+    assert evaluation_status(candidate_evaluation) is EvaluationStatus.OK
+    assert reference_runtime.store.encode() == reference_accepted
+    assert candidate_runtime.store.encode() == candidate_accepted
+    assert reference_accepted == candidate_accepted
+    for first, second in zip(
+      reference_evaluation.residual_values,
+      candidate_evaluation.residual_values,
+      strict=True,
+    ):
+      _assert_raw_uint64_equal(first.values, second.values)
+    for first, second in zip(
+      reference_evaluation.jacobian_values,
+      candidate_evaluation.jacobian_values,
+      strict=True,
+    ):
+      _assert_raw_uint64_equal(first.values, second.values)
+    _assert_raw_uint64_equal(
+      reference_evaluation.trial_state.values,
+      candidate_evaluation.trial_state.values,
+    )
+
+    gate = gate_fe2(reference, candidate)
+    assert gate.passed, [
+      (check.name, check.detail) for check in gate.checks if not check.passed
+    ]
+    assert reference.evidence() == candidate.evidence()
+  finally:
+    if reference is not None and reference.driver is not None:
+      reference.driver.close()
+    if candidate is not None and candidate.driver is not None:
+      candidate.driver.close()
+    set_num_threads(previous_threads)
