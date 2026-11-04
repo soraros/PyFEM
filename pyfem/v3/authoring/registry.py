@@ -14,6 +14,7 @@ from collections.abc import Callable
 
 from pyfem.v3.authoring.diagnostics import raise_descriptor_mismatch
 from pyfem.v3.compile.continuum import (
+  BACKWARD_EULER_PERZYNA_MATERIAL_KEY,
   DAMAGE_MATERIAL_KEY,
   PLASTIC_MATERIAL_KEY,
   Q8_FORMULATION_KEY,
@@ -23,6 +24,7 @@ from pyfem.v3.compile.continuum import (
   SOVS_MATERIAL_KEY,
   VISCOELASTIC_MATERIAL_KEY,
   VISCOPLASTIC_MATERIAL_KEY,
+  backward_euler_perzyna_reference_registry,
   damage_reference_registry,
   plasticity_reference_registry,
   q8_descriptor_metadata,
@@ -41,6 +43,9 @@ from pyfem.v3.compile.truss import (
 )
 from pyfem.v3.materials.isotropic_hardening_plasticity import (
   isotropic_hardening_plasticity_metadata,
+)
+from pyfem.v3.materials.perzyna_backward_euler import (
+  backward_euler_perzyna_metadata,
 )
 from pyfem.v3.materials.perzyna_viscoplasticity import (
   perzyna_viscoplasticity_metadata,
@@ -221,6 +226,29 @@ def viscoplasticity_law(
   )
 
 
+def backward_euler_perzyna_law(
+  binding: StatefulContinuumBinding,
+  *,
+  implementation_id: str,
+  version: str = "1",
+) -> RegistryDescriptor:
+  """Bind a true implicit Perzyna law to its distinct material convention.
+
+  The binding receives the same six physical parameters as the legacy-mapped
+  law, but declares 13-float rows (``epsilon_e`` 6, ``epsilon_p`` 6,
+  ``kappa`` 1) and the derived ``dtime`` signal port. Metadata is re-declared
+  and byte-checked during compilation; no legacy deck changes meaning.
+  """
+  return RegistryDescriptor(
+    kind=BACKWARD_EULER_PERZYNA_MATERIAL_KEY[0],
+    name=BACKWARD_EULER_PERZYNA_MATERIAL_KEY[1],
+    version=version,
+    implementation_id=implementation_id,
+    metadata=backward_euler_perzyna_metadata(),
+    binding=binding,
+  )
+
+
 def skorohod_olevsky_law(
   binding: StatefulContinuumBinding,
   *,
@@ -355,6 +383,8 @@ def _continuum_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
     return prony_viscoelasticity_metadata()
   if (kind, name) == VISCOPLASTIC_MATERIAL_KEY:
     return perzyna_viscoplasticity_metadata()
+  if (kind, name) == BACKWARD_EULER_PERZYNA_MATERIAL_KEY:
+    return backward_euler_perzyna_metadata()
   if (kind, name) == SOVS_MATERIAL_KEY:
     return skorohod_olevsky_metadata()
   return q8_descriptor_metadata(kind, name)
@@ -531,6 +561,30 @@ def viscoplasticity_registry(
   return registry
 
 
+def backward_euler_perzyna_registry(
+  *,
+  topology: RegistryDescriptor | None = None,
+  quadrature: RegistryDescriptor | None = None,
+  formulation: RegistryDescriptor | None = None,
+  material: RegistryDescriptor | None = None,
+) -> dict[RegistryKey, RegistryDescriptor]:
+  """Compose references and replacements for the true implicit Perzyna law."""
+  registry = backward_euler_perzyna_reference_registry()
+  _replace(
+    registry,
+    (
+      (Q8_TOPOLOGY_KEY, topology),
+      (Q8_QUADRATURE_KEY, quadrature),
+      (Q8_FORMULATION_KEY, formulation),
+      (BACKWARD_EULER_PERZYNA_MATERIAL_KEY, material),
+    ),
+    family="backward-euler-perzyna",
+    metadata_for=_continuum_descriptor_metadata,
+    source="authoring.backward_euler_perzyna_registry",
+  )
+  return registry
+
+
 def skorohod_olevsky_registry(
   *,
   topology: RegistryDescriptor | None = None,
@@ -604,8 +658,8 @@ def check_registry(
   if family == "Q8":
     # The small-strain formulation is the open stateful seam: the compiler
     # selects the material descriptor by the spec's model name. Only the
-    # pinned Q8, plasticity, damage, viscoelasticity, viscoplasticity, and
-    # skorohod-olevsky conventions carry a qualified metadata contract here;
+    # pinned Q8, plasticity, damage, viscoelasticity, both viscoplasticity
+    # conventions, and skorohod-olevsky carry a qualified metadata contract;
     # other stateful keys defer to the landed compiler's binding
     # re-declaration validation.
     material_key: RegistryKey = ("material", material.model)

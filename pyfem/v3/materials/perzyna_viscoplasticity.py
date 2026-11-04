@@ -17,12 +17,11 @@ rate-independent-j2-perzyna). The ONLY rate effect in the law is the
 ``dtime > 0`` gate (:205): a supra-yield step at constant time returns the
 elastic trial response above the yield surface — a semantic trap the parity
 battery pins explicitly. The backward-Euler/Perzyna claims of the legacy
-docstring (:25-34, :76) and of ``examples/materials/viscoplasticity/README.md``
-(:39-55: "fast loading -> higher peak stress") are false for the implemented
-map; a true-Perzyna rate law is a deferred v2 feature, NOT this mission
-(tower ruling, M68). This kernel replicates the implemented map statement for
-statement; the module and registry names keep the legacy branding so decks
-map one-to-one.
+docstring (:25-34, :76) and the historical example README are false for the
+implemented map. The distinct ``backward-euler-perzyna`` descriptor now
+provides true rate physics without changing this legacy mapping. This kernel
+replicates the implemented map statement for statement; the module and
+registry names keep the legacy branding so decks map one-to-one.
 
 The law is 3D internally (6-Voigt ``[xx, yy, zz, yz, zx, xy]`` with
 engineering shears); the continuum operator embeds the 3-Voigt port strain as

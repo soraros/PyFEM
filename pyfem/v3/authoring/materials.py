@@ -333,6 +333,70 @@ def viscoplasticity(
   )
 
 
+def backward_euler_perzyna(
+  E: float,
+  nu: float,
+  syield: float,
+  hard: float,
+  gamma: float,
+  n: float,
+  *,
+  id: SpecId = "material",
+  source: str = "authoring.backward_euler_perzyna",
+) -> MaterialSpec:
+  """Author the distinct true backward-Euler Perzyna rate law.
+
+  The six parameters have the same physical meanings as in
+  :func:`viscoplasticity`, but this law solves the implicit Perzyna rate
+  residual rather than the legacy-mapped rate-independent consistency
+  equation. Declare a ``time`` program coordinate; the compiled driver derives
+  each committed ``dtime`` increment automatically.
+  """
+  youngs_modulus = _finite_scalar(E, label="backward_euler_perzyna E")
+  poisson_ratio = _finite_scalar(nu, label="backward_euler_perzyna nu")
+  initial_yield_stress = _finite_scalar(syield, label="backward_euler_perzyna syield")
+  hardening_slope = _finite_scalar(hard, label="backward_euler_perzyna hard")
+  fluidity_value = _finite_scalar(gamma, label="backward_euler_perzyna gamma")
+  rate_exponent = _finite_scalar(n, label="backward_euler_perzyna n")
+  return MaterialSpec(
+    id=_material_id(id),
+    model="backward-euler-perzyna",
+    parameters=(
+      MaterialParameterSpec(
+        "youngs_modulus",
+        youngs_modulus,
+        _source(f"{source}:youngs_modulus"),
+      ),
+      MaterialParameterSpec(
+        "poisson_ratio",
+        poisson_ratio,
+        _source(f"{source}:poisson_ratio"),
+      ),
+      MaterialParameterSpec(
+        "initial_yield_stress",
+        initial_yield_stress,
+        _source(f"{source}:initial_yield_stress"),
+      ),
+      MaterialParameterSpec(
+        "hardening_slope",
+        hardening_slope,
+        _source(f"{source}:hardening_slope"),
+      ),
+      MaterialParameterSpec(
+        "fluidity",
+        fluidity_value,
+        _source(f"{source}:fluidity"),
+      ),
+      MaterialParameterSpec(
+        "rate_exponent",
+        rate_exponent,
+        _source(f"{source}:rate_exponent"),
+      ),
+    ),
+    source=_source(source),
+  )
+
+
 def skorohod_olevsky(
   eta0: float,
   Q: float,
