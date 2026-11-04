@@ -21,20 +21,15 @@ if sys.version_info < (3, 13):
 
 from pyfem.v3.analysis import (
   AcceptedTransition,
-  LinearConvergenceRecord,
-  LinearPredictor,
-  StepTransaction,
-)
-from pyfem.v3.api import (
   AnalysisPreparationError,
   AnalysisSolveError,
+  LinearConvergenceRecord,
+  LinearPredictor,
   LinearStatic,
   PreparedAnalysis,
-  Solution,
-  SolutionVerificationError,
   StateTransactionError,
+  StepTransaction,
   prepare_analysis,
-  solve,
 )
 from pyfem.v3.assembly import (
   CanonicalCooOperator,
@@ -57,6 +52,8 @@ from pyfem.v3.model import (
   StateGeneration,
 )
 from pyfem.v3.results.contracts import LinearBalanceLedger
+from pyfem.v3.results.diagnostics import SolutionVerificationError
+from pyfem.v3.results.solution import Solution
 from pyfem.v3.results.verification import validate_state_record
 from pyfem.v3.spec import (
   AffineCoefficientSpec,
@@ -2210,15 +2207,12 @@ def test_patch_test8_analytical_field_is_primary_new_flow_oracle() -> None:
   assert solution.verify().passed
 
 
-def test_one_shot_uses_same_verified_transition_path() -> None:
-  solution = solve(
-    _model_spec(),
-    _rational_program(),
-    LinearStatic(),
-    registry=q8_reference_registry(),
-    initial_point=_point(0.0),
-    point=_point(1.0),
-  )
+def test_direct_one_shot_uses_same_verified_transition_path() -> None:
+  model = compile_model(_model_spec(), q8_reference_registry())
+  program = compile_program(model, _rational_program())
+  analysis = prepare_analysis(model, program, LinearStatic())
+  initial = analysis.initialize(point=_point(0.0))
+  solution = analysis.solve(initial=initial, point=_point(1.0))
   np.testing.assert_allclose(
     solution.primary_values.values,
     _RATIONAL_DISPLACEMENT,

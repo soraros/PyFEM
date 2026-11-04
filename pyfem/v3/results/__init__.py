@@ -1,19 +1,5 @@
-"""Internal immutable result and verification contracts."""
+"""Internal immutable result and verification implementation modules.
 
-from pyfem.v3.results.contracts import (
-  LinearBalanceLedger,
-  VerificationCheck,
-  VerificationReport,
-)
-from pyfem.v3.results.diagnostics import (
-  SolutionVerificationDiagnostic,
-  SolutionVerificationError,
-)
-
-__all__ = [
-  "LinearBalanceLedger",
-  "SolutionVerificationDiagnostic",
-  "SolutionVerificationError",
-  "VerificationCheck",
-  "VerificationReport",
-]
+The package intentionally has no re-export facade. Import result contracts,
+diagnostics, solutions, and verification from their owning modules.
+"""

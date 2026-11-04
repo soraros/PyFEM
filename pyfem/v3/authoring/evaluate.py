@@ -2,11 +2,11 @@
 
 A trial state is authored as a mapping of node id to displacement components;
 the helpers map it onto the compiled system's coefficient vector, gather the
-operator's port batch, supply a zero accepted state of the compiled layout,
-and request every channel. This covers the teaching path (stateless Q8 and
-truss operators); stateful flows step through the transaction helpers in
-:mod:`pyfem.v3.authoring.transactions` (``state_owner``/``nonlinear_static``),
-passing the trial's accepted snapshot as ``accepted_state`` here.
+operator's port batch, and request every channel. Stateless operators receive
+their zero-width accepted state automatically. Stateful flows step through the
+transaction helpers in :mod:`pyfem.v3.authoring.transactions`
+(``state_owner``/``nonlinear_static``) and pass the trial's accepted snapshot
+as ``accepted_state`` here; even an intentional virgin state must be explicit.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
+from pyfem.v3.driver.diagnostics import DriverDiagnostic, DriverEvaluationError
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
   ChannelRequest,
@@ -25,6 +26,7 @@ from pyfem.v3.model.operator import (
   SemanticId,
 )
 from pyfem.v3.model.system import CompiledSystem, DiscreteSpace
+from pyfem.v3.spec.diagnostics import SourceContext
 
 
 def _finite_scalar(value: object, *, label: str) -> float:
@@ -126,8 +128,8 @@ def evaluate(
   ``displacements`` accepts the plain mapping form of :func:`trial_vector`
   or a ready global coefficient vector; ``operator`` selects the system
   operator by index. The request covers all of the operator's residual and
-  jacobian channels unless disabled; the accepted state defaults to the zero
-  state of the compiled layout.
+  jacobian channels unless disabled. A zero-width accepted state is implicit;
+  every nonzero accepted-state layout requires an explicit ``accepted_state``.
   """
   if type(system) is not CompiledSystem:
     msg = "evaluate requires an exact CompiledSystem"
@@ -150,6 +152,20 @@ def evaluate(
     raise ValueError(msg)
   layout = selected.header.state_layout
   if accepted_state is None:
+    if layout.row_width != 0:
+      raise DriverEvaluationError(
+        (
+          DriverDiagnostic(
+            code="accepted-state-required",
+            message=(
+              f"operator {operator} has nonzero accepted-state layout "
+              f"{layout.row_shape}; pass accepted_state explicitly, using an "
+              "intentional zero array only for a virgin state"
+            ),
+            source=SourceContext(source="authoring.evaluate"),
+          ),
+        )
+      )
     state = FinalizedArray(np.zeros(layout.row_shape), dtype=np.float64)
   else:
     state = FinalizedArray(accepted_state, dtype=np.float64)
