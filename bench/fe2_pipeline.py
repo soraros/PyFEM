@@ -30,6 +30,7 @@ from pyfem.v3.model.operator import (
   NestedEvaluationInput,
   OperatorEvaluationInput,
   evaluation_status,
+  operator_nested_execution,
 )
 from pyfem.v3.spec.program import (
   AffineCoefficientSpec,
@@ -138,7 +139,9 @@ class FE2Pipeline:
   @property
   def logical_bytes(self) -> dict[str, int]:
     operator = self.system.operators[0]
-    layout = operator.nested_store.layout
+    declaration = operator_nested_execution(operator.header)
+    assert declaration is not None
+    layout = declaration.recipe.layout
     per_ip = 8 * (
       layout.coefficient_count
       + sum(block.entity_count * block.row_width for block in layout.blocks)
@@ -173,11 +176,15 @@ class FE2Pipeline:
     if self.driver is None:
       msg = "FE2 nested evaluation requires a solved pipeline"
       raise RuntimeError(msg)
+    runtime = self.driver.nested_executions[0]
+    if runtime is None:
+      msg = "FE2 nested evaluation requires its prepared nested runtime"
+      raise RuntimeError(msg)
     owner = self.driver.owner
     operator = self.system.operators[0]
     gather = operator.header.ports[0].coefficient_map.values
-    store = operator.nested_store
-    store.begin_trial()
+    store = runtime.store
+    runtime.begin_trial()
     try:
       return operator.evaluate(
         OperatorEvaluationInput(
@@ -187,20 +194,24 @@ class FE2Pipeline:
           accepted_state=owner.accepted_state(operator.header.state_layout.block_id),
           signals=(),
           request=ChannelRequest(("internal-force",), ("material-tangent",)),
-          nested_execution=NestedEvaluationInput(store),
+          nested_execution=NestedEvaluationInput(runtime),
         )
       )
     finally:
       if store.trial_open:
-        store.reject_trial()
+        runtime.reject_trial()
 
   def evidence(self) -> dict[str, object]:
     """Return cross-revision state hashes, payload sizes, and schedule counters."""
     if self.driver is None:
       msg = "FE2 evidence requires a solved pipeline"
       raise RuntimeError(msg)
+    runtime = self.driver.nested_executions[0]
+    if runtime is None:
+      msg = "FE2 evidence requires its prepared nested runtime"
+      raise RuntimeError(msg)
     operator = self.system.operators[0]
-    store = operator.nested_store
+    store = runtime.store
     if store.trial_open:
       msg = "FE2 evidence requires a closed nested trial"
       raise RuntimeError(msg)
@@ -281,8 +292,10 @@ def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> GateResult:
   reference_driver = reference.driver
   candidate_driver = candidate.driver
   assert reference_driver is not None and candidate_driver is not None
+  reference_runtime = reference_driver.nested_executions[0]
+  candidate_runtime = candidate_driver.nested_executions[0]
+  assert reference_runtime is not None and candidate_runtime is not None
   reference_operator = reference.system.operators[0]
-  candidate_operator = candidate.system.operators[0]
   block_id = reference_operator.header.state_layout.block_id
   checks.append(
     _identity_check(
@@ -298,8 +311,8 @@ def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> GateResult:
       candidate_driver.owner.accepted_state(block_id).values,
     )
   )
-  reference_accepted = reference_operator.nested_store.encode()
-  candidate_accepted = candidate_operator.nested_store.encode()
+  reference_accepted = reference_runtime.store.encode()
+  candidate_accepted = candidate_runtime.store.encode()
   nested_equal = reference_accepted == candidate_accepted
   checks.append(
     CheckResult(
@@ -343,8 +356,8 @@ def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> GateResult:
       detail="both rejected-trial homogenized evaluations completed",
     )
   )
-  reference_rejected = reference_operator.nested_store.encode()
-  candidate_rejected = candidate_operator.nested_store.encode()
+  reference_rejected = reference_runtime.store.encode()
+  candidate_rejected = candidate_runtime.store.encode()
   rejected_equal = (
     reference_rejected == candidate_rejected == reference_accepted == candidate_accepted
   )

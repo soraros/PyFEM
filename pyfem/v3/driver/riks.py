@@ -128,12 +128,25 @@ from pyfem.v3.driver.contracts import (
   _NORM_REFERENCE_FLOOR,
   DriverStatistics,
   DriverStatus,
+  NestedFailure,
+  NestedSolveStatistics,
   SubstepObservation,
   SubstepStatus,
 )
 from pyfem.v3.driver.diagnostics import (
   DriverDiagnostic,
   DriverPreparationError,
+)
+from pyfem.v3.driver.nested import (
+  PreparedNestedExecution,
+  begin_nested_trial,
+  close_nested_executions,
+  collect_nested_activity,
+  commit_nested_trial,
+  prepare_nested_executions,
+  reject_nested_trial,
+  snapshot_nested_activity,
+  validate_nested_trial,
 )
 from pyfem.v3.driver.plan import (
   DriverAssemblyPlan,
@@ -148,9 +161,12 @@ from pyfem.v3.model.identity import require_same_generation
 from pyfem.v3.model.operator import (
   ChannelRequest,
   EvaluationStatus,
+  NestedEvaluationInput,
   OperatorEvaluation,
   OperatorEvaluationInput,
+  evaluation_nested_references,
   evaluation_status,
+  operator_nested_execution,
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec.diagnostics import SourceContext
@@ -191,6 +207,11 @@ class _RiksWorkspace:
     "factorization_count",
     "factorization_reuse_count",
     "linear_solve_count",
+    "nested_evaluation_count",
+    "nested_factorization_count",
+    "nested_factorization_reuse_count",
+    "nested_iteration_count",
+    "nested_linear_solve_count",
     "rejected_substep_count",
     "residual_assembly_count",
     "tangent_refill_count",
@@ -204,6 +225,11 @@ class _RiksWorkspace:
     self.factorization_count = 0
     self.factorization_reuse_count = 0
     self.linear_solve_count = 0
+    self.nested_evaluation_count = 0
+    self.nested_factorization_count = 0
+    self.nested_factorization_reuse_count = 0
+    self.nested_iteration_count = 0
+    self.nested_linear_solve_count = 0
     self.rejected_substep_count = 0
     self.residual_assembly_count = 0
     self.tangent_refill_count = 0
@@ -261,7 +287,6 @@ class RiksDriver:
     self._map = coordinate_map
     self._settings = settings
     self._plan = compile_driver_plan(system, coordinate_map, loads)
-    self._owner = StateTransactionOwner(system)
     self._evolution_layout = ContinuationEvolutionLayout(
       schema=CONTINUATION_EVOLUTION_STATE_SCHEMA,
       reduced_dof_count=coordinate_map.reduced_dof_count,
@@ -293,6 +318,31 @@ class RiksDriver:
       order="C",
       copy=True,
     )
+    declarations = tuple(
+      operator_nested_execution(operator.header) for operator in system.operators
+    )
+    runtimes = prepare_nested_executions(
+      tuple(
+        None if declaration is None else declaration.recipe
+        for declaration in declarations
+      )
+    )
+    try:
+      self._nested_inputs = tuple(
+        None if runtime is None else NestedEvaluationInput(runtime)
+        for runtime in runtimes
+      )
+      self._owner = StateTransactionOwner(
+        system,
+        nested_stores=tuple(
+          runtime.store for runtime in runtimes if runtime is not None
+        ),
+      )
+    except BaseException:
+      close_nested_executions(runtimes)
+      raise
+    self._nested_executions = runtimes
+    self._closed = False
 
   @property
   def plan(self) -> DriverAssemblyPlan:
@@ -308,6 +358,33 @@ class RiksDriver:
   def settings(self) -> ArcLengthSettings:
     """Return the exact numeric policy."""
     return self._settings
+
+  @property
+  def nested_executions(self) -> tuple[PreparedNestedExecution | None, ...]:
+    """Return this driver's execution-local nested runtimes, aligned to operators."""
+    return self._nested_executions
+
+  def close(self) -> None:
+    """Release nested host workers and retained buffers; idempotent."""
+    if self._closed:
+      return
+    close_nested_executions(self._nested_executions)
+    self._closed = True
+
+  def __enter__(self) -> RiksDriver:
+    if self._closed:
+      msg = "Riks driver is closed"
+      raise RuntimeError(msg)
+    return self
+
+  def __exit__(self, *_exc: object) -> None:
+    self.close()
+
+  def __del__(self) -> None:
+    try:
+      self.close()
+    except Exception:
+      pass
 
   @property
   def evolution_layout(self) -> ContinuationEvolutionLayout:
@@ -333,6 +410,11 @@ class RiksDriver:
       cutback_count=workspace.cutback_count,
       committed_substep_count=workspace.committed_substep_count,
       rejected_substep_count=workspace.rejected_substep_count,
+      nested_iteration_count=workspace.nested_iteration_count,
+      nested_evaluation_count=workspace.nested_evaluation_count,
+      nested_factorization_count=workspace.nested_factorization_count,
+      nested_factorization_reuse_count=workspace.nested_factorization_reuse_count,
+      nested_linear_solve_count=workspace.nested_linear_solve_count,
     )
 
   def _attempt_point(
@@ -355,10 +437,11 @@ class RiksDriver:
     full = full_coefficients(self._map, reduced, point)
     signal_inputs = evaluate_signals(self._plan, point)
     evaluations = []
-    for operator, request, signals in zip(
+    for operator, request, signals, nested_input in zip(
       self._system.operators,
       self._requests,
       signal_inputs,
+      self._nested_inputs,
       strict=True,
     ):
       gather = operator.header.ports[0].coefficient_map.values
@@ -377,6 +460,7 @@ class RiksDriver:
             ),
             signals=signals,
             request=request,
+            nested_execution=nested_input,
           )
         )
       )
@@ -436,6 +520,38 @@ class RiksDriver:
       return None
     return np.asarray(solution, dtype=np.float64)
 
+  def _begin_nested_trial(self) -> None:
+    begin_nested_trial(self._nested_executions)
+
+  def _reject_nested_trial(self) -> None:
+    reject_nested_trial(self._nested_executions)
+
+  def _validate_nested_trial(self) -> None:
+    validate_nested_trial(self._nested_executions)
+
+  def _commit_nested_trial(self) -> None:
+    commit_nested_trial(self._nested_executions)
+
+  def _snapshot_nested_drivers(self) -> tuple[tuple[object, ...], ...]:
+    return snapshot_nested_activity(self._nested_executions)
+
+  def _collect_nested_activity(
+    self,
+    cursors: tuple[tuple[object, ...], ...],
+  ) -> tuple[tuple[NestedSolveStatistics, ...], NestedFailure | None]:
+    return collect_nested_activity(cursors)
+
+  def _accumulate_nested_statistics(
+    self, statistics: tuple[NestedSolveStatistics, ...]
+  ) -> None:
+    workspace = self._workspace
+    for cost in statistics:
+      workspace.nested_iteration_count += cost.iteration_count
+      workspace.nested_evaluation_count += cost.evaluation_count
+      workspace.nested_factorization_count += cost.factorization_count
+      workspace.nested_factorization_reuse_count += cost.factorization_reuse_count
+      workspace.nested_linear_solve_count += cost.linear_solve_count
+
   def _cycle_attempt(
     self,
     baseline: ContinuationEvolutionStore,
@@ -449,6 +565,7 @@ class RiksDriver:
     free_dofs = coordinate_map.free_dofs.values
     transaction = self._owner.begin()
     closed = False
+    nested_open = False
     iterations: list[ArcLengthIterationRecord] = []
 
     def rejected(lam: float, point: ProgramPoint) -> _AttemptOutcome:
@@ -466,6 +583,8 @@ class RiksDriver:
       )
 
     try:
+      self._begin_nested_trial()
+      nested_open = True
       reduced_committed = np.array(
         transaction.accepted_physical.values[free_dofs],
         dtype=np.float64,
@@ -495,6 +614,10 @@ class RiksDriver:
         da1 = self._back_substitute(factorization, lam * self._fhat_reduced)
         if da1 is None:
           return rejected(lam, point)
+        self._reject_nested_trial()
+        nested_open = False
+        self._begin_nested_trial()
+        nested_open = True
       else:
         da1 = attempt_factor * baseline.da_prev
         dlam1 = attempt_factor * baseline.dlam_prev
@@ -544,6 +667,10 @@ class RiksDriver:
           da = anchor_da + increment
           dlam = anchor_dlam + increment_lam
           increment_norm = float(np.linalg.norm(increment))
+          self._reject_nested_trial()
+          nested_open = False
+          self._begin_nested_trial()
+          nested_open = True
           continue
         external = evaluate_loads(self._plan.loads, point).values
         internal, residual_reduced = self._reduced_residual(evaluations, external)
@@ -580,8 +707,13 @@ class RiksDriver:
               operator.header.state_layout.block_id,
               evaluation.trial_state,
             )
+            for reference in evaluation_nested_references(evaluation):
+              transaction.stage_nested(reference)
+          self._validate_nested_trial()
           transaction.commit()
           closed = True
+          self._commit_nested_trial()
+          nested_open = False
           workspace.committed_substep_count += 1
           full_residual = internal - external
           reactions = reaction_forces(coordinate_map, full_residual)
@@ -686,11 +818,18 @@ class RiksDriver:
         )
         if not bool(np.isfinite(reduced).all()) or not math.isfinite(lam):
           return rejected(lam, point)
+        self._reject_nested_trial()
+        nested_open = False
+        self._begin_nested_trial()
+        nested_open = True
       return rejected(lam, point)
     except BaseException:
       if not closed:
         transaction.reject()
       raise
+    finally:
+      if nested_open:
+        self._reject_nested_trial()
 
   def run(
     self,
@@ -716,6 +855,9 @@ class RiksDriver:
     restore is the checkpoint-bundle follow-up's boundary, not this
     driver's.
     """
+    if self._closed:
+      msg = "Riks driver is closed"
+      raise RuntimeError(msg)
     if type(base_point) is not ProgramPoint:
       msg = "the Riks driver base point must be an exact ProgramPoint value"
       raise TypeError(msg)
@@ -766,7 +908,17 @@ class RiksDriver:
       cutback_level = 0
       while True:
         attempt_factor = baseline.factor * settings.cutback_factor**cutback_level
-        outcome = self._cycle_attempt(baseline, base_values, attempt_factor)
+        nested_cursors = self._snapshot_nested_drivers()
+        try:
+          outcome = self._cycle_attempt(baseline, base_values, attempt_factor)
+        except BaseException:
+          nested_statistics, _ = self._collect_nested_activity(nested_cursors)
+          self._accumulate_nested_statistics(nested_statistics)
+          raise
+        nested_statistics, nested_failure = self._collect_nested_activity(
+          nested_cursors
+        )
+        self._accumulate_nested_statistics(nested_statistics)
         if outcome.committed:
           break
         cutback_level += 1
@@ -783,6 +935,8 @@ class RiksDriver:
               committed_ordinal=None,
               committed_coefficients=None,
               observation=None,
+              nested_statistics=nested_statistics,
+              nested_failure=nested_failure,
             )
           )
           return ArcLengthResult(
@@ -811,6 +965,8 @@ class RiksDriver:
             committed_ordinal=None,
             committed_coefficients=None,
             observation=None,
+            nested_statistics=nested_statistics,
+            nested_failure=nested_failure,
           )
         )
         workspace.cutback_count += 1
@@ -826,6 +982,7 @@ class RiksDriver:
           committed_ordinal=self._owner.generation.ordinal,
           committed_coefficients=outcome.full,
           observation=outcome.observation,
+          nested_statistics=nested_statistics,
         )
       )
       # Termination is checked AFTER the commit and baseline advance: the

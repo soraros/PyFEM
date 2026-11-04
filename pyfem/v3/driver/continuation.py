@@ -32,6 +32,8 @@ from enum import Enum
 from pyfem.v3.driver.contracts import (
   DriverStatistics,
   DriverStatus,
+  NestedFailure,
+  NestedSolveStatistics,
   SubstepObservation,
   SubstepStatus,
 )
@@ -234,7 +236,8 @@ class ArcLengthStepRecord:
   for a committed cycle (what the next predictor will use) and the attempt
   factor for a rejected or failed attempt. ``committed_coefficients`` is the
   committed full-space coefficient vector — the per-cycle program-history
-  point returned as per-run data.
+  point returned as per-run data. ``nested_statistics`` attributes per-IP work
+  to this attempt, and ``nested_failure`` carries the first nested non-convergence.
   """
 
   cycle: int
@@ -247,6 +250,8 @@ class ArcLengthStepRecord:
   committed_ordinal: int | None
   committed_coefficients: FinalizedArray | None
   observation: SubstepObservation | None
+  nested_statistics: tuple[NestedSolveStatistics, ...] = ()
+  nested_failure: NestedFailure | None = None
 
 
 @dataclass(frozen=True, slots=True, eq=False)

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Iterator
-from dataclasses import astuple, dataclass
+from dataclasses import astuple, dataclass, replace
 
 import numpy as np
 import pytest
@@ -22,9 +22,12 @@ from pyfem.v3.compile.fe2 import FE2_TANGENT_CLASS, FE2ContinuumOperator
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.constraints import compile_constraint_map
 from pyfem.v3.driver import (
+  ArcLengthSettings,
   DriverStatus,
   NonlinearStaticDriver,
   NonlinearStaticSettings,
+  PreparedNestedExecution,
+  RiksDriver,
   StepFailureClass,
 )
 from pyfem.v3.model.arrays import FinalizedArray
@@ -34,6 +37,7 @@ from pyfem.v3.model.operator import (
   NestedEvaluationInput,
   NestedExecutionDeclaration,
   NestedExecutionModality,
+  NestedExecutionRecipe,
   OperatorEvaluation,
   OperatorEvaluationInput,
   evaluation_nested_references,
@@ -75,6 +79,7 @@ class _Deck:
   cell: PeriodicCell
   macro_mesh: object
   micro_mesh: object
+  runtime: PreparedNestedExecution
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,7 +147,10 @@ def _deck(
     "settings": micro_settings,
   }
   system = authoring.fe2_continuum(base, **arguments)
-  return _Deck(system, micro_system, micro_map, cell, macro_mesh, micro_mesh)
+  declaration = operator_nested_execution(system.operators[0].header)
+  assert declaration is not None
+  runtime = PreparedNestedExecution(declaration.recipe)
+  return _Deck(system, micro_system, micro_map, cell, macro_mesh, micro_mesh, runtime)
 
 
 def _cantilever(
@@ -180,17 +188,23 @@ def _cantilever(
     coordinate_map,
     settings=macro_settings or NonlinearStaticSettings(tolerance=1.0e-9),
   )
-  return _Cantilever(deck, driver, coordinate_map)
+  deck.runtime.close()
+  runtime = driver.nested_executions[0]
+  assert runtime is not None
+  return _Cantilever(replace(deck, runtime=runtime), driver, coordinate_map)
 
 
 def _evaluate_port(
   deck: _Deck,
   values: np.ndarray,
   accepted: FinalizedArray,
+  *,
+  runtime: PreparedNestedExecution | None = None,
 ) -> OperatorEvaluation:
   operator = deck.system.operators[0]
-  store = operator.nested_store
-  store.begin_trial()
+  runtime = deck.runtime if runtime is None else runtime
+  store = runtime.store
+  runtime.begin_trial()
   try:
     return operator.evaluate(
       OperatorEvaluationInput(
@@ -198,7 +212,7 @@ def _evaluate_port(
         accepted_state=accepted,
         signals=(),
         request=ChannelRequest(("internal-force",), ("material-tangent",)),
-        nested_execution=NestedEvaluationInput(store),
+        nested_execution=NestedEvaluationInput(runtime),
       )
     )
   finally:
@@ -208,8 +222,7 @@ def _evaluate_port(
 
 def _seed_documented_ip_state(deck: _Deck, strain: np.ndarray) -> None:
   """Seed the measured converged IP displacement field with virgin material history."""
-  operator = deck.system.operators[0]
-  store = operator.nested_store
+  store = deck.runtime.store
   displacements = {
     node.id: (
       float(strain[0] * node.coordinates[0]),
@@ -241,9 +254,8 @@ def _seed_documented_ip_state(deck: _Deck, strain: np.ndarray) -> None:
 
 
 def _stress_from_reactions(deck: _Deck, ip_index: int = 0) -> np.ndarray:
-  operator = deck.system.operators[0]
   point = _point(_documented_strain())
-  result = operator.drivers[ip_index].run(base_point=point, target_points=(point,))
+  result = deck.runtime.run_point(ip_index, base_point=point, target_points=(point,))
   assert result.status is DriverStatus.COMPLETED
   reactions = result.records[-1].observation.reactions.values
   request = deck.cell.homogenization_request(deck.micro_system)
@@ -259,20 +271,40 @@ def _documented_strain() -> np.ndarray:
   return np.array([2.0e-3, -2.0e-3 / 3.0, 0.0])
 
 
-def test_header_additions_and_virgin_nested_probe_are_additive() -> None:
+def test_header_declares_an_immutable_recipe_not_live_execution_state() -> None:
   deck = _deck(elastic=True)
   operator = deck.system.operators[0]
   declaration = operator_nested_execution(operator.header)
   assert type(declaration) is NestedExecutionDeclaration
   assert declaration.modality is NestedExecutionModality.DRIVER_PER_INTEGRATION_POINT
-  assert declaration.store is operator.nested_store
+  recipe = declaration.recipe
+  assert type(recipe) is NestedExecutionRecipe
+  assert recipe.micro_system is deck.micro_system
+  assert recipe.micro_coordinate_map is deck.micro_map
+  assert recipe.layout.ip_count == 9
+  assert recipe.settings.nested_ip_thread_count == deck.runtime.task_pool.thread_count
+  other = _deck(elastic=True)
+  assert recipe.provenance.to_bytes() == other.runtime.recipe.provenance.to_bytes()
+  other.runtime.close()
   assert operator_tangent_class(operator.header) == FE2_TANGENT_CLASS
-  assert len(operator.drivers) == operator.nested_store.ip_count == 9
-  # The compile probe really evaluated every nested driver and then rejected:
-  # only the one-time initial-state seeding generation remains accepted.
-  assert not operator.nested_store.trial_open
-  assert {generation.ordinal for generation in operator.nested_store.generations} == {1}
-  assert all(driver.statistics.evaluation_count > 0 for driver in operator.drivers)
+  assert not hasattr(operator, "drivers")
+  assert not hasattr(operator, "nested_store")
+  assert not hasattr(operator, "task_pool")
+
+  store = deck.runtime.store
+  assert not store.trial_open
+  assert {generation.ordinal for generation in store.generations} == {1}
+  assert all(
+    statistics.evaluation_count == 0 for statistics in deck.runtime.driver_statistics
+  )
+  fresh = PreparedNestedExecution(recipe)
+  assert fresh.recipe is recipe
+  assert fresh.store is not store
+  assert fresh.store.instance != store.instance
+  assert tuple(astuple(item) for item in fresh.driver_statistics) == tuple(
+    astuple(item) for item in deck.runtime.driver_statistics
+  )
+  fresh.close()
 
   direct_base = compile_system(
     authoring.small_strain_continuum(
@@ -327,9 +359,11 @@ def test_micro_loads_are_part_of_fe2_content_identity() -> None:
     loaded.system.operators[0].content_manifest.to_bytes()
     == identical.system.operators[0].content_manifest.to_bytes()
   )
-  assert not np.array_equal(
-    plain.system.operators[0].drivers[0].plan.loads.coordinate_coefficients.values,
-    loaded.system.operators[0].drivers[0].plan.loads.coordinate_coefficients.values,
+  assert plain.runtime.recipe.provenance.to_bytes() != (
+    loaded.runtime.recipe.provenance.to_bytes()
+  )
+  assert loaded.runtime.recipe.provenance.to_bytes() == (
+    identical.runtime.recipe.provenance.to_bytes()
   )
 
 
@@ -361,7 +395,7 @@ def test_macro_fe2_reported_ip_state_matches_legacy_sigma11() -> None:
   assert len(evaluation_nested_references(evaluation)) == 9
   # Rejecting the direct evaluation leaves the seeded accepted state intact;
   # observe the same point's solve-free boundary-reaction reduction next.
-  store = operator.nested_store
+  store = deck.runtime.store
   store.begin_trial()
   try:
     stress = _stress_from_reactions(deck)
@@ -385,16 +419,18 @@ def test_real_free_dof_micromodel_cantilever_runs_end_to_end() -> None:
   )
   assert result.status is DriverStatus.COMPLETED
   owner = cantilever.driver.owner
-  operator = cantilever.deck.system.operators[0]
+  deck = cantilever.deck
+  operator = deck.system.operators[0]
+  store = deck.runtime.store
   assert owner.generation.ordinal > 0
   assert len(owner.history[-1].nested_references) == 9
-  assert not operator.nested_store.trial_open
-  assert {generation.ordinal for generation in operator.nested_store.generations} == {
+  assert not store.trial_open
+  assert {generation.ordinal for generation in store.generations} == {
     1 + owner.generation.ordinal
   }
   macro_strain = owner.accepted_state(operator.header.state_layout.block_id).values
   assert float(np.max(np.abs(macro_strain))) > 4.0e-4
-  assert any(np.any(block != 0.0) for block in operator.nested_store.snapshot().blocks)
+  assert any(np.any(block != 0.0) for block in store.snapshot().blocks)
 
 
 def test_macro_tangent_is_fd_exact_at_nonzero_state_and_tamper_visible() -> None:
@@ -437,7 +473,7 @@ def test_macro_tangent_is_fd_exact_at_nonzero_state_and_tamper_visible() -> None
 def test_fe2_commit_and_reject_isolate_macro_and_nested_bytes() -> None:
   deck = _deck(elastic=True)
   operator = deck.system.operators[0]
-  store = operator.nested_store
+  store = deck.runtime.store
   block_id = operator.header.state_layout.block_id
   owner = StateTransactionOwner(deck.system, nested_stores=(store,))
   macro_before = (
@@ -489,8 +525,9 @@ def test_retry_iteration_discards_and_reopens_the_nested_scope(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   cantilever = _cantilever(prescribed=2.0e-4, elastic=True)
-  operator = cantilever.deck.system.operators[0]
-  store = operator.nested_store
+  deck = cantilever.deck
+  operator = deck.system.operators[0]
+  store = deck.runtime.store
   original = operator.evaluate
   calls = 0
   scopes = []
@@ -539,8 +576,9 @@ def test_nested_nonconvergence_rejects_macro_without_state_resurrection(
     micro_settings=NonlinearStaticSettings(max_iterations=1),
     macro_settings=NonlinearStaticSettings(max_cutbacks=0),
   )
-  operator = cantilever.deck.system.operators[0]
-  store = operator.nested_store
+  deck = cantilever.deck
+  operator = deck.system.operators[0]
+  store = deck.runtime.store
   nested_before = store.encode()
   owner = cantilever.driver.owner
   physical_before = owner.accepted_physical().values.tobytes()
@@ -601,15 +639,16 @@ def test_nested_costs_match_hand_counted_elastic_work() -> None:
 
   # Each macro substep takes two evaluations. Each one runs every elastic micro
   # driver through two Newton evaluations (one correction, one convergence).
-  # The compile-probed constant tangent is cached: each micro run contributes
-  # one Newton plus three homogenization back-substitutions, hence four reuses
-  # and solves with zero fresh factorizations. Two runs give (4, 4, 0, 8, 8).
-  for record in result.records:
+  # Every fresh execution factorizes once per IP on its first run. Its constant
+  # tangent then covers one Newton plus three homogenization back-substitutions
+  # per run, so later runs contribute four reuses and no fresh factorization.
+  for record_index, record in enumerate(result.records):
     assert len(record.iterations) == 2
     assert record.nested_failure is None
     assert len(record.nested_statistics) == 9
+    expected = (4, 4, 1, 7, 8) if record_index == 0 else (4, 4, 0, 8, 8)
     for cost in record.nested_statistics:
-      assert astuple(cost)[2:] == (4, 4, 0, 8, 8)
+      assert astuple(cost)[2:] == expected
       assert cost.factorization_count + cost.factorization_reuse_count == (
         cost.linear_solve_count
       )
@@ -621,7 +660,7 @@ def test_nested_costs_match_hand_counted_elastic_work() -> None:
     statistics.nested_factorization_count,
     statistics.nested_factorization_reuse_count,
     statistics.nested_linear_solve_count,
-  ) == (72, 72, 0, 144, 144)
+  ) == (72, 72, 9, 135, 144)
   assert (
     statistics.factorization_count
     + statistics.factorization_reuse_count
@@ -688,9 +727,7 @@ def test_nested_accounting_is_primal_byte_transparent(
     observed_operator.header.state_layout.block_id
   )
   assert control_state.values.tobytes() == observed_state.values.tobytes()
-  assert control_operator.nested_store.encode() == (
-    observed_operator.nested_store.encode()
-  )
+  assert control.deck.runtime.store.encode() == observed.deck.runtime.store.encode()
 
 
 def _assert_raw_uint64_equal(first: np.ndarray, second: np.ndarray) -> None:
@@ -706,37 +743,21 @@ def _evaluate_with_ip_outputs(
   values: np.ndarray,
   accepted: FinalizedArray,
 ) -> tuple[OperatorEvaluation, list[tuple[np.ndarray, np.ndarray] | None]]:
-  operator = deck.system.operators[0]
-  outputs: list[tuple[np.ndarray, np.ndarray] | None] = [None] * len(operator.drivers)
-  for ip_index, driver in enumerate(operator.drivers):
-    original = driver.run
-
-    def capture(
-      *args: object,
-      _original: object = original,
-      _ip_index: int = ip_index,
-      **kwargs: object,
-    ) -> object:
-      result = _original(*args, **kwargs)
-      record = result.records[-1]
-      assert record.observation is not None
-      observation = record.observation.homogenization
-      assert observation is not None
-      outputs[_ip_index] = (
-        np.array(observation.stress.values, copy=True),
-        np.array(observation.tangent.values, copy=True),
-      )
-      return result
-
-    driver.run = capture
-  return _evaluate_port(deck, values, accepted), outputs
+  evaluation = _evaluate_port(deck, values, accepted)
+  stresses = deck.runtime.retained_buffer("fe2-stresses", (9, 3))
+  tangents = deck.runtime.retained_buffer("fe2-tangents", (9, 3, 3))
+  outputs = [
+    (np.array(stresses[index], copy=True), np.array(tangents[index], copy=True))
+    for index in range(9)
+  ]
+  return evaluation, outputs
 
 
 def test_fe2_ip_pool_policy_defaults_to_serial_and_validates_width() -> None:
   deck = _deck(elastic=True, micro_settings=NonlinearStaticSettings())
-  operator = deck.system.operators[0]
-  assert operator.task_pool.thread_count == 1
-  assert operator.task_pool.worker_count == 1
+  pool = deck.runtime.task_pool
+  assert pool.thread_count == 1
+  assert pool.worker_count == 1
   with pytest.raises(ValueError, match="nested IP thread count"):
     NonlinearStaticSettings(nested_ip_thread_count=0)
 
@@ -759,10 +780,12 @@ def test_ip_task_pool_matches_one_thread_raw_uint64_across_macro_steps() -> None
     assert serial_result.status is parallel_result.status is DriverStatus.COMPLETED
     serial_operator = serial.deck.system.operators[0]
     parallel_operator = parallel.deck.system.operators[0]
-    assert serial_operator.task_pool.thread_count == 1
-    assert parallel_operator.task_pool.thread_count == 2
-    assert parallel_operator.task_pool.worker_count == 2
-    assert parallel_operator.task_pool.chunks == ((0, 5), (5, 9))
+    serial_pool = serial.deck.runtime.task_pool
+    parallel_pool = parallel.deck.runtime.task_pool
+    assert serial_pool.thread_count == 1
+    assert parallel_pool.thread_count == 2
+    assert parallel_pool.worker_count == 2
+    assert parallel_pool.chunks == ((0, 5), (5, 9))
     assert (
       serial.deck.system.content_fingerprint.digest
       == parallel.deck.system.content_fingerprint.digest
@@ -776,29 +799,27 @@ def test_ip_task_pool_matches_one_thread_raw_uint64_across_macro_steps() -> None
       serial.driver.owner.accepted_state(block_id).values,
       parallel.driver.owner.accepted_state(block_id).values,
     )
-    assert (
-      serial_operator.nested_store.encode() == parallel_operator.nested_store.encode()
-    )
+    assert serial.deck.runtime.store.encode() == parallel.deck.runtime.store.encode()
 
     set_num_threads(1)
     serial_gather = serial_operator.header.ports[0].coefficient_map.values
     serial_full = serial.driver.owner.accepted_physical().values
     serial_accepted = serial.driver.owner.accepted_state(block_id)
-    serial_nested = serial_operator.nested_store.encode()
+    serial_nested = serial.deck.runtime.store.encode()
     serial_evaluation, serial_outputs = _evaluate_with_ip_outputs(
       serial.deck, serial_full[serial_gather], serial_accepted
     )
-    assert serial_operator.nested_store.encode() == serial_nested
+    assert serial.deck.runtime.store.encode() == serial_nested
 
     set_num_threads(2)
     parallel_gather = parallel_operator.header.ports[0].coefficient_map.values
     parallel_full = parallel.driver.owner.accepted_physical().values
     parallel_accepted = parallel.driver.owner.accepted_state(block_id)
-    parallel_nested = parallel_operator.nested_store.encode()
+    parallel_nested = parallel.deck.runtime.store.encode()
     parallel_evaluation, parallel_outputs = _evaluate_with_ip_outputs(
       parallel.deck, parallel_full[parallel_gather], parallel_accepted
     )
-    assert parallel_operator.nested_store.encode() == parallel_nested
+    assert parallel.deck.runtime.store.encode() == parallel_nested
   finally:
     set_num_threads(previous_threads)
 
@@ -829,14 +850,16 @@ def test_nested_staged_buffer_objects_survive_parallel_macro_steps() -> None:
   try:
     set_num_threads(2)
     cantilever = _cantilever(prescribed=2.0e-4, elastic=True)
-    operator = cantilever.deck.system.operators[0]
-    store = operator.nested_store
+    deck = cantilever.deck
+    store = deck.runtime.store
     block_id = store.layout.blocks[0].block_id
     store.begin_trial()
     coefficient_buffer = store.trial_coefficients(0).base
     block_buffer = store.trial_block(0, block_id).base
     store.reject_trial()
-    chunks = operator.task_pool.chunks
+    stresses = deck.runtime.retained_buffer("fe2-stresses", (9, 3))
+    tangents = deck.runtime.retained_buffer("fe2-tangents", (9, 3, 3))
+    chunks = deck.runtime.task_pool.chunks
     result = cantilever.driver.run(
       base_point=_load_point(0.0),
       target_points=(_load_point(0.5), _load_point(1.0)),
@@ -847,6 +870,351 @@ def test_nested_staged_buffer_objects_survive_parallel_macro_steps() -> None:
     assert store.trial_coefficients(0).base is coefficient_buffer
     assert store.trial_block(0, block_id).base is block_buffer
     store.reject_trial()
-    assert operator.task_pool.chunks == chunks
+    assert deck.runtime.retained_buffer("fe2-stresses", (9, 3)) is stresses
+    assert deck.runtime.retained_buffer("fe2-tangents", (9, 3, 3)) is tangents
+    assert deck.runtime.task_pool.chunks == chunks
   finally:
+    set_num_threads(previous_threads)
+
+
+def test_independent_macro_executions_share_only_the_compiled_recipe() -> None:
+  first = _cantilever(prescribed=2.0e-4, elastic=True)
+  second = NonlinearStaticDriver(
+    first.deck.system,
+    first.coordinate_map,
+    settings=NonlinearStaticSettings(tolerance=1.0e-9),
+  )
+  first_runtime = first.deck.runtime
+  second_runtime = second.nested_executions[0]
+  assert second_runtime is not None
+  assert first_runtime.recipe is second_runtime.recipe
+  assert first_runtime.store is not second_runtime.store
+  assert first_runtime.task_pool is not second_runtime.task_pool
+  block_id = first.deck.system.operators[0].header.state_layout.block_id
+
+  def snapshot(
+    driver: NonlinearStaticDriver,
+    runtime: PreparedNestedExecution,
+  ) -> tuple[object, ...]:
+    return (
+      driver.owner.accepted_physical().values.tobytes(),
+      driver.owner.accepted_state(block_id).values.tobytes(),
+      driver.owner.generation.ordinal,
+      driver.owner.history,
+      runtime.store.encode(),
+      tuple(generation.ordinal for generation in runtime.store.generations),
+      astuple(driver.statistics),
+      tuple(astuple(item) for item in runtime.driver_statistics),
+    )
+
+  try:
+    second_initial = snapshot(second, second_runtime)
+    first_result = first.driver.run(
+      base_point=_load_point(0.0), target_points=(_load_point(1.0),)
+    )
+    assert first_result.status is DriverStatus.COMPLETED
+    first_physical = np.array(first.driver.owner.accepted_physical().values, copy=True)
+    first_state = np.array(
+      first.driver.owner.accepted_state(block_id).values, copy=True
+    )
+    first_nested = first_runtime.store.encode()
+    first_statistics = astuple(first.driver.statistics)
+    first_ip_statistics = tuple(
+      astuple(item) for item in first_runtime.driver_statistics
+    )
+    assert snapshot(second, second_runtime) == second_initial
+
+    advanced = first.driver.run(
+      base_point=_load_point(1.0), target_points=(_load_point(2.0),)
+    )
+    assert advanced.status is DriverStatus.COMPLETED
+    assert snapshot(second, second_runtime) == second_initial
+    first_before_second = snapshot(first.driver, first_runtime)
+
+    second_result = second.run(
+      base_point=_load_point(0.0), target_points=(_load_point(1.0),)
+    )
+    assert second_result.status is DriverStatus.COMPLETED
+    assert snapshot(first.driver, first_runtime) == first_before_second
+    _assert_raw_uint64_equal(
+      second.owner.accepted_physical().values,
+      first_physical,
+    )
+    _assert_raw_uint64_equal(
+      second.owner.accepted_state(block_id).values,
+      first_state,
+    )
+    assert second_runtime.store.encode() == first_nested
+    assert astuple(second.statistics) == first_statistics
+    assert tuple(astuple(item) for item in second_runtime.driver_statistics) == (
+      first_ip_statistics
+    )
+    assert second_result.records[-1].observation is not None
+    assert first_result.records[-1].observation is not None
+    _assert_raw_uint64_equal(
+      second_result.records[-1].observation.reactions.values,
+      first_result.records[-1].observation.reactions.values,
+    )
+  finally:
+    first.driver.close()
+    second.close()
+
+
+def test_fresh_runtime_rebinding_and_cleanup_are_execution_local() -> None:
+  deck = _deck(elastic=True)
+  foreign = _deck(elastic=True)
+  fresh = PreparedNestedExecution(deck.runtime.recipe)
+  values = np.zeros((1, 16), dtype=np.float64)
+  accepted = FinalizedArray(np.zeros((9, 3)), dtype=np.float64)
+  try:
+    control = _evaluate_port(deck, values, accepted)
+    rebound = _evaluate_port(deck, values, accepted, runtime=fresh)
+    _assert_raw_uint64_equal(
+      control.residual_values[0].values,
+      rebound.residual_values[0].values,
+    )
+    _assert_raw_uint64_equal(
+      control.jacobian_values[0].values,
+      rebound.jacobian_values[0].values,
+    )
+    _assert_raw_uint64_equal(control.trial_state.values, rebound.trial_state.values)
+    with pytest.raises(ValueError, match="foreign recipe"):
+      _evaluate_port(deck, values, accepted, runtime=foreign.runtime)
+
+    fresh.begin_trial()
+    buffer = fresh.retained_buffer("cleanup-probe", (2, 3))
+    assert fresh.retained_buffer("cleanup-probe", (2, 3)) is buffer
+    fresh.close()
+    assert fresh.closed
+    assert fresh.task_pool.closed
+    assert not fresh.store.trial_open
+    fresh.close()
+    with pytest.raises(RuntimeError, match="pool is closed"):
+      fresh.task_pool.run(lambda index: index)
+    with pytest.raises(RuntimeError, match="execution is closed"):
+      fresh.retained_buffer("cleanup-probe", (2, 3))
+    with pytest.raises(RuntimeError, match="execution is closed"):
+      fresh.run_point(
+        0,
+        base_point=_point((0.0, 0.0, 0.0)),
+        target_points=(_point((0.0, 0.0, 0.0)),),
+      )
+  finally:
+    deck.runtime.close()
+    foreign.runtime.close()
+    fresh.close()
+
+
+def test_real_elastic_fe2_runs_through_riks_without_macro_owner_access(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  deck = _deck(elastic=True)
+  deck.runtime.close()
+  mesh = deck.macro_mesh
+  left = tuple(node.id for node in mesh.nodes if abs(node.coordinates[0]) < 1.0e-12)
+  right = tuple(
+    node.id for node in mesh.nodes if abs(node.coordinates[0] - 1.0) < 1.0e-12
+  )
+  coordinate_map = compile_constraint_map(
+    deck.system,
+    constraints=authoring.fixed(left, components=("x", "y")),
+    coordinates=(ProgramCoordinateSpec("load", "load"),),
+  )
+  loads = tuple(
+    authoring.nodal_load(node, "x", 0.01, coordinate="load") for node in right
+  )
+  driver = RiksDriver(
+    deck.system,
+    coordinate_map,
+    loads,
+    ArcLengthSettings(tolerance=1.0e-9, fixed_step=True, max_lam=0.5),
+  )
+  runtime = driver.nested_executions[0]
+  assert runtime is not None
+  macro_owner = driver.owner
+  nested_active = False
+  original_evaluate = FE2ContinuumOperator.evaluate
+
+  def guarded_evaluate(
+    self: FE2ContinuumOperator,
+    inputs: OperatorEvaluationInput,
+  ) -> OperatorEvaluation:
+    nonlocal nested_active
+    assert inputs.nested_execution is not None
+    assert inputs.nested_execution.runtime is runtime
+    nested_active = True
+    try:
+      return original_evaluate(self, inputs)
+    finally:
+      nested_active = False
+
+  def guard_owner_method(name: str) -> None:
+    original = getattr(StateTransactionOwner, name)
+
+    def guarded(self: StateTransactionOwner, *args: object, **kwargs: object) -> object:
+      if nested_active and self is macro_owner:
+        msg = f"nested execution accessed macro owner through {name}"
+        raise AssertionError(msg)
+      return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(StateTransactionOwner, name, guarded)
+
+  for name in ("begin", "_commit", "_reject", "accepted_physical", "accepted_state"):
+    guard_owner_method(name)
+  monkeypatch.setattr(FE2ContinuumOperator, "evaluate", guarded_evaluate)
+  try:
+    result = driver.run(base_point=ProgramPoint())
+    assert result.status is DriverStatus.COMPLETED
+    committed = [
+      record for record in result.records if record.status.value == "committed"
+    ]
+    assert len(committed) == 1
+    record = committed[0]
+    assert len(record.iterations) == 2
+    assert record.nested_failure is None
+    assert len(record.nested_statistics) == 9
+    assert all(cost.evaluation_count > 0 for cost in record.nested_statistics)
+    assert result.statistics.nested_evaluation_count == sum(
+      cost.evaluation_count for cost in record.nested_statistics
+    )
+    assert record.observation is not None
+    assert record.observation.reduced_residual_norm <= 1.0e-7
+    assert record.committed_coefficients is not None
+    assert bool(np.isfinite(record.committed_coefficients.values).all())
+    assert not runtime.store.trial_open
+    assert {generation.ordinal for generation in runtime.store.generations} == {
+      1 + macro_owner.generation.ordinal
+    }
+    assert len(macro_owner.history[-1].nested_references) == 9
+  finally:
+    driver.close()
+  assert runtime.closed
+  assert runtime.task_pool.closed
+
+
+def test_riks_nested_nonconvergence_is_typed_and_rolls_back() -> None:
+  deck = _deck(
+    elastic=True,
+    micro_settings=NonlinearStaticSettings(max_iterations=1),
+  )
+  deck.runtime.close()
+  mesh = deck.macro_mesh
+  left = tuple(node.id for node in mesh.nodes if abs(node.coordinates[0]) < 1.0e-12)
+  right = tuple(
+    node.id for node in mesh.nodes if abs(node.coordinates[0] - 1.0) < 1.0e-12
+  )
+  coordinate_map = compile_constraint_map(
+    deck.system,
+    constraints=authoring.fixed(left, components=("x", "y")),
+    coordinates=(ProgramCoordinateSpec("load", "load"),),
+  )
+  loads = tuple(
+    authoring.nodal_load(node, "x", 0.01, coordinate="load") for node in right
+  )
+  driver = RiksDriver(
+    deck.system,
+    coordinate_map,
+    loads,
+    ArcLengthSettings(
+      tolerance=1.0e-9,
+      fixed_step=True,
+      max_lam=10.0,
+      max_cutbacks=0,
+    ),
+  )
+  runtime = driver.nested_executions[0]
+  assert runtime is not None
+  nested_before = runtime.store.encode()
+  physical_before = driver.owner.accepted_physical().values.tobytes()
+  try:
+    result = driver.run(base_point=ProgramPoint())
+    assert result.status is DriverStatus.STEP_FAILED
+    (record,) = result.records
+    assert record.status.value == "failed"
+    assert record.nested_failure is not None
+    assert record.nested_failure.code == "nested-non-convergence"
+    assert record.nested_failure.failure_class is (
+      StepFailureClass.ITERATION_BUDGET_EXHAUSTED
+    )
+    assert record.nested_statistics[0].evaluation_count > 0
+    assert result.statistics.nested_evaluation_count == sum(
+      cost.evaluation_count for cost in record.nested_statistics
+    )
+    assert driver.owner.generation.ordinal == 0
+    assert driver.owner.history == ()
+    assert driver.owner.accepted_physical().values.tobytes() == physical_before
+    assert runtime.store.encode() == nested_before
+    assert not runtime.store.trial_open
+  finally:
+    driver.close()
+
+
+def test_fe2_benchmark_pipeline_gate_smoke_matches_1t_and_2t_raw_science() -> None:
+  from bench.fe2_pipeline import FE2Pipeline, gate_fe2
+  from bench.workloads import FE2Workload
+
+  previous_threads = get_num_threads()
+  reference = candidate = None
+  try:
+    set_num_threads(1)
+    reference = FE2Pipeline(FE2Workload(1, 1, elastic=True))
+    logical_bytes = reference.logical_bytes
+    assert logical_bytes["accepted_nested"] == logical_bytes["staged_nested"] > 0
+    assert logical_bytes["accepted_macro_strain"] > 0
+    assert logical_bytes["nested_evaluation_copy"] == 0
+    reference.solve()
+
+    set_num_threads(2)
+    candidate = FE2Pipeline(FE2Workload(1, 1, elastic=True))
+    assert candidate.logical_bytes == logical_bytes
+    candidate.solve()
+    reference_driver = reference.driver
+    candidate_driver = candidate.driver
+    assert reference_driver is not None and candidate_driver is not None
+    reference_runtime = reference_driver.nested_executions[0]
+    candidate_runtime = candidate_driver.nested_executions[0]
+    assert reference_runtime is not None and candidate_runtime is not None
+    assert reference_runtime.recipe.provenance.to_bytes() == (
+      candidate_runtime.recipe.provenance.to_bytes()
+    )
+    assert reference_runtime.store is not candidate_runtime.store
+    assert reference_runtime.task_pool.thread_count == 1
+    assert candidate_runtime.task_pool.thread_count == 2
+
+    reference_accepted = reference_runtime.store.encode()
+    candidate_accepted = candidate_runtime.store.encode()
+    reference_evaluation = reference.nested_evaluation()
+    candidate_evaluation = candidate.nested_evaluation()
+    assert evaluation_status(reference_evaluation) is EvaluationStatus.OK
+    assert evaluation_status(candidate_evaluation) is EvaluationStatus.OK
+    assert reference_runtime.store.encode() == reference_accepted
+    assert candidate_runtime.store.encode() == candidate_accepted
+    assert reference_accepted == candidate_accepted
+    for first, second in zip(
+      reference_evaluation.residual_values,
+      candidate_evaluation.residual_values,
+      strict=True,
+    ):
+      _assert_raw_uint64_equal(first.values, second.values)
+    for first, second in zip(
+      reference_evaluation.jacobian_values,
+      candidate_evaluation.jacobian_values,
+      strict=True,
+    ):
+      _assert_raw_uint64_equal(first.values, second.values)
+    _assert_raw_uint64_equal(
+      reference_evaluation.trial_state.values,
+      candidate_evaluation.trial_state.values,
+    )
+
+    gate = gate_fe2(reference, candidate)
+    assert gate.passed, [
+      (check.name, check.detail) for check in gate.checks if not check.passed
+    ]
+    assert reference.evidence() == candidate.evidence()
+  finally:
+    if reference is not None and reference.driver is not None:
+      reference.driver.close()
+    if candidate is not None and candidate.driver is not None:
+      candidate.driver.close()
     set_num_threads(previous_threads)
