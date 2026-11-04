@@ -117,10 +117,10 @@ class ThermoSmallStrainContinuum( Element ):
     
     temp0 = elemdat.state [tDofs] - elemdat.Dstate[tDofs]
     
-    stiff = zeros(shape=(4,4))
+    stiff = zeros(shape=(len(tDofs),len(tDofs)))
     
     if self.transient:
-      ctt = zeros(shape=(4,4))
+      ctt = zeros(shape=(len(tDofs),len(tDofs)))
       invdtime = 1.0/self.solverStat.dtime
                  
     for iInt,iData in enumerate(sData):
@@ -139,7 +139,7 @@ class ThermoSmallStrainContinuum( Element ):
             
       sigma,tang = self.mat.getStress( self.kin )
             
-      stiff[ix_(tDofs,tDofs)] += \
+      stiff += \
         dot ( iData.dhdx , dot( self.D , iData.dhdx.transpose() ) ) * iData.weight
   
       elemdat.fint[dDofs] += dot ( B.transpose() , sigma ) * iData.weight
@@ -150,7 +150,8 @@ class ThermoSmallStrainContinuum( Element ):
       self.appendNodalOutput( self.mat.outLabels() , self.mat.outData() )
       self.appendNodalOutput( self.labels , dot(self.D,gradTemp) ) 
     
-    if self.transient:  
+    if self.transient:
+      ktt0 = invdtime * ctt - stiff * ( 1.0-self.theta )
       stiff *= self.theta
       
       stiff += invdtime * ctt 

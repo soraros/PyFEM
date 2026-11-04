@@ -80,6 +80,61 @@ class PhaseField( Element ):
 
     return energyPos, energyNeg
 
+  def _getPositiveEnergyGradient ( self, strain ):
+
+    '''Differentiates the positive energy with respect to the legacy strain vector.'''
+
+    prinVal, prinVec = linalg.eig(strain)
+    strainPos = zeros(shape=(self.rank,self.rank))
+
+    for i in range(self.rank):
+      strainPos += 0.5*(prinVal[i]+abs(prinVal[i]))*tensordot(prinVec[:,i],prinVec[:,i],0)
+
+    mu = self.matProps.E/(2*(1+self.matProps.nu))
+    lame = (self.matProps.E*self.matProps.nu)/((1+self.matProps.nu)*(1-2*self.matProps.nu))
+    tracePos = 0.5*(strain.trace()+abs(strain.trace()))
+    stressPos = zeros(self.nstr)
+
+    for iStr in range(self.nstr):
+      dStrain = zeros(shape=(self.rank,self.rank))
+      if self.rank == 2:
+        if iStr < 2:
+          dStrain[iStr,iStr] = 1.0
+        else:
+          dStrain[0,1] = dStrain[1,0] = 1.0
+      else:
+        if iStr < 3:
+          dStrain[iStr,iStr] = 1.0
+        else:
+          i,j = [(1,2),(0,2),(0,1)][iStr-3]
+          dStrain[i,j] = dStrain[j,i] = 1.0
+
+      dTrace = dStrain.trace() if strain.trace() > 0.0 else 0.0
+      dStrainPos = zeros(shape=(self.rank,self.rank))
+
+      for i in range(self.rank):
+        if prinVal[i] <= 0.0:
+          continue
+
+        vecI = prinVec[:,i]
+        dVecI = zeros(self.rank)
+        for j in range(self.rank):
+          if i == j:
+            continue
+          vecJ = prinVec[:,j]
+          denominator = prinVal[i]-prinVal[j]
+          if denominator == 0.0:
+            continue
+          dVecI += vecJ*dot(vecJ,dot(dStrain,vecI))/denominator
+
+        dStrainPos += dot(vecI,dot(dStrain,vecI))*outer(vecI,vecI)
+        dStrainPos += prinVal[i]*(outer(dVecI,vecI)+outer(vecI,dVecI))
+
+      stressPos[iStr] = lame*tracePos*dTrace
+      stressPos[iStr] += 2.0*mu*sum(strainPos.diagonal()*dStrainPos.diagonal())
+
+    return stressPos
+
 #-------------------------------------------------------------------------------
 #
 #-------------------------------------------------------------------------------
@@ -105,7 +160,8 @@ class PhaseField( Element ):
       
       sigma,tang = self.mat.getStress( self.kin )
 
-      energyPos, energyNeg = self.getDecompEnergy(self.strain2matrix(self.kin.strain))
+      strain = self.strain2matrix(self.kin.strain)
+      energyPos, energyNeg = self.getDecompEnergy(strain)
       energy = 0.5*sum(self.kin.strain*sigma)
 
       if energyPos > self.hisOld[iInt]:
@@ -140,8 +196,13 @@ class PhaseField( Element ):
       # -- Coupling terms
       
       vecu = -2.0 * ( 1.0 - phase ) * dot( B.transpose() , sigma ) * iData.weight
-      elemdat.stiff[ix_(uDofs,pDofs)] += outer( vecu , iData.h )       
-      elemdat.stiff[ix_(pDofs,uDofs)] += outer( iData.h , vecu ) 
+      elemdat.stiff[ix_(uDofs,pDofs)] += outer( vecu , iData.h )
+
+      vecPhase = zeros(len(uDofs))
+      if energyPos > self.hisOld[iInt]:
+        stressPos = self._getPositiveEnergyGradient(strain)
+        vecPhase = 2.0*( phase-1.0 ) * dot( B.transpose() , stressPos ) * iData.weight
+      elemdat.stiff[ix_(pDofs,uDofs)] += outer( iData.h , vecPhase )
       
       self.appendNodalOutput( self.mat.outLabels() , self.mat.outData() )
      
@@ -203,7 +264,7 @@ class PhaseField( Element ):
     '''Copies the new history parameters (maximum internal energy for each 
        integration point) to the old history parameters.'''
 
-    self.hisOld = self.hisNew
+    self.hisOld = self.hisNew.copy()
    
 #-------------------------------------------------------------------------------
 #  getBmatrix
