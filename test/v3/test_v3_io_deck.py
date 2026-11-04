@@ -31,6 +31,7 @@ from _legacy_parity import (
   load_parity_tolerances,
 )
 
+from pyfem.v3.compile.system import compile_system
 from pyfem.v3.driver import (
   ArcLengthTermination,
   DriverStatus,
@@ -366,7 +367,8 @@ def test_cantilever8_deck_reads_the_finite_strain_slice() -> None:
 def test_compile_deck_uses_landed_compiler_unchanged() -> None:
   deck = read_legacy_deck(SKIMS / "patch_test8" / "skim.pro")
   compiled = compile_deck(deck)
-  assert type(compiled.system).__name__ == "CompiledSystem"
+  direct = compile_system(deck.model, deck.registry)
+  assert compiled.system.content_fingerprint == direct.content_fingerprint
   assert sum(len(space.coefficient_ids) for space in compiled.system.spaces) == 40
   assert compiled.constraint_map.full_dof_count == 40
   assert compiled.constraint_map.reduced_dof_count == 24
@@ -606,9 +608,16 @@ def test_shallow_truss_riks_deck_matches_legacy_per_cycle() -> None:
 
   deck = read_legacy_deck(pro_path)
   compiled = compile_deck(deck)
-  assert [type(operator).__name__ for operator in compiled.system.operators] == [
-    "TrussOperator",
-    "SpringOperator",
+  assert [
+    (
+      operator.header.entity_block_id,
+      tuple(channel.channel_id for channel in operator.header.residual_channels),
+      tuple(channel.channel_id for channel in operator.header.jacobian_channels),
+    )
+    for operator in compiled.system.operators
+  ] == [
+    ("TrussElem", ("internal-force",), ("tangent",)),
+    ("SpringElem", ("spring-force",), ("spring-tangent",)),
   ]
   run = run_deck(deck)
   result = run.result
@@ -781,10 +790,17 @@ def test_multiple_spring_groups_emit_one_declaration_each(tmp_path: Path) -> Non
   # Element 4: chord (-10,0)->(0,0.5).
   assert second.parameters == pytest.approx((50.0, 10.0 / length, 0.5 / length))
   compiled = compile_deck(deck)
-  assert [type(operator).__name__ for operator in compiled.system.operators] == [
-    "TrussOperator",
-    "SpringOperator",
-    "SpringOperator",
+  assert [
+    (
+      operator.header.entity_block_id,
+      tuple(channel.channel_id for channel in operator.header.residual_channels),
+      tuple(channel.channel_id for channel in operator.header.jacobian_channels),
+    )
+    for operator in compiled.system.operators
+  ] == [
+    ("TrussElem", ("internal-force",), ("tangent",)),
+    ("SpringElem", ("spring-force",), ("spring-tangent",)),
+    ("SpringElem2", ("spring-force",), ("spring-tangent",)),
   ]
 
 

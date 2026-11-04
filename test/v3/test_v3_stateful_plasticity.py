@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import platform
 import sys
 import warnings
 from collections.abc import Callable
@@ -667,9 +666,10 @@ def test_compiled_plasticity_system_fingerprint_is_deterministic() -> None:
 
 
 def test_optimized_kernel_matches_reference_bitwise(
-  monkeypatch: pytest.MonkeyPatch,
   bitwise_pin: Callable[..., None],
   reference_platform_probe: Callable[[], bool],
+  reference_platform_fingerprint: dict[str, object],
+  platform_fingerprint_override: Callable[[dict[str, object]], None],
 ) -> None:
   """The M30 optimized kernel reproduces the M25 reference bit for bit.
 
@@ -743,12 +743,13 @@ def test_optimized_kernel_matches_reference_bitwise(
   # skips. The forcings are host-independent; both branches must assert.
   one = np.array([1.0])
   one_ulp_off = np.nextafter(one, 2.0)
-  monkeypatch.setattr(sys, "platform", "darwin")
-  monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+  platform_fingerprint_override(reference_platform_fingerprint)
   assert reference_platform_probe()
   with pytest.raises(AssertionError):  # the byte-identity branch sees 1 ulp
     bitwise_pin(one_ulp_off, one, rtol=_CROSS_PLATFORM_RTOL, atol=_CROSS_PLATFORM_ATOL)
-  monkeypatch.setattr(sys, "platform", "linux")
+  unknown_fingerprint = dict(reference_platform_fingerprint)
+  unknown_fingerprint["cpu"] = "unrecorded test CPU"
+  platform_fingerprint_override(unknown_fingerprint)
   assert not reference_platform_probe()
   # One ulp is within the cross-platform tolerance; a real gap still fails.
   bitwise_pin(one_ulp_off, one, rtol=_CROSS_PLATFORM_RTOL, atol=_CROSS_PLATFORM_ATOL)
