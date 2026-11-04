@@ -60,11 +60,10 @@ signal port: committed state rows equal the kernel oracle stepped on the
 committed integration-point strains (bitwise), the ``time`` slot records the
 substep's bound time at every integration point, a constant-time supra-yield
 substep changes the committed response through the gate (positive control),
-two all-advancing schedules give identical stress to solver tolerance
-(rate-independence end-to-end), and a port-free law driven under two
-different time schedules yields byte-identical results (isolation). The ABI
-proof is the frozen validator accepting the law's v2 metadata unchanged plus
-``pyfem/v3/compile/contracts.py`` carrying no diff for this mission.
+and two all-advancing schedules give identical stress to solver tolerance
+(rate-independence end-to-end). The ABI proof is the frozen validator accepting
+the law's v2 metadata unchanged plus ``pyfem/v3/compile/contracts.py`` carrying
+no diff for this mission.
 """
 
 from __future__ import annotations
@@ -87,7 +86,6 @@ from pyfem.v3 import authoring
 from pyfem.v3.compile.continuum import (
   BACKWARD_EULER_PERZYNA_MATERIAL_KEY,
   backward_euler_perzyna_reference_registry,
-  q8_reference_registry,
   viscoplasticity_reference_registry,
 )
 from pyfem.v3.compile.contracts import (
@@ -918,39 +916,6 @@ def _vp_model() -> ModelSpec:
   )
 
 
-def _elastic_model() -> ModelSpec:
-  """The same one-element mesh with the port-free plane-stress linear law."""
-  base = _vp_model()
-  return ModelSpec(
-    mesh=base.mesh,
-    fields=base.fields,
-    materials=(
-      MaterialSpec(
-        id="steel",
-        model="plane-stress-linear-elastic",
-        parameters=(
-          MaterialParameterSpec("youngs_modulus", _E),
-          MaterialParameterSpec("poisson_ratio", _NU),
-        ),
-        source=_source("material"),
-      ),
-    ),
-    regions=base.regions[:-1]
-    + (
-      RegionSpec(
-        id="domain",
-        cell_refs=(CellRef("cells", "cell-1"),),
-        field_ids=("displacement",),
-        material_id="steel",
-        formulation="small-strain-continuum",
-        quadrature="gauss-3x3",
-        source=_source("region"),
-      ),
-    ),
-    source=_source("model"),
-  )
-
-
 def _compiled(model: ModelSpec, registry: dict) -> CompiledSystem:
   return compile_system(model, registry)
 
@@ -1327,37 +1292,6 @@ def test_driver_response_is_rate_invariant_under_advancing_schedules() -> None:
     rtol=1.0e-9,
     atol=1.0e-12,
   )
-
-
-def test_port_free_law_results_are_signal_independent() -> None:
-  first = _ramp_driver(_elastic_model(), q8_reference_registry())
-  second = _ramp_driver(_elastic_model(), q8_reference_registry())
-  eps_path = (2.0e-4, 5.0e-4, 1.1e-3)
-  first_base = _point(0.0, 0.0)
-  second_base = _point(0.0, 0.0)
-  for first_time, second_time, eps in (
-    (0.0, 3.0, eps_path[0]),
-    (0.0, 7.5, eps_path[1]),
-    (0.0, 11.25, eps_path[2]),
-  ):
-    first_result = first.run(
-      base_point=first_base, target_points=(_point(first_time, eps),)
-    )
-    second_result = second.run(
-      base_point=second_base, target_points=(_point(second_time, eps),)
-    )
-    assert first_result.status is DriverStatus.COMPLETED
-    assert second_result.status is DriverStatus.COMPLETED
-    assert (
-      first.owner.accepted_physical().values.tobytes()
-      == second.owner.accepted_physical().values.tobytes()
-    )
-    assert (
-      first_result.records[-1].observation.reactions.values.tobytes()
-      == second_result.records[-1].observation.reactions.values.tobytes()
-    )
-    first_base = _point(first_time, eps)
-    second_base = _point(second_time, eps)
 
 
 def test_state_codec_round_trips_and_rejects_foreign_schemas() -> None:

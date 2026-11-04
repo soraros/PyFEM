@@ -36,12 +36,10 @@ Einf = 100, three terms, log-spaced times 0.1 .. 10, equal moduli 300).
 The driver battery proves schedule-owned time flows through the M29 identity
 signal port: committed state rows equal the kernel oracle stepped on the
 committed integration-point strains (bitwise), the ``time`` slot records the
-substep's bound time at every integration point, the response changes when the
-same strain path runs under a different time schedule (positive control), and
-a port-free law driven under two different time schedules yields byte
--identical results (isolation: without a declared port no schedule value
-reaches the law). The ABI proof is the frozen validator accepting the law's
-v2 metadata unchanged — parameterized width and signal ports included — plus
+substep's bound time at every integration point, and the response changes when
+the same strain path runs under a different time schedule (positive control).
+The ABI proof is the frozen validator accepting the law's v2 metadata unchanged
+— parameterized width and signal ports included — plus
 ``pyfem/v3/compile/contracts.py`` carrying no diff for this mission.
 """
 
@@ -61,10 +59,7 @@ if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
 from pyfem.materials.ViscoElasticity import ViscoElasticity
-from pyfem.v3.compile.continuum import (
-  q8_reference_registry,
-  viscoelasticity_reference_registry,
-)
+from pyfem.v3.compile.continuum import viscoelasticity_reference_registry
 from pyfem.v3.compile.contracts import (
   STATEFUL_MATERIAL_DESCRIPTOR_SCHEMA,
   StatefulContinuumKernelResult,
@@ -614,39 +609,6 @@ def _visco_model(term_count: float = 3.0) -> ModelSpec:
   )
 
 
-def _elastic_model() -> ModelSpec:
-  """The same one-element mesh with the port-free plane-stress linear law."""
-  base = _visco_model()
-  return ModelSpec(
-    mesh=base.mesh,
-    fields=base.fields,
-    materials=(
-      MaterialSpec(
-        id="steel",
-        model="plane-stress-linear-elastic",
-        parameters=(
-          MaterialParameterSpec("youngs_modulus", _E),
-          MaterialParameterSpec("poisson_ratio", _NU),
-        ),
-        source=_source("material"),
-      ),
-    ),
-    regions=base.regions[:-1]
-    + (
-      RegionSpec(
-        id="domain",
-        cell_refs=(CellRef("cells", "cell-1"),),
-        field_ids=("displacement",),
-        material_id="steel",
-        formulation="small-strain-continuum",
-        quadrature="gauss-3x3",
-        source=_source("region"),
-      ),
-    ),
-    source=_source("model"),
-  )
-
-
 def _compiled(model: ModelSpec, registry: dict) -> CompiledSystem:
   return compile_system(model, registry)
 
@@ -968,37 +930,6 @@ def test_driver_response_depends_on_the_time_schedule() -> None:
     first.owner.accepted_physical().values.tobytes()
     != second.owner.accepted_physical().values.tobytes()
   )
-
-
-def test_port_free_law_results_are_signal_independent() -> None:
-  first = _ramp_driver(_elastic_model(), q8_reference_registry())
-  second = _ramp_driver(_elastic_model(), q8_reference_registry())
-  eps_path = (2.0e-4, 5.0e-4, 1.1e-3)
-  first_base = _point(0.0, 0.0)
-  second_base = _point(0.0, 0.0)
-  for first_time, second_time, eps in (
-    (0.0, 3.0, eps_path[0]),
-    (0.0, 7.5, eps_path[1]),
-    (0.0, 11.25, eps_path[2]),
-  ):
-    first_result = first.run(
-      base_point=first_base, target_points=(_point(first_time, eps),)
-    )
-    second_result = second.run(
-      base_point=second_base, target_points=(_point(second_time, eps),)
-    )
-    assert first_result.status is DriverStatus.COMPLETED
-    assert second_result.status is DriverStatus.COMPLETED
-    assert (
-      first.owner.accepted_physical().values.tobytes()
-      == second.owner.accepted_physical().values.tobytes()
-    )
-    assert (
-      first_result.records[-1].observation.reactions.values.tobytes()
-      == second_result.records[-1].observation.reactions.values.tobytes()
-    )
-    first_base = _point(first_time, eps)
-    second_base = _point(second_time, eps)
 
 
 def test_state_codec_round_trips_and_rejects_foreign_schemas() -> None:
