@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -77,6 +78,48 @@ ROOT = Path(__file__).resolve().parents[2]
 _LAW_RTOL = 1.0e-12
 _TRACTION_ATOL = 2.0e-14
 _TANGENT_ATOL = 5.0e-13
+
+
+def _assert_tolerance_branch_has_teeth(bitwise_pin: Callable[..., None]) -> None:
+  one = np.array([1.0])
+  bitwise_pin(
+    np.nextafter(one, 2.0),
+    one,
+    rtol=_LAW_RTOL,
+    atol=_TRACTION_ATOL,
+  )
+  with pytest.raises(AssertionError):
+    bitwise_pin(
+      np.array([1.1]),
+      one,
+      rtol=_LAW_RTOL,
+      atol=_TRACTION_ATOL,
+    )
+
+
+def test_every_incomplete_or_unknown_stack_uses_asserting_tolerance(
+  monkeypatch: pytest.MonkeyPatch,
+  bitwise_pin: Callable[..., None],
+  reference_platform_probe: Callable[[], bool],
+  reference_platform_fingerprint: dict[str, object],
+  platform_fingerprint_override: Callable[[dict[str, object]], None],
+) -> None:
+  for field in reference_platform_fingerprint:
+    for mode in ("missing", "unknown"):
+      fingerprint = dict(reference_platform_fingerprint)
+      if mode == "missing":
+        fingerprint.pop(field)
+      else:
+        fingerprint[field] = "unrecorded test value"
+      platform_fingerprint_override(fingerprint)
+      assert not reference_platform_probe(), f"{mode} fingerprint field: {field}"
+      _assert_tolerance_branch_has_teeth(bitwise_pin)
+
+  # Forced-off validation remains fail-safe even with a complete fingerprint.
+  platform_fingerprint_override(reference_platform_fingerprint)
+  monkeypatch.setenv("PYFEM_TEST_FORCE_OFF_REFERENCE", "1")
+  assert not reference_platform_probe()
+  _assert_tolerance_branch_has_teeth(bitwise_pin)
 
 
 def _legacy_material(law: str) -> object:
@@ -666,7 +709,9 @@ def test_corrected_frame_at_45_degrees_maps_normal_to_normal() -> None:
 # --- tangent honesty: the documented divergence from legacy --------------------
 
 
-def test_exact_tangent_diverges_from_legacy_by_the_frame_terms() -> None:
+def test_exact_tangent_diverges_from_legacy_by_the_frame_terms(
+  bitwise_pin: Callable[..., None],
+) -> None:
   """The M65 tangent-honesty evidence battery, measured on one element.
 
   Legacy omits the frame-motion terms (the survey measured 6e-3..1e-2
@@ -705,12 +750,21 @@ def test_exact_tangent_diverges_from_legacy_by_the_frame_terms() -> None:
 
   legacy_fint, legacy_tangent, _ = _legacy_element_response("XuNeedleman", state, None)
   residual_v3, tangent_v3 = v3_response(state)
-  # Residual parity on the axis-aligned state holds bitwise while the
-  # tangents diverge by the frame terms.
-  np.testing.assert_array_equal(
-    residual_v3.view(np.uint64),
-    legacy_fint.view(np.uint64),
+  # Raw identity holds on the reference platform. Off it, CI run 38023817372
+  # measured 2.22e-16 absolute drift for this law's zero-sensitive traction;
+  # atol=2e-14 gives 90x headroom and rtol=1e-12 exceeds the documented
+  # 7.1e-15 relative drift class by >100x, while the tangents diverge by the
+  # frame terms.
+  bitwise_pin(
+    residual_v3,
+    legacy_fint,
+    rtol=_LAW_RTOL,
+    atol=_TRACTION_ATOL,
   )
+  tampered = residual_v3.copy()
+  tampered[0] += 1.0e-9
+  with pytest.raises(AssertionError):
+    bitwise_pin(tampered, legacy_fint, rtol=_LAW_RTOL, atol=_TRACTION_ATOL)
   step = 1.0e-7
   fd_legacy = np.zeros((8, 8))
   fd_v3 = np.zeros((8, 8))
