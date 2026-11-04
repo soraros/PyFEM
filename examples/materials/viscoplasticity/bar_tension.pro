@@ -25,14 +25,13 @@
 ############################################################################
 
 #
-# Example: Rate-dependent viscoplastic bar in tension
+# Example: legacy ViscoPlasticity notched bar in tension
 #
-# This example demonstrates the rate-dependent behavior of a viscoplastic
-# material. A notched bar is subjected to tension with different loading rates.
-# The viscoplastic model shows that higher loading rates result in higher
-# peak stresses before plastic flow occurs.
-#
-# The Perzyna overstress model is used to capture the rate dependency.
+# Compatibility warning: this legacy material's converged residual is
+# rate-independent J2 consistency plasticity. gamma, n, and dtime only seed a
+# discarded initial guess; positive-time schedules cannot demonstrate physical
+# rate dependence. The separate v3 backward-euler-perzyna law implements true
+# rate physics without changing this deck's meaning.
 #
 
 input = "bar_tension.dat";
@@ -65,7 +64,7 @@ solver =
   
   maxCycle = 50;
   
-  # Time stepping for rate-dependent loading
+  # Advancing time opens the legacy gate; it does not introduce rate physics
   tmax = 1.0;
   dtime = 0.02;
 };

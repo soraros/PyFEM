@@ -64,7 +64,12 @@ divergence records are retained in the kernel modules. The sixth is the fresh
 ``crystal-plasticity`` law: complete 12-system FCC or BCC slip families,
 current-iterate saturation hardening, 55-float rows, a parameter-dependent
 ``tau0`` initial state, and the derived ``dtime`` signal binding. Its measured
-general multislip tangent is ``algorithmic-nonsymmetric``.
+general multislip tangent is ``algorithmic-nonsymmetric``. The distinct
+``backward-euler-perzyna`` law adds true rate physics: its converged residual
+contains the implicit Perzyna overstress rate, its 13-float rows need no
+absolute-time slot because it uses the derived ``dtime`` binding, and its
+consistent tangent is ``algorithmic-symmetric``. It does not alter the legacy
+``perzyna-viscoplasticity`` descriptor or deck meaning.
 
 - ``total-lagrangian-continuum``: the finite-strain slice (serendipity-quad8
   only): one node displacement field and the plane-stress
@@ -168,6 +173,10 @@ from pyfem.v3.materials.isotropic_hardening_plasticity import (
   ISOTROPIC_HARDENING_PLASTICITY_BINDING,
   isotropic_hardening_plasticity_metadata,
 )
+from pyfem.v3.materials.perzyna_backward_euler import (
+  BACKWARD_EULER_PERZYNA_BINDING,
+  backward_euler_perzyna_metadata,
+)
 from pyfem.v3.materials.perzyna_viscoplasticity import (
   PERZYNA_VISCOPLASTICITY_BINDING,
   perzyna_viscoplasticity_metadata,
@@ -249,6 +258,10 @@ PLASTIC_MATERIAL_KEY: RegistryKey = ("material", "isotropic-hardening-plasticity
 DAMAGE_MATERIAL_KEY: RegistryKey = ("material", "plane-strain-damage")
 VISCOELASTIC_MATERIAL_KEY: RegistryKey = ("material", "prony-viscoelasticity")
 VISCOPLASTIC_MATERIAL_KEY: RegistryKey = ("material", "perzyna-viscoplasticity")
+BACKWARD_EULER_PERZYNA_MATERIAL_KEY: RegistryKey = (
+  "material",
+  "backward-euler-perzyna",
+)
 SOVS_MATERIAL_KEY: RegistryKey = ("material", "skorohod-olevsky")
 CRYSTAL_MATERIAL_KEY: RegistryKey = ("material", "crystal-plasticity")
 _PARAMETER_NAMES = ("youngs_modulus", "poisson_ratio")
@@ -1744,6 +1757,8 @@ def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
     return prony_viscoelasticity_metadata()
   if key == VISCOPLASTIC_MATERIAL_KEY:
     return perzyna_viscoplasticity_metadata()
+  if key == BACKWARD_EULER_PERZYNA_MATERIAL_KEY:
+    return backward_euler_perzyna_metadata()
   if key == SOVS_MATERIAL_KEY:
     return skorohod_olevsky_metadata()
   if key == CRYSTAL_MATERIAL_KEY:
@@ -1958,6 +1973,23 @@ def viscoplasticity_reference_registry() -> dict[RegistryKey, RegistryDescriptor
     implementation_id="pyfem-v3-perzyna-viscoplasticity-v1",
     metadata=perzyna_viscoplasticity_metadata(),
     binding=PERZYNA_VISCOPLASTICITY_BINDING,
+  )
+  registry[descriptor.key] = descriptor
+  return registry
+
+
+def backward_euler_perzyna_reference_registry() -> dict[
+  RegistryKey, RegistryDescriptor
+]:
+  """Build the Q8 registry plus the distinct true implicit Perzyna law."""
+  registry = dict(q8_reference_registry())
+  descriptor = RegistryDescriptor(
+    kind=BACKWARD_EULER_PERZYNA_MATERIAL_KEY[0],
+    name=BACKWARD_EULER_PERZYNA_MATERIAL_KEY[1],
+    version="1",
+    implementation_id="pyfem-v3-backward-euler-perzyna-v1",
+    metadata=backward_euler_perzyna_metadata(),
+    binding=BACKWARD_EULER_PERZYNA_BINDING,
   )
   registry[descriptor.key] = descriptor
   return registry

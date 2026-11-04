@@ -23,10 +23,9 @@ rate effect is the ``dtime > 0`` gate (ViscoPlasticity.py:205): a supra-yield
 step at constant or backward time returns the elastic trial response above
 the yield surface — pinned as oracle behavior here and end-to-end through
 the driver. The legacy docstring's backward-Euler/Perzyna claims and the
-example README's rate-dependence promises
-(examples/materials/viscoplasticity/README.md:39-55) are false for the
-implemented map; a true-Perzyna rate law is a deferred v2 feature, not this
-migration.
+historical example README's rate-dependence promises are false for the
+implemented map. The separate ``backward-euler-perzyna`` battery below adds
+true rate physics without changing this legacy parity oracle.
 
 The tangent relationship is parity-where-repaired (the M55/l2 flip
 precedent). The legacy coded tangent used to add a spurious ``rate_factor``
@@ -84,7 +83,10 @@ if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
 from pyfem.materials.ViscoPlasticity import ViscoPlasticity
+from pyfem.v3 import authoring
 from pyfem.v3.compile.continuum import (
+  BACKWARD_EULER_PERZYNA_MATERIAL_KEY,
+  backward_euler_perzyna_reference_registry,
   q8_reference_registry,
   viscoplasticity_reference_registry,
 )
@@ -102,6 +104,13 @@ from pyfem.v3.driver import (
   DriverStatus,
   NonlinearStaticDriver,
   evaluate_signals,
+)
+from pyfem.v3.materials.perzyna_backward_euler import (
+  BACKWARD_EULER_PERZYNA_BINDING,
+  backward_euler_perzyna_calibration,
+  backward_euler_perzyna_initial_state,
+  backward_euler_perzyna_kernel,
+  backward_euler_perzyna_metadata,
 )
 from pyfem.v3.materials.perzyna_viscoplasticity import (
   PERZYNA_VISCOPLASTICITY_BINDING,
@@ -1364,3 +1373,466 @@ def test_state_codec_round_trips_and_rejects_foreign_schemas() -> None:
   )
   with pytest.raises(StateCodecError):
     owner.decode_state(layout.block_id, payload.replace(b"kappa:1", b"kappa:2"))
+
+
+# --- distinct true backward-Euler Perzyna law -------------------------------------
+
+_BE_ROW_WIDTH = 13
+_BE_STRAIN = np.array([0.004, -0.0003, 0.0002, 0.0004, -0.0002, 0.003])
+_BE_DTIME = 0.2
+
+
+def _be_calibration(
+  *,
+  gamma: float = 0.05,
+  exponent: float = 1.0,
+  hardening: float = _HARD,
+) -> np.ndarray:
+  return backward_euler_perzyna_calibration(
+    _E, _NU, _SYIELD, hardening, gamma, exponent
+  )
+
+
+def _be_signal(dtime: float) -> StatefulContinuumSignalInput:
+  return StatefulContinuumSignalInput(
+    port_id="dtime",
+    values=np.array([dtime], dtype=np.float64),
+    derivatives=(
+      StatefulContinuumSignalDerivative("time", np.array([1.0], dtype=np.float64)),
+    ),
+  )
+
+
+def _be_step(
+  calibration: np.ndarray,
+  rows: np.ndarray,
+  strain: np.ndarray,
+  dtime: float = _BE_DTIME,
+) -> StatefulContinuumKernelResult:
+  result = backward_euler_perzyna_kernel(
+    np.asarray(strain, dtype=np.float64)[None, :],
+    rows,
+    calibration,
+    (_be_signal(dtime),),
+  )
+  assert result.status is EvaluationStatus.OK
+  return result
+
+
+def test_backward_euler_perzyna_matches_scalar_bisection_and_central_fd() -> None:
+  """Independent scalar roots and full 6-Voigt FDs convict the implementation.
+
+  The residual and bisection below are written independently of the production
+  return-map helper. All probes are safely inside the active overstress branch,
+  away from both the elastic and zero-overstress kinks. Measured on this
+  platform: worst equivalent-strain root deviation 2.86e-14 relative (n=2,
+  hard=1000), worst tangent deviation 3.24e-11 relative of max|FD| (n=0.7,
+  hard=1000), using central h=1e-7.
+  """
+  worst_oracle = 0.0
+  worst_fd = 0.0
+  for exponent in (0.7, 1.0, 2.0):
+    for hardening in (0.0, _HARD):
+      calibration = _be_calibration(exponent=exponent, hardening=hardening)
+      rows = np.zeros((1, _BE_ROW_WIDTH))
+      result = _be_step(calibration, rows, _BE_STRAIN)
+      increment = float(result.trial_rows[0, 12])
+      assert increment > 0.0
+      eg3 = calibration[2]
+      elastic = calibration[10:46].reshape(6, 6)
+      trial_stress = elastic @ _BE_STRAIN
+      trial_mises = _von_mises(trial_stress)
+      stiffness = eg3 + hardening
+
+      def residual(value: float) -> float:
+        overstress = max(trial_mises - stiffness * value - _SYIELD, 0.0)
+        current_yield = _SYIELD + hardening * value
+        rate = 0.05 * _BE_DTIME * (overstress / current_yield) ** exponent
+        return value - rate
+
+      lower = 0.0
+      upper = (trial_mises - _SYIELD) / stiffness
+      assert residual(lower) < 0.0 < residual(upper)
+      for _ in range(200):
+        midpoint = 0.5 * (lower + upper)
+        if residual(midpoint) > 0.0:
+          upper = midpoint
+        else:
+          lower = midpoint
+      oracle = 0.5 * (lower + upper)
+      oracle_deviation = abs(increment - oracle) / oracle
+      worst_oracle = max(worst_oracle, oracle_deviation)
+      assert oracle_deviation < 1.0e-11, (exponent, hardening, oracle_deviation)
+
+      hydrostatic = np.sum(trial_stress[:3]) / 3.0
+      flow = np.array(trial_stress, copy=True)
+      flow[:3] -= hydrostatic
+      flow /= trial_mises
+      oracle_stress = flow * (trial_mises - eg3 * oracle)
+      oracle_stress[:3] += hydrostatic
+      np.testing.assert_allclose(
+        result.stresses[0], oracle_stress, rtol=2.0e-11, atol=2.0e-9
+      )
+
+      fd = np.empty((6, 6))
+      step = 1.0e-7
+      for component in range(6):
+        delta = np.zeros(6)
+        delta[component] = step
+        plus = _be_step(calibration, rows, _BE_STRAIN + delta).stresses[0]
+        minus = _be_step(calibration, rows, _BE_STRAIN - delta).stresses[0]
+        fd[:, component] = (plus - minus) / (2.0 * step)
+      scale = float(np.max(np.abs(fd)))
+      fd_deviation = float(np.max(np.abs(fd - result.tangents[0]))) / scale
+      worst_fd = max(worst_fd, fd_deviation)
+      assert fd_deviation < 1.0e-8, (exponent, hardening, fd_deviation)
+      assert float(np.max(np.abs(result.tangents[0] - result.tangents[0].T))) == 0.0
+  assert worst_oracle < 1.0e-11
+  assert worst_fd < 1.0e-8
+
+
+def test_backward_euler_perzyna_symbolic_implicit_derivative() -> None:
+  """Sympy differentiates the cited scalar residual and radial stress map."""
+  import sympy as sp
+
+  calibration = _be_calibration()
+  result = _be_step(calibration, np.zeros((1, _BE_ROW_WIDTH)), _BE_STRAIN)
+  increment = float(result.trial_rows[0, 12])
+  eg3 = calibration[2]
+  elastic = calibration[10:46].reshape(6, 6)
+  eps = sp.Matrix(sp.symbols("e0:6"))
+  lam = sp.symbols("lambda_p")
+  trial = sp.Matrix(elastic) * eps
+  trial_mises = sp.sqrt(
+    (
+      (trial[0] - trial[1]) ** 2
+      + (trial[1] - trial[2]) ** 2
+      + (trial[2] - trial[0]) ** 2
+      + 6.0 * (trial[3] ** 2 + trial[4] ** 2 + trial[5] ** 2)
+    )
+    / 2.0
+  )
+  current_yield = _SYIELD + _HARD * lam
+  mises = trial_mises - eg3 * lam
+  residual = lam - 0.05 * _BE_DTIME * (mises - current_yield) / current_yield
+  hydrostatic = (trial[0] + trial[1] + trial[2]) / 3.0
+  flow = (trial - hydrostatic * sp.Matrix([1, 1, 1, 0, 0, 0])) / trial_mises
+  sigma = mises * flow + hydrostatic * sp.Matrix([1, 1, 1, 0, 0, 0])
+  lambda_gradient = -sp.Matrix([sp.diff(residual, item) for item in eps]) / sp.diff(
+    residual, lam
+  )
+  jacobian = sigma.jacobian(eps) + sp.diff(sigma, lam) * lambda_gradient.T
+  substitutions = {f"e{index}": float(_BE_STRAIN[index]) for index in range(6)}
+  substitutions[lam] = increment
+  numeric = np.asarray(jacobian.subs(substitutions), dtype=np.float64)
+  scale = float(np.max(np.abs(numeric)))
+  deviation = float(np.max(np.abs(numeric - result.tangents[0]))) / scale
+  assert deviation < 1.0e-9, deviation
+
+
+def test_backward_euler_perzyna_elastic_and_rate_independent_limits() -> None:
+  rows = np.zeros((1, _BE_ROW_WIDTH))
+  calibration = _be_calibration()
+  elastic = calibration[10:46].reshape(6, 6)
+  virgin = _be_step(calibration, rows, np.zeros(6), 0.0)
+  assert np.array_equal(virgin.trial_rows, rows)
+  assert np.array_equal(virgin.tangents[0], elastic)
+
+  subyield_strain = np.array([0.0002, 0.0, 0.0, 0.0, 0.0, 0.0])
+  subyield = _be_step(calibration, rows, subyield_strain)
+  assert np.array_equal(subyield.stresses[0], elastic @ subyield_strain)
+  assert subyield.trial_rows[0, 12] == 0.0
+
+  above_yield = np.array([0.004, 0.0, 0.0, 0.0, 0.0, 0.0])
+  held_time = _be_step(calibration, rows, above_yield, 0.0)
+  assert np.array_equal(held_time.stresses[0], elastic @ above_yield)
+  assert np.array_equal(held_time.tangents[0], elastic)
+  assert held_time.trial_rows[0, 12] == 0.0
+  nearly_inviscid = _be_step(_be_calibration(gamma=1.0e-16), rows, above_yield, 1.0)
+  np.testing.assert_allclose(
+    nearly_inviscid.stresses[0], elastic @ above_yield, rtol=1.0e-12, atol=1.0e-8
+  )
+
+  nearly_rate_independent = _be_step(
+    _be_calibration(gamma=1.0e8), rows, above_yield, 1.0
+  )
+  trial_mises = _von_mises(elastic @ above_yield)
+  consistency_increment = (trial_mises - _SYIELD) / (calibration[2] + _HARD)
+  increment_deviation = (
+    abs(nearly_rate_independent.trial_rows[0, 12] - consistency_increment)
+    / consistency_increment
+  )
+  assert increment_deviation < 2.0e-10  # measured 1.09e-11
+  legacy = _v3_step(
+    perzyna_viscoplasticity_calibration(_E, _NU, _SYIELD, _HARD, _GAMMA, _N),
+    np.zeros((1, 14)),
+    above_yield,
+    1.0,
+  )
+  stress_deviation = float(
+    np.max(np.abs(nearly_rate_independent.stresses[0] - legacy.stresses[0]))
+  ) / float(np.max(np.abs(legacy.stresses[0])))
+  assert stress_deviation < 1.0e-9  # measured 3.16e-12
+
+
+def test_legacy_gamma_invariance_negative_control_for_true_rate_physics() -> None:
+  strain = np.array([0.004, 0.0, 0.0, 0.0, 0.0, 0.0])
+  legacy_results = []
+  rate_results = []
+  for gamma, exponent in ((1.0e-4, 1.0), (1.0e2, 2.0)):
+    legacy_results.append(
+      _v3_step(
+        perzyna_viscoplasticity_calibration(_E, _NU, _SYIELD, _HARD, gamma, exponent),
+        np.zeros((1, 14)),
+        strain,
+        0.2,
+      )
+    )
+    rate_results.append(
+      _be_step(
+        _be_calibration(gamma=gamma, exponent=exponent),
+        np.zeros((1, _BE_ROW_WIDTH)),
+        strain,
+      )
+    )
+  np.testing.assert_allclose(
+    legacy_results[0].stresses[0],
+    legacy_results[1].stresses[0],
+    rtol=1.0e-8,
+    atol=1.0e-8,
+  )
+  assert not np.allclose(
+    rate_results[0].stresses[0], rate_results[1].stresses[0], rtol=1.0e-3
+  )
+  assert _von_mises(rate_results[1].stresses[0]) < _von_mises(
+    rate_results[0].stresses[0]
+  )
+  assert BACKWARD_EULER_PERZYNA_MATERIAL_KEY[1] == "backward-euler-perzyna"
+  assert BACKWARD_EULER_PERZYNA_MATERIAL_KEY[1] != "perzyna-viscoplasticity"
+
+
+def test_backward_euler_perzyna_calibration_state_and_typed_rejections() -> None:
+  with pytest.raises(TypeError, match="exact float"):
+    backward_euler_perzyna_calibration(200000, _NU, _SYIELD, _HARD, 0.05, 1.0)
+  with pytest.raises(ValueError, match="fluidity must be positive"):
+    _be_calibration(gamma=0.0)
+  with pytest.raises(ValueError, match="rate_exponent must be positive"):
+    _be_calibration(exponent=0.0)
+  with pytest.raises(TypeError, match="exactly six"):
+    BACKWARD_EULER_PERZYNA_BINDING(_E, _NU, _SYIELD, _HARD, 0.05)
+
+  metadata = backward_euler_perzyna_metadata()
+  assert validate_stateful_material_metadata(metadata) is metadata
+  slots = resolve_material_state_slots(
+    metadata["state_slots"],
+    {
+      "youngs_modulus": _E,
+      "poisson_ratio": _NU,
+      "initial_yield_stress": _SYIELD,
+      "hardening_slope": _HARD,
+      "fluidity": 0.05,
+      "rate_exponent": 1.0,
+    },
+  )
+  assert [slot.name for slot in slots] == ["epsilon_e", "epsilon_p", "kappa"]
+  assert [slot.width for slot in slots] == [6, 6, 1]
+  assert slots[2].annotation == "monotone-nondecreasing"
+
+  calibration = _be_calibration()
+  rows = np.zeros((1, _BE_ROW_WIDTH))
+  rows_before = rows.copy()
+  accepted = _be_step(calibration, rows, _BE_STRAIN).trial_rows
+  accepted_before = accepted.copy()
+  assert np.array_equal(rows, rows_before)
+  for bad_strain, bad_time in (
+    (np.full(6, np.inf), _BE_DTIME),
+    (_BE_STRAIN, np.nan),
+    (_BE_STRAIN, -_BE_DTIME),
+  ):
+    rejected = backward_euler_perzyna_kernel(
+      bad_strain[None, :], accepted, calibration, (_be_signal(bad_time),)
+    )
+    assert rejected.status is EvaluationStatus.REJECT_STEP
+    assert rejected.trial_rows.tobytes() == accepted.tobytes()
+    assert np.array_equal(accepted, accepted_before)
+
+
+def _be_model() -> ModelSpec:
+  base = _vp_model()
+  legacy = base.materials[0]
+  material = MaterialSpec(
+    id="steel",
+    model="backward-euler-perzyna",
+    parameters=legacy.parameters,
+    source=_source("backward-euler-material"),
+  )
+  return ModelSpec(
+    mesh=base.mesh,
+    fields=base.fields,
+    materials=(material,),
+    regions=base.regions,
+    source=_source("backward-euler-model"),
+  )
+
+
+def _be_driver() -> NonlinearStaticDriver:
+  model = _be_model()
+  parameters = tuple(item.value for item in model.materials[0].parameters)
+  assert parameters == (_E, _NU, _SYIELD, _HARD, _GAMMA, _N)
+  return _ramp_driver(model, backward_euler_perzyna_reference_registry())
+
+
+def _be_stresses(driver: NonlinearStaticDriver) -> np.ndarray:
+  layout = driver.owner.system.operators[0].header.state_layout
+  rows = driver.owner.accepted_state(layout.block_id).values
+  elastic = (
+    driver.owner.system.operators[0].payload.calibration.values[10:46].reshape(6, 6)
+  )
+  return np.einsum("ab,eb->ea", elastic, rows[:, :6], optimize=True)
+
+
+def _be_overstress(driver: NonlinearStaticDriver) -> np.ndarray:
+  layout = driver.owner.system.operators[0].header.state_layout
+  rows = driver.owner.accepted_state(layout.block_id).values
+  stresses = _be_stresses(driver)
+  return np.array(
+    [
+      _von_mises(stress) - _SYIELD - _HARD * row[12]
+      for stress, row in zip(stresses, rows)
+    ]
+  )
+
+
+def _be_owner_snapshot(driver: NonlinearStaticDriver) -> tuple[object, ...]:
+  owner = driver.owner
+  return (
+    owner.accepted_physical().values.tobytes(),
+    owner.generation.ordinal,
+    owner.history,
+    tuple((block, owner.encode_state(block)) for block in owner.block_ids),
+  )
+
+
+def test_backward_euler_perzyna_authoring_registration_and_derived_dtime() -> None:
+  material = authoring.backward_euler_perzyna(
+    _E, _NU, _SYIELD, _HARD, _GAMMA, _N, id="steel"
+  )
+  model = authoring.small_strain_continuum(authoring.quad8_patch(), material=material)
+  default = authoring.compile(model)
+  explicit = authoring.compile(model, authoring.backward_euler_perzyna_registry())
+  assert default.content_fingerprint == explicit.content_fingerprint
+  layout = default.operators[0].header.state_layout
+  assert layout.row_shape == (9, _BE_ROW_WIDTH)
+  assert layout.schema == (
+    "pyfem-v3-backward-euler-perzyna-state-v1|epsilon_e:6,epsilon_p:6,kappa:1"
+  )
+  assert layout.initial_rows is not None
+  assert np.all(layout.initial_rows.values == 0.0)
+  parameters = (_E, _NU, _SYIELD, _HARD, _GAMMA, _N)
+  assert np.array_equal(
+    backward_euler_perzyna_initial_state(parameters, layout),
+    layout.initial_rows.values,
+  )
+  law = authoring.backward_euler_perzyna_law(
+    BACKWARD_EULER_PERZYNA_BINDING, implementation_id="student-be-perzyna-v1"
+  )
+  assert law.key == BACKWARD_EULER_PERZYNA_MATERIAL_KEY
+  replaced = authoring.backward_euler_perzyna_registry(material=law)
+  assert replaced[law.key].implementation_id == "student-be-perzyna-v1"
+
+  driver = _be_driver()
+  assert driver.plan.requires_committed_point
+  (port,) = driver.plan.signal_slices[0]
+  assert port.port_id == port.signal_id == "dtime"
+  assert port.binding == "increment"
+  signal = evaluate_signals(driver.plan, _point(0.35, 0.004), _point(0.1, 0.003))[0][0]
+  np.testing.assert_allclose(signal.values.values, [0.25], rtol=0.0, atol=1.0e-16)
+
+
+def test_backward_euler_perzyna_q8_fast_loading_has_higher_overstress() -> None:
+  """Displacement-controlled Q8: the fast schedule is exactly 100x faster."""
+  fast = _be_driver()
+  slow = _be_driver()
+  fast_base = _point(0.0, 0.0)
+  slow_base = _point(0.0, 0.0)
+  fast_result = slow_result = None
+  for index, eps in enumerate((2.0e-4, 2.0e-3, 4.0e-3), 1):
+    fast_point = _point(0.01 * index, eps)
+    slow_point = _point(1.0 * index, eps)
+    fast_result = fast.run(base_point=fast_base, target_points=(fast_point,))
+    slow_result = slow.run(base_point=slow_base, target_points=(slow_point,))
+    assert fast_result.status is DriverStatus.COMPLETED
+    assert slow_result.status is DriverStatus.COMPLETED
+    fast_base = fast_point
+    slow_base = slow_point
+  assert fast_result is not None and slow_result is not None
+  fast_overstress = _be_overstress(fast)
+  slow_overstress = _be_overstress(slow)
+  assert np.all(slow_overstress > 0.0)
+  assert np.all(fast_overstress > slow_overstress)
+  assert np.linalg.norm(fast_result.records[-1].observation.reactions.values) > (
+    np.linalg.norm(slow_result.records[-1].observation.reactions.values)
+  )
+  fast_layout = fast.owner.system.operators[0].header.state_layout
+  slow_layout = slow.owner.system.operators[0].header.state_layout
+  fast_rows = fast.owner.accepted_state(fast_layout.block_id).values
+  slow_rows = slow.owner.accepted_state(slow_layout.block_id).values
+  assert np.all(fast_rows[:, 12] < slow_rows[:, 12])
+
+  loaded = slow_rows.copy()
+  unloaded_result = slow.run(base_point=slow_base, target_points=(_point(4.0, 2.0e-3),))
+  assert unloaded_result.status is DriverStatus.COMPLETED
+  unloaded = slow.owner.accepted_state(slow_layout.block_id).values
+  assert np.array_equal(unloaded[:, 6:13], loaded[:, 6:13])
+  assert np.all(_be_overstress(slow) <= 1.0e-7)
+  reloaded_result = slow.run(
+    base_point=_point(4.0, 2.0e-3), target_points=(_point(5.0, 4.5e-3),)
+  )
+  assert reloaded_result.status is DriverStatus.COMPLETED
+  reloaded = slow.owner.accepted_state(slow_layout.block_id).values
+  assert np.all(reloaded[:, 12] > loaded[:, 12])
+
+
+def test_backward_euler_perzyna_rejected_trial_preserves_committed_bytes() -> None:
+  driver = _be_driver()
+  loaded = driver.run(base_point=_point(0.0, 0.0), target_points=(_point(1.0, 4.0e-3),))
+  assert loaded.status is DriverStatus.COMPLETED
+  before = _be_owner_snapshot(driver)
+  rejected = driver.run(
+    base_point=_point(1.0, 4.0e-3), target_points=(_point(0.5, 4.5e-3),)
+  )
+  assert rejected.status is DriverStatus.STEP_FAILED
+  assert rejected.statistics.rejected_substep_count > 0
+  assert _be_owner_snapshot(driver) == before
+
+
+def test_backward_euler_perzyna_uninterrupted_and_restart_are_byte_equivalent() -> None:
+  points = (
+    _point(0.01, 2.0e-4),
+    _point(0.10, 2.0e-3),
+    _point(0.20, 4.0e-3),
+    _point(0.30, 3.0e-3),
+  )
+  uninterrupted = _be_driver()
+  uninterrupted_result = uninterrupted.run(
+    base_point=_point(0.0, 0.0), target_points=points
+  )
+  assert uninterrupted_result.status is DriverStatus.COMPLETED
+
+  restarted = _be_driver()
+  first = restarted.run(base_point=_point(0.0, 0.0), target_points=points[:2])
+  assert first.status is DriverStatus.COMPLETED
+  second = restarted.run(base_point=points[1], target_points=points[2:])
+  assert second.status is DriverStatus.COMPLETED
+  for block in uninterrupted.owner.block_ids:
+    assert uninterrupted.owner.encode_state(block) == restarted.owner.encode_state(
+      block
+    )
+  assert (
+    uninterrupted.owner.accepted_physical().values.tobytes()
+    == restarted.owner.accepted_physical().values.tobytes()
+  )
+  assert (
+    uninterrupted_result.records[-1].observation.reactions.values.tobytes()
+    == second.records[-1].observation.reactions.values.tobytes()
+  )

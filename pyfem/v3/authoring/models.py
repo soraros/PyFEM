@@ -152,7 +152,8 @@ def small_strain_continuum(
   elastic ``linear_elastic(E, nu)`` slice or a stateful slice
   (``plasticity(E, nu, syield, hard)``, ``damage(E, nu, kappa0, kappac,
   k)``, ``prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last)``,
-  ``viscoplasticity(E, nu, syield, hard, gamma, n)``, or
+  ``viscoplasticity(E, nu, syield, hard, gamma, n)``,
+  ``backward_euler_perzyna(E, nu, syield, hard, gamma, n)``, or
   ``skorohod_olevsky(eta0, Q, T, rho0, sigma_sint, R, n_vol, n_shear)``); a
   stateful law authors exactly like an elastic one.
   """
@@ -174,13 +175,15 @@ def small_strain_continuum(
       "plane-strain-damage",
       "prony-viscoelasticity",
       "perzyna-viscoplasticity",
+      "backward-euler-perzyna",
       "skorohod-olevsky",
     ),
     helper=(
       "linear_elastic(E, nu), plasticity(E, nu, syield, hard), "
       "damage(E, nu, kappa0, kappac, k), "
       "prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last), "
-      "viscoplasticity(E, nu, syield, hard, gamma, n), or "
+      "viscoplasticity(E, nu, syield, hard, gamma, n), "
+      "backward_euler_perzyna(E, nu, syield, hard, gamma, n), or "
       "skorohod_olevsky(eta0, Q, T, rho0, sigma_sint, R, n_vol, n_shear)"
     ),
   )

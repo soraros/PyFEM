@@ -70,6 +70,7 @@ from pyfem.v3.authoring.interfaces import (
   xu_needleman,
 )
 from pyfem.v3.authoring.materials import (
+  backward_euler_perzyna,
   damage,
   linear_elastic,
   plasticity,
@@ -82,6 +83,8 @@ from pyfem.v3.authoring.mesh import line2_mesh, quad8_mesh, quad8_patch
 from pyfem.v3.authoring.models import small_strain_continuum, truss
 from pyfem.v3.authoring.program import fixed, nodal_load
 from pyfem.v3.authoring.registry import (
+  backward_euler_perzyna_law,
+  backward_euler_perzyna_registry,
   check_registry,
   damage_law,
   damage_registry,
@@ -131,6 +134,9 @@ __all__ = [
   "StateSnapshot",
   "StateTrial",
   "SubstepStatus",
+  "backward_euler_perzyna",
+  "backward_euler_perzyna_law",
+  "backward_euler_perzyna_registry",
   "check_registry",
   "compile",
   "damage",

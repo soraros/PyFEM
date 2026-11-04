@@ -1,122 +1,97 @@
 # Viscoplastic Material Example
 
-## Overview
+## What the shipped deck actually demonstrates
 
-This example demonstrates rate-dependent plastic behavior using the `ViscoPlasticity` material model based on the Perzyna overstress formulation.
+`bar_tension.pro` exercises the legacy `ViscoPlasticity` material on a notched
+bar in tension. Despite the historical Perzyna branding, **this deck's
+implemented constitutive map is rate-independent J2 plasticity with isotropic
+linear hardening and a `dtime > 0` gate**. It must not be used as evidence of
+rate-dependent yielding.
 
-## Problem Description
+The local legacy residual is
 
-A notched bar in tension is simulated where:
-- The bar has a geometric notch creating stress concentration
-- The material exhibits rate-dependent yielding
-- Higher loading rates result in higher apparent yield stress
-- Plastic deformation localizes at the notch
-
-## Material Model
-
-The `ViscoPlasticity` model uses Perzyna overstress theory:
-
-```
-d(εᵖ)/dt = γ × <(σ_vm - σ_y)/σ_y>ⁿ × N
+```text
+σ_vm,trial − 3G Δκ − (syield + hard (κ_n + Δκ)) = 0.
 ```
 
-where:
-- γ: fluidity parameter (controls rate sensitivity)
-- σ_vm: von Mises stress
-- σ_y: current yield stress (with hardening)
-- n: rate sensitivity exponent
-- N: flow direction (normal to yield surface)
+Neither `gamma`, `n`, nor `dtime` occurs in that residual. They only seed a
+Newton initial guess that the linear solve discards. Consequently:
 
-### Material Parameters
+- all schedules with positive time increments give the same converged stress,
+  apart from Newton-tolerance roundoff;
+- changing `gamma` or `n` does not calibrate rate physics;
+- a supra-yield step at constant or backward time takes the gate and commits
+  the elastic trial response above yield, with plastic state frozen;
+- the deck cannot show “fast loading → higher peak stress”.
 
-- **E = 200000.0**: Young's modulus (MPa) - typical for steel
-- **nu = 0.3**: Poisson's ratio
-- **syield = 250.0**: Initial yield stress (MPa)
-- **hard = 1000.0**: Linear hardening modulus (MPa)
-- **gamma = 0.001**: Fluidity parameter (1/MPa/s)
-- **n = 1.0**: Rate sensitivity exponent (linear viscosity)
+The old Perzyna equation and rate-dependent claims formerly shown in this
+README described the intended branding, not the algorithm in the deck.
 
-## Expected Behavior
+## Problem and material data
 
-1. **Elastic loading**: Initially, the material responds elastically
-2. **Rate-dependent yielding**: When stress exceeds yield, plastic flow rate depends on:
-   - Magnitude of overstress (σ - σ_y)
-   - Loading rate (through time step and gamma)
-3. **Stress concentration**: Maximum stress and plastic strain occur at the notch
-4. **Hardening**: Yield stress increases with plastic deformation
-5. **Smooth transition**: No sharp yield point - gradual onset of plasticity
+The bar has length 8.0, width 0.5 (0.45 at the notch), thickness 0.2, and a
+0.05-deep central notch. The material parameters are:
 
-## Physical Interpretation
+- `E = 200000.0`: Young's modulus;
+- `nu = 0.3`: Poisson's ratio;
+- `syield = 250.0`: initial von Mises yield stress;
+- `hard = 1000.0`: linear isotropic hardening slope;
+- `gamma = 0.001`, `n = 1.0`: numerically inert converged-map parameters in
+  this legacy material, retained to preserve the deck's meaning.
 
-### Rate Dependency
-- **Fast loading** (small dtime): Material appears stiffer, higher peak stress
-- **Slow loading** (large dtime): More plastic flow, lower peak stress
-- **gamma → 0**: Approaches rate-independent plasticity
-- **gamma → ∞**: Approaches viscous flow
-
-### Applications
-This model is relevant for:
-- **Metals at high strain rates**: Impact, crash simulations
-- **Polymers**: Highly rate-dependent behavior
-- **High temperature metals**: Creep and viscoplasticity
-- **Numerical regularization**: Avoiding mesh-dependent localization
-
-## Running the Example
+Run the legacy example headlessly with:
 
 ```bash
-pyfem bar_tension.pro
+MPLBACKEND=Agg pyfem bar_tension.pro
 ```
 
-## Output
+`GraphWriter` records time, horizontal displacement at node 17, reaction at
+the loaded nodes, and equivalent plastic strain at the notch. Stress and
+plastic strain concentrate at the notch; the response is elastic below yield
+and follows rate-independent J2 hardening above it whenever time advances.
 
-The GraphWriter module tracks:
-- **time**: Simulation time
-- **disp**: Horizontal displacement at the right end (node 17)
-- **load**: Total reaction force at loaded nodes
-- **plastic**: Equivalent plastic strain at the notch (node 8)
+## True backward-Euler Perzyna physics in v3
 
-## Geometry Details
+The separate v3 material key **`backward-euler-perzyna`** implements the
+actual implicit rate law without changing this legacy deck or the
+legacy-mapped v3 key `perzyna-viscoplasticity`:
 
-The notched bar has:
-- Length: 8.0 units
-- Width: 0.5 units (0.45 at notch)
-- Thickness: 0.2 units
-- Notch location: Center (x = 3.5-4.0)
-- Notch depth: 0.05 units (10% width reduction)
+```python
+from pyfem.v3 import authoring
 
-## Variations to Try
+material = authoring.backward_euler_perzyna(
+  200000.0, 0.3, 250.0, 1000.0, 0.001, 1.0
+)
+model = authoring.small_strain_continuum(
+  authoring.quad8_patch(), material=material
+)
+system = authoring.compile(model)
+```
 
-1. **Different loading rates**:
-   ```
-   dtime = 0.001;  # Fast loading - higher peak stress
-   dtime = 0.1;    # Slow loading - more creep
-   ```
+Its equivalent viscoplastic strain rate is
 
-2. **Rate sensitivity exponent**:
-   ```
-   n = 2.0;  # More rate-sensitive at high overstress
-   n = 0.5;  # Less rate-sensitive
-   ```
+```text
+κ̇ = gamma <(σ_vm − σ_y(κ))/σ_y(κ)>^n,
+σ_y(κ) = syield + hard κ.
+```
 
-3. **Fluidity parameter**:
-   ```
-   gamma = 0.0001;  # Less viscous, closer to rate-independent
-   gamma = 0.01;    # More viscous, significant rate effects
-   ```
+A nonlinear static program must declare a `time` coordinate. The driver derives
+`dtime` from the previous committed program point, and the material solves
 
-4. **Compare with rate-independent**:
-   - Set gamma very small (e.g., 1e-10)
-   - Should match `IsotropicKinematicHardening` results
+```text
+Δκ = gamma Δt <(σ_vm,trial − 3GΔκ − σ_y(κ_n+Δκ))/σ_y(κ_n+Δκ)>^n.
+```
 
-## Understanding the Results
+For the same displacement history, a faster physical schedule has less time
+for viscoplastic flow and therefore carries higher overstress; a slower
+schedule flows more and relaxes toward the yield surface. For this law,
+`gamma Δt → 0` approaches the elastic predictor and `gamma Δt → ∞` approaches
+rate-independent J2 consistency. (The directions formerly printed here were
+incorrect.)
 
-**Load-displacement curve**:
-- Initially linear (elastic)
-- Smooth transition to plastic flow (no sharp yield point)
-- Strain hardening causes rising load
-- Rate effects visible when comparing different dtime values
-
-**Plastic strain distribution**:
-- Localizes at the notch (stress concentration)
-- Gradual spread with continued loading
-- Regularized by viscosity (gamma parameter)
+The Q8 regression `test_backward_euler_perzyna_q8_fast_loading_has_higher_overstress`
+in `test/v3/test_v3_viscoplasticity.py` compares schedules differing by a
+factor of 100 and checks overstress at every integration point. Other tests
+cover unload/reload state, rejected-trial byte identity, and restart
+byte-equivalence. The legacy gamma-invariance test remains as the negative
+control.

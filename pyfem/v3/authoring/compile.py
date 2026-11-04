@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from pyfem.v3.authoring.registry import check_registry
 from pyfem.v3.compile.continuum import (
+  BACKWARD_EULER_PERZYNA_MATERIAL_KEY,
   DAMAGE_MATERIAL_KEY,
   PLASTIC_MATERIAL_KEY,
   SOVS_MATERIAL_KEY,
   VISCOELASTIC_MATERIAL_KEY,
   VISCOPLASTIC_MATERIAL_KEY,
+  backward_euler_perzyna_reference_registry,
   damage_reference_registry,
   plasticity_reference_registry,
   q8_reference_registry,
@@ -42,6 +44,11 @@ def _default_registry(model: ModelSpec) -> dict[RegistryKey, RegistryDescriptor]
     material.model == VISCOPLASTIC_MATERIAL_KEY[1] for material in model.materials
   ):
     return viscoplasticity_reference_registry()
+  if any(
+    material.model == BACKWARD_EULER_PERZYNA_MATERIAL_KEY[1]
+    for material in model.materials
+  ):
+    return backward_euler_perzyna_reference_registry()
   if any(material.model == SOVS_MATERIAL_KEY[1] for material in model.materials):
     return sovs_reference_registry()
   return q8_reference_registry()

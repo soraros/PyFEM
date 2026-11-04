@@ -1,64 +1,145 @@
-# ViscoPlasticity
+# Viscoplasticity
 
-The `ViscoPlasticity` model is a J2 plasticity law with isotropic linear
-hardening and a time-step gate. Despite the Perzyna branding, **the
-implemented integration is rate-INDEPENDENT** — see the correction below.
+PyFEM has two deliberately distinct material mappings. The legacy mapping is
+preserved for deck compatibility; true Perzyna rate physics is new v3
+functionality under another key.
 
-## Overview
-- **Material type:** `ViscoPlasticity`
-- **State:** elastic strain, plastic strain, accumulated equivalent plastic
-  strain, and the last evaluation time.
+## Legacy `ViscoPlasticity` / v3 `perzyna-viscoplasticity`
 
-## Parameters
-### Mandatory
-- `type`: Must be set to `"ViscoPlasticity"`
-- `E`: Young's modulus
-- `nu`: Poisson's ratio
-- `syield`: Initial yield stress
-- `gamma`: Fluidity parameter (see the correction below: numerically inert)
+The legacy class and its v3 mapping implement J2 plasticity with isotropic
+linear hardening and a time-step gate. Their converged local residual is
 
-### Optional
-- `n`: Rate sensitivity exponent. Default: `1.0` (numerically inert)
-- `hard`: Linear hardening modulus. Default: `0.0` (perfectly plastic)
+```text
+σ_vm,trial − 3G Δκ − σ_y(κ_n + Δκ) = 0,
+σ_y(κ) = syield + hard κ.
+```
 
-## Correction: the implemented map is rate-independent J2
+This is **rate-independent** consistency plasticity, not a Perzyna integration.
+`gamma`, `n`, and `dtime` only seed a discarded Newton initial guess. Measured
+on the documented ramp, changing `(gamma=1e-4, n=1)` to `(gamma=1e2, n=2)`
+changes stress by only about `2e-16` relative. The regression suite retains
+this gamma invariance as a negative control.
 
-The class documentation and `examples/materials/viscoplasticity/README.md`
-describe Perzyna overstress theory — rate-dependent yielding, "fast loading →
-higher peak stress", gamma controlling the flow rate. **These claims are
-false for the implemented algorithm** (finding
-`20261009-agent-vp1-bug-viscoplasticity-stress-update-is-rate-independent-j2-perzyna`):
+The sole time effect is the `dtime > 0` gate. A supra-yield step at constant or
+backward time returns and commits the elastic trial stress above yield while
+freezing `epsilon_p` and `kappa`. Changing time schedules therefore does not
+demonstrate physical rate dependence.
 
-- The local Newton iteration solves the rate-independent J2 consistency
-  equation `σ_vm − 3G·Δε_p − σ_y(ε̄_p) = 0`. No rate term enters the
-  residual; `gamma`, `n`, and `dtime` only seed the initial guess, which the
-  linear-residual Newton discards. Measured: running a 12-step plastic ramp
-  with `gamma = 1e-4, n = 1` versus `gamma = 1e2, n = 2` changes the
-  converged stress by **1.95e-16 relative** — pure Newton-tolerance slack.
-- The ONLY time effect is the `dtime > 0` gate: a supra-yield step at
-  constant (or backward) time returns the **elastic** trial response above
-  the yield surface. Schedules that hold time constant while advancing the
-  load therefore commit elastic states above yield — a semantic trap.
+The legacy-mapped v3 descriptor keeps 14 state floats (`epsilon_e[6]`,
+`epsilon_p[6]`, `kappa[1]`, `time[1]`) and its identity `time` port. Its name,
+parameters, state schema, and parity tests are unchanged. The legacy local
+iteration warns and continues on non-convergence; v3 reports a typed step
+rejection. The returned J2 tangent is the consistent rate-factor-free form
+(the M67 repair removed the spurious derivative of the discarded initial
+guess).
 
-Consequences: the shipped deck cannot exhibit the rate-dependent behavior
-its README promises, and any calibration against `gamma`/`n` is meaningless.
-A true-Perzyna rate law is a deferred feature, not a bugfix of this class.
+## True v3 `backward-euler-perzyna`
 
-## Notes
+This fresh constitutive descriptor implements associative J2 Perzyna flow with
+linear isotropic hardening. It is not selected by a legacy `ViscoPlasticity`
+deck and must not be confused with the mapping above.
 
-- **Tangent:** the returned plastic-branch tangent used to add a spurious
-  `rate_factor` term (the derivative of the discarded initial guess, not of
-  the converged map — finding
-  `20261009-agent-vp1-bug-viscoplasticity-tangent-inconsistent-with-its-own-stress-upd`).
-  Converged states were unaffected; measured against a finite difference of
-  the law's own stress response the coded tangent errs by 6.6e-2 relative at
-  an amplified state (`gamma = 1e4`, `dtime = 1e3`), while the
-  rate-factor-free J2 consistent tangent matches to 3e-8 class. The term is
-  dormant at deck-like time steps (~1e-11 relative). The legacy repair
-  landed in M67 (commit 494f30c, merge 8a3eae8) — the returned tangent is
-  now the rate-factor-free consistent form. The v3 migration (`pyfem.v3` law
-  `perzyna-viscoplasticity`) shipped the same true tangent from day one; the
-  v3 divergence pins flipped to repair-confirmed parity in M76 (b0ad9ed,
-  merge 2ffcf20).
-- **Non-convergence:** the legacy local iteration warns and continues; the
-  v3 law reports a typed step rejection instead.
+### Rate equation and implicit return map
+
+The equivalent viscoplastic strain rate is
+
+```text
+κ̇ = gamma <(q − y)/y>^n,
+q = σ_vm,
+y = syield + hard κ.
+```
+
+`<x>` denotes `max(x,0)`. For trial von Mises stress `q_trial`, accepted
+`kappa_n`, `l = Δκ`, `a = gamma Δt`, and `A = 3G + hard`, backward Euler gives
+the scalar residual
+
+```text
+r(l) = l − a <(q_trial − A l − y_n)/(y_n + hard l)>^n = 0
+q(l) = q_trial − 3G l
+y(l) = y_n + hard l.
+```
+
+For positive trial overstress and positive `a`, the root is bracketed by zero
+and `(q_trial-y_n)/A`. The implementation uses safeguarded Newton iterations
+with the analytical residual derivative and bisection fallback. Zero `dtime`
+is exactly elastic; negative or non-finite `dtime` rejects the step with trial
+state byte-equal to accepted state.
+
+The response is genuinely time-dependent: at the same displacement, faster
+loading permits less viscoplastic flow and produces higher overstress. As
+`gamma Δt → 0`, the map approaches the elastic predictor. As
+`gamma Δt → ∞`, normalized overstress approaches zero and the map approaches
+rate-independent J2 consistency.
+
+### Algorithmic tangent
+
+On the active branch, define
+
+```text
+φ = (q−y)/y
+B = A y + hard (q−y) = 3G y + hard q
+w = a n φ^(n−1).
+```
+
+Implicit differentiation of the same residual gives
+
+```text
+dl/dq_trial = w y / (y² + w B)
+dq/dq_trial = 1 − 3G dl/dq_trial.
+```
+
+With `N = dev(σ_trial)/q_trial`, the stress is
+`σ = p_trial I + qN`. The consistent engineering-Voigt tangent is the radial
+elastic block plus
+`(3G dq/dq_trial − 3G q/q_trial) N⊗N`; it is symmetric. Elastic steps return
+the elastic stiffness.
+
+### Parameters, state, and authoring
+
+The six required parameters are `youngs_modulus`, `poisson_ratio`,
+`initial_yield_stress`, `hardening_slope`, `fluidity`, and `rate_exponent`.
+Fluidity has units of inverse time because the overstress ratio is
+nondimensional. State contains 13 floats: `epsilon_e[6]`, `epsilon_p[6]`, and
+monotone `kappa[1]`. The descriptor declares a derived `dtime` port with a
+`time` derivative coordinate, so absolute time need not be stored in each
+integration-point row.
+
+```python
+from pyfem.v3 import authoring
+
+material = authoring.backward_euler_perzyna(
+  200000.0, 0.3, 250.0, 1000.0, 0.001, 1.0
+)
+model = authoring.small_strain_continuum(
+  authoring.quad8_patch(), material=material
+)
+system = authoring.compile(model)
+```
+
+Declare `time` among the nonlinear program coordinates. The driver computes
+each `dtime` from the previous committed point, including after a run-boundary
+restart.
+
+### Verification
+
+`test/v3/test_v3_viscoplasticity.py` validates the return map against an
+independent scalar bisection solve and the tangent against central finite
+differences away from branch kinks. Across exponents 0.7, 1, and 2, with and
+without hardening, the worst measured root deviation is `2.86e-14` relative
+and the worst tangent deviation is `3.24e-11` relative of `max|FD|`. A Sympy
+implicit differentiation checks the analytical tangent structurally. Elastic
+and rate-independent limiting controls are included.
+
+A displacement-controlled Q8 test compares physical schedules differing by a
+factor of 100 and requires higher overstress everywhere in the fast schedule.
+Further tests prove unload/reload state correctness, rejected-trial byte
+identity, and uninterrupted-versus-restart byte equivalence.
+
+## References
+
+- P. Perzyna, “Fundamental Problems in Viscoplasticity,” *Advances in Applied
+  Mechanics* 9 (1966), 243–377,
+  [doi:10.1016/S0065-2156(08)70009-7](https://doi.org/10.1016/S0065-2156(08)70009-7).
+- J.C. Simo and T.J.R. Hughes, *Computational Inelasticity*, Springer, 1998,
+  chapters 2 and 5,
+  [doi:10.1007/b98904](https://doi.org/10.1007/b98904).
