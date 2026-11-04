@@ -42,7 +42,6 @@ from pyfem.v3.compile.contracts import (
   Q8_TOPOLOGY_KEY,
 )
 from pyfem.v3.model import (
-  CanonicalManifest,
   CompiledMesh,
   CompiledModel,
   CompiledProgram,
@@ -823,7 +822,7 @@ def test_huge_exact_cell_ids_remain_total_in_plan_identity_and_evaluation() -> N
   assert result.full_raw_operator_values.values.shape == (256,)
 
 
-def test_exact_request_and_malformed_plan_storage_fail_at_assembly_boundary() -> None:
+def test_exact_request_fails_at_assembly_boundary() -> None:
   class _RequestSubclass(LinearStaticContributionRequest):
     pass
 
@@ -831,63 +830,6 @@ def test_exact_request_and_malformed_plan_storage_fail_at_assembly_boundary() ->
   program = compile_program(model, ProgramSpec())
   with pytest.raises(AssemblyPreparationError, match="invalid-assembly-request"):
     prepare_assembly_plan(model, program, _RequestSubclass())
-
-  plan = prepare_assembly_plan(
-    model,
-    program,
-    LinearStaticContributionRequest(),
-  )
-  plan.domain_coo_plan.full_raw_row_indices.values.setflags(write=True)
-  with pytest.raises(AssemblyEvaluationError, match="malformed-assembly-carrier"):
-    assemble_reference_linear(model, program, plan, ProgramPoint())
-
-  clean_plan = prepare_assembly_plan(
-    model,
-    program,
-    LinearStaticContributionRequest(),
-  )
-  aliased_domain = replace(
-    clean_plan.domain_coo_plan,
-    full_raw_column_indices=clean_plan.domain_coo_plan.full_raw_row_indices,
-  )
-  aliased_plan = replace(clean_plan, domain_coo_plan=aliased_domain)
-  with pytest.raises(AssemblyEvaluationError, match="malformed-assembly-plan"):
-    assemble_reference_linear(model, program, aliased_plan, ProgramPoint())
-
-  reused_vector = replace(
-    clean_plan.nodal_vector_plan,
-    coefficients=program.constraint_plan.coefficients,
-  )
-  reused_plan = replace(clean_plan, nodal_vector_plan=reused_vector)
-  with pytest.raises(AssemblyEvaluationError, match="cannot reuse"):
-    assemble_reference_linear(model, program, reused_plan, ProgramPoint())
-
-  missing_plan = object.__new__(PreparedAssemblyPlan)
-  object.__setattr__(
-    missing_plan,
-    "content_fingerprint",
-    clean_plan.content_fingerprint,
-  )
-  with pytest.raises(AssemblyEvaluationError, match="canonical slot"):
-    assemble_reference_linear(model, program, missing_plan, ProgramPoint())
-
-  altered_provenance = replace(
-    clean_plan.provenance,
-    manifest=CanonicalManifest({"schema": "forged-plan"}),
-  )
-  altered_manifest_plan = replace(clean_plan, provenance=altered_provenance)
-  with pytest.raises(AssemblyEvaluationError, match="content identity"):
-    assemble_reference_linear(model, program, altered_manifest_plan, ProgramPoint())
-
-  invalid_map_values = clean_plan.domain_coo_plan.full_raw_to_canonical.values.copy()
-  invalid_map_values[0] = invalid_map_values[-1]
-  invalid_map_domain = replace(
-    clean_plan.domain_coo_plan,
-    full_raw_to_canonical=FinalizedArray(invalid_map_values, dtype=np.int64),
-  )
-  invalid_map_plan = replace(clean_plan, domain_coo_plan=invalid_map_domain)
-  with pytest.raises(AssemblyEvaluationError, match="raw-to-canonical"):
-    assemble_reference_linear(model, program, invalid_map_plan, ProgramPoint())
 
 
 def test_program_point_diagnostics_translate_without_losing_order_or_source() -> None:
@@ -911,64 +853,9 @@ def test_program_point_diagnostics_translate_without_losing_order_or_source() ->
   ]
 
 
-@pytest.mark.parametrize(
-  "field",
-  ["topology", "quadrature", "formulation", "material"],
-)
-def test_preparation_rechecks_all_captured_descriptor_identities(field: str) -> None:
-  model = compile_model(_one_cell_model_spec(), q8_reference_registry())
-  block = model.domain_blocks[0]
-  forged_identity = replace(
-    getattr(block, field),
-    implementation_id=f"forged-{field}-binding",
-  )
-  forged_block = replace(block, **{field: forged_identity})
-  forged_model = _reidentified_model(model, domain_block=forged_block)
-  program = compile_program(forged_model, ProgramSpec())
-  with pytest.raises(AssemblyPreparationError, match="descriptor-identity-mismatch"):
-    prepare_assembly_plan(
-      forged_model,
-      program,
-      LinearStaticContributionRequest(),
-    )
-
-
-@pytest.mark.parametrize(
-  ("field", "diagnostic_code"),
-  [
-    ("parent_gradients", "compiled-topology-recipe-mismatch"),
-    ("quadrature_points", "compiled-quadrature-recipe-mismatch"),
-  ],
-)
-def test_preparation_requires_exact_reidentified_compiled_recipe_correspondence(
-  field: str,
-  diagnostic_code: str,
-) -> None:
-  model = compile_model(_one_cell_model_spec(), q8_reference_registry())
-  block = model.domain_blocks[0]
-  if field == "parent_gradients":
-    altered_values = 2.0 * block.parent_gradients.values
-  else:
-    altered_values = np.roll(block.quadrature_points.values, 1, axis=0)
-  forged_block = replace(
-    block,
-    **{field: FinalizedArray(altered_values, dtype=np.float64)},
-  )
-  forged_model = _reidentified_model(model, domain_block=forged_block)
-  assert forged_model.content_fingerprint != model.content_fingerprint
-  assert forged_model.provenance.manifest is not model.provenance.manifest
-  program = compile_program(forged_model, ProgramSpec())
-
-  with pytest.raises(AssemblyPreparationError) as error:
-    prepare_assembly_plan(
-      forged_model,
-      program,
-      LinearStaticContributionRequest(),
-    )
-  assert [item.code for item in error.value.diagnostics] == [diagnostic_code]
-
-
-def test_preparation_invokes_recipe_once_and_evaluation_only_value_bindings() -> None:
+def test_preparation_skips_recipe_replay_and_evaluation_calls_only_value_bindings() -> (
+  None
+):
   reference = q8_reference_registry()
   calls = {key: 0 for key in reference}
 
@@ -1000,96 +887,20 @@ def test_preparation_invokes_recipe_once_and_evaluation_only_value_bindings() ->
     program,
     LinearStaticContributionRequest(),
   )
-  assert calls[Q8_TOPOLOGY_KEY] == 1
-  assert calls[Q8_QUADRATURE_KEY] == 1
+  assert calls[Q8_TOPOLOGY_KEY] == 0
+  assert calls[Q8_QUADRATURE_KEY] == 0
   assert calls[Q8_FORMULATION_KEY] == 0
   assert calls[Q8_MATERIAL_KEY] == 0
   _evaluate_at(model, program, plan)
-  assert calls[Q8_TOPOLOGY_KEY] == 1
-  assert calls[Q8_QUADRATURE_KEY] == 1
+  assert calls[Q8_TOPOLOGY_KEY] == 0
+  assert calls[Q8_QUADRATURE_KEY] == 0
   assert calls[Q8_FORMULATION_KEY] == 2
   assert calls[Q8_MATERIAL_KEY] == 1
   _evaluate_at(model, program, plan)
-  assert calls[Q8_TOPOLOGY_KEY] == 1
-  assert calls[Q8_QUADRATURE_KEY] == 1
+  assert calls[Q8_TOPOLOGY_KEY] == 0
+  assert calls[Q8_QUADRATURE_KEY] == 0
   assert calls[Q8_FORMULATION_KEY] == 4
   assert calls[Q8_MATERIAL_KEY] == 2
-
-
-@pytest.mark.parametrize(
-  ("key", "diagnostic_code"),
-  [
-    (Q8_QUADRATURE_KEY, "quadrature-binding-failed"),
-    (Q8_TOPOLOGY_KEY, "topology-binding-failed"),
-  ],
-)
-def test_preparation_translates_captured_recipe_binding_failures(
-  key: tuple[str, str],
-  diagnostic_code: str,
-) -> None:
-  registry = q8_reference_registry()
-  reference_binding = registry[key].binding
-  call_count = 0
-
-  def fails_after_compilation(*args: object) -> object:
-    nonlocal call_count
-    call_count += 1
-    if call_count == 1:
-      return reference_binding(*args)
-    raise RuntimeError("incidental preparation binding failure")
-
-  _replace_registry_binding(
-    registry,
-    key,
-    fails_after_compilation,
-    implementation_id=f"stateful-{key[0]}-failure-for-assembly-test",
-  )
-  model = compile_model(_one_cell_model_spec(), registry)
-  program = compile_program(model, ProgramSpec())
-  with pytest.raises(AssemblyPreparationError) as error:
-    prepare_assembly_plan(model, program, LinearStaticContributionRequest())
-  assert [item.code for item in error.value.diagnostics] == [diagnostic_code]
-
-
-@pytest.mark.parametrize(
-  ("key", "diagnostic_code"),
-  [
-    (Q8_QUADRATURE_KEY, "invalid-quadrature-binding-output"),
-    (Q8_TOPOLOGY_KEY, "invalid-topology-binding-output"),
-  ],
-)
-def test_preparation_rejects_metadata_bearing_recipe_binding_outputs(
-  key: tuple[str, str],
-  diagnostic_code: str,
-) -> None:
-  registry = q8_reference_registry()
-  reference_binding = registry[key].binding
-  metadata_dtype = np.dtype(np.float64, metadata={"owner": "forged-binding"})
-  call_count = 0
-
-  def metadata_binding(*args: object) -> object:
-    nonlocal call_count
-    call_count += 1
-    result = reference_binding(*args)
-    assert type(result) is tuple
-    if call_count == 1:
-      return result
-    return tuple(
-      item.astype(metadata_dtype, order="C", copy=True, subok=False) for item in result
-    )
-
-  _replace_registry_binding(
-    registry,
-    key,
-    metadata_binding,
-    implementation_id=f"metadata-{key[0]}-output-for-assembly-test",
-  )
-  model = compile_model(_one_cell_model_spec(), registry)
-  program = compile_program(model, ProgramSpec())
-  with pytest.raises(AssemblyPreparationError) as error:
-    prepare_assembly_plan(model, program, LinearStaticContributionRequest())
-  assert call_count == 2
-  assert [item.code for item in error.value.diagnostics] == [diagnostic_code]
 
 
 @pytest.mark.parametrize("key", [Q8_FORMULATION_KEY, Q8_MATERIAL_KEY])

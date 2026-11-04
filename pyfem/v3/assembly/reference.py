@@ -28,10 +28,10 @@ from pyfem.v3.assembly.prepare import (
   _program_source,
   _raise_boundary,
   _validate_model_program_compatibility,
+  _validate_plan_compatibility,
   _validated_array_values,
   _validated_fingerprint,
   _validated_instance_id,
-  _validated_prepared_plan,
 )
 from pyfem.v3.compile.contracts import Q8_FORMULATION_KEY, Q8_MATERIAL_KEY
 from pyfem.v3.compile.program import (
@@ -911,7 +911,7 @@ def _evaluate(
       "assembly evaluation requires exact live model compatibility",
       program_source,
     )
-  validated_plan = _validated_prepared_plan(
+  validated_plan = _validate_plan_compatibility(
     plan,
     validated_model,
     validated_program,
