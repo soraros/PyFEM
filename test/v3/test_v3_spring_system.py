@@ -28,6 +28,7 @@ the shallow-truss-with-spring configuration of the M18/M32 decks:
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -35,6 +36,7 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
+from pyfem.v3.compile.contracts import continuum_reference_registry
 from pyfem.v3.compile.diagnostics import ModelCompilationError
 from pyfem.v3.compile.spring import (
   SpringDeclaration,
@@ -47,11 +49,16 @@ from pyfem.v3.compile.spring import (
 )
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.compile.truss import TrussOperator, truss_reference_registry
-from pyfem.v3.constraints import compile_constraint_map
+from pyfem.v3.constraints import CompiledConstraintMap, compile_constraint_map
 from pyfem.v3.driver import (
+  DriverAssemblyPlan,
   DriverStatus,
   NonlinearStaticDriver,
   NonlinearStaticResult,
+  assemble_internal_force,
+  compile_driver_plan,
+  evaluate_loads,
+  refill_tangent,
 )
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
@@ -634,3 +641,498 @@ def test_multi_group_membership_collisions_are_preserved() -> None:
     _landed_system(first, overlapping)
   with pytest.raises(ValueError, match="collides"):
     _wired_system(first, overlapping)
+
+
+def _grounded_x_declaration(node_id: int = 1) -> SpringDeclaration:
+  return SpringDeclaration(
+    block_id="grounded-spring",
+    space_id="displacement",
+    spring_ids=("support-1",),
+    node_ids=(node_id,),
+    state_schema="grounded-x-v1",
+    state_slots=(),
+    kernel_name="axial-linear-spring",
+    kernel_version="1",
+    implementation_id="grounded-x-v1",
+    parameters=(2.0, 1.0, 0.0),
+    kernel=axial_spring_kernel,
+    source=_source("spring:support"),
+  )
+
+
+def _single_topology_model(kind: str) -> ModelSpec:
+  if kind == "quad4":
+    coordinates = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0))
+    cell_node_ids = (0, 1, 2, 3)
+    topology = "quadrilateral"
+    interpolation = "bilinear-quad4"
+    quadrature = "gauss-2x2"
+  elif kind == "tria3":
+    coordinates = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))
+    cell_node_ids = (0, 1, 2)
+    topology = "triangle"
+    interpolation = "linear-tria3"
+    quadrature = "gauss-tria3-1"
+  else:
+    msg = f"unknown test topology {kind!r}"
+    raise ValueError(msg)
+  nodes = tuple(
+    NodeSpec(
+      id=index,
+      coordinates=point,
+      source=_source(f"mesh:node-{index}"),
+    )
+    for index, point in enumerate(coordinates)
+  )
+  cell = CellSpec(
+    id="cell-1",
+    node_ids=cell_node_ids,
+    source=_source("mesh:cell-1"),
+  )
+  block = CellBlockSpec(
+    id="cells",
+    reference_topology=topology,
+    topological_dimension=2,
+    embedding_dimension=2,
+    geometry_interpolation=interpolation,
+    cells=(cell,),
+    source=_source("mesh:cells"),
+  )
+  field = FieldSpec(
+    id="displacement",
+    components=("x", "y"),
+    location="node",
+    source=_source("field:displacement"),
+  )
+  material = MaterialSpec(
+    id="elastic",
+    model="plane-stress-linear-elastic",
+    parameters=(
+      MaterialParameterSpec("youngs_modulus", 1.0, _source("material:E")),
+      MaterialParameterSpec("poisson_ratio", 0.0, _source("material:nu")),
+    ),
+    source=_source("material:elastic"),
+  )
+  region = RegionSpec(
+    id="domain",
+    cell_refs=(CellRef(block.id, cell.id),),
+    field_ids=(field.id,),
+    material_id=material.id,
+    formulation="small-strain-continuum",
+    quadrature=quadrature,
+    source=_source("region:domain"),
+  )
+  return ModelSpec(
+    mesh=MeshSpec(nodes=nodes, cell_blocks=(block,), source=_source("mesh")),
+    fields=(field,),
+    materials=(material,),
+    regions=(region,),
+    source=_source("model"),
+  )
+
+
+def _ramp_loads(*, reverse: bool = False) -> tuple[NodalLoadSpec, ...]:
+  loads = tuple(
+    NodalLoadSpec(
+      id=load_id,
+      target=DofRef(node_id=1, field_id="displacement", component="x"),
+      value=AffineValueSpec(
+        coefficients=(
+          AffineCoefficientSpec(
+            "load",
+            magnitude,
+            _source(f"program:{load_id}:coefficient"),
+          ),
+        ),
+        source=_source(f"program:{load_id}:value"),
+      ),
+      source=_source(f"program:{load_id}"),
+    )
+    for load_id, magnitude in (
+      ("load-quarter", 0.25),
+      ("load-three-quarters", 0.75),
+    )
+  )
+  return tuple(reversed(loads)) if reverse else loads
+
+
+def _single_topology_driver(
+  kind: str,
+) -> tuple[
+  CompiledSystem,
+  CompiledConstraintMap,
+  tuple[NodalLoadSpec, ...],
+  NonlinearStaticDriver,
+]:
+  system = compile_system(
+    _single_topology_model(kind),
+    continuum_reference_registry(),
+    springs=(_grounded_x_declaration(),),
+  )
+  fixed_nodes = (0, 3) if kind == "quad4" else (0, 2)
+  coordinate_map = compile_constraint_map(
+    system,
+    constraints=tuple(
+      PrescribedDofSpec(
+        id=f"fix-{node}-{component}",
+        target=DofRef(
+          node_id=node,
+          field_id="displacement",
+          component=component,
+        ),
+        value=AffineValueSpec(constant=0.0),
+        source=_source(f"constraint:{node}:{component}"),
+      )
+      for node in fixed_nodes
+      for component in ("x", "y")
+    ),
+    coordinates=(ProgramCoordinateSpec(name="load", kind="load"),),
+  )
+  loads = _ramp_loads()
+  return (
+    system,
+    coordinate_map,
+    loads,
+    NonlinearStaticDriver(system, coordinate_map, loads),
+  )
+
+
+@pytest.mark.parametrize(
+  ("kind", "expected_state", "expected_continuum", "expected_spring", "reaction"),
+  [
+    pytest.param(
+      "quad4",
+      np.array([0.0, 0.0, 3.0 / 7.0, 2.0 / 7.0, -1.0 / 7.0, 2.0 / 7.0, 0.0, 0.0]),
+      np.array([-1.0 / 7.0, 0.0, 1.0 / 7.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+      np.array([[6.0 / 7.0, 0.0]]),
+      np.array([-1.0 / 7.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+      id="q4",
+    ),
+    pytest.param(
+      "tria3",
+      np.array([0.0, 0.0, 2.0 / 5.0, 0.0, 0.0, 0.0]),
+      np.array([-1.0 / 5.0, 0.0, 1.0 / 5.0, 0.0, 0.0, 0.0]),
+      np.array([[4.0 / 5.0, 0.0]]),
+      np.array([-1.0 / 5.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+      id="t3",
+    ),
+  ],
+)
+def test_exact_mixed_solution_and_attributed_balance(
+  kind: str,
+  expected_state: np.ndarray,
+  expected_continuum: np.ndarray,
+  expected_spring: np.ndarray,
+  reaction: np.ndarray,
+) -> None:
+  system, coordinate_map, loads, driver = _single_topology_driver(kind)
+  point = _ramp_points((1.0,))[0]
+  result = driver.run(
+    base_point=_ramp_points((0.0,))[0],
+    target_points=(point,),
+  )
+  assert result.status is DriverStatus.COMPLETED
+  state = driver.owner.accepted_physical().values
+  np.testing.assert_allclose(state, expected_state, rtol=0.0, atol=4.0e-15)
+
+  evaluations = _evaluate(system, state)
+  assert len(evaluations) == 2
+  continuum, spring = evaluations
+  np.testing.assert_allclose(
+    continuum.residual_values[0].values[0],
+    expected_continuum,
+    rtol=0.0,
+    atol=2.0e-15,
+  )
+  np.testing.assert_allclose(
+    spring.residual_values[0].values,
+    expected_spring,
+    rtol=0.0,
+    atol=2.0e-15,
+  )
+  np.testing.assert_array_equal(
+    spring.jacobian_values[0].values,
+    np.array([[[2.0, 0.0], [0.0, 0.0]]]),
+  )
+
+  residual_batches = tuple(
+    evaluation.residual_values[0].values for evaluation in evaluations
+  )
+  jacobian_batches = tuple(
+    evaluation.jacobian_values[0].values for evaluation in evaluations
+  )
+  internal = assemble_internal_force(driver.plan, residual_batches)
+  external = evaluate_loads(driver.plan.loads, point).values
+  individual = tuple(
+    evaluate_loads(
+      compile_driver_plan(system, coordinate_map, (load,)).loads,
+      point,
+    ).values
+    for load in loads
+  )
+  assert individual[0][2] == 0.25
+  assert individual[1][2] == 0.75
+  np.testing.assert_array_equal(external, individual[0] + individual[1])
+  expected_external = np.zeros(system.coefficient_count, dtype=np.float64)
+  expected_external[2] = 1.0
+  np.testing.assert_array_equal(external, expected_external)
+  np.testing.assert_allclose(
+    internal - external,
+    reaction,
+    rtol=0.0,
+    atol=2.0e-15,
+  )
+  observation = result.records[-1].observation
+  assert observation is not None
+  np.testing.assert_allclose(
+    observation.reactions.values,
+    reaction,
+    rtol=0.0,
+    atol=2.0e-15,
+  )
+
+  reconstructed_internal = np.zeros(system.coefficient_count, dtype=np.float64)
+  reconstructed_tangent = np.zeros(
+    (system.coefficient_count, system.coefficient_count), dtype=np.float64
+  )
+  for slice_, operator, evaluation in zip(
+    driver.plan.operator_slices,
+    system.operators,
+    evaluations,
+    strict=True,
+  ):
+    assert slice_.block_id == operator.header.block_id
+    residual = evaluation.residual_values[0].values
+    tangent = evaluation.jacobian_values[0].values
+    for entity, dofs in enumerate(slice_.gather.values):
+      reconstructed_internal[dofs] += residual[entity]
+      reconstructed_tangent[np.ix_(dofs, dofs)] += tangent[entity]
+  np.testing.assert_allclose(
+    reconstructed_internal,
+    internal,
+    rtol=0.0,
+    atol=2.0e-15,
+  )
+  np.testing.assert_allclose(
+    reconstructed_tangent,
+    refill_tangent(driver.plan, jacobian_batches).toarray(),
+    rtol=0.0,
+    atol=2.0e-15,
+  )
+  operator_id = system.operators[0].header.block_id
+  assert system.source_for("operator", operator_id).source == "region:domain"
+  assert system.source_for("cell", ("cells", "cell-1")).source == "mesh:cell-1"
+  assert system.source_for("spring", "support-1").source == "spring:support"
+
+
+def _mixed_topology_model() -> ModelSpec:
+  nodes = tuple(
+    NodeSpec(
+      id=index,
+      coordinates=point,
+      source=_source(f"mesh:node-{index}"),
+    )
+    for index, point in enumerate(
+      ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (2.0, 0.0))
+    )
+  )
+  quad_cell = CellSpec(
+    id="quad-cell",
+    node_ids=(0, 1, 2, 3),
+    source=_source("mesh:quad-cell"),
+  )
+  tria_cell = CellSpec(
+    id="tria-cell",
+    node_ids=(1, 4, 2),
+    source=_source("mesh:tria-cell"),
+  )
+  quad_block = CellBlockSpec(
+    id="quad-block",
+    reference_topology="quadrilateral",
+    topological_dimension=2,
+    embedding_dimension=2,
+    geometry_interpolation="bilinear-quad4",
+    cells=(quad_cell,),
+    source=_source("mesh:quad-block"),
+  )
+  tria_block = CellBlockSpec(
+    id="tria-block",
+    reference_topology="triangle",
+    topological_dimension=2,
+    embedding_dimension=2,
+    geometry_interpolation="linear-tria3",
+    cells=(tria_cell,),
+    source=_source("mesh:tria-block"),
+  )
+  field = FieldSpec(
+    id="displacement",
+    components=("x", "y"),
+    location="node",
+    source=_source("field:displacement"),
+  )
+  material = MaterialSpec(
+    id="elastic",
+    model="plane-stress-linear-elastic",
+    parameters=(
+      MaterialParameterSpec("youngs_modulus", 1.0),
+      MaterialParameterSpec("poisson_ratio", 0.0),
+    ),
+    source=_source("material:elastic"),
+  )
+  quad_region = RegionSpec(
+    id="20-quad",
+    cell_refs=(CellRef(quad_block.id, quad_cell.id),),
+    field_ids=(field.id,),
+    material_id=material.id,
+    formulation="small-strain-continuum",
+    quadrature="gauss-2x2",
+    source=_source("region:quad"),
+  )
+  tria_region = RegionSpec(
+    id="10-tria",
+    cell_refs=(CellRef(tria_block.id, tria_cell.id),),
+    field_ids=(field.id,),
+    material_id=material.id,
+    formulation="small-strain-continuum",
+    quadrature="gauss-tria3-1",
+    source=_source("region:tria"),
+  )
+  return ModelSpec(
+    mesh=MeshSpec(
+      nodes=nodes,
+      cell_blocks=(quad_block, tria_block),
+      source=_source("mesh"),
+    ),
+    fields=(field,),
+    materials=(material,),
+    regions=(quad_region, tria_region),
+    source=_source("model"),
+  )
+
+
+def _mixed_plan(
+  model: ModelSpec,
+  *,
+  reverse_loads: bool = False,
+) -> tuple[CompiledSystem, CompiledConstraintMap, DriverAssemblyPlan]:
+  system = compile_system(
+    model,
+    continuum_reference_registry(),
+    springs=(_grounded_x_declaration(),),
+  )
+  coordinate_map = compile_constraint_map(
+    system,
+    coordinates=(ProgramCoordinateSpec(name="load", kind="load"),),
+  )
+  plan = compile_driver_plan(
+    system,
+    coordinate_map,
+    _ramp_loads(reverse=reverse_loads),
+  )
+  return system, coordinate_map, plan
+
+
+def test_mixed_blocks_ownership_and_attribution_are_canonical() -> None:
+  forward_model = _mixed_topology_model()
+  reverse_model = replace(
+    forward_model,
+    mesh=replace(
+      forward_model.mesh,
+      cell_blocks=tuple(reversed(forward_model.mesh.cell_blocks)),
+    ),
+    regions=tuple(reversed(forward_model.regions)),
+  )
+  forward, _forward_map, forward_plan = _mixed_plan(forward_model)
+  reverse, _reverse_map, reverse_plan = _mixed_plan(
+    reverse_model,
+    reverse_loads=True,
+  )
+  expected_ids = (
+    ("tria-block", "10-tria"),
+    ("quad-block", "20-quad"),
+    ("grounded-spring", "grounded-x-v1"),
+  )
+  forward_ids = tuple(operator.header.block_id for operator in forward.operators)
+  reverse_ids = tuple(operator.header.block_id for operator in reverse.operators)
+  assert forward_ids == expected_ids
+  assert reverse_ids == expected_ids
+  assert forward_plan.provenance.operator_block_ids == expected_ids
+  assert reverse_plan.provenance.operator_block_ids == expected_ids
+  assert forward.content_fingerprint == reverse.content_fingerprint
+  assert forward.instance_id != reverse.instance_id
+  assert forward_plan.content_fingerprint == reverse_plan.content_fingerprint
+  assert forward.source_for("operator", expected_ids[0]).source == "region:tria"
+  assert forward.source_for("operator", expected_ids[1]).source == "region:quad"
+  assert forward.source_for("spring", "support-1").source == "spring:support"
+  forward_attribution = tuple(
+    (record.kind, record.semantic_id, record.source.source)
+    for record in forward.source_attribution
+  )
+  reverse_attribution = tuple(
+    (record.kind, record.semantic_id, record.source.source)
+    for record in reverse.source_attribution
+  )
+  assert forward_attribution == reverse_attribution
+
+  for name in (
+    "residual_scatter",
+    "coo_row_indices",
+    "coo_column_indices",
+    "csr_sort_permutation",
+  ):
+    np.testing.assert_array_equal(
+      getattr(forward_plan, name).values,
+      getattr(reverse_plan, name).values,
+    )
+  point = _ramp_points((1.0,))[0]
+  forward_external = evaluate_loads(forward_plan.loads, point).values
+  reverse_external = evaluate_loads(reverse_plan.loads, point).values
+  np.testing.assert_array_equal(forward_external, reverse_external)
+  assert forward_external[2] == 1.0
+
+  state = np.linspace(-0.2, 0.3, forward.coefficient_count, dtype=np.float64)
+  forward_evaluations = _evaluate(forward, state)
+  reverse_evaluations = _evaluate(reverse, state)
+  forward_internal = assemble_internal_force(
+    forward_plan,
+    tuple(item.residual_values[0].values for item in forward_evaluations),
+  )
+  reverse_internal = assemble_internal_force(
+    reverse_plan,
+    tuple(item.residual_values[0].values for item in reverse_evaluations),
+  )
+  np.testing.assert_array_equal(forward_internal, reverse_internal)
+  forward_tangent = refill_tangent(
+    forward_plan,
+    tuple(item.jacobian_values[0].values for item in forward_evaluations),
+  )
+  reverse_tangent = refill_tangent(
+    reverse_plan,
+    tuple(item.jacobian_values[0].values for item in reverse_evaluations),
+  )
+  np.testing.assert_array_equal(forward_tangent.toarray(), reverse_tangent.toarray())
+
+  coordinates = forward.point_blocks[0].reference_coordinates.values.copy()
+  left_arrays = (
+    forward.point_blocks[0].reference_coordinates.values,
+    forward.entity_blocks[0].incidence.values,
+    forward.spaces[0].coefficient_map.values,
+    forward.operators[-1].payload.parameters.values,
+    forward_plan.loads.coordinate_coefficients.values,
+  )
+  right_arrays = (
+    reverse.point_blocks[0].reference_coordinates.values,
+    reverse.entity_blocks[0].incidence.values,
+    reverse.spaces[0].coefficient_map.values,
+    reverse.operators[-1].payload.parameters.values,
+    reverse_plan.loads.coordinate_coefficients.values,
+  )
+  for left, right in zip(left_arrays, right_arrays, strict=True):
+    assert left.flags.owndata and not left.flags.writeable
+    assert left.dtype.metadata is None
+    assert not np.shares_memory(left, right)
+  object.__setattr__(forward_model.mesh.nodes[0], "coordinates", (99.0, 99.0))
+  np.testing.assert_array_equal(
+    forward.point_blocks[0].reference_coordinates.values,
+    coordinates,
+  )
