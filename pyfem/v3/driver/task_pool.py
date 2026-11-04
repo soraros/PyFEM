@@ -16,7 +16,7 @@ class IntegrationPointTaskPool:
   executor overhead.
   """
 
-  __slots__ = ("_chunks", "_executor", "_ip_count", "_thread_count")
+  __slots__ = ("_chunks", "_closed", "_executor", "_ip_count", "_thread_count")
 
   def __init__(self, ip_count: int, thread_count: int) -> None:
     if type(ip_count) is not int or ip_count < 0:
@@ -27,6 +27,7 @@ class IntegrationPointTaskPool:
       raise ValueError(msg)
     self._ip_count = ip_count
     self._thread_count = thread_count
+    self._closed = False
     worker_count = min(ip_count, thread_count)
     chunks: list[tuple[int, int]] = []
     if worker_count:
@@ -58,8 +59,16 @@ class IntegrationPointTaskPool:
     """Return the stable half-open IP ranges assigned to workers."""
     return self._chunks
 
+  @property
+  def closed(self) -> bool:
+    """Return whether host workers have been shut down."""
+    return self._closed
+
   def run[ResultT](self, evaluate: Callable[[int], ResultT]) -> tuple[ResultT, ...]:
     """Evaluate every IP exactly once and return results in stable IP order."""
+    if self._closed:
+      msg = "integration-point task pool is closed"
+      raise RuntimeError(msg)
     executor = self._executor
     if executor is None:
       return tuple(evaluate(ip_index) for ip_index in range(self._ip_count))
@@ -75,3 +84,21 @@ class IntegrationPointTaskPool:
     for future in futures:
       future.result()
     return tuple(results)
+
+  def close(self) -> None:
+    """Shut down host workers after outstanding tasks finish; idempotent."""
+    if self._closed:
+      return
+    executor = self._executor
+    if executor is not None:
+      executor.shutdown(wait=True)
+    self._closed = True
+
+  def __enter__(self) -> IntegrationPointTaskPool:
+    if self._closed:
+      msg = "integration-point task pool is closed"
+      raise RuntimeError(msg)
+    return self
+
+  def __exit__(self, *_exc: object) -> None:
+    self.close()

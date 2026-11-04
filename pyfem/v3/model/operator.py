@@ -7,7 +7,12 @@ from enum import Enum
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-  from pyfem.v3.state.nested import NestedStateReference, NestedStateStore
+  from pyfem.v3.constraints.compile import CompiledConstraintMap
+  from pyfem.v3.driver.contracts import HomogenizationRequest, NonlinearStaticSettings
+  from pyfem.v3.driver.nested import PreparedNestedExecution
+  from pyfem.v3.model.system import CompiledSystem
+  from pyfem.v3.spec.program import NodalLoadSpec
+  from pyfem.v3.state.nested import NestedStateLayout, NestedStateReference
 
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.provenance import CanonicalManifest
@@ -85,34 +90,93 @@ class NestedExecutionModality(Enum):
 
 
 @dataclass(frozen=True, slots=True, eq=False)
-class NestedExecutionDeclaration:
-  """The runtime store binding declared by a nested-execution operator header."""
+class NestedExecutionRecipe:
+  """Immutable compiled inputs shared by any number of nested executions.
 
-  modality: NestedExecutionModality
-  store: NestedStateStore
+  The recipe carries numerical content and execution policy only. Accepted
+  state, drivers, workspaces, and host workers belong to one prepared runtime.
+  """
+
+  micro_system: CompiledSystem
+  micro_coordinate_map: CompiledConstraintMap
+  micro_loads: tuple[NodalLoadSpec, ...]
+  homogenization: HomogenizationRequest
+  layout: NestedStateLayout
+  settings: NonlinearStaticSettings
+  provenance: CanonicalManifest
 
   def __post_init__(self) -> None:
-    from pyfem.v3.state.nested import NestedStateStore
+    from pyfem.v3.constraints.compile import CompiledConstraintMap
+    from pyfem.v3.driver.contracts import HomogenizationRequest, NonlinearStaticSettings
+    from pyfem.v3.model.system import CompiledSystem
+    from pyfem.v3.spec.program import NodalLoadSpec
+    from pyfem.v3.state.nested import NestedStateLayout
 
+    if type(self.micro_system) is not CompiledSystem:
+      msg = "nested execution recipes require an exact micro CompiledSystem"
+      raise TypeError(msg)
+    if type(self.micro_coordinate_map) is not CompiledConstraintMap:
+      msg = "nested execution recipes require an exact micro CompiledConstraintMap"
+      raise TypeError(msg)
+    _exact_tuple(self.micro_loads, NodalLoadSpec, "nested micro loads")
+    if type(self.homogenization) is not HomogenizationRequest:
+      msg = "nested execution recipes require an exact HomogenizationRequest"
+      raise TypeError(msg)
+    if type(self.layout) is not NestedStateLayout:
+      msg = "nested execution recipes require an exact NestedStateLayout"
+      raise TypeError(msg)
+    if type(self.settings) is not NonlinearStaticSettings:
+      msg = "nested execution recipes require exact NonlinearStaticSettings"
+      raise TypeError(msg)
+    if type(self.provenance) is not CanonicalManifest:
+      msg = "nested execution recipes require an exact CanonicalManifest"
+      raise TypeError(msg)
+    if self.layout.coefficient_count != self.micro_system.coefficient_count:
+      msg = "nested layout coefficient width does not match the micro system"
+      raise ValueError(msg)
+    if len(self.layout.blocks) != len(self.micro_system.operators):
+      msg = "nested layout block count does not match the micro system"
+      raise ValueError(msg)
+    for operator, block in zip(
+      self.micro_system.operators, self.layout.blocks, strict=True
+    ):
+      state = operator.header.state_layout
+      if (
+        block.schema != state.schema
+        or block.entity_count != state.entity_count
+        or block.row_width != state.row_width
+      ):
+        msg = "nested layout state blocks do not match the micro system"
+        raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class NestedExecutionDeclaration:
+  """The immutable nested-execution recipe declared by an operator header."""
+
+  modality: NestedExecutionModality
+  recipe: NestedExecutionRecipe
+
+  def __post_init__(self) -> None:
     if type(self.modality) is not NestedExecutionModality:
       msg = "nested execution requires an exact NestedExecutionModality"
       raise TypeError(msg)
-    if type(self.store) is not NestedStateStore:
-      msg = "nested execution declarations require an exact NestedStateStore"
+    if type(self.recipe) is not NestedExecutionRecipe:
+      msg = "nested execution declarations require an exact NestedExecutionRecipe"
       raise TypeError(msg)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class NestedEvaluationInput:
-  """The store an evaluator may use; deliberately excludes the macro owner."""
+  """One prepared runtime; deliberately excludes the macro transaction owner."""
 
-  store: NestedStateStore
+  runtime: PreparedNestedExecution
 
   def __post_init__(self) -> None:
-    from pyfem.v3.state.nested import NestedStateStore
+    from pyfem.v3.driver.nested import PreparedNestedExecution
 
-    if type(self.store) is not NestedStateStore:
-      msg = "nested evaluation requires an exact NestedStateStore"
+    if type(self.runtime) is not PreparedNestedExecution:
+      msg = "nested evaluation requires an exact PreparedNestedExecution"
       raise TypeError(msg)
 
 

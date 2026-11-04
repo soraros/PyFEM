@@ -31,6 +31,7 @@ from pyfem.v3.driver.diagnostics import (
   DriverEvaluationError,
   DriverPreparationError,
 )
+from pyfem.v3.driver.nested import PreparedNestedExecution
 from pyfem.v3.driver.nonlinear import NonlinearStaticDriver
 from pyfem.v3.driver.plan import (
   DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA,
@@ -82,6 +83,7 @@ __all__ = [
   "OperatorDerivativeSlice",
   "OperatorSignalPortSlice",
   "ParameterSensitivityObservation",
+  "PreparedNestedExecution",
   "RiksDriver",
   "StepFailureClass",
   "SubstepObservation",

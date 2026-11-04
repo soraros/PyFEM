@@ -1,4 +1,16 @@
-"""FE² continuum operator: orchestrated nested response per macro integration point."""
+"""FE² continuum operator: orchestrated nested response per macro integration point.
+
+Compiled systems share an immutable ``NestedExecutionRecipe``. Every macro
+nonlinear or Riks driver prepares its own runtime from that recipe and passes it
+through ``NestedEvaluationInput``; the compiler's virgin probe uses and closes a
+separate temporary runtime. Drivers own their runtimes and ``close`` releases
+host workers and retained response buffers.
+
+The intentional API migration replaces ``operator.drivers``,
+``operator.nested_store``, and ``operator.task_pool`` with
+``header.nested_execution.recipe`` and ``driver.nested_executions``.
+``NestedEvaluationInput`` now carries that prepared runtime, not a shared store.
+"""
 
 from __future__ import annotations
 
@@ -12,15 +24,11 @@ from pyfem.v3.compile.diagnostics import (
   ModelCompilationError,
 )
 from pyfem.v3.constraints.compile import CompiledConstraintMap
-from pyfem.v3.driver import (
-  DriverStatus,
-  NonlinearStaticDriver,
-  NonlinearStaticSettings,
-  SubstepStatus,
-)
+from pyfem.v3.driver import DriverStatus, NonlinearStaticSettings, SubstepStatus
 from pyfem.v3.driver.contracts import HomogenizationRequest
 from pyfem.v3.driver.diagnostics import DriverEvaluationError
-from pyfem.v3.driver.task_pool import IntegrationPointTaskPool
+from pyfem.v3.driver.nested import PreparedNestedExecution
+from pyfem.v3.driver.plan import compile_driver_plan
 from pyfem.v3.fem.element import continuum_internal_force_batched
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import InstanceId, require_same_instance
@@ -35,6 +43,7 @@ from pyfem.v3.model.operator import (
   NestedEvaluationInput,
   NestedExecutionDeclaration,
   NestedExecutionModality,
+  NestedExecutionRecipe,
   OperatorEvaluation,
   OperatorEvaluationInput,
   OperatorHeader,
@@ -53,12 +62,7 @@ from pyfem.v3.spec.program import (
   ProgramCoordinateValue,
   ProgramPoint,
 )
-from pyfem.v3.state import (
-  NestedBlockLayout,
-  NestedStateLayout,
-  NestedStateStore,
-  StateTransactionOwner,
-)
+from pyfem.v3.state import NestedBlockLayout, NestedStateLayout
 
 FE2_SYSTEM_SCHEMA = "pyfem-v3-fe2-continuum-system-v1"
 FE2_STATE_SCHEMA = "pyfem-v3-fe2-macro-strain-state-v1"
@@ -107,46 +111,18 @@ def _nested_layout(system: CompiledSystem, ip_count: int) -> NestedStateLayout:
   )
 
 
-def _seed_store(system: CompiledSystem, store: NestedStateStore) -> None:
-  store.begin_trial()
-  try:
-    for ip_index in range(store.ip_count):
-      store.write_trial_coefficients(
-        ip_index, np.zeros(system.coefficient_count, dtype=np.float64)
-      )
-      for operator, block in zip(system.operators, store.layout.blocks, strict=True):
-        layout = operator.header.state_layout
-        initial_rows = getattr(layout, "initial_rows", None)
-        rows = (
-          np.zeros(layout.row_shape, dtype=np.float64)
-          if initial_rows is None
-          else initial_rows.values
-        )
-        store.write_trial_block(ip_index, block.block_id, rows)
-      store.trial_complete(ip_index)
-    store.commit_trial()
-  except BaseException:
-    if store.trial_open:
-      store.reject_trial()
-    raise
-
-
 class _NestedIPRejected(Exception):
   pass
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class FE2ContinuumOperator(CompilerConstructed):
-  """Macro Q8 geometry with a deterministic host task pool over its micro drivers."""
+  """Macro Q8 geometry and an immutable recipe for per-execution nested runtimes."""
 
   header: OperatorHeader
   entity_block: object
   payload: Q8ContinuumPayload
   content_manifest: CanonicalManifest
-  drivers: tuple[NonlinearStaticDriver, ...]
-  nested_store: NestedStateStore
-  homogenization: HomogenizationRequest
-  task_pool: IntegrationPointTaskPool
   base_system_instance: InstanceId
 
   def _rejected(
@@ -196,12 +172,15 @@ class FE2ContinuumOperator(CompilerConstructed):
       raise ValueError(msg)
     nested = inputs.nested_execution
     if type(nested) is not NestedEvaluationInput:
-      msg = "FE2 evaluation requires its declared nested store and no macro owner"
+      msg = "FE2 evaluation requires its prepared runtime and no macro owner"
       raise ValueError(msg)
-    if nested.store is not self.nested_store:
-      msg = "FE2 evaluation rejects a foreign nested store"
+    declaration = self.header.nested_execution
+    runtime = nested.runtime
+    if declaration is None or runtime.recipe is not declaration.recipe:
+      msg = "FE2 evaluation rejects a runtime prepared from a foreign recipe"
       raise ValueError(msg)
-    if not nested.store.trial_open:
+    store = runtime.store
+    if not store.trial_open:
       msg = "FE2 evaluation requires a driver-opened nested trial scope"
       raise RuntimeError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
@@ -238,17 +217,15 @@ class FE2ContinuumOperator(CompilerConstructed):
     )
     strain_voigt = np.einsum("epai,ei->epa", b_matrix, values, optimize=True)
     ip_strains = strain_voigt.reshape(layout.entity_count, 3)
-    stresses = np.empty((layout.entity_count, 3), dtype=np.float64)
-    tangents = np.empty((layout.entity_count, 3, 3), dtype=np.float64)
-    store = nested.store
+    stresses = runtime.retained_buffer("fe2-stresses", (layout.entity_count, 3))
+    tangents = runtime.retained_buffer("fe2-tangents", (layout.entity_count, 3, 3))
 
     def evaluate_ip(ip_index: int) -> None:
-      driver = self.drivers[ip_index]
       try:
-        result = driver.run(
+        result = runtime.run_point(
+          ip_index,
           base_point=_point(accepted.values[ip_index]),
           target_points=(_point(ip_strains[ip_index]),),
-          homogenization=self.homogenization,
         )
       except DriverEvaluationError as exc:
         raise _NestedIPRejected from exc
@@ -266,7 +243,7 @@ class FE2ContinuumOperator(CompilerConstructed):
       store.trial_complete(ip_index)
 
     try:
-      self.task_pool.run(evaluate_ip)
+      runtime.task_pool.run(evaluate_ip)
     except _NestedIPRejected:
       return self._rejected(accepted)
 
@@ -405,21 +382,47 @@ def compile_fe2_continuum(
       source,
     )
   ip_count = element_count * point_count
-  store = NestedStateStore(_nested_layout(micro_system, ip_count))
-  _seed_store(micro_system, store)
-  drivers = tuple(
-    NonlinearStaticDriver(
-      micro_system,
-      micro_coordinate_map,
-      micro_loads,
-      settings,
-      owner=StateTransactionOwner.for_nested_point(
-        micro_system, store=store, ip_index=ip_index
-      ),
-    )
-    for ip_index in range(ip_count)
+  layout = _nested_layout(micro_system, ip_count)
+  load_program = compile_driver_plan(
+    micro_system, micro_coordinate_map, micro_loads
+  ).loads
+  recipe_provenance = CanonicalManifest(
+    {
+      "schema": "pyfem-v3-fe2-nested-execution-recipe-v1",
+      "micro_system": micro_system.provenance.manifest,
+      "micro_coordinate_map": micro_coordinate_map.provenance.manifest,
+      "micro_loads": {
+        "coordinate_names": load_program.coordinate_names,
+        "constant": load_program.constant.values,
+        "coordinate_coefficients": load_program.coordinate_coefficients.values,
+        "load_count": load_program.load_count,
+      },
+      "homogenization": _homogenization_manifest(homogenization),
+      "layout": {
+        "schema": layout.schema,
+        "coefficient_count": layout.coefficient_count,
+        "ip_count": layout.ip_count,
+      },
+      "settings": {
+        "tolerance": settings.tolerance,
+        "max_iterations": settings.max_iterations,
+        "max_cutbacks": settings.max_cutbacks,
+        "cutback_factor": settings.cutback_factor,
+        "growth_factor": settings.growth_factor,
+        "divergence_ratio": settings.divergence_ratio,
+        "min_substep_size": settings.min_substep_size,
+      },
+    }
   )
-  task_pool = IntegrationPointTaskPool(ip_count, settings.nested_ip_thread_count)
+  recipe = NestedExecutionRecipe(
+    micro_system=micro_system,
+    micro_coordinate_map=micro_coordinate_map,
+    micro_loads=micro_loads,
+    homogenization=homogenization,
+    layout=layout,
+    settings=settings,
+    provenance=recipe_provenance,
+  )
   index_dtype = base_operator.header.ports[0].coefficient_map.values.dtype
   state_layout = _new(
     OperatorStateLayout,
@@ -462,7 +465,7 @@ def compile_fe2_continuum(
   )
   nested_execution = NestedExecutionDeclaration(
     modality=NestedExecutionModality.DRIVER_PER_INTEGRATION_POINT,
-    store=store,
+    recipe=recipe,
   )
   header = _new(
     OperatorHeader,
@@ -489,7 +492,6 @@ def compile_fe2_continuum(
     nested_execution=nested_execution,
     tangent_class=FE2_TANGENT_CLASS,
   )
-  load_program = drivers[0].plan.loads
   manifest = CanonicalManifest(
     {
       "schema": FE2_SYSTEM_SCHEMA,
@@ -535,15 +537,13 @@ def compile_fe2_continuum(
     entity_block=base_operator.entity_block,
     payload=payload,
     content_manifest=manifest,
-    drivers=drivers,
-    nested_store=store,
-    homogenization=homogenization,
-    task_pool=task_pool,
     base_system_instance=base.instance_id,
   )
 
+  runtime = PreparedNestedExecution(recipe)
+  store = runtime.store
   before = store.encode()
-  store.begin_trial()
+  runtime.begin_trial()
   try:
     probe = operator.evaluate(
       OperatorEvaluationInput(
@@ -557,10 +557,10 @@ def compile_fe2_continuum(
         ),
         signals=(),
         request=ChannelRequest(("internal-force",), ("material-tangent",)),
-        nested_execution=NestedEvaluationInput(store),
+        nested_execution=NestedEvaluationInput(runtime),
       )
     )
-    store.validate_trial()
+    runtime.validate_trial()
   except (TypeError, ValueError, RuntimeError) as exc:
     _fail(
       "nested-probe-failed",
@@ -568,8 +568,7 @@ def compile_fe2_continuum(
       source,
     )
   finally:
-    if store.trial_open:
-      store.reject_trial()
+    runtime.close()
   if evaluation_status(probe) is not EvaluationStatus.OK:
     _fail(
       "invalid-nested-probe",

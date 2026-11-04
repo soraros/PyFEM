@@ -180,6 +180,17 @@ from pyfem.v3.driver.diagnostics import (
   DriverEvaluationError,
   DriverPreparationError,
 )
+from pyfem.v3.driver.nested import (
+  PreparedNestedExecution,
+  begin_nested_trial,
+  close_nested_executions,
+  collect_nested_activity,
+  commit_nested_trial,
+  prepare_nested_executions,
+  reject_nested_trial,
+  snapshot_nested_activity,
+  validate_nested_trial,
+)
 from pyfem.v3.driver.plan import (
   CompiledSensitivityProgram,
   DriverAssemblyPlan,
@@ -266,16 +277,6 @@ class _DriverWorkspace:
     self.residual_assembly_count = 0
     self.stashed_factorization: object = None
     self.tangent_refill_count = 0
-
-
-@dataclass(frozen=True, slots=True, eq=False)
-class _NestedDriverCursor:
-  """One nested driver's counters at a macro substep boundary."""
-
-  driver: NonlinearStaticDriver
-  run_serial: int
-  iteration_count: int
-  statistics: DriverStatistics
 
 
 def _interpolate(
@@ -488,51 +489,10 @@ class NonlinearStaticDriver:
     declarations = tuple(
       operator_nested_execution(operator.header) for operator in system.operators
     )
-    stores = tuple(
-      declaration.store for declaration in declarations if declaration is not None
-    )
-    if len({store.instance for store in stores}) != len(stores):
-      msg = "nested execution stores must be distinct per operator"
-      raise ValueError(msg)
-    if owner is None:
-      owner = StateTransactionOwner(system, nested_stores=stores)
-    else:
-      expected = {store.instance for store in stores}
-      bound = {store.instance for store in owner.nested_stores}
-      if bound != expected:
-        msg = "the supplied owner does not bind the declared nested execution stores"
-        raise ValueError(msg)
     self._system = system
     self._map = coordinate_map
     self._settings = settings
     self._plan = compile_driver_plan(system, coordinate_map, loads)
-    self._owner = owner
-    self._nested_stores = stores
-    self._nested_inputs = tuple(
-      None if declaration is None else NestedEvaluationInput(declaration.store)
-      for declaration in declarations
-    )
-    nested_drivers = []
-    for operator, declaration in zip(system.operators, declarations, strict=True):
-      if declaration is None:
-        nested_drivers.append(())
-        continue
-      drivers = getattr(operator, "drivers", None)
-      if (
-        type(drivers) is not tuple
-        or len(drivers) != declaration.store.ip_count
-        or any(type(driver) is not NonlinearStaticDriver for driver in drivers)
-      ):
-        msg = (
-          "driver-per-IP nested execution requires one exact "
-          "NonlinearStaticDriver per integration point"
-        )
-        raise TypeError(msg)
-      nested_drivers.append(drivers)
-    self._nested_drivers = tuple(nested_drivers)
-    self._workspace = _DriverWorkspace()
-    self._run_serial = 0
-    self._last_result: NonlinearStaticResult | None = None
     self._requests = tuple(
       ChannelRequest(
         (operator.header.residual_channels[0].channel_id,),
@@ -540,6 +500,38 @@ class NonlinearStaticDriver:
       )
       for operator in system.operators
     )
+    runtimes = prepare_nested_executions(
+      tuple(
+        None if declaration is None else declaration.recipe
+        for declaration in declarations
+      )
+    )
+    try:
+      stores = tuple(runtime.store for runtime in runtimes if runtime is not None)
+      if len({store.instance for store in stores}) != len(stores):
+        msg = "nested execution stores must be distinct per operator"
+        raise ValueError(msg)
+      if owner is None:
+        owner = StateTransactionOwner(system, nested_stores=stores)
+      else:
+        expected = {store.instance for store in stores}
+        bound = {store.instance for store in owner.nested_stores}
+        if bound != expected:
+          msg = "the supplied owner does not bind the prepared nested execution stores"
+          raise ValueError(msg)
+      self._nested_inputs = tuple(
+        None if runtime is None else NestedEvaluationInput(runtime)
+        for runtime in runtimes
+      )
+    except BaseException:
+      close_nested_executions(runtimes)
+      raise
+    self._owner = owner
+    self._nested_executions = runtimes
+    self._workspace = _DriverWorkspace()
+    self._run_serial = 0
+    self._last_result: NonlinearStaticResult | None = None
+    self._closed = False
 
   @property
   def plan(self) -> DriverAssemblyPlan:
@@ -555,6 +547,33 @@ class NonlinearStaticDriver:
   def settings(self) -> NonlinearStaticSettings:
     """Return the exact numeric policy."""
     return self._settings
+
+  @property
+  def nested_executions(self) -> tuple[PreparedNestedExecution | None, ...]:
+    """Return this driver's execution-local nested runtimes, aligned to operators."""
+    return self._nested_executions
+
+  def close(self) -> None:
+    """Release nested host workers and retained buffers; idempotent."""
+    if self._closed:
+      return
+    close_nested_executions(self._nested_executions)
+    self._closed = True
+
+  def __enter__(self) -> NonlinearStaticDriver:
+    if self._closed:
+      msg = "nonlinear static driver is closed"
+      raise RuntimeError(msg)
+    return self
+
+  def __exit__(self, *_exc: object) -> None:
+    self.close()
+
+  def __del__(self) -> None:
+    try:
+      self.close()
+    except Exception:
+      pass
 
   @property
   def statistics(self) -> DriverStatistics:
@@ -888,86 +907,25 @@ class NonlinearStaticDriver:
     )
 
   def _begin_nested_trial(self) -> None:
-    opened = []
-    try:
-      for store in self._nested_stores:
-        store.begin_trial()
-        opened.append(store)
-    except BaseException:
-      for store in reversed(opened):
-        store.reject_trial()
-      raise
+    begin_nested_trial(self._nested_executions)
 
   def _reject_nested_trial(self) -> None:
-    for store in self._nested_stores:
-      store.reject_trial()
+    reject_nested_trial(self._nested_executions)
 
   def _validate_nested_trial(self) -> None:
-    for store in self._nested_stores:
-      store.validate_trial()
+    validate_nested_trial(self._nested_executions)
 
   def _commit_nested_trial(self) -> None:
-    for store in self._nested_stores:
-      store.commit_trial()
+    commit_nested_trial(self._nested_executions)
 
-  def _snapshot_nested_drivers(self) -> tuple[tuple[_NestedDriverCursor, ...], ...]:
-    return tuple(
-      tuple(
-        _NestedDriverCursor(
-          driver=driver,
-          run_serial=driver._run_serial,
-          iteration_count=driver._workspace.iteration_count,
-          statistics=driver.statistics,
-        )
-        for driver in drivers
-      )
-      for drivers in self._nested_drivers
-    )
+  def _snapshot_nested_drivers(self) -> tuple[tuple[object, ...], ...]:
+    return snapshot_nested_activity(self._nested_executions)
 
   def _collect_nested_activity(
     self,
-    cursors: tuple[tuple[_NestedDriverCursor, ...], ...],
+    cursors: tuple[tuple[object, ...], ...],
   ) -> tuple[tuple[NestedSolveStatistics, ...], NestedFailure | None]:
-    statistics = []
-    failure = None
-    for operator_index, operator_cursors in enumerate(cursors):
-      for ip_index, cursor in enumerate(operator_cursors):
-        driver = cursor.driver
-        before = cursor.statistics
-        after = driver.statistics
-        cost = NestedSolveStatistics(
-          operator_index=operator_index,
-          ip_index=ip_index,
-          iteration_count=driver._workspace.iteration_count - cursor.iteration_count,
-          evaluation_count=after.evaluation_count - before.evaluation_count,
-          factorization_count=after.factorization_count - before.factorization_count,
-          factorization_reuse_count=(
-            after.factorization_reuse_count - before.factorization_reuse_count
-          ),
-          linear_solve_count=after.linear_solve_count - before.linear_solve_count,
-        )
-        statistics.append(cost)
-        if failure is not None or driver._run_serial == cursor.run_serial:
-          continue
-        result = driver._last_result
-        if result is None:
-          failure_class = StepFailureClass.DRIVER_EVALUATION_ERROR
-        elif result.status is DriverStatus.STEP_FAILED:
-          terminal = result.records[-1] if result.records else None
-          failure_class = (
-            terminal.failure_class
-            if terminal is not None and terminal.failure_class is not None
-            else StepFailureClass.STEP_FAILED
-          )
-        else:
-          continue
-        failure = NestedFailure(
-          code="nested-non-convergence",
-          operator_index=operator_index,
-          ip_index=ip_index,
-          failure_class=failure_class,
-        )
-    return tuple(statistics), failure
+    return collect_nested_activity(cursors)
 
   def _accumulate_nested_statistics(
     self, statistics: tuple[NestedSolveStatistics, ...]
@@ -1296,6 +1254,9 @@ class NonlinearStaticDriver:
     or reduction DOFs, out-of-range DOFs, and non-finite scales are
     rejected with coded diagnostics.
     """
+    if self._closed:
+      msg = "nonlinear static driver is closed"
+      raise RuntimeError(msg)
     self._run_serial += 1
     self._last_result = None
     if type(target_points) is not tuple or any(
