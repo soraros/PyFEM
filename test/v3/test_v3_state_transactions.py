@@ -16,8 +16,6 @@ import pytest
 if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
-from test_v3_state_nested import _q8_model
-
 from pyfem.v3.compile.continuum import (
   Q8ContinuumOperator,
   plasticity_reference_registry,
@@ -63,6 +61,10 @@ from pyfem.v3.state import (
   StateTransaction,
   StateTransactionOwner,
 )
+
+# isort: split
+
+from test_v3_state_nested import _q8_model
 
 _UNIT_COORDINATES = (
   (0.0, 0.0),
