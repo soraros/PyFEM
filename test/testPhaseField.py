@@ -9,7 +9,7 @@ from pyfem.elements.PhaseField import PhaseField
 from pyfem.util.dataStructures import Properties, elementData, solverStatus
 
 
-class TestPhaseFieldHistory(unittest.TestCase):
+class PhaseFieldTestCase(unittest.TestCase):
     def setUp(self):
         self.coords = np.array(
             [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 1.0]]
@@ -52,6 +52,7 @@ class TestPhaseFieldHistory(unittest.TestCase):
         element.getInternalForce(data)
         return data.fint.copy()
 
+class TestPhaseFieldHistory(PhaseFieldTestCase):
     def test_rejected_trial_does_not_change_accepted_restart(self):
         element = self.make_element()
         accepted_data = self.make_data(0.25)
@@ -81,6 +82,67 @@ class TestPhaseFieldHistory(unittest.TestCase):
         restarted_force = self.evaluate_internal_force(element, rejected_data)
         np.testing.assert_array_equal(restarted_force, accepted_force)
         np.testing.assert_array_equal(element.hisNew, accepted_history)
+
+
+class TestPhaseFieldTangent(PhaseFieldTestCase):
+    def get_tangent_and_finite_difference(self):
+        element = self.make_element()
+        tangent_data = self.make_data(1.0)
+        element.mat.reset()
+        element.getTangentStiffness(tangent_data)
+
+        reference_force = self.evaluate_internal_force(
+            self.make_element(), self.make_data(1.0)
+        )
+        np.testing.assert_array_equal(tangent_data.fint, reference_force)
+
+        finite_difference = np.zeros((12, 12))
+        step = 1.0e-7
+        for column in range(12):
+            plus = self.make_data(1.0)
+            minus = self.make_data(1.0)
+            plus.state[column] += step
+            minus.state[column] -= step
+            force_plus = self.evaluate_internal_force(element, plus)
+            force_minus = self.evaluate_internal_force(element, minus)
+            finite_difference[:, column] = (force_plus - force_minus) / (2.0 * step)
+
+        return element, tangent_data.stiff, finite_difference
+
+    def test_all_rectangular_blocks_match_central_differences(self):
+        element, tangent, finite_difference = self.get_tangent_and_finite_difference()
+        u_dofs, p_dofs = element.splitDofIDs(4)
+        blocks = [
+            ("u,u", u_dofs, u_dofs),
+            ("u,phase", u_dofs, p_dofs),
+            ("phase,u", p_dofs, u_dofs),
+            ("phase,phase", p_dofs, p_dofs),
+        ]
+
+        for name, rows, columns in blocks:
+            with self.subTest(block=name):
+                indices = np.ix_(rows, columns)
+                np.testing.assert_allclose(
+                    tangent[indices],
+                    finite_difference[indices],
+                    rtol=5.0e-6,
+                    atol=5.0e-5,
+                )
+
+    def test_legacy_transposed_coupling_is_a_failing_control(self):
+        element, tangent, finite_difference = self.get_tangent_and_finite_difference()
+        u_dofs, p_dofs = element.splitDofIDs(4)
+        phase_u = np.ix_(p_dofs, u_dofs)
+        u_phase = np.ix_(u_dofs, p_dofs)
+        tangent[phase_u] = tangent[u_phase].transpose()
+
+        with self.assertRaises(AssertionError):
+            np.testing.assert_allclose(
+                tangent[phase_u],
+                finite_difference[phase_u],
+                rtol=5.0e-6,
+                atol=5.0e-5,
+            )
 
 
 if __name__ == "__main__":
