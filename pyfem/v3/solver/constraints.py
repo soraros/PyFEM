@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, csr_array
 from scipy.sparse import csr_matrix as CSRMatrix
 
-from pyfem.v3.types import F64, ProblemDefinition
+from pyfem.v3.types import F64, I32, ProblemDefinition
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,7 @@ class PrescribedConstraints:
 
   C: CSRMatrix
   prescribed: F64
+  free_dofs: I32 | None = None
 
 
 def build_prescribed_constraints(problem: ProblemDefinition) -> PrescribedConstraints:
@@ -26,19 +27,17 @@ def build_prescribed_constraints(problem: ProblemDefinition) -> PrescribedConstr
   for dof_id, value in zip(problem.constraint_dof, problem.constraint_val):
     prescribed[int(dof_id)] = float(value)
 
-  prescribed_dofs = set(problem.constraint_dof.tolist())
-  slave_dofs = set(problem.mpc_slave_dof.tolist())
-  constrained = prescribed_dofs | slave_dofs
-  free_dofs = [i for i in range(n_dofs) if i not in constrained]
+  constrained = np.zeros(n_dofs, dtype=bool)
+  constrained[problem.constraint_dof] = True
+  constrained[problem.mpc_slave_dof] = True
+  free_dofs = np.flatnonzero(~constrained).astype(np.int32, copy=False)
   n_free = len(free_dofs)
 
-  dof_to_col = {dof: col for col, dof in enumerate(free_dofs)}
+  dof_to_col = {int(dof): col for col, dof in enumerate(free_dofs)}
 
-  row = np.empty(n_free, dtype=np.int32)
+  row = free_dofs
   col = np.arange(n_free, dtype=np.int32)
   val = np.ones(n_free, dtype=np.float64)
-  for j, dof in enumerate(free_dofs):
-    row[j] = dof
 
   mpc_rows: list[int] = []
   mpc_cols: list[int] = []
@@ -65,7 +64,21 @@ def build_prescribed_constraints(problem: ProblemDefinition) -> PrescribedConstr
     val = np.concatenate([val, np.asarray(mpc_vals, dtype=np.float64)])
 
   c = coo_matrix((val, (row, col)), shape=(n_dofs, n_free)).tocsr()
-  return PrescribedConstraints(C=c, prescribed=prescribed)
+  selector = free_dofs if problem.mpc_slave_dof.size == 0 else None
+  return PrescribedConstraints(C=c, prescribed=prescribed, free_dofs=selector)
+
+
+def reduce_prescribed_tangent(
+  constraints: PrescribedConstraints,
+  k_csr: csr_array,
+) -> csr_array:
+  """Reduce a tangent by free-DOF selection or a genuine MPC prolongation."""
+  if constraints.free_dofs is None:
+    return (constraints.C.T @ (k_csr @ constraints.C)).tocsr()
+  free = constraints.free_dofs
+  reduced = k_csr[free, :][:, free].tocsr()
+  reduced.eliminate_zeros()
+  return reduced
 
 
 def apply_prescribed_to_state(state: F64, constraints: PrescribedConstraints) -> None:

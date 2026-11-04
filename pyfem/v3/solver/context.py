@@ -19,6 +19,7 @@ from pyfem.v3.solver.constraints import (
   PrescribedConstraints,
   apply_prescribed_to_state,
   build_prescribed_constraints,
+  reduce_prescribed_tangent,
 )
 from pyfem.v3.types import F64, LinearSystem, LoadedProblem, ProblemDefinition
 
@@ -27,9 +28,8 @@ def factorized_reduced_solve(
   constraints: PrescribedConstraints,
   k_csr: csr_array,
 ) -> Callable[[F64], F64]:
-  """Factorize the reduced stiffness ``C.T @ K @ C`` for repeated back-solves."""
-  k_red = constraints.C.T @ (k_csr @ constraints.C)
-  return factorized(k_red.tocsr())
+  """Factorize the reduced stiffness for repeated back-solves."""
+  return factorized(reduce_prescribed_tangent(constraints, k_csr))
 
 
 def solve_reduced_displacement(

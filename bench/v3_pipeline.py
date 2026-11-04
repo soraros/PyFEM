@@ -13,7 +13,7 @@ Each stage is a separately timed callable over the real v3 code path:
 - ``assemble_coo`` — the public ``assemble_loaded`` (kernel + scatter + COO),
   matching the M3 baseline's "v3 asm" envelope
 - ``assemble`` — ``assemble_coo`` plus CSR conversion (what a solve consumes)
-- ``constrain`` — constraint matrix build and ``C.T @ K @ C``
+- ``constrain`` — constraint build and selector extraction (or MPC prolongation)
 - ``factor`` — SuperLU factorization of the reduced system
 - ``backsolve`` — one cached-factorization back-solve (repeat-solve cost)
 - ``solve`` — single-shot constrained solve from an assembled stiffness
@@ -38,7 +38,10 @@ from pyfem.v3.mesh.refined_patch import (
   build_uniform_q8_loaded,
   build_uniform_q8_patch,
 )
-from pyfem.v3.solver.constraints import build_prescribed_constraints
+from pyfem.v3.solver.constraints import (
+  build_prescribed_constraints,
+  reduce_prescribed_tangent,
+)
 from pyfem.v3.solver.context import CachedLinearSystem, prepare_cached_linear
 from pyfem.v3.types import LinearSystem, LoadedProblem
 
@@ -82,7 +85,7 @@ class V3Q8Pipeline:
     # pattern + strict-sequential dedup), not scipy's unstable-order tocsr.
     self.k_csr = canonical_csr(self.k_coo)
     self.constraints = build_prescribed_constraints(problem)
-    self.k_red = (self.constraints.C.T @ (self.k_csr @ self.constraints.C)).tocsr()
+    self.k_red = reduce_prescribed_tangent(self.constraints, self.k_csr)
     self.solve_red = factorized(self.k_red)
 
     a = np.zeros(n_dofs, dtype=np.float64)
@@ -138,7 +141,7 @@ class V3Q8Pipeline:
 
   def constrain(self) -> None:
     constraints = build_prescribed_constraints(self.problem)
-    (constraints.C.T @ (self.k_csr @ constraints.C)).tocsr()
+    reduce_prescribed_tangent(constraints, self.k_csr)
 
   def factor(self) -> None:
     factorized(self.k_red)
