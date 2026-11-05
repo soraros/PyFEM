@@ -84,9 +84,11 @@ python3 -m venv .venv          # Linux / macOS
 source .venv/bin/activate      # Linux / macOS
 # .venv\Scripts\activate.bat   # Windows (cmd.exe)
 python -m pip install --upgrade pip
-python -m pip install -e .
-python -m pip install pytest coverage ruff
+python -m pip install -e . --group dev --group v3
 ```
+
+The `--group` options install the same `dev` and `v3` dependency groups as
+`uv sync` (dependency-group support requires pip 25.1 or newer).
 
 Create a focused branch for your contribution:
 
@@ -105,7 +107,9 @@ Run the full suite from the repository root:
 uv run python -m pytest
 ```
 
-or a focused subset, e.g. `uv run python -m pytest test/v3 -q`.
+or a focused subset, e.g. `uv run python -m pytest test/v3 -q`. With an
+activated pip environment, use `python -m pytest` instead; keep the module
+invocation so tests import the current checkout.
 
 The v3 compiler and identity diagnostics have regressions for Python's
 integer-string conversion limit. When those paths change, run the affected

@@ -58,7 +58,7 @@ Run PyFEM without activating the environment:
 ```bash
 uv run pyfem --help
 cd examples/ch02
-uv run pyfem PatchTest.pro
+uv run pyfem PatchTest8.pro
 ```
 
 ### Development Installation
@@ -72,8 +72,10 @@ uv sync
 uv run python -m pytest
 uv run coverage run -m pytest -q
 uv run coverage report
-uv run ruff check pyfem test
+uv run ruff check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
 ```
+
+The legacy modules and tests are outside the Ruff gates. See [CONTRIBUTING](CONTRIBUTING.md#lint-and-format-gates) for all exact per-tree CI check and format commands, including the separate test, benchmark, and notebook configurations.
 
 Build and verify the wheel (same as CI):
 
@@ -116,13 +118,13 @@ Run a PyFEM analysis from the command line:
 cd examples/ch02
 
 # Run an example
-uv run pyfem PatchTest.pro
+uv run pyfem PatchTest8.pro
 ```
 
 View results in [ParaView](https://www.paraview.org/download/):
 
 ```bash
-paraview PatchTest.pvd
+paraview PatchTest8.pvd
 ```
 
 ## 📖 Documentation
