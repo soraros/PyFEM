@@ -1,171 +1,296 @@
-# Program playbook — what 60+ tower missions taught about building this library
+# PyFEM v3 research-kernel program playbook
 
-Distilled by the control tower (2026-10-09) at the human's request. This file is
-the meta-layer: not what the architecture IS (see generic_core.md / design.md)
-but what the program LEARNED about doing the work — which instruments detect
-truth, which disciplines compound, and which preconceptions died. Evidence refs
-are tower mission ids (M<n>) and findings; their full records live in
-.tower/comms/ (missions/, reviews/, findings/).
+This is the working discipline for the NX7 charter in
+[migration-execution.md](migration-execution.md). It supersedes the former
+parity-preservation, frozen-ABI, and feature-dispatch lessons in this file.
+Numerical findings in [migration-history.md](migration-history.md),
+[evidence/](evidence/), [parity.md](parity.md), [scaling.md](scaling.md), and
+`bench/results/` remain valuable; their old process instructions do not select
+new work.
 
-## 0. The parity principle (human directive, 2026-10-31)
+## 1. Selection before implementation
 
-Parity means SEMANTIC equivalence, never arithmetic fidelity. Legacy is
-evidence, not specification. Where legacy's structure is lousy, v3 chooses the
-better structure and proves the shared physics — converged-state parity at a
-documented tolerance, FD/symbolic/literature conviction — instead of replicating
-statement-for-statement. Do not get pinned in an awkward place because v1
-happened to divide the domain or solve a problem in a particular way.
+The north star is a compiled, data-oriented, explicitly stateful FE library whose
+accepted answers are scientifically auditable. The means is the smallest
+coherent research kernel with real consumers, not the largest defensible subset
+of legacy or earlier v3.
 
-Corollary: the parity batteries and divergence pins exist to catch defects in
-US, never to preserve quirks in THEM. Where legacy is provably buggy, v3 pins
-corrected semantics and (per the M55/M67 precedent) repairs the legacy side
-too. Where legacy is merely clumsy, v3 is free to be better by design — the
-fresh-crystal mission (M81) is the template: literature-first, verified by
-instruments, no oracle required.
+Review every proposed capability in this order:
 
-## 1. Instruments, not tests
+1. **Consumer:** who runs it — a maintained notebook, registered benchmark,
+   retained deck route, or required extension of one of those flows?
+2. **Scientific contract:** what equations, state timing, observations, failure
+   behavior, and independent conviction make the answer meaningful?
+3. **Architectural fit:** can it use the existing entities/spaces/operators,
+   affine map, driver plan, transaction owner, and typed records without a second
+   runtime?
+4. **Cost:** how many implementations, exports, validators, tests, benchmark
+   lanes, and mental lifetime rules does it add?
+5. **Disposition:** only then choose KEEP, UNIFY, REBUILD, or DELETE.
 
-The parity battery is a measurement instrument, not a regression suite. Written
-to pin exact arithmetic (bitwise where achievable, tolerance-class where
-documented), it turned "rewrite the library" into "measure two implementations
-against each other" — and every divergence became a bug candidate with receipts.
-Nine legacy correctness bugs were found BY the pins, not by reading code
-(spring tangent projector, J2 flow[3:] slot pollution, J2 shear +G accumulation,
-self.hard undefined, damage depsdstrain never assigned, damage 0.5·O3 halving,
-visco a↔(1−a) swap, constraint 2-cycle hang, MPC multi-hop flatten — all M55).
+- **KEEP** means a real consumer and independent evidence justify the capability
+  at its current boundary.
+- **UNIFY** means the behavior survives but one existing implementation becomes
+  the only owner. Compatibility wrappers are not unification.
+- **REBUILD** means the consumer and science survive while the inadequate
+  implementation or public route is replaced and the old path deleted.
+- **DELETE** means live support, exports, adapters, and maintenance obligations
+  end. Historical evidence remains addressable.
 
-In a Newton-based library, residual correctness and tangent correctness are
-SEPARATE axes with separate instruments. Converged-state comparison (R=0) is
-blind to tangent bugs — they only move convergence rate and every
-derivative-consumer (IFT sensitivities, bifurcation, arc-length quality). The
-instruments that see tangents: FD probes of the assembled tangent against the
-residual map at NONZERO committed states (X1 probes, M56), and iteration-count
-protocol pins — restored quadratic convergence is a regression oracle
-(41 linear → 5 quadratic on the J2 vehicle, M54).
+Source presence, a public name, sunk implementation cost, an old ABI manifest,
+or a large test file is not a consumer. A passing test can be excellent evidence
+for a capability that should nevertheless be retired. Conversely, deleting a
+family is not permission to delete its independent scientific findings.
 
-Every pin ships with a conviction leg: the buggy construction measured FAILING
-the same pin (e.g. truncated-unrolled sensitivity deviates 4.1e-3 vs the 1e-8
-pin). A pin without a failing control is decoration.
+## 2. Deletion is a supported-state transition
 
-For closed-form derivative claims, add a SYMBOLIC leg: cross-derive with sympy
-(dev group; differentiate the map symbolically, compare against the coded form
-by evaluation or expression simplification). FD convicts numerically at sampled
-states; symbolic derivation convicts structurally everywhere. The SOVS tangent
-episode (M67) is the cautionary case: per-leg FD identifications were correct
-while the full-matrix reassembly was wrong — a symbolic check of the reassembly
-would have caught it before review. Prefer generated evidence over hand-derived
-claims whenever a formula enters the tree.
+The retirement decisions named in the execution charter are approved dispositions
+under [migration_workflow.md](migration_workflow.md); that document's coverage
+vocabulary and evidence grades remain useful, but its generic warning that a
+proposed retirement is not approved does not block an explicitly authorized NX7
+retirement. Coverage of the legacy inventory is no longer the completion goal.
 
-Escalation standard: when a hard invariant appears violated, the acceptable
-proof is a four-way experiment (old/new × loose/tight tolerance) separating the
-change's effect from the old run's own convergence slack — the creep_test 0.31
-movement was the old code's own tol slack, R=0 states identical to 2e-10 (M55).
+A deletion mission must carry one atomic accounting unit:
 
-## 2. Performance governance
+- exact symbols and files removed;
+- exports, registry defaults, adapter branches, diagnostics, and docs updated;
+- every in-repo consumer migrated or explicitly rejected with a coded error;
+- useful behavior tests mapped to retained contracts before duplicate tests go;
+- historical source revision and independent oracle location recorded outside
+  the live implementation;
+- benchmark workload/baseline consequences declared;
+- numerical and performance gates run on the resulting tree.
 
-The D2 compute cost model (M5) is the design governor, not a report. Every
-large win was an architecture correction at a model-named anti-pattern, and
-each post-win bottleneck migrated exactly where the model predicted
-(kernel 85×/203× M30 → fused continuum kernels 6-15× M51 → dedup 10-13× M59 →
-production CSR and stable-reduction wiring in M64). If the abstraction is
-right, the code cannot be slow — measure against the model's floor, not against
-yesterday.
+Do not leave importable "reference" implementations in production, skip their
+old tests, or add a facade that forwards to both old and new paths. A historical
+revision is the archive; Git can execute it when an investigator truly needs the
+old implementation. The current checkout keeps only live support and independent
+oracles.
 
-Bitwise discipline pays compound interest: 1T-vs-nT raw-uint64 pins make races
-impossible to ship silently (disjoint-writes parallelism preserves bits), and
-canonical reduction orders remove ordering and SIMD ambiguity. They do not make
-an entire numerical pipeline bitwise-identical across platforms: BLAS selection
-and target code generation can still change rounding. Own your reduction orders:
-scipy's csr_sort_indices is an unstable std::sort (libc++/libstdc++ bits differ)
-and numpy's add.reduceat inner loop is SIMD-dependent — neither is a valid
-canonical reference (M59). M64 removed the remaining driver/plan.py reduceat
-case; strict-sequential stable-order accumulation is the canonical form.
+A compatibility shim is justified only by a separately identified external
+consumer with a bounded migration window. No such consumer is assumed by NX7.
+"Someone might use it" is not evidence.
 
-Raw-bit pins follow the contract in test/v3/conftest.py: on the one bench-
-manifest reference platform (macOS x86_64 Intel i9-9980HK, Python 3.13, pinned
-numba/numpy, Accelerate BLAS), assert_bitwise_pin compares raw uint64 values,
-including signed-zero distinctions. Off that platform the same assertion always runs with
-the call site's documented rtol/atol instead; the platform selects the
-comparison, never skips it. Each tolerance must exceed the observed
-cross-platform deviation and cite that deviation at the call site.
+## 3. One owner per meaning
 
-Bench adjudication: environment is a first-class variable. The accepted
-evidence protocol is candidate run + base-revision control run under matched
-conditions (M51 precedent, codified in bench/README.md, M60); manifests carry
-working-tree state. The baseline JSON is tower-owned; never re-baseline under
-fleet load.
+Cross-mission duplication is a design defect even when each implementation is
+correct. The kernel has exactly one owner for each of these meanings:
 
-## 3. ABI evolution without fear
+| Meaning | Owner |
+|---|---|
+| Authored model/program values and normalization | `spec/` |
+| Immutable arrays, live/content/generation identity, manifests | `model/arrays.py`, `identity.py`, `provenance.py` |
+| Entities, discrete spaces, operator/channel/state declarations | `model/system.py`, `model/operator.py` |
+| Family-specific payload construction and direct/nested evaluation | retained `compile/` family modules |
+| Fixed affine coordinates, offsets, reactions, reductions | `constraints/` |
+| Fixed COO/CSR topology, load/signal binding, stable value refill | `driver/plan.py` plus numerical sparse helpers |
+| Accepted physical/operator state and atomic trial transitions | `state/owner.py` |
+| Nested accepted state and execution resources | `state/nested.py`, `driver/nested.py` |
+| Continuation evolution | `state/evolution.py` |
+| Newton/cutback and Riks schedules | `driver/nonlinear.py`, `driver/riks.py` |
+| Accepted run records and solve-free observations | `driver/contracts.py` and driver records |
+| Plain authoring convenience | `authoring/` functions, not another runtime |
+| Legacy deck syntax conversion | `io/legacy_deck.py` |
 
-The frozen ABI evolves by ADDITIVE OPTIONAL SLOTS under the getattr precedent
-(initial_rows, then parameters/derivative_channels in M56): channel-free
-headers carry no attribute, the frozen validator stays untouched, manifests
-stay byte-identical (sha256-pinned). No version bump was needed.
+`DriverAssemblyPlan` is preparation; drivers are schedules; workspaces are
+disposable. No public `PreparedExecution` may duplicate those lifetimes. Private
+helper extraction is acceptable only when it removes measured duplication and
+adds no public lifecycle object or accepted-state owner.
 
-Declare capability by BEHAVIOR (a binding member), never by metadata: metadata
-is inherited verbatim by teaching bindings that cannot honor the declaration
-(the student-law regression convicted the metadata-gate design, M56 notes).
+No typed DSL, universal operator dictionary, plugin auto-discovery, second
+compiler, alternative state transaction, or second result verifier is a
+simplification. Specialized numerical payloads are encouraged; specialized
+copies of generic validation and ownership are not.
 
-Every declared channel is exercised fail-closed at virgin compile before the
-operator escapes (finite/complete/byte-equal-trial-rows invariants). Declared
-and unexercised ABI surface is worse than none (SpringKernelResult deliberately
-left without param_derivatives until a spring law needs it).
+## 4. Oracles outlive implementations
 
-## 4. Semantic boundaries are first-class design artifacts
+Keep four kinds of evidence distinct:
 
-The hard part of IFT sensitivities was not the linear algebra (one
-back-substitution per parameter on the stashed factorization) — it was the
-semantic boundary: the channel's fixed-entering-state semantics means later-step
-columns are the INCREMENT's sensitivity, not total path sensitivity (M57).
-State-transaction timing is physical: the same channel evaluated pre-commit vs
-post-commit answers different questions. Such boundaries must be unmistakable in
-user-facing docstrings — a user misreading increment for total gets silently
-wrong numbers. Name the boundary, pin it with a test (the factor-2 boundary
-test), and defer total propagation to an explicit v2 scope.
+1. **Independent live oracles** — analytic fields, rational/symbolic derivations,
+   finite differences, literature equations, conservation/balance identities,
+   and deliberately simple numerical references. These remain in tests when they
+   cover retained behavior.
+2. **Legacy-v1 comparisons** — an external implementation and shipped decks used
+   to falsify v3 behavior at documented tolerances. The v1 side may remain
+   independent even where that duplicates a parser or settings helper; forcing
+   the oracle and candidate to share code weakens the instrument.
+3. **Historical v3 implementations** — old prototypes and frozen verticals.
+   Their source and tests remain recoverable at recorded Git revisions. They are
+   not live dependencies, fallback paths, or permanent benchmark sides.
+4. **Historical performance records** — `bench/results/*.json`, including M85,
+   M116, and M118 controlled pairs. They establish exactly their recorded
+   workload, revision, environment, and coverage. They do not prove universal
+   scaling or require the old route to remain available.
 
-## 5. Fleet protocol lessons (tower + mission authors)
+For a retirement, record the source revision, mathematical references, test/oracle
+locations, known limitations, and corrected-legacy episodes in the historical
+record. Do not silently rewrite an old result or turn a known bug into a parity
+target. Do not copy thousands of lines of dead code into `.agents/` to make them
+"archived".
 
-- Gates are the EXACT CI invocations on whole trees, format --check included.
-  "Ruff green" claims covering only `check` on changed files let a format
-  violation reach v3 (repaired in 6140cfa; the four invocations are now law).
-- Append-only correction of record: mission notes accumulate claim +
-  superseding retraction (53→39 shared cells, 9→8 records, 6→5 net-decreasing
-  attempts). Never silently edit history; the audit trail is the product.
-- Cross-mission coupling is the norm. Sequence merges so a semantic breaker
-  carries the re-pin atomically on its own branch (M54 carried M52's near-miss
-  vehicle redesign; M55's plasticity flip waited for M54's merge). A red tip
-  window is a process failure, not an inevitability.
-- Scope widenings are cheap, logged, and expected: request with file-level
-  evidence (pyfem/fem/Constrainer.py, bench/v3_pipeline.py), never touch
-  silently. A worker that discovers a dead scope glob has found a planning bug.
-- Survey-before-build for anything capability-sized (M48 AD, M62/M63 breadth):
-  the sketch must be executable by a worker that never reads the legacy source.
+The [migration_workflow.md](migration_workflow.md) E0–E4 grades describe evidence,
+not entitlement to support. A retained public scientific flow needs E3-level
+authored-to-verified-result evidence; E4 documentation/compatibility/performance
+claims are made only where applicable. Component E2 evidence cannot promote a
+compile-only family to supported public breadth.
 
-## 6. Implications for the remaining program
+## 5. Numerical conviction rules
 
-The completed 2026-10 CSR, breadth and FE² sequence leaves durable ordering
-lessons, not another dispatch queue:
+### 5.1 Independence and disconfirmation
 
-- Keep coupled topology, production wiring, reduction-order changes and any
-  required re-pinning atomic. M64 completed exactly that combination for
-  pattern-cached CSR, the single canonical pattern compiler and stable-order
-  driver reductions; splitting such a change can strand duplication or
-  nondeterminism.
-- Survey capability-sized breadth work before building it, and establish
-  consumer semantics before adding layers. The M62/M63 surveys preceded their
-  landed cohesive/contact and ViscoPlasticity/SOVS implementations; M71 resolved
-  the crystal per-IP status question before M81's fresh law; M75-M84 then landed
-  RVE/FE² through map-level IFT, nested-state composition, the nested continuum
-  operator and typed cross-level failure propagation. These are completed
-  dependencies, not remaining work.
+Every significant numerical claim needs an independent leg and a failing control
+where practical. A reference copied from the production formula, a stored output
+with no derivation, or a test that only checks a flag is weak evidence. Rational
+Q4/T3/Q8 constructions, analytic patch fields, symbolic differentiation, and
+legacy-v1 comparisons are preferred according to the question.
 
-The operator-DSL decision stays deferred until sensitivity-modality scoping
-forces it (M22 criteria); do not build it speculatively.
+Converged residuals and consistent tangents are separate claims. Use directional
+finite differences at nonzero, non-kink states for assembled and homogenized
+Jacobians; include the deliberately wrong construction failing the same probe.
+Use symbolic differentiation for nontrivial closed-form reassembly when the dev
+stack supports it. Preserve objectivity, geometry, balance, and constraint-work
+checks where they address the physics.
 
-## 7. The deepest lesson
+Tolerance changes are scientific changes. Record normalization, state, load path,
+observed deviation, and why the new band is honest. Four-way old/new × loose/tight
+experiments remain the standard when convergence slack could explain a movement.
 
-The program's durable product is the instrument suite and the protocol, not
-any single merge: parity batteries that detect bugs, cost models that predict
-bottlenecks, probes that convict tangents at real states, and a review loop
-that reproduces every number independently. The library is what falls out of
-running them. When in doubt, invest in the instrument — the code follows.
+### 5.2 State and generation
+
+- Repeated evaluation from one accepted generation is repeatable; rejected trials
+  change no accepted bytes.
+- Commit is atomic across coefficients, operator rows, nested references, and
+  applicable evolution. The accepted trial corresponds to the accepted candidate.
+- Stateful derivative requests state exactly whether entering history is fixed.
+  Current parameter columns are increment/fixed-entering-state sensitivities,
+  not total path derivatives.
+- Verification never advances final history under the guise of observation.
+  Homogenization and reactions use committed responses and documented reductions.
+- Nested tests cover accepted and rejected macro attempts, per-IP attribution,
+  stable order, retained-buffer identity, and resource closure.
+
+### 5.3 Determinism
+
+Disjoint writes and canonical stable-order reductions are the parallelism
+contract. Do not substitute SciPy/NumPy reduction order for the project's
+canonical order without evidence. One-thread/n-thread and repeated-run pins
+compare raw uint64 where required, including state payloads, counters, and signed
+zero where relevant.
+
+`test/v3/conftest.py::assert_bitwise_pin` defines the platform behavior: raw
+uint64 on the recorded reference platform; an always-executed documented
+rtol/atol branch elsewhere. A tolerance call site must cite observed
+cross-platform deviation. Platform selection is not a skip mechanism.
+
+### 5.4 Riks and sensitivity semantics
+
+Algorithm consolidation must not silently change Riks prediction, two-solve
+normal-plane constraint, commit, termination, resume, or continuation evolution.
+A later scientific redesign may change legacy quirks, but it needs its own
+consumer, independent branch/limit-point oracle, and explicit migration of exact
+cycle/correction-count gates. Parity is not a reason to preserve a defect.
+
+Homogenization derivatives along map coordinates and material-parameter
+sensitivities are different channels. Keep their meanings, right-hand sides,
+factorization reuse, and observations separate even when they share linear
+algebra.
+
+## 6. Performance governance
+
+Measure the public prepared and end-to-end routes, not private kernels alone.
+Every timing record states model/DOF/state complexity, hardware and numerical
+library versions, thread count, cold versus warm scope, correctness result, and
+working-tree provenance. Logical copy/byte accounting, `tracemalloc`, and RSS are
+different measurements and are never interchanged.
+
+Use matched candidate and base-revision control runs under comparable clean
+conditions. The established regression signal is ratio above 1.25 with absolute
+slowdown above 1 ms unless a cell has a documented variance override. A failed
+ratio is investigated, not hidden by changing thresholds. Fleet/thermal
+contamination requires the candidate/control overlap evidence described in
+`bench/README.md`.
+
+Keep workload identities honest:
+
+- Q8/skims compare against independent legacy/analytic gates on identical decks.
+- J2 optimized kernels retain the pure reference and bitwise batch/status gates.
+- FE² retains raw 1/n-thread identity and explicit serial/default versus opt-in
+  host-pool policy. GIL-bound damage records are not parallel-scaling claims.
+- FE²-memory is a synthetic copy/state protocol, not another physics solve.
+- TL/Riks family routes retain their independent force/tangent/branch gates.
+- Cold, true-cold, warm, fresh-process, and JIT measurements remain distinct.
+
+A deleted implementation is not a baseline exception. Migrate the workload,
+state the envelope difference, and create a reviewed baseline successor only
+from a full clean reference-machine run. Keep old baseline files as history;
+never promote a baseline under load or silently drop missing full-coverage cells.
+
+## 7. Required repository gates
+
+Run tests from the actual checkout root with the project interpreter, always as
+`python -m pytest`, never bare `pytest` or `uv run pytest`. Before requesting
+independent review of a charter-level or cross-cutting change, run the complete
+repository suite in both integer-string modes:
+
+```bash
+python -m pytest -q
+PYTHONINTMAXSTRDIGITS=640 python -m pytest -q
+```
+
+In a worktree, use the primary checkout's absolute `.venv/bin/python` while
+remaining in the worktree. Read-only review may add `PYTHONDONTWRITEBYTECODE=1`
+and `-p no:cacheprovider`; these do not reduce coverage.
+
+Run all exact CI Ruff invocations, using the pinned project Ruff rather than
+`PATH` (CI spells the executable `uv run --no-sync ruff`):
+
+```bash
+uv run --no-sync ruff check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+uv run --no-sync ruff check test/v3 --config test/v3/ruff.toml
+uv run --no-sync ruff check bench --config bench/ruff.toml
+uv run --no-sync ruff check notebooks/v3 --config notebooks/v3/ruff.toml
+uv run --no-sync ruff format --check pyfem/v3 test/v3 --config pyfem/v3/ruff.toml
+uv run --no-sync ruff format --check test/v3 --config test/v3/ruff.toml
+uv run --no-sync ruff format --check bench --config bench/ruff.toml
+uv run --no-sync ruff format --check notebooks/v3 --config notebooks/v3/ruff.toml
+```
+
+Also run the invocation-invariant bare check required by the root guidance:
+
+```bash
+ruff check pyfem/v3 test/v3 bench notebooks/v3
+```
+
+The local substitute for either command form is the pinned absolute
+`.venv/bin/ruff` with identical arguments. A changed-files-only lint is not a
+whole-tree gate. Documentation-only missions still run the full matrix so the
+review starts from a known base, but must report that the tests are base-code
+evidence rather than implementation evidence for the document diff.
+
+## 8. Review and durable record
+
+Independent review must inspect current source and consumers, not just prose or
+test counts. For a plan, the reviewer checks every named symbol/file, whether the
+claimed consumer exists, whether shared numerical dependencies survive, whether
+deletion targets are actually unsupported, and whether acceptance gates can
+falsify the proposal. For implementation, the reviewer reproduces numerical and
+performance evidence at the exact branch tip.
+
+A mission record answers:
+
+- what consumer and scientific contract changed;
+- what was kept, unified, rebuilt, or deleted, with exact symbols;
+- which independent oracles moved and which historical records stayed behind;
+- actual production/test/bench line deltas and public export changes;
+- both suite results, all Ruff results, benchmark routes/artifacts and coverage;
+- remaining unsupported combinations and the next safe action.
+
+Append corrections rather than silently rewriting historical claims. The live
+execution charter may change the frontier explicitly; old reviews and mission
+cards remain provenance. Reviewer count, a "GO" word, or a green suite cannot
+compensate for a missing consumer, a shared-oracle conflict, or unsupported
+numerical semantics.
+
+The durable product is a small, comprehensible scientific kernel and instruments
+that can convict it. Preserve the instruments and evidence; do not preserve every
+implementation that happened to produce them.
