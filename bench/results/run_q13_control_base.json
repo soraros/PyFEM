@@ -1,0 +1,3163 @@
+{
+  "schema": 1,
+  "kind": "benchmark-run",
+  "coverage": "partial",
+  "manifest": {
+    "created_utc": "2026-11-05T06:48:47+00:00",
+    "git_revision": "3a435a8349171042c0e191a4c0901f630bb58556",
+    "working_tree": {
+      "clean": true,
+      "dirty_files": []
+    },
+    "cpu": "Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz",
+    "machine": "x86_64",
+    "os": "Darwin 25.6.0 (Darwin Kernel Version 25.6.0: Thu Oct  1 22:11:40 PDT 2026; root:xnu-12377.161.15.701.39~1/RELEASE_X86_64)",
+    "python": "3.13.11",
+    "python_executable": "/Users/sora/Projects/python/PyFEM/.venv/bin/python",
+    "numpy": "2.3.5",
+    "scipy": "1.18.0",
+    "numba": "0.62.1",
+    "linalg_backend": {
+      "blas": {
+        "name": "accelerate",
+        "version": "unknown"
+      },
+      "lapack": {
+        "name": "accelerate",
+        "version": "unknown"
+      }
+    },
+    "thread_env": {
+      "NUMBA_NUM_THREADS": "",
+      "OMP_NUM_THREADS": "",
+      "OPENBLAS_NUM_THREADS": "",
+      "MKL_NUM_THREADS": "",
+      "VECLIB_MAXIMUM_THREADS": "",
+      "NUMBA_CACHE_DIR": ""
+    },
+    "numba_threads_default": 16,
+    "threadpoolctl_available": false,
+    "numba_cache_coherence": {
+      "coherent": true,
+      "pairs": [
+        {
+          "caller": "pyfem/v3/fem/element.py",
+          "callee": "pyfem/v3/fem/quadrature.py",
+          "callee_source_mtime_utc": "2026-11-05T06:44:08.826696+00:00",
+          "caller_cache_entries": 0,
+          "caller_cache_live_entries": 0,
+          "caller_cache_oldest_live_mtime_utc": null,
+          "coherent": true
+        },
+        {
+          "caller": "pyfem/v3/fem/element.py",
+          "callee": "pyfem/v3/fem/shapes.py",
+          "callee_source_mtime_utc": "2026-11-05T06:44:08.826981+00:00",
+          "caller_cache_entries": 0,
+          "caller_cache_live_entries": 0,
+          "caller_cache_oldest_live_mtime_utc": null,
+          "coherent": true
+        },
+        {
+          "caller": "pyfem/v3/fem/element.py",
+          "callee": "pyfem/v3/fem/kinematics.py",
+          "callee_source_mtime_utc": "2026-11-05T06:44:08.826190+00:00",
+          "caller_cache_entries": 0,
+          "caller_cache_live_entries": 0,
+          "caller_cache_oldest_live_mtime_utc": null,
+          "coherent": true
+        },
+        {
+          "caller": "pyfem/v3/fem/tl_element.py",
+          "callee": "pyfem/v3/fem/quadrature.py",
+          "callee_source_mtime_utc": "2026-11-05T06:44:08.826696+00:00",
+          "caller_cache_entries": 0,
+          "caller_cache_live_entries": 0,
+          "caller_cache_oldest_live_mtime_utc": null,
+          "coherent": true
+        },
+        {
+          "caller": "pyfem/v3/fem/tl_element.py",
+          "callee": "pyfem/v3/fem/shapes.py",
+          "callee_source_mtime_utc": "2026-11-05T06:44:08.826981+00:00",
+          "caller_cache_entries": 0,
+          "caller_cache_live_entries": 0,
+          "caller_cache_oldest_live_mtime_utc": null,
+          "coherent": true
+        },
+        {
+          "caller": "pyfem/v3/fem/tl_element.py",
+          "callee": "pyfem/v3/fem/tl_kinematics.py",
+          "callee_source_mtime_utc": "2026-11-05T06:44:08.827394+00:00",
+          "caller_cache_entries": 0,
+          "caller_cache_live_entries": 0,
+          "caller_cache_oldest_live_mtime_utc": null,
+          "coherent": true
+        }
+      ]
+    },
+    "harness_matrix": "Q13 Riks deck route: riks-fan/2,8,32,128 at 1/2/4/8/16 threads, budget_s=0.6, plus legacy and cold riks-fan/32 cells",
+    "harness_wall_s": 35.031
+  },
+  "records": [
+    {
+      "category": "family",
+      "workload": "riks-fan/2",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 2,
+      "n_dofs": 6,
+      "metrics": {
+        "load": {
+          "min_ms": 15.177458990365267,
+          "median_ms": 16.072181999334134,
+          "mean_ms": 16.124050167854875,
+          "reps": 30,
+          "samples_ms": [
+            16.220855992287397,
+            16.344180010491982,
+            16.313283995259553,
+            15.903916995739564,
+            16.312576015479863,
+            16.9267870078329,
+            15.693498979089782,
+            15.625488013029099,
+            16.017568006645888,
+            15.543287998298183,
+            15.177458990365267,
+            15.985235018888488,
+            16.20281900977716,
+            16.040519985836,
+            17.928034998476505,
+            17.83449898357503,
+            16.460412996821105,
+            15.487224998651072,
+            15.518166997935623,
+            15.594889991916716,
+            15.776048006955534,
+            15.930146997561678,
+            15.786316012963653,
+            16.10384401283227,
+            16.009350976673886,
+            16.10551800695248,
+            16.16942000691779,
+            16.259108000667766,
+            16.198216006159782,
+            16.252832021564245
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 49.61056399042718,
+          "median_ms": 50.59264099691063,
+          "mean_ms": 51.692873818948016,
+          "reps": 11,
+          "samples_ms": [
+            52.00105899712071,
+            52.37230702186935,
+            49.61056399042718,
+            50.37812501541339,
+            50.59264099691063,
+            49.84898000839166,
+            59.78491299902089,
+            52.07906698342413,
+            49.860340979648754,
+            49.86460201325826,
+            52.22901300294325
+          ],
+          "rss_delta_mb": 0.015625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=31 legacy=31"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 2.1144291994397763e-13,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=6.750e-14"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 1.9751297515504273e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.551e-17"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/2",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 2,
+      "n_elems": 2,
+      "n_dofs": 6,
+      "metrics": {
+        "load": {
+          "min_ms": 15.093227993929759,
+          "median_ms": 15.913211987935938,
+          "mean_ms": 16.09495453206667,
+          "reps": 30,
+          "samples_ms": [
+            16.87094898079522,
+            16.158737998921424,
+            16.208207001909614,
+            16.719250997994095,
+            17.592046002391726,
+            15.781273978063837,
+            16.046817996539176,
+            17.23394400323741,
+            16.433301992947236,
+            15.86857798974961,
+            15.670953987864777,
+            15.46724300715141,
+            15.665159997297451,
+            15.814134996617213,
+            15.68631301051937,
+            15.684829006204382,
+            15.957845986122265,
+            15.712582011474296,
+            16.778240009443834,
+            15.49321401398629,
+            15.388988016638905,
+            15.093227993929759,
+            15.66293800715357,
+            15.223230002447963,
+            15.77066897880286,
+            16.536829993128777,
+            16.344117000699043,
+            16.040663002058864,
+            16.646124015096575,
+            17.298225982813165
+          ],
+          "rss_delta_mb": 0.06640625,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 49.38263198710047,
+          "median_ms": 50.83364997699391,
+          "mean_ms": 51.30433107842691,
+          "reps": 12,
+          "samples_ms": [
+            49.38263198710047,
+            53.376031981315464,
+            51.6143350105267,
+            50.51686000660993,
+            49.658769014058635,
+            51.16160699981265,
+            49.90722000366077,
+            50.67045701434836,
+            51.671051973244175,
+            50.83695097710006,
+            50.83034897688776,
+            56.02570899645798
+          ],
+          "rss_delta_mb": 0.00390625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=31 legacy=31"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 2.1144291994397763e-13,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=6.750e-14"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 1.9751297515504273e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.551e-17"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/2",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 4,
+      "n_elems": 2,
+      "n_dofs": 6,
+      "metrics": {
+        "load": {
+          "min_ms": 15.161118004471064,
+          "median_ms": 16.119459993205965,
+          "mean_ms": 16.139366802720662,
+          "reps": 30,
+          "samples_ms": [
+            16.164578002644703,
+            15.387293009553105,
+            15.370471985079348,
+            16.38079501572065,
+            16.11751300515607,
+            16.292042011627927,
+            16.25045100809075,
+            15.966599021339789,
+            16.25979700475,
+            16.08508001663722,
+            16.12140698125586,
+            16.283987002680078,
+            16.177730984054506,
+            16.093395999632776,
+            15.99172200076282,
+            16.122049011755735,
+            16.417303995694965,
+            15.588370006298646,
+            15.418348019011319,
+            17.718340997816995,
+            15.476216998649761,
+            16.13541500410065,
+            15.929503017105162,
+            15.795034996699542,
+            15.94478398328647,
+            16.477483994094655,
+            16.027381003368646,
+            17.87224499275908,
+            17.154547007521614,
+            15.161118004471064
+          ],
+          "rss_delta_mb": 0.015625,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 50.072760990587994,
+          "median_ms": 53.61527700733859,
+          "mean_ms": 53.127074596704915,
+          "reps": 10,
+          "samples_ms": [
+            54.815331008285284,
+            54.657696979120374,
+            56.40195601154119,
+            50.072760990587994,
+            50.86391998338513,
+            53.63738400046714,
+            54.78711499017663,
+            53.593170014210045,
+            52.02102300245315,
+            50.42038898682222
+          ],
+          "rss_delta_mb": 0.1640625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=31 legacy=31"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 2.1144291994397763e-13,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=6.750e-14"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 1.9751297515504273e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.551e-17"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/2",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 8,
+      "n_elems": 2,
+      "n_dofs": 6,
+      "metrics": {
+        "load": {
+          "min_ms": 15.46660900930874,
+          "median_ms": 15.932951995637268,
+          "mean_ms": 16.221641763695516,
+          "reps": 30,
+          "samples_ms": [
+            16.60556101705879,
+            16.22395499725826,
+            15.799571992829442,
+            15.928364999126643,
+            15.896414988674223,
+            15.818225976545364,
+            17.076519987313077,
+            17.211913014762104,
+            17.6305009808857,
+            15.836726990528405,
+            16.282366996165365,
+            15.687331004301086,
+            15.539529995294288,
+            15.46660900930874,
+            16.52302299044095,
+            15.504267008509487,
+            16.06517200707458,
+            15.58256900170818,
+            15.567477996228263,
+            16.5637010068167,
+            17.94397598132491,
+            15.937538992147893,
+            16.57600299222395,
+            15.767539996886626,
+            15.84129300317727,
+            15.83411599858664,
+            17.38729397766292,
+            15.646005020244047,
+            16.923538001719862,
+            15.982146986061707
+          ],
+          "rss_delta_mb": 0.01953125,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 49.85093997674994,
+          "median_ms": 52.147309004794806,
+          "mean_ms": 51.935465821192004,
+          "reps": 11,
+          "samples_ms": [
+            52.54010300268419,
+            52.71443500532769,
+            52.651706006145105,
+            51.26106401439756,
+            52.147309004794806,
+            50.27532498934306,
+            53.79179000738077,
+            54.17695202049799,
+            51.94737800047733,
+            49.85093997674994,
+            49.933122005313635
+          ],
+          "rss_delta_mb": 0.00390625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=31 legacy=31"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 2.1144291994397763e-13,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=6.750e-14"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 1.9751297515504273e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.551e-17"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/2",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 2,
+      "n_dofs": 6,
+      "metrics": {
+        "load": {
+          "min_ms": 14.97586999903433,
+          "median_ms": 15.692268483689986,
+          "mean_ms": 15.840009631938301,
+          "reps": 30,
+          "samples_ms": [
+            17.097984004067257,
+            15.517049992922693,
+            15.923244995065033,
+            16.158014012034982,
+            16.415114019764587,
+            15.531751996604726,
+            17.179850983666256,
+            15.83237701561302,
+            16.001181007595733,
+            15.670724998926744,
+            14.97586999903433,
+            16.557616996578872,
+            15.691855980549008,
+            15.275434008799493,
+            15.328155976021662,
+            15.712060005171224,
+            15.363682003226131,
+            16.05265197576955,
+            15.692680986830965,
+            16.17581001482904,
+            15.308709000237286,
+            15.79903598758392,
+            15.604215004714206,
+            15.667718020267785,
+            15.531337005086243,
+            16.32631800021045,
+            15.244474983774126,
+            15.391641994938254,
+            16.668327007209882,
+            15.505400981055573
+          ],
+          "rss_delta_mb": 0.03125,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 50.5170059914235,
+          "median_ms": 52.807303494773805,
+          "mean_ms": 52.82226089620963,
+          "reps": 10,
+          "samples_ms": [
+            55.27455298579298,
+            54.999657993903384,
+            51.004893000936136,
+            50.5170059914235,
+            52.471734990831465,
+            50.85730299470015,
+            50.581848016008735,
+            55.660912999883294,
+            53.142871998716146,
+            53.711827989900485
+          ],
+          "rss_delta_mb": 0.01953125,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=31 legacy=31"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 2.1144291994397763e-13,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=6.750e-14"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 1.9751297515504273e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.551e-17"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/2",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 2,
+      "n_dofs": 6,
+      "metrics": {
+        "load": {
+          "min_ms": 1.0925579990725964,
+          "median_ms": 1.1138449917780235,
+          "mean_ms": 1.1432085651904345,
+          "reps": 30,
+          "samples_ms": [
+            1.2056039995513856,
+            1.1180309811607003,
+            1.3099649804644287,
+            1.1340910277795047,
+            1.129707001382485,
+            1.2657659826800227,
+            1.153575984062627,
+            1.1179659923072904,
+            1.0946370020974427,
+            1.1461019748821855,
+            1.0978830105159432,
+            1.0995360207743943,
+            1.0987620044033974,
+            1.098915992770344,
+            1.1097239912487566,
+            1.0925579990725964,
+            1.0956850019283593,
+            1.1418159992899746,
+            1.144506997661665,
+            1.0991980088874698,
+            1.2038039858452976,
+            1.2034729879815131,
+            1.302404998568818,
+            1.1033779883291572,
+            1.103927002986893,
+            1.229776011314243,
+            1.0966990084853023,
+            1.1013479961548,
+            1.0988300200551748,
+            1.098587003070861
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 63.41129197971895,
+          "median_ms": 64.61528901127167,
+          "mean_ms": 64.5207432040479,
+          "reps": 5,
+          "samples_ms": [
+            63.83754499256611,
+            66.01598401903175,
+            64.61528901127167,
+            64.72360601765104,
+            63.41129197971895
+          ],
+          "rss_delta_mb": null,
+          "note": "solver loop only; per-rep load excluded (M3 envelope)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=31 legacy=31"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 2.1144291994397763e-13,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=6.750e-14"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 1.9751297515504273e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.551e-17"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/8",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 8,
+      "n_dofs": 18,
+      "metrics": {
+        "load": {
+          "min_ms": 17.330995993688703,
+          "median_ms": 17.95790450705681,
+          "mean_ms": 19.222183598321863,
+          "reps": 30,
+          "samples_ms": [
+            18.954831000883132,
+            17.959590011741966,
+            18.03019698127173,
+            17.94292699196376,
+            17.979858996113762,
+            18.10067699989304,
+            17.956219002371654,
+            21.549703989876434,
+            18.415678991004825,
+            17.4894499941729,
+            18.718892009928823,
+            17.678742995485663,
+            17.66750100068748,
+            17.77038600994274,
+            17.517920990940183,
+            17.389972024830058,
+            17.40253999014385,
+            18.07202398777008,
+            17.543360008858144,
+            17.385774001013488,
+            18.2810359983705,
+            17.330995993688703,
+            17.356405995087698,
+            17.689755011815578,
+            48.25666200486012,
+            20.68506699288264,
+            20.322633994510397,
+            19.025488989427686,
+            17.580001993337646,
+            18.6112149967812
+          ],
+          "rss_delta_mb": 0.0625,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 19.58607300184667,
+          "median_ms": 20.32919999328442,
+          "mean_ms": 20.825584341795988,
+          "reps": 29,
+          "samples_ms": [
+            20.207348017720506,
+            20.61993899405934,
+            19.58607300184667,
+            21.762335003586486,
+            21.078341989777982,
+            21.267458010697737,
+            20.32919999328442,
+            19.969215005403385,
+            20.2212689910084,
+            19.817635999061167,
+            20.118064974667504,
+            20.0383469928056,
+            19.870297983288765,
+            19.909041991923004,
+            20.333977008704096,
+            20.718505984405056,
+            25.62252798816189,
+            22.84094301285222,
+            23.020277003524825,
+            22.36342302057892,
+            20.055203000083566,
+            19.693078997079283,
+            20.510834001470357,
+            20.177443977445364,
+            19.7266899922397,
+            21.506127988686785,
+            20.162812987109646,
+            21.188190003158525,
+            21.227343997452408
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/8",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 3.566753775996805e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 32.69678111581839,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=4.337e-19"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/8",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 2,
+      "n_elems": 8,
+      "n_dofs": 18,
+      "metrics": {
+        "load": {
+          "min_ms": 17.05669198418036,
+          "median_ms": 18.226674015750177,
+          "mean_ms": 18.38355596701149,
+          "reps": 30,
+          "samples_ms": [
+            17.983005003770813,
+            18.29990398255177,
+            17.982649005716667,
+            19.84848699066788,
+            17.549084994243458,
+            17.473140003858134,
+            19.624717999249697,
+            17.34861099976115,
+            17.79605701449327,
+            17.919809004524723,
+            17.915337026352063,
+            18.146395013900474,
+            18.1739570107311,
+            18.34489798056893,
+            18.240424018586054,
+            18.355737993260846,
+            18.507851025788113,
+            18.52775999577716,
+            18.294326990144327,
+            18.56585597852245,
+            18.773107993183658,
+            17.72872099536471,
+            20.878070004982874,
+            17.56940598716028,
+            18.2129240129143,
+            19.361687009222806,
+            19.000653992407024,
+            19.863142020767555,
+            18.164266977692023,
+            17.05669198418036
+          ],
+          "rss_delta_mb": 0.05859375,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 19.044869986828417,
+          "median_ms": 19.718336014193483,
+          "mean_ms": 21.758521935165238,
+          "reps": 30,
+          "samples_ms": [
+            19.111166009679437,
+            19.367531000170857,
+            20.102130016312003,
+            19.954463001340628,
+            21.16865900461562,
+            64.5057049987372,
+            26.480459986487404,
+            21.54231001622975,
+            20.50983501248993,
+            19.424958009039983,
+            19.254066981375217,
+            19.5031339826528,
+            19.62068601278588,
+            19.980131008196622,
+            22.115744999609888,
+            19.17585398769006,
+            19.666912005050108,
+            23.222007002914324,
+            22.035384987248108,
+            20.60517598874867,
+            19.769760023336858,
+            19.25982002285309,
+            19.4454749871511,
+            19.34138301294297,
+            19.52097800676711,
+            19.044869986828417,
+            19.47180400020443,
+            20.09644199279137,
+            19.556017010472715,
+            19.90279500023462
+          ],
+          "rss_delta_mb": 0.03515625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/8",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 3.566753775996805e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 32.69678111581839,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=4.337e-19"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/8",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 4,
+      "n_elems": 8,
+      "n_dofs": 18,
+      "metrics": {
+        "load": {
+          "min_ms": 17.319902981398627,
+          "median_ms": 17.875364996143617,
+          "mean_ms": 18.30532986690135,
+          "reps": 30,
+          "samples_ms": [
+            17.68838200950995,
+            18.277153983945027,
+            18.988385010743514,
+            17.86257600178942,
+            17.936108983121812,
+            17.631619004532695,
+            17.646419000811875,
+            17.319902981398627,
+            17.568181006936356,
+            18.099521985277534,
+            17.888153990497813,
+            18.692754994845018,
+            18.09924002736807,
+            18.82944200769998,
+            17.83593001891859,
+            18.69162599905394,
+            17.848249000962824,
+            17.98320998204872,
+            17.817402025684714,
+            17.627649009227753,
+            17.648278997512534,
+            17.431752989068627,
+            17.95215901802294,
+            17.973178008105606,
+            17.358863988192752,
+            17.690716980723664,
+            20.664834999479353,
+            22.72653000545688,
+            21.895551995839924,
+            17.486122000264004
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 19.291555014206097,
+          "median_ms": 20.387711992952973,
+          "mean_ms": 20.967964999225185,
+          "reps": 29,
+          "samples_ms": [
+            20.683004026068375,
+            21.946271997876465,
+            20.85318398894742,
+            20.387711992952973,
+            22.220049984753132,
+            20.26357501745224,
+            23.158858995884657,
+            19.450588995823637,
+            19.356919976416975,
+            19.722491007996723,
+            19.310083996970206,
+            19.555716979084536,
+            19.38969301409088,
+            19.291555014206097,
+            19.370817026356235,
+            19.845740986056626,
+            19.490926002617925,
+            19.96780899935402,
+            19.378834025701508,
+            19.875844998750836,
+            20.88253601687029,
+            24.16365098906681,
+            23.722148995148018,
+            24.943561991676688,
+            22.422946989536285,
+            22.26409298600629,
+            23.502183990785852,
+            21.030647010775283,
+            21.619538980303332
+          ],
+          "rss_delta_mb": 0.00390625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/8",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 3.566753775996805e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 32.69678111581839,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=4.337e-19"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/8",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 8,
+      "n_elems": 8,
+      "n_dofs": 18,
+      "metrics": {
+        "load": {
+          "min_ms": 17.458241985877976,
+          "median_ms": 19.110101493424736,
+          "mean_ms": 19.12271769736738,
+          "reps": 30,
+          "samples_ms": [
+            18.54954697773792,
+            19.193647982319817,
+            20.11775999562815,
+            19.62980200187303,
+            18.874239001888782,
+            18.16721700015478,
+            19.905186985852197,
+            17.458241985877976,
+            18.49181597935967,
+            19.32373401359655,
+            18.402202986180782,
+            19.381554011488333,
+            18.708905001403764,
+            18.385819013928995,
+            19.508636003592983,
+            19.486965000396594,
+            19.34521901421249,
+            19.801924005150795,
+            18.127172981621698,
+            21.405273990239948,
+            18.290601001353934,
+            18.732406984781846,
+            19.226005009841174,
+            19.017809012439102,
+            19.807945005595684,
+            19.93320501060225,
+            19.026555004529655,
+            19.940945989219472,
+            18.797658995026723,
+            18.643534975126386
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 20.086743985302746,
+          "median_ms": 21.339056998840533,
+          "mean_ms": 21.459861845449687,
+          "reps": 26,
+          "samples_ms": [
+            23.058118007611483,
+            21.894500008784235,
+            20.646834978833795,
+            20.874628011370078,
+            21.612373006064445,
+            21.278522995999083,
+            21.284596994519234,
+            22.012857982190326,
+            21.125497994944453,
+            21.70440900954418,
+            23.079570004483685,
+            21.188899991102517,
+            22.191714990185574,
+            20.194225013256073,
+            20.85957399685867,
+            21.393517003161833,
+            20.369392994325608,
+            21.552404999965802,
+            21.626154019031674,
+            23.5522759903688,
+            20.453074015676975,
+            22.865311009809375,
+            21.036366000771523,
+            20.086743985302746,
+            21.74593199742958,
+            20.26891298010014
+          ],
+          "rss_delta_mb": 0.00390625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/8",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 3.566753775996805e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 32.69678111581839,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=4.337e-19"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/8",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 8,
+      "n_dofs": 18,
+      "metrics": {
+        "load": {
+          "min_ms": 17.865944013465196,
+          "median_ms": 18.75690999440849,
+          "mean_ms": 19.027568999445066,
+          "reps": 30,
+          "samples_ms": [
+            18.104360991856083,
+            18.255174974910915,
+            19.201593997422606,
+            18.134471989469603,
+            18.74780099024065,
+            22.904969984665513,
+            24.109527003020048,
+            20.895027002552524,
+            18.011025997111574,
+            19.40336197731085,
+            18.45423600752838,
+            19.12786197499372,
+            19.305968016851693,
+            17.865944013465196,
+            18.890500999987125,
+            19.51871599885635,
+            18.973982980242,
+            18.89170502545312,
+            17.88721402408555,
+            18.230876012239605,
+            18.58974399510771,
+            18.143652996513993,
+            18.766018998576328,
+            18.34748001419939,
+            17.896026984089985,
+            19.094030023552477,
+            19.455312023637816,
+            18.157855985919014,
+            19.102151010883972,
+            18.36047798860818
+          ],
+          "rss_delta_mb": 0.0546875,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 19.926893000956625,
+          "median_ms": 21.488806989509612,
+          "mean_ms": 21.523789346121767,
+          "reps": 29,
+          "samples_ms": [
+            20.36930702161044,
+            19.926893000956625,
+            21.012821001932025,
+            19.983132980996743,
+            21.016225015046075,
+            22.667471988825127,
+            22.124659997643903,
+            22.986326017417014,
+            20.626558020012453,
+            21.59626199863851,
+            21.136413008207455,
+            21.488806989509612,
+            21.364944986999035,
+            21.465750003699213,
+            22.38124201539904,
+            21.596774022327736,
+            23.615593003341928,
+            20.869528001639992,
+            21.897308994084597,
+            21.176365000428632,
+            22.577677998924628,
+            21.697032992960885,
+            21.10308999544941,
+            21.811237995279953,
+            21.522694994928315,
+            20.98465702147223,
+            20.82783298101276,
+            21.614206983940676,
+            22.749077004846185
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/8",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 3.566753775996805e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 32.69678111581839,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=4.337e-19"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/8",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 8,
+      "n_dofs": 18,
+      "metrics": {
+        "load": {
+          "min_ms": 1.9493190047796816,
+          "median_ms": 2.1185325022088364,
+          "mean_ms": 2.1735986995433145,
+          "reps": 30,
+          "samples_ms": [
+            1.9794699910562485,
+            2.1322009852156043,
+            1.9718910043593496,
+            2.0294349815230817,
+            2.3287419753614813,
+            2.632810006616637,
+            2.643139014253393,
+            2.5037910090759397,
+            2.045041008386761,
+            2.0878170034848154,
+            2.1696129988413304,
+            2.199347974965349,
+            1.9958649936597794,
+            2.1708659769501537,
+            2.1237150067463517,
+            2.198316011345014,
+            2.07776200841181,
+            2.8066460217814893,
+            2.2519459889736027,
+            2.022836997639388,
+            2.0007170096505433,
+            2.113349997671321,
+            2.0464050176087767,
+            1.9493190047796816,
+            2.0631179795600474,
+            2.0517710072454065,
+            2.0526309963315725,
+            2.236080006696284,
+            2.1501840092241764,
+            2.173134998884052
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 54.76606098818593,
+          "median_ms": 56.25397100811824,
+          "mean_ms": 56.89550659735687,
+          "reps": 5,
+          "samples_ms": [
+            54.76606098818593,
+            59.70655201235786,
+            56.25397100811824,
+            57.91899099131115,
+            55.831957986811176
+          ],
+          "rss_delta_mb": null,
+          "note": "solver loop only; per-rep load excluded (M3 envelope)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/8",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 3.566753775996805e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 32.69678111581839,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=4.337e-19"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/32",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 32,
+      "n_dofs": 66,
+      "metrics": {
+        "load": {
+          "min_ms": 26.058654999360442,
+          "median_ms": 27.388524496927857,
+          "mean_ms": 28.318684246914927,
+          "reps": 20,
+          "samples_ms": [
+            29.288174002431333,
+            26.411708997329697,
+            27.18583299429156,
+            26.982356008375064,
+            26.058654999360442,
+            30.392535991268232,
+            35.62962301657535,
+            29.182613012380898,
+            31.77201098878868,
+            28.049809974618256,
+            27.089682000223547,
+            27.04694599378854,
+            28.191099991090596,
+            27.45766899897717,
+            27.117686986457556,
+            27.319379994878545,
+            27.142053993884474,
+            28.133990010246634,
+            28.848583984654397,
+            27.073272998677567
+          ],
+          "rss_delta_mb": 0.06640625,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 21.64808800444007,
+          "median_ms": 22.772547003114596,
+          "mean_ms": 22.811055596685037,
+          "reps": 25,
+          "samples_ms": [
+            23.72050000121817,
+            21.90204500220716,
+            23.163678008131683,
+            22.303106990875676,
+            23.600925982464105,
+            22.3018919932656,
+            22.772547003114596,
+            23.328745999606326,
+            23.842368012992665,
+            22.072610998293385,
+            22.588128980714828,
+            23.76131498022005,
+            22.154273989144713,
+            23.85505201527849,
+            22.142547997646034,
+            22.5210830103606,
+            22.792470990680158,
+            23.061095998855308,
+            21.64808800444007,
+            21.802023984491825,
+            22.428017982747406,
+            22.51882999553345,
+            23.83568199002184,
+            22.793359006755054,
+            23.36600099806674
+          ],
+          "rss_delta_mb": 0.03515625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/32",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.329611287515682e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 4.927526501529495,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=1.355e-20"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/32",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 2,
+      "n_elems": 32,
+      "n_dofs": 66,
+      "metrics": {
+        "load": {
+          "min_ms": 25.48931000637822,
+          "median_ms": 25.960405997466296,
+          "mean_ms": 27.555786958976608,
+          "reps": 23,
+          "samples_ms": [
+            25.73447601753287,
+            25.915178994182497,
+            26.553962990874425,
+            25.909681018674746,
+            27.10118901450187,
+            25.771169981453568,
+            26.95907899760641,
+            25.94285600935109,
+            25.712642003782094,
+            26.291820977348834,
+            56.30404100520536,
+            29.604595009004697,
+            26.560638012597337,
+            25.48931000637822,
+            26.22160199098289,
+            25.926613016054034,
+            25.87074800976552,
+            25.960405997466296,
+            26.344883983256295,
+            26.290670008165762,
+            26.308837987016886,
+            25.496197020402178,
+            25.512502004858106
+          ],
+          "rss_delta_mb": 0.01171875,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 21.206440986134112,
+          "median_ms": 22.3921500146389,
+          "mean_ms": 22.75255718268454,
+          "reps": 27,
+          "samples_ms": [
+            21.655937016475946,
+            21.5511959977448,
+            22.167770977830514,
+            21.206440986134112,
+            22.01130398316309,
+            22.981443005846813,
+            23.14118400681764,
+            23.546798998722807,
+            23.5154360125307,
+            22.40750499186106,
+            22.27390298503451,
+            23.880755004938692,
+            22.05340500222519,
+            22.74197802762501,
+            22.302069992292672,
+            22.62360998429358,
+            21.756996982730925,
+            21.747184975538403,
+            22.54417398944497,
+            22.3921500146389,
+            21.83707701624371,
+            22.5013549788855,
+            27.531316998647526,
+            27.153147995704785,
+            23.436145012965426,
+            22.075966000556946,
+            21.282792993588373
+          ],
+          "rss_delta_mb": 0.00390625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/32",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.329611287515682e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 4.927526501529495,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=1.355e-20"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/32",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 4,
+      "n_elems": 32,
+      "n_dofs": 66,
+      "metrics": {
+        "load": {
+          "min_ms": 24.89063300890848,
+          "median_ms": 26.119943999219686,
+          "mean_ms": 26.19867782366624,
+          "reps": 23,
+          "samples_ms": [
+            25.325410009827465,
+            25.69126698654145,
+            26.217745995381847,
+            26.8270910019055,
+            25.618818996008486,
+            26.941454998450354,
+            26.44608198897913,
+            26.136486005270854,
+            25.67193200229667,
+            27.96856901841238,
+            27.399242972023785,
+            25.97236298606731,
+            26.416943001095206,
+            26.834380987565964,
+            25.746530009200796,
+            26.611823006533086,
+            25.70892998483032,
+            25.654024007963017,
+            26.59383899299428,
+            26.119943999219686,
+            24.89063300890848,
+            25.729319982929155,
+            26.0467600019183
+          ],
+          "rss_delta_mb": 0.16015625,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 21.060405997559428,
+          "median_ms": 22.66569298808463,
+          "mean_ms": 23.24035271054267,
+          "reps": 28,
+          "samples_ms": [
+            21.26939600566402,
+            22.01911900192499,
+            21.718748001148924,
+            23.796718975063413,
+            22.972806997131556,
+            22.131865000119433,
+            22.49579699127935,
+            22.230796981602907,
+            24.703917995793745,
+            24.836392985889688,
+            25.90204300940968,
+            25.465938000706956,
+            25.483214005362242,
+            25.03469100338407,
+            25.473585003055632,
+            24.903625017032027,
+            25.441858015256003,
+            24.873870017472655,
+            24.5803709840402,
+            21.060405997559428,
+            22.01434498419985,
+            21.621883992338553,
+            21.408807981060818,
+            21.4221770002041,
+            21.80862199747935,
+            22.83558898488991,
+            21.328984992578626,
+            21.89430597354658
+          ],
+          "rss_delta_mb": 0.09375,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/32",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.329611287515682e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 4.927526501529495,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=1.355e-20"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/32",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 8,
+      "n_elems": 32,
+      "n_dofs": 66,
+      "metrics": {
+        "load": {
+          "min_ms": 25.32269697985612,
+          "median_ms": 26.832871983060613,
+          "mean_ms": 27.624313953724183,
+          "reps": 22,
+          "samples_ms": [
+            26.784432993736118,
+            26.80465398589149,
+            27.983694017166272,
+            25.56176099460572,
+            26.191940007265657,
+            25.767469021957368,
+            26.22746000997722,
+            27.933912992011756,
+            30.80336400307715,
+            27.359144005458802,
+            26.766356982989237,
+            26.861089980229735,
+            26.52975099044852,
+            26.696988992625847,
+            29.149472014978528,
+            28.23373000137508,
+            25.32269697985612,
+            25.856045016553253,
+            27.830325008835644,
+            30.356898991158232,
+            31.09902498545125,
+            31.614695006283
+          ],
+          "rss_delta_mb": 0.00390625,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 20.94902901444584,
+          "median_ms": 23.26619999075774,
+          "mean_ms": 23.436202883693532,
+          "reps": 26,
+          "samples_ms": [
+            22.81128501635976,
+            22.763015003874898,
+            21.662768005626276,
+            22.037012997316197,
+            22.638656984781846,
+            20.94902901444584,
+            22.05681099439971,
+            22.414425009628758,
+            23.336832993663847,
+            23.3134459995199,
+            24.863913014996797,
+            27.307329000905156,
+            26.405607990454882,
+            25.755871000001207,
+            24.16393399471417,
+            23.80639800685458,
+            22.83776001422666,
+            23.17768899956718,
+            23.557531996630132,
+            22.680710011627525,
+            23.45103200059384,
+            23.46378198126331,
+            23.607972980244085,
+            23.86931999353692,
+            23.19018798880279,
+            23.218953981995583
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/32",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.329611287515682e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 4.927526501529495,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=1.355e-20"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/32",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 32,
+      "n_dofs": 66,
+      "metrics": {
+        "load": {
+          "min_ms": 25.02912699128501,
+          "median_ms": 26.089455001056194,
+          "mean_ms": 27.340059631234524,
+          "reps": 19,
+          "samples_ms": [
+            30.430601997068152,
+            27.522406016942114,
+            25.43025798513554,
+            35.962789988843724,
+            31.844059994909912,
+            31.301976006943733,
+            26.089455001056194,
+            25.742942991200835,
+            25.750942004378885,
+            26.7032090050634,
+            25.734154012752697,
+            25.02912699128501,
+            25.374440010637045,
+            26.151316007599235,
+            25.572860991815105,
+            25.792092987103388,
+            25.717487005749717,
+            26.721388014266267,
+            26.589625980705023
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 21.1075360130053,
+          "median_ms": 22.54334399185609,
+          "mean_ms": 22.478087304849534,
+          "reps": 26,
+          "samples_ms": [
+            22.36749997246079,
+            22.488933987915516,
+            21.719488024245948,
+            21.926640009041876,
+            22.47176502714865,
+            22.539361991221085,
+            23.613158002262935,
+            23.048845992889255,
+            22.98891800455749,
+            23.085991997504607,
+            22.494873992400244,
+            22.70474098622799,
+            22.495440993225202,
+            22.546930005773902,
+            22.772449010517448,
+            22.563340986380354,
+            22.839615994598716,
+            22.445039998274297,
+            22.53975797793828,
+            22.712882986525074,
+            22.64595398446545,
+            22.750280011678115,
+            21.1075360130053,
+            21.228103985777125,
+            22.996483981842175,
+            21.336236008210108
+          ],
+          "rss_delta_mb": 0.00390625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/32",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.329611287515682e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 4.927526501529495,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=1.355e-20"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/32",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 32,
+      "n_dofs": 66,
+      "metrics": {
+        "load": {
+          "min_ms": 5.3662999998778105,
+          "median_ms": 5.585096005233936,
+          "mean_ms": 5.976212669823629,
+          "reps": 30,
+          "samples_ms": [
+            5.386472010286525,
+            5.4995500249788165,
+            5.469547002576292,
+            5.5898250138852745,
+            5.9705720050260425,
+            6.605817994568497,
+            5.5803669965825975,
+            5.518010002560914,
+            5.447028001071885,
+            5.418775021098554,
+            5.88930697995238,
+            5.504435015609488,
+            5.501928011653945,
+            6.740465003531426,
+            5.492504016729072,
+            5.8194030134473,
+            5.469491006806493,
+            5.465688998810947,
+            5.3662999998778105,
+            5.791492993012071,
+            5.604180012596771,
+            6.519959977595136,
+            5.720185989048332,
+            9.07089898828417,
+            6.062444008421153,
+            5.51330900634639,
+            5.482137989019975,
+            8.673981006722897,
+            7.148920994950458,
+            5.963383009657264
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 165.11168199940585,
+          "median_ms": 169.54364301636815,
+          "mean_ms": 169.46581001393497,
+          "reps": 5,
+          "samples_ms": [
+            165.11168199940585,
+            172.6991080213338,
+            169.54364301636815,
+            168.72826701728627,
+            171.24635001528077
+          ],
+          "rss_delta_mb": null,
+          "note": "solver loop only; per-rep load excluded (M3 envelope)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/32",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.329611287515682e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 4.927526501529495,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=1.355e-20"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/128",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 128,
+      "n_dofs": 258,
+      "metrics": {
+        "load": {
+          "min_ms": 58.55896900175139,
+          "median_ms": 60.83221650624182,
+          "mean_ms": 65.3245092544239,
+          "reps": 8,
+          "samples_ms": [
+            69.47075799689628,
+            93.51686100126244,
+            58.55896900175139,
+            58.947150013409555,
+            61.0810250218492,
+            59.3568779877387,
+            61.02132401429117,
+            60.643108998192474
+          ],
+          "rss_delta_mb": 0.546875,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 28.492927987826988,
+          "median_ms": 29.38585051742848,
+          "mean_ms": 29.671790110619945,
+          "reps": 18,
+          "samples_ms": [
+            32.78976498404518,
+            28.492927987826988,
+            28.506639995612204,
+            29.247087019030005,
+            28.533915989100933,
+            30.50924398121424,
+            29.649919015355408,
+            29.158935009036213,
+            28.56368600623682,
+            30.62826400855556,
+            29.524614015826955,
+            29.235110996523872,
+            29.782058991258964,
+            30.589578993385658,
+            29.141555016394705,
+            30.54571498068981,
+            30.126318015391007,
+            29.0668869856745
+          ],
+          "rss_delta_mb": 0.51171875,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/128",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.32919655887875e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 226.52291307334994,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.482e-22"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/128",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 2,
+      "n_elems": 128,
+      "n_dofs": 258,
+      "metrics": {
+        "load": {
+          "min_ms": 60.46177298412658,
+          "median_ms": 61.034779995679855,
+          "mean_ms": 67.23301633125327,
+          "reps": 6,
+          "samples_ms": [
+            97.25755799445324,
+            60.46177298412658,
+            60.815514996647835,
+            60.65439901431091,
+            62.954808003269136,
+            61.254044994711876
+          ],
+          "rss_delta_mb": 0.37890625,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 28.0094770132564,
+          "median_ms": 29.61792697897181,
+          "mean_ms": 29.88119980381314,
+          "reps": 21,
+          "samples_ms": [
+            28.48020099918358,
+            29.53202699427493,
+            29.901506000896916,
+            29.731563990935683,
+            29.754237999441102,
+            29.716482007643208,
+            30.213841993827373,
+            29.832825006451458,
+            29.15402498911135,
+            30.859158985549584,
+            28.386096004396677,
+            29.61792697897181,
+            32.048078981461,
+            29.20269497553818,
+            35.46479597571306,
+            32.576755998888984,
+            29.537303984398022,
+            28.378195012919605,
+            28.298336983425543,
+            28.80966500379145,
+            28.0094770132564
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/128",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.32919655887875e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 226.52291307334994,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.482e-22"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/128",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 4,
+      "n_elems": 128,
+      "n_dofs": 258,
+      "metrics": {
+        "load": {
+          "min_ms": 58.69601198355667,
+          "median_ms": 60.7861629978288,
+          "mean_ms": 65.87944016306817,
+          "reps": 6,
+          "samples_ms": [
+            93.62717100884765,
+            62.28376799845137,
+            58.69601198355667,
+            59.525816002860665,
+            59.09736399189569,
+            62.04650999279693
+          ],
+          "rss_delta_mb": 0.2109375,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 28.66400600760244,
+          "median_ms": 30.24451300734654,
+          "mean_ms": 30.525814252905548,
+          "reps": 20,
+          "samples_ms": [
+            28.731720987707376,
+            29.582690011011437,
+            28.66400600760244,
+            30.599171004723758,
+            29.198703996371478,
+            31.162505998509005,
+            28.71957200113684,
+            31.228338018991053,
+            29.715237993514165,
+            30.042123020393774,
+            30.508308991556987,
+            35.55575298378244,
+            34.27890400053002,
+            30.493427999317646,
+            30.279739992693067,
+            30.419304996030405,
+            29.986663023009896,
+            30.209286022000015,
+            31.218682997860014,
+            29.92214501136914
+          ],
+          "rss_delta_mb": 0.015625,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/128",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.32919655887875e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 226.52291307334994,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.482e-22"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/128",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 8,
+      "n_elems": 128,
+      "n_dofs": 258,
+      "metrics": {
+        "load": {
+          "min_ms": 59.40479299169965,
+          "median_ms": 62.34744898392819,
+          "mean_ms": 65.97312422107078,
+          "reps": 9,
+          "samples_ms": [
+            64.34101000195369,
+            96.97533401777036,
+            62.34744898392819,
+            61.343492998275906,
+            62.33898299979046,
+            59.40479299169965,
+            59.789710998302326,
+            63.930342003004625,
+            63.287002994911745
+          ],
+          "rss_delta_mb": 0.0,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 29.224608006188646,
+          "median_ms": 31.37475799303502,
+          "mean_ms": 32.21900936669523,
+          "reps": 19,
+          "samples_ms": [
+            30.714758002432063,
+            39.94915998191573,
+            31.586577999405563,
+            30.000809987541288,
+            30.637502000899985,
+            31.53201800887473,
+            31.799388001672924,
+            31.37475799303502,
+            33.19840301992372,
+            30.059009994147345,
+            30.93378900666721,
+            29.224608006188646,
+            29.561577015556395,
+            29.94737497647293,
+            29.82849400723353,
+            33.50098698865622,
+            35.20806698361412,
+            37.35203799442388,
+            35.751857998548076
+          ],
+          "rss_delta_mb": 0.12109375,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/128",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.32919655887875e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 226.52291307334994,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.482e-22"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/128",
+      "side": "v3",
+      "mode": "warm",
+      "threads": 16,
+      "n_elems": 128,
+      "n_dofs": 258,
+      "metrics": {
+        "load": {
+          "min_ms": 57.967127999290824,
+          "median_ms": 60.38667098619044,
+          "mean_ms": 65.431454742793,
+          "reps": 8,
+          "samples_ms": [
+            70.22330598556437,
+            60.294831986539066,
+            60.47850998584181,
+            59.589759999653324,
+            59.985041996696964,
+            63.23172297561541,
+            57.967127999290824,
+            91.68133701314218
+          ],
+          "rss_delta_mb": 0.27734375,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 28.277434001211077,
+          "median_ms": 29.613095495733432,
+          "mean_ms": 29.797327111332883,
+          "reps": 18,
+          "samples_ms": [
+            32.44421401177533,
+            28.758978995028883,
+            30.586342996684834,
+            29.83554298407398,
+            29.32601500651799,
+            28.77777599496767,
+            30.006409011548385,
+            28.277434001211077,
+            30.095866008196026,
+            28.42094999505207,
+            29.592032980872318,
+            30.140707007376477,
+            29.502093006158248,
+            29.634158010594547,
+            30.89950099820271,
+            31.928729003993794,
+            29.323588008992374,
+            28.8015499827452
+          ],
+          "rss_delta_mb": 0.02734375,
+          "note": ""
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/128",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.32919655887875e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 226.52291307334994,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.482e-22"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "family",
+      "workload": "riks-fan/128",
+      "side": "legacy",
+      "mode": "warm",
+      "threads": 1,
+      "n_elems": 128,
+      "n_dofs": 258,
+      "metrics": {
+        "load": {
+          "min_ms": 19.608856993727386,
+          "median_ms": 22.813319985289127,
+          "mean_ms": 22.800653283151664,
+          "reps": 28,
+          "samples_ms": [
+            21.063549007521942,
+            26.9932980008889,
+            23.6686349962838,
+            23.506295023253188,
+            23.479850991861895,
+            20.850588014582172,
+            22.02496098470874,
+            21.9022520177532,
+            22.440166008891538,
+            20.773539989022538,
+            24.86892297747545,
+            21.87272597802803,
+            20.21795601467602,
+            19.608856993727386,
+            20.089946017833427,
+            21.78125799400732,
+            22.20215098350309,
+            24.17035898542963,
+            23.11544999247417,
+            25.726403982844204,
+            24.797488003969193,
+            22.607024991884828,
+            25.071306998142973,
+            23.293936013942584,
+            22.726347990101203,
+            22.90029198047705,
+            23.434114991687238,
+            23.230616003274918
+          ],
+          "rss_delta_mb": 0.12890625,
+          "note": ""
+        },
+        "e2e": {
+          "min_ms": 632.4477219895925,
+          "median_ms": 647.1437110158149,
+          "mean_ms": 653.2461371971294,
+          "reps": 5,
+          "samples_ms": [
+            633.6396370024886,
+            647.1437110158149,
+            632.4477219895925,
+            648.0916779837571,
+            704.907937993994
+          ],
+          "rss_delta_mb": null,
+          "note": "solver loop only; per-rep load excluded (M3 envelope)"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "workload": "riks-fan/128",
+        "passed": true,
+        "checks": [
+          {
+            "name": "driver-status",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "status=COMPLETED; termination=ArcLengthTermination.LOAD_PARAMETER_LIMIT"
+          },
+          {
+            "name": "cycle-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "v3=11 legacy=11"
+          },
+          {
+            "name": "per-cycle-lam",
+            "passed": true,
+            "max_rel_diff": 5.32919655887875e-16,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=3.553e-15"
+          },
+          {
+            "name": "per-cycle-state",
+            "passed": true,
+            "max_rel_diff": 226.52291307334994,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "detail": "max_abs=5.482e-22"
+          },
+          {
+            "name": "per-cycle-correction-count",
+            "passed": true,
+            "max_rel_diff": 0.0,
+            "rtol": 0.0,
+            "atol": 0.0,
+            "detail": "max_abs=0.000e+00"
+          }
+        ]
+      }
+    },
+    {
+      "category": "cold",
+      "workload": "riks-fan/32",
+      "side": "v3",
+      "mode": "cold",
+      "threads": 1,
+      "n_elems": 32,
+      "n_dofs": 66,
+      "metrics": {
+        "import": {
+          "min_ms": 667.600462998962,
+          "median_ms": 667.600462998962,
+          "mean_ms": 667.600462998962,
+          "reps": 1,
+          "samples_ms": [
+            667.600462998962
+          ],
+          "rss_delta_mb": null,
+          "note": ""
+        },
+        "load": {
+          "min_ms": 30.097101989667863,
+          "median_ms": 30.097101989667863,
+          "mean_ms": 30.097101989667863,
+          "reps": 1,
+          "samples_ms": [
+            30.097101989667863
+          ],
+          "rss_delta_mb": null,
+          "note": ""
+        },
+        "solve": {
+          "min_ms": 177.98054398735985,
+          "median_ms": 177.98054398735985,
+          "mean_ms": 177.98054398735985,
+          "reps": 1,
+          "samples_ms": [
+            177.98054398735985
+          ],
+          "rss_delta_mb": null,
+          "note": ""
+        },
+        "wall": {
+          "min_ms": 1129.8464860010426,
+          "median_ms": 1129.8464860010426,
+          "mean_ms": 1129.8464860010426,
+          "reps": 1,
+          "samples_ms": [
+            1129.8464860010426
+          ],
+          "rss_delta_mb": 118.8515625,
+          "note": "parent-measured subprocess wall; rss_delta_mb = worker peak RSS"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "detail": "gated by parent"
+      }
+    },
+    {
+      "category": "cold",
+      "workload": "riks-fan/32",
+      "side": "v3",
+      "mode": "cold",
+      "threads": 16,
+      "n_elems": 32,
+      "n_dofs": 66,
+      "metrics": {
+        "import": {
+          "min_ms": 693.5424859984778,
+          "median_ms": 693.5424859984778,
+          "mean_ms": 693.5424859984778,
+          "reps": 1,
+          "samples_ms": [
+            693.5424859984778
+          ],
+          "rss_delta_mb": null,
+          "note": ""
+        },
+        "load": {
+          "min_ms": 28.89360600966029,
+          "median_ms": 28.89360600966029,
+          "mean_ms": 28.89360600966029,
+          "reps": 1,
+          "samples_ms": [
+            28.89360600966029
+          ],
+          "rss_delta_mb": null,
+          "note": ""
+        },
+        "solve": {
+          "min_ms": 148.63862399943173,
+          "median_ms": 148.63862399943173,
+          "mean_ms": 148.63862399943173,
+          "reps": 1,
+          "samples_ms": [
+            148.63862399943173
+          ],
+          "rss_delta_mb": null,
+          "note": ""
+        },
+        "wall": {
+          "min_ms": 1119.3647570034955,
+          "median_ms": 1119.3647570034955,
+          "mean_ms": 1119.3647570034955,
+          "reps": 1,
+          "samples_ms": [
+            1119.3647570034955
+          ],
+          "rss_delta_mb": 117.390625,
+          "note": "parent-measured subprocess wall; rss_delta_mb = worker peak RSS"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "detail": "gated by parent"
+      }
+    },
+    {
+      "category": "cold",
+      "workload": "riks-fan/32",
+      "side": "legacy",
+      "mode": "cold",
+      "threads": 1,
+      "n_elems": 32,
+      "n_dofs": 66,
+      "metrics": {
+        "import": {
+          "min_ms": 258.38248399668373,
+          "median_ms": 258.38248399668373,
+          "mean_ms": 258.38248399668373,
+          "reps": 1,
+          "samples_ms": [
+            258.38248399668373
+          ],
+          "rss_delta_mb": null,
+          "note": ""
+        },
+        "load": {
+          "min_ms": 9.5005180046428,
+          "median_ms": 9.5005180046428,
+          "mean_ms": 9.5005180046428,
+          "reps": 1,
+          "samples_ms": [
+            9.5005180046428
+          ],
+          "rss_delta_mb": null,
+          "note": ""
+        },
+        "solve": {
+          "min_ms": 179.66220900416374,
+          "median_ms": 179.66220900416374,
+          "mean_ms": 179.66220900416374,
+          "reps": 1,
+          "samples_ms": [
+            179.66220900416374
+          ],
+          "rss_delta_mb": null,
+          "note": ""
+        },
+        "wall": {
+          "min_ms": 563.0635819979943,
+          "median_ms": 563.0635819979943,
+          "mean_ms": 563.0635819979943,
+          "reps": 1,
+          "samples_ms": [
+            563.0635819979943
+          ],
+          "rss_delta_mb": 46.375,
+          "note": "parent-measured subprocess wall; rss_delta_mb = worker peak RSS"
+        }
+      },
+      "logical_bytes": {},
+      "correctness": {
+        "passed": true,
+        "detail": "gated by parent"
+      }
+    }
+  ]
+}
