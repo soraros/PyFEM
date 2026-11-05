@@ -4027,12 +4027,18 @@ not regenerated from the deleted implementation.
   cycle diagnostics, full/reduced projections, and direct reactions were already
   generic in `test_v3_constraints.py`. The frozen
   `test_v3_program_compile.py::{test_chain_through_prescribed_root_composes_negative_factor_and_derivative,test_multiple_slaves_may_share_one_free_master,test_compilation_rejects_nonfinite_chain_intermediate,test_evaluation_rejects_nonfinite_affine_product_and_load_reduction}`
-  obligations move to `test_prescribed_root_and_shared_master_composition` and
-  `test_affine_overflow_is_rejected_at_compile_and_evaluation`. Declaration-order
+  chain, prescribed-root, and affine-product obligations move to
+  `test_prescribed_root_and_shared_master_composition` and
+  `test_affine_overflow_is_rejected_at_compile_and_evaluation`. The same frozen
+  evaluation test's additive load-reduction overflow obligation moves to
+  `test_v3_driver_plan.py::test_load_accumulation_overflow_is_typed_at_driver_boundary`,
+  which constructs the public `NonlinearStaticDriver` with two individually
+  finite `1.0e308` constants or coordinate coefficients on one DOF and requires
+  `DriverPreparationError` with `non-finite-load-value`. Declaration-order
   provenance and unchanged numerical plan arrays are checked by
   `test_declaration_permutations_preserve_plan_and_change_provenance`; source
-  edits change identity. Existing generic driver-plan tests retain additive load
-  binding and external load rejection.
+  edits change identity. Existing generic driver-plan tests retain ordinary
+  additive load binding and literal non-finite external load rejection.
 - **Equilibrium, reactions, work, and zero-free response.** The independent
   rational displacement in
   `test_v3_linear_analysis.py::test_rational_one_cell_solution_ledgers_and_rigid_derivative`,
