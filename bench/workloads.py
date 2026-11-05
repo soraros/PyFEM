@@ -272,8 +272,7 @@ class RiksFanWorkload:
     return 2 * (self.n_rays + 1)
 
 
-# Documented fan sizes, mirroring the landed structural scale bench
-# (test/v3/_bench_structural_scale.py): 8/32/128 rays.
+# Documented fan sizes for the maintained Riks family workloads: 8/32/128 rays.
 RIKS_FAN_RAYS: tuple[int, ...] = (8, 32, 128)
 
 

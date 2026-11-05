@@ -15,11 +15,20 @@ The original notes did not completely capture hardware identity, dependency
 versions, or CPU-thread settings. Treat every timing as directional evidence, not
 as a reproducible performance gate.
 
-**All prototype command blocks below are archival.** They record the dated
-prototype invocations, not the current benchmark workflow. For current
-benchmark work, use [bench/README.md](../../bench/README.md) and its
-`python -m bench.run` commands from the actual checkout root. The historical
-commands and measurements below are retained only as evidence.
+**The `test/v3/_bench_*.py` drivers named below are archival and have been
+deleted.** Their names retain the provenance of the dated measurements; they
+are not current commands. For current benchmark work, use
+[bench/README.md](../../bench/README.md) and run the maintained harness from
+the actual checkout root:
+
+```bash
+.venv/bin/python -m bench.run gates
+.venv/bin/python -m bench.run warm
+.venv/bin/python -m bench.run cold
+```
+
+The historical measurements below are retained as evidence, not as thresholds or
+reproduction instructions.
 
 ## Historical scale-first policy
 
@@ -45,7 +54,7 @@ reuse mattered.
 ### Observed qualitative comparison
 
 - **Assembly:** the prototype's batched Numba path was orders of magnitude faster
-  than the legacy Python element loops at scale; see
+  than the legacy Python element loops at scale; see the archived
   `_bench_prange_investigation.py` Q6.
 - **Solve:** both paths used SciPy direct methods; measured gains came from
   `factorized` reuse through `LinearSolutionContext` and the cached Newton path.
@@ -53,19 +62,10 @@ reuse mattered.
   `f_int = K @ u`, and factorized `K_red` once per load step when `K` was
   constant.
 
-## Run scale benchmarks
+## Historical scale-benchmark evidence
 
-```bash
-uv sync --group v3
-uv run python test/v3/_bench_solve_scale.py
-uv run python test/v3/_bench_plane_strain_scale.py
-uv run python test/v3/_bench_tangent_assembly.py
-uv run python test/v3/_bench_structural_scale.py
-uv run python test/v3/_bench_numba_stiffness.py
-uv run python test/v3/_bench_prange_investigation.py
-```
-
-`_bench_solve_scale.py` sweeps uniform Q8 patch grids (`build_uniform_q8_patch`) with staged timings:
+The archived `_bench_solve_scale.py` driver swept uniform Q8 patch grids
+(`build_uniform_q8_patch`) with staged timings:
 
 | Column | Meaning |
 |--------|---------|
@@ -158,10 +158,9 @@ Use generators for scale sweeps, not for replacing book parity skims.
 
 ### Plane-strain benchmark
 
-```bash
-uv sync --group v3
-uv run python test/v3/_bench_plane_strain_scale.py
-```
+The archived `_bench_plane_strain_scale.py` driver produced the dated results
+below. Current warm and correctness runs use the maintained routes above with
+`--materials PlaneStrain`.
 
 Columns match the linear baseline: `asm_ms` (chunked when `n_elems > 2048`),
 amortized `LinearSolutionContext.solve`, repeat back-solve, and peak RSS. Minimum
@@ -214,12 +213,9 @@ small-strain tangents with constant `K`; nonlinear materials must call
 `K_red = C.T @ K @ C` once per load step when `K` was constant.
 
 The fixture was `build_uniform_q8_loaded` from
-`pyfem/v3/mesh/refined_patch.py`, with a minimum 2×2 grid.
-
-```bash
-uv sync --group v3
-uv run python test/v3/_bench_tangent_assembly.py
-```
+`pyfem/v3/mesh/refined_patch.py`, with a minimum 2×2 grid. The archived
+`_bench_tangent_assembly.py` driver produced the dated results below; current
+runs use the maintained routes above.
 
 | Column | Meaning |
 |---|---|
@@ -270,10 +266,9 @@ Truss and Spring shared one batched kernel; prototype assembly dispatched by
 `ShallowtrussRiks` topology. `build_truss_fan_loaded(n_rays)` added
 `RiksSolverSettings(fixed_step=True)`.
 
-```bash
-uv sync --group v3
-uv run python test/v3/_bench_structural_scale.py
-```
+The archived `_bench_structural_scale.py` driver produced the dated results
+below. Current Riks-fan correctness and timing runs use the maintained routes
+above.
 
 | Column | Meaning |
 |---|---|
