@@ -75,36 +75,43 @@ runtime or replacement `Solution.verify` exists. The exact deleted surface and
 old/new independent-oracle map are indexed in
 [migration-history.md](migration-history.md#nx7-2-retirement-frozen-q8-analysisresult-vertical).
 
-The actual nonblank Python totals, measured recursively against `v3` at
-`df31ef4`, are **41,876 -> 30,912 production lines** (net **10,964 removed**,
-exceeding 10,500) and **35,697 -> 30,824 v3-test lines** (net **4,873 removed**,
-exceeding 4,500). The direct D1 production set contributes 10,861 lines and
-export cleanup another 103. The four deleted test files contribute 5,509 lines;
-the retained migrations add 636: 221 in `test_v3_q8_generic_flow.py`, 112 in
+The actual nonblank Python totals after the R1 correction, measured recursively
+against `v3` at `df31ef4`, are **41,876 -> 30,937 production lines** (net
+**10,939 removed**, exceeding 10,500) and **35,697 -> 30,856 v3-test lines**
+(net **4,841 removed**, exceeding 4,500). The direct D1 production set and
+export cleanup contribute 10,964 removed lines; R1 commit `3eac574` adds 25
+lines for finite additive-load accumulation checks. The four deleted test files
+contribute 5,509 lines; retained migrations and regressions add 668. The
+original 636 comprise 221 in `test_v3_q8_generic_flow.py`, 112 in
 `test_v3_constraints.py`, 242 in `test_v3_driver_nonlinear.py`, and 61 in
-`test_v3_driver_parity.py`. `test_v3_model_identity.py` is unchanged because it
-contains only shared array/identity/provenance/registry subjects.
+`test_v3_driver_parity.py`; R1 adds 32 in `test_v3_driver_plan.py`.
+`test_v3_model_identity.py` is unchanged because it contains only shared
+array/identity/provenance/registry subjects.
 
 The retained tests now cover literal Q8/rigid-body, authored material/topology
 rejection, canonical provenance, prescribed-root/shared-master and overflowing
 affine maps, rational equilibrium/reactions/work, zero-free rigid offsets,
 chained MPC solving, and a real analytic PatchTest8 accepted-record observation
-of full/reduced balance and direct reactions. Existing analytic Q4/T3/Hex8,
-constant-tangent reuse, full/reduced projection, and rejected-attempt byte
-identity tests remain. The migration gate passed **188 focused tests**; the
-post-deletion `test/v3` run passed **958 tests**. The notebook quickstart passed
-its analytic PatchTest8 assertion. An AST audit parsed 174
-production/test/benchmark/notebook files and found no deleted-module import.
-Both complete repository digit-mode suites passed **1,154 tests plus 12
-subtests each** (normal and `PYTHONINTMAXSTRDIGITS=640`). The complete exact and
-bare Ruff check/format matrix passed.
+of full/reduced balance and direct reactions. R1 commit `3eac574` explicitly
+covers finite-addend constant and coordinate-coefficient load overflow through
+the public `NonlinearStaticDriver`, raising `DriverPreparationError` with
+`non-finite-load-value` before manifest construction while preserving ordinary
+ordered load arithmetic. Existing analytic Q4/T3/Hex8, constant-tangent reuse,
+full/reduced projection, and rejected-attempt byte identity tests remain. The
+migration gate passed **188 focused tests**; the R1 focused run passed **203
+tests**. The notebook quickstart passed its analytic PatchTest8 assertion. An
+AST audit parsed 174 production/test/benchmark/notebook files and found no
+deleted-module import. At `3eac574`, both complete repository digit-mode suites
+passed **1,156 tests plus 12 subtests each** (normal and
+`PYTHONINTMAXSTRDIGITS=640`). The complete exact and bare Ruff check/format
+matrix passed on the same commit.
 
-`python -m bench.run gates` reported **0 failures**, including raw-zero FE² and
-J2 comparisons and unchanged passing Q8/skim, total-Lagrangian, truss, Riks, and
-family oracles. No `bench/results/` file or performance baseline changed, and no
-retained shared hot numerical implementation changed, so no candidate/control
-timing or performance claim is made. The branch is ready for independent
-source-to-charter review of the deletion and proof migration.
+The deletion acceptance run of `python -m bench.run gates` at `f766bb2` reported
+**0 failures**, including raw-zero FE² and J2 comparisons and unchanged passing
+Q8/skim, total-Lagrangian, truss, Riks, and family oracles. No `bench/results/`
+file or performance baseline changed, and no candidate/control timing or
+performance claim is made. The branch is ready for fresh R2 independent
+source-to-charter review of the deletion, proof migration, and R1 correction.
 
 ## Exact next safe action
 
