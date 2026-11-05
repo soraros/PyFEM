@@ -62,7 +62,7 @@ repeatable complexity metric rather than a claim about scientific value.
 | `test/v3/` | 47,187 | Strong independent oracles mixed with duplicate carrier and parity tests |
 | `bench/` | 3,863 | Prototype Q8/skim routes and generic FE²/family routes |
 | `notebooks/v3/` | one paired notebook | `authoring` + legacy deck + `NonlinearStaticDriver` on PatchTest8 |
-| `examples/` | no v3 Python consumer | Legacy examples only; no hidden v3 compatibility requirement |
+| `examples/` | one documented v3 authoring example | `examples/materials/viscoplasticity/README.md` uses `authoring.backward_euler_perzyna`; the other examples are legacy |
 
 The decisive consumer facts are:
 
@@ -84,12 +84,17 @@ The decisive consumer facts are:
   but no notebook or benchmark consumer. Its production files total 10,861
   nonblank lines.
 - Penalty contact, cohesive interfaces, thermal/thermoelastic operators, and
-  the Prony, two Perzyna, SOVS, and crystal families have no v3 notebook,
-  example, or registered benchmark consumer. Their direct implementation files
-  total 5,314 nonblank lines before compiler/adapter cleanup; their fourteen
-  focused test files total 11,525. The generic driver also rejects operators
-  with more than one coefficient port in `driver/plan.py::_compile_operator_slices`,
-  so the coupled thermoelastic compiler is not a supported solve path.
+  the Prony, two Perzyna, SOVS, and crystal families have no v3 notebook or
+  registered benchmark workload. They nevertheless have named live support:
+  `examples/materials/viscoplasticity/README.md` contains a public compile-only
+  `authoring.backward_euler_perzyna` example, while
+  `doc/materials/{viscoplasticity,crystal_plasticity,sovs}.md` are live Sphinx
+  support pages. D3/NX7-1 explicitly retires those surfaces rather than denying
+  them. The direct implementation files total 5,314 nonblank lines before
+  compiler/adapter cleanup; their fourteen focused test files total 11,525. The
+  generic driver also rejects operators with more than one coefficient port in
+  `driver/plan.py::_compile_operator_slices`, so the coupled thermoelastic
+  compiler is not a supported solve path.
 - Parameter sensitivities are different: the authored J2 flow has independent
   derivative evidence and shares the converged-factorization/IFT machinery used
   by homogenization. Keep its explicitly fixed-entering-state meaning; do not
@@ -204,15 +209,31 @@ Replace `types.F64`/`I32` imports in retained numerical modules with explicit
 NumPy dtype aliases owned by those modules; do not retain `types.py` for aliases.
 
 Move `CooCsrPattern`, `compile_csr_pattern`, `dedup_coo_values`,
-`dedup_coo_segments`, and their private serial reduction kernels from
-`fem/assembly.py` to `fem/sparse.py`; these are the canonical pattern/refill
-helpers needed by `DriverAssemblyPlan` and generic benchmarks. Delete
+`dedup_coo_segments`, `_PARALLEL_MIN_ENTRIES`, `_dedup_coo_values_serial`, and
+`_dedup_coo_values_parallel` from `fem/assembly.py` to `fem/sparse.py`; these are
+the canonical pattern/refill helpers and thresholded serial/parallel reduction
+kernels needed by `DriverAssemblyPlan` and generic benchmarks. Delete
 `fem/assembly.py`, its `GROUP_*` dispatch/prototype assembly, and the prototype
 re-exports in `fem/__init__.py`. Retain the small-strain stiffness/internal-force
 math with generic callers or independent oracles in `fem/element.py`. Delete the
 prototype-only Tet4 lane: `fem/element.py::{_tet4_rule,tet4_stiffness}`,
 `fem/shapes.py::linear_tet4`, `fem/quadrature.py::gauss_tet4`, their exports, and
 `test_tet4_solve.py`; Tet4 is not a hidden expansion obligation.
+
+Keep the parallel reduction path: it is retained driver-plan behavior and part of
+the generic performance envelope, not prototype-only dispatch. Before deleting
+`test_assembly_coo.py`, migrate
+`test_dedup_coo_values_bitwise_match_strict_sequential_reference` and
+`test_dedup_coo_values_bitwise_identical_across_thread_counts` into a retained
+`test_v3_sparse.py`. Replace their `LoadedProblem` fixtures with synthetic COO
+streams containing duplicate runs and at least `_PARALLEL_MIN_ENTRIES` entries;
+pin the explicit serial and parallel kernels and the dispatcher at 1T versus nT
+with raw-uint64 equality above the threshold, check the strict left-to-right
+reference, and restore the prior Numba thread count. Add the corresponding
+above-threshold `refill_tangent` integration oracle to `test_v3_driver_plan.py`
+using a compiled generic system rather than the prototype patch. Serial-only is
+not an accepted simplification without separate numerical and matched
+candidate/control performance evidence.
 
 Migrate `test_v3_driver_parity.py` and the skim/linear parity tests to
 `read_legacy_deck` plus generic drivers. Keep `test/v3/_legacy_parity.py` as an
@@ -248,11 +269,58 @@ Delete these complete live families and their authoring exports:
   signals remain supported by researcher springs; no built-in rate law is needed
   to justify that ABI.
 
+Retire the affected public documentation explicitly, without deleting valid
+legacy-only documentation:
+
+- In `examples/materials/viscoplasticity/README.md`, remove the live section
+  "True backward-Euler Perzyna physics in v3" and its authoring example, and link
+  the remaining legacy deck README to the retirement entry. Preserve the legacy
+  deck's rate-independent explanation and negative control.
+- In `doc/materials/viscoplasticity.md`, remove the v3 mapping claims and the
+  complete "True v3 `backward-euler-perzyna`" section, including its live
+  authoring contract. Retain a legacy-only `ViscoPlasticity` page; demote the v3
+  return-map/tangent equations, authoring example, and verification references to
+  the retirement entry.
+- Demote the wholly v3 `doc/materials/crystal_plasticity.md` page to
+  `.agents/v3/evidence/2026-11-05-nx7-crystal-plasticity.md`, marked as retired
+  historical evidence at `d9e4a12`, and remove `crystal_plasticity.md` from
+  `doc/materials/overview.md`. Do not leave a live Sphinx link or present the law
+  as supported.
+- In `doc/materials/sovs.md`, retain the legacy model, quirks, repaired-tangent,
+  and bibliography documentation but remove/demote the live v3
+  `skorohod-olevsky` migration and parity claims in the tangent note. Update any
+  v3 support links to point to the retirement entry.
+
 Before deletion, append an NX7 retirement entry to `migration-history.md` naming
-`d9e4a12`, these symbols/tests, the independent legacy or literature references,
-and the reason for retirement. Historical source is recoverable from Git; do not
-copy dead implementations into the documentation tree or keep them importable as
-"reference" production modules.
+`d9e4a12`, these symbols/tests/documents, and the consumer/cost reason for
+retirement. The entry must preserve these independent literature and oracle
+locations rather than merely saying "see Git":
+
+- For backward-Euler Perzyna, cite the README's retired v3 section,
+  `doc/materials/viscoplasticity.md` sections "Verification" and "References",
+  Perzyna (1966, DOI `10.1016/S0065-2156(08)70009-7`), Simo and Hughes (1998,
+  DOI `10.1007/b98904`), and
+  `test_v3_viscoplasticity.py::{test_backward_euler_perzyna_matches_scalar_bisection_and_central_fd,test_backward_euler_perzyna_symbolic_implicit_derivative,test_backward_euler_perzyna_elastic_and_rate_independent_limits,test_backward_euler_perzyna_q8_fast_loading_has_higher_overstress,test_backward_euler_perzyna_uninterrupted_and_restart_are_byte_equivalent}`.
+- For crystal, cite the demoted page's "Slip systems and Schmid kinetics",
+  "Saturation and latent hardening", and "Why this is fresh, not ported"
+  sections; Peirce/Asaro/Needleman (1983, DOI
+  `10.1016/0001-6160(83)90014-7`); Kocks and Mecking (2003, DOI
+  `10.1016/S0079-6425(02)00003-8`); and
+  `test_v3_crystal_plasticity.py::{test_single_slip_analytical_hardening_response,test_sympy_implicit_return_map_derivative,test_full_tangent_fd_conviction_and_measured_class,test_elastic_limits_are_exact,test_two_system_competition_uses_the_complete_fcc_family,test_compiled_layout_derived_dtime_and_driver_commit}`.
+  State explicitly that removed legacy `Crystal.py` is not a numerical oracle:
+  conviction comes from literature, analytical single-slip response, SymPy,
+  finite differences and tampered-tangent controls, elastic limits, transaction
+  isolation, full-family competition, and the compiled-driver derived-`dtime`
+  path, not legacy arithmetic.
+- For SOVS, cite `doc/materials/sovs.md` "References" (Skorohod 1972 and
+  Olevsky 1998), the documented M67/M76 tangent-repair history, and
+  `test_v3_sovs.py::{test_activated_tangent_repair_confirmed_by_fd,test_kernel_tangent_is_the_exact_stress_map_derivative_by_fd,test_symbolic_jacobian_confirms_the_closed_form}`.
+  For the other D3 families, name their module docstrings, independent legacy or
+  literature references, and focused tests at `d9e4a12` with the same precision.
+
+Historical source remains recoverable from Git; do not copy dead implementations
+into the documentation tree or keep them importable as "reference" production
+modules.
 
 ### 4.4 D4 — facades and low-value public exports: UNIFY or DELETE
 
@@ -278,16 +346,25 @@ must explain the unexpected scientific gain and amend this charter before merge.
 
 ### NX7-1 — retire non-kernel breadth and record its evidence
 
-1. Add the historical retirement entry and the retained multi-space test.
-2. Apply D3 and remove all exports, docs, registry defaults, and deck support in
-   the same commit. No rejected deck may silently fall back to another law.
+1. Add the historical retirement entry with every D3-required literature,
+   independent-oracle, and non-legacy crystal verification location, plus the
+   retained multi-space test.
+2. Apply D3, including the named edits to
+   `examples/materials/viscoplasticity/README.md`,
+   `doc/materials/{viscoplasticity,crystal_plasticity,sovs}.md`, the crystal
+   historical move, and `doc/materials/overview.md`. Remove all exports,
+   registry defaults, and deck support in the same commit. No rejected deck may
+   silently fall back to another law.
 3. Delete the fourteen obsolete focused test files except for the specifically
    migrated space case; do not retain skipped tests.
 
 **Consumers affected:** interface decks and direct users of the named contact,
 thermal, rate, SOVS, and crystal helpers now receive explicit unsupported-input
-errors. No registered benchmark or v3 notebook uses them. Researcher springs,
-J2/damage, FE², TL, and Riks remain.
+errors. Readers of the backward-Euler Perzyna README example and the three
+Sphinx pages are directed to the exact historical retirement record; valid
+legacy-only documentation remains live. No registered benchmark or v3 notebook
+uses the deleted families. Researcher springs, J2/damage, FE², TL, and Riks
+remain.
 
 **Complexity gate:** at least 6,500 net production and 9,500 net v3-test
 nonblank lines removed. Current direct files alone provide 5,314 production and
@@ -297,8 +374,12 @@ rest while allowing for the small retained test.
 **Acceptance:** retained authored flows and `bench.run gates` pass; FE² raw
 identity and J2/damage oracles are unchanged; both full digit-mode suites and
 all Ruff gates pass; an import/search audit finds no live reference to D3
-symbols. Run matched candidate/control timings only if shared hot code changes;
-otherwise record that no performance claim or baseline change is made.
+symbols. The Sphinx build and a documentation audit must show no live v3
+support claim for the deleted families, no crystal entry in the materials
+toctree, the historical crystal evidence at its exact new path, and all required
+literature/oracle citations in `migration-history.md`. Run matched
+candidate/control timings only if shared hot code changes; otherwise record that
+no performance claim or baseline change is made.
 
 ### NX7-2 — delete the frozen Q8 analysis/result vertical
 
@@ -351,10 +432,12 @@ partial `fem` cleanup is additional.
 
 **Acceptance:** every registered skim preserves its independent legacy/analytic
 gate; TL tangent/force and Riks branch tolerances pass; generic Q8 scale gates
-include the analytic field; FE² gates stay raw-identical. A full candidate and
-base-revision control run under matched clean conditions must show no unexplained
-regression above the established 1.25 ratio plus 1 ms noise rule. Missing cells
-are failures in full coverage, not "skipped" successes.
+include the analytic field; FE² gates stay raw-identical. The migrated synthetic
+above-threshold serial/parallel and dispatcher 1T/nT raw-uint64 oracles and the
+generic `refill_tangent` integration oracle must pass in both digit modes. A full
+candidate and base-revision control run under matched clean conditions must show
+no unexplained regression above the established 1.25 ratio plus 1 ms noise rule.
+Missing cells are failures in full coverage, not "skipped" successes.
 
 ### NX7-4 — unify the surviving compiler and operator implementations
 
