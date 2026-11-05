@@ -15,6 +15,8 @@ surviving kernel; their old migration sequences do not expand this charter.
 
 ## NX7-1 implementation and acceptance record
 
+Atomic implementation commit: `288e5f3`.
+
 NX7-1 retired the complete D3 surface against the `d9e4a12` evidence boundary:
 penalty contact, cohesive interfaces and their deck adapter, unsolved
 thermal/thermoelastic operators, Prony viscoelasticity, both Perzyna mappings,
