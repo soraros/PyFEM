@@ -335,6 +335,16 @@ evidence for those workloads and conditions, not full-harness coverage or a
 promoted baseline; `baseline_m3.json` and the historical scaling records remain
 unchanged.
 
+The M116 execution-consolidation pair is
+`bench/results/run_q11_candidate.json` (candidate `caa3ca3`) and
+`bench/results/run_q11_control_base.json` (control `eecfce3`). It repeats the
+same 28-record matrix with clean reference-machine manifests and identical
+scientific correctness/evidence. The manifests record `harness_matrix` and
+`harness_wall_s`: the consolidated candidate took 118.980 s versus 243.618 s
+for the control, a measured 124.638 s (51.2%) reduction. The default
+candidate-versus-control ratio check reports zero regressions. These are
+targeted harness-evidence artifacts, not a promoted baseline.
+
 `bench.run check` compares a candidate against a baseline per cell
 (`category, workload, side, mode, threads, metric`):
 
