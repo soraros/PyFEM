@@ -10,8 +10,9 @@
   must be headless: prefix with `MPLBACKEND=Agg` — several call `plt.show()` and
   will otherwise pop windows on the operator's machine.
 - Tests live in `test/v3/`; notebooks in `notebooks/v3/`. Jupytext is configured in
-  root `pyproject.toml`. Diagnostic benchmarks use `_bench_*.py` and stay out of
-  ordinary pytest collection.
+  root `pyproject.toml`. Benchmark workloads and timing drivers live in `bench/`
+  and run through `python -m bench.run`; see `bench/README.md` for the maintained
+  gates, warm, cold, and regression-check routes.
 
 ## Worktree environments
 
