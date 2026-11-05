@@ -2,9 +2,8 @@
 
 Root exports are deliberately limited to the legacy loader, numerical solvers,
 and ``ProblemDefinition``. Dtype aliases and packing helpers stay in their
-owning modules rather than adding unused facade surface. The former ``api``
-one-shot facade is intentionally absent: compose the compile, analysis, and
-result implementations directly.
+owning modules rather than adding unused facade surface. Generic authored
+solves use ``compile.system``, ``constraints``, and ``driver`` directly.
 """
 
 from __future__ import annotations

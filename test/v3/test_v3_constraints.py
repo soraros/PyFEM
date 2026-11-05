@@ -820,6 +820,127 @@ def test_periodic_ties_expand_pair_major_then_component() -> None:
   assert np.all(offset_matrix[:, 1] == 0.0)
 
 
+def test_prescribed_root_and_shared_master_composition() -> None:
+  coordinates = (_lam(),)
+  prescribed_root = compile_constraint_map(
+    _system(),
+    coordinates=coordinates,
+    constraints=(
+      _prescribed(
+        "root",
+        1,
+        "x",
+        AffineValueSpec(
+          constant=2.0,
+          coefficients=(AffineCoefficientSpec("lam", 1.0),),
+        ),
+      ),
+      _tie(
+        "slave",
+        _dof(1, "y"),
+        _dof(1, "x"),
+        factor=-2.0,
+        offset=AffineValueSpec(
+          constant=1.0,
+          coefficients=(AffineCoefficientSpec("lam", -1.0),),
+        ),
+      ),
+    ),
+  )
+  evaluation = evaluate_offsets(prescribed_root, _point(("lam", 4.0)))
+  np.testing.assert_array_equal(evaluation.offsets.values[:2], [6.0, -15.0])
+  np.testing.assert_array_equal(
+    evaluation.derivatives.values[:2, 0],
+    [1.0, -3.0],
+  )
+
+  shared_master = compile_constraint_map(
+    _system(),
+    constraints=(
+      _tie("first", _dof(1, "y"), _dof(1, "x"), factor=2.0),
+      _tie("second", _dof(2, "x"), _dof(1, "x"), factor=-3.0),
+    ),
+  )
+  dense = shared_master.prolongation().toarray()
+  np.testing.assert_array_equal(dense[:3, 0], [1.0, 2.0, -3.0])
+
+
+def test_affine_overflow_is_rejected_at_compile_and_evaluation() -> None:
+  with pytest.raises(ConstraintMapError, match="non-finite-constraint-value"):
+    compile_constraint_map(
+      _system(),
+      constraints=(
+        _prescribed("root", 1, "x", AffineValueSpec(constant=1.0e308)),
+        _tie(
+          "overflow",
+          _dof(1, "y"),
+          _dof(1, "x"),
+          factor=1.0e308,
+          offset=AffineValueSpec(),
+        ),
+      ),
+    )
+
+  coordinate_map = compile_constraint_map(
+    _system(),
+    coordinates=(_lam(),),
+    constraints=(
+      _prescribed(
+        "fixed",
+        1,
+        "x",
+        AffineValueSpec(
+          coefficients=(AffineCoefficientSpec("lam", 1.0e308),),
+        ),
+      ),
+    ),
+  )
+  with pytest.raises(ConstraintEvaluationError, match="non-finite-coordinate-value"):
+    evaluate_offsets(coordinate_map, _point(("lam", 2.0)))
+
+
+def test_declaration_permutations_preserve_plan_and_change_provenance() -> None:
+  system = _system()
+  first = compile_constraint_map(
+    system,
+    constraints=_MIXED_CONSTRAINTS,
+    coordinates=(_lam(),),
+  )
+  reordered = compile_constraint_map(
+    system,
+    constraints=tuple(reversed(_MIXED_CONSTRAINTS)),
+    coordinates=(_lam(),),
+  )
+  assert first.content_fingerprint != reordered.content_fingerprint
+  assert first.instance_id != reordered.instance_id
+  for name in (
+    "free_dofs",
+    "constrained_dofs",
+    "row_offsets",
+    "column_indices",
+    "coefficients",
+    "offset_constant",
+    "offset_coordinate_coefficients",
+  ):
+    np.testing.assert_array_equal(
+      getattr(first, name).values,
+      getattr(reordered, name).values,
+    )
+
+  changed_constraint = PrescribedDofSpec(
+    id="fix-x",
+    target=_dof(1, "x"),
+    value=AffineValueSpec(constant=0.25),
+    source=_source("changed-constraint-source"),
+  )
+  changed = compile_constraint_map(
+    system,
+    constraints=(changed_constraint, *_MIXED_CONSTRAINTS[1:]),
+    coordinates=(_lam(),),
+  )
+  assert changed.content_fingerprint != first.content_fingerprint
+
+
 def test_periodic_ties_validation() -> None:
   base = {
     "primary_node_ids": (1, 8, 7),

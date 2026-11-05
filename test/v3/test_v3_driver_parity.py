@@ -605,3 +605,70 @@ def test_patch_test8_nonlinear_prescribed_end_to_end_matches_legacy() -> None:
   observation = result.records[-1].observation
   assert observation is not None
   assert observation.constraint_work != 0.0
+
+
+def test_patch_test8_accepted_record_observes_full_reduced_balance() -> None:
+  from pyfem.v3 import authoring
+  from pyfem.v3.constraints import reaction_forces, reduce_residual
+  from pyfem.v3.driver.plan import assemble_internal_force, evaluate_loads
+
+  dat = ROOT / "examples" / "ch02" / "PatchTest8.dat"
+  driver, result, legacy, (rtol, atol) = _run_patch_skim(
+    "patch_test8_nonlinear_prescribed",
+    dat,
+  )
+  assert result.status is DriverStatus.COMPLETED
+  accepted = driver.owner.accepted_physical().values
+  np.testing.assert_allclose(accepted, legacy, rtol=rtol, atol=atol)
+
+  system = driver._system
+  coordinate_map = driver._map
+  coordinates = system.point_blocks[0].reference_coordinates.values
+  expected = np.column_stack(
+    (
+      1.0e-3 * coordinates[:, 0] + 5.0e-4 * coordinates[:, 1],
+      5.0e-4 * coordinates[:, 0] + 1.0e-3 * coordinates[:, 1],
+    )
+  )
+  node_rows = {
+    node_id: row for row, node_id in enumerate(system.point_blocks[0].entity_ids)
+  }
+  displacements = np.empty_like(expected)
+  for row, (_, node_id, component) in enumerate(system.spaces[0].coefficient_ids):
+    displacements[node_rows[node_id], {"x": 0, "y": 1}[component]] = accepted[row]
+  np.testing.assert_allclose(displacements, expected, rtol=0.0, atol=1.0e-12)
+
+  final = result.records[-1]
+  observation = final.observation
+  assert observation is not None
+  evaluation = authoring.evaluate(system, accepted, jacobian=False)
+  internal = assemble_internal_force(
+    driver.plan,
+    (evaluation.residual_values[0].values,),
+  )
+  external = evaluate_loads(driver.plan.loads, final.point).values
+  full_residual = internal - external
+  reduced_residual = reduce_residual(coordinate_map, full_residual).values
+  assert observation.full_residual_norm == pytest.approx(
+    float(np.linalg.norm(full_residual)),
+    abs=2.0e-11,
+  )
+  assert observation.reduced_residual_norm == pytest.approx(
+    float(np.linalg.norm(reduced_residual)),
+    abs=2.0e-11,
+  )
+  expected_reactions = reaction_forces(coordinate_map, full_residual).values
+  np.testing.assert_allclose(
+    observation.reactions.values,
+    expected_reactions,
+    rtol=0.0,
+    atol=2.0e-11,
+  )
+  assert np.all(observation.reactions.values[coordinate_map.free_dofs.values] == 0.0)
+
+  total_force = (external + observation.reactions.values).reshape(-1, 2)
+  np.testing.assert_allclose(total_force.sum(axis=0), 0.0, rtol=0.0, atol=2.0e-8)
+  moment = np.sum(
+    coordinates[:, 0] * total_force[:, 1] - coordinates[:, 1] * total_force[:, 0]
+  )
+  assert float(moment) == pytest.approx(0.0, abs=2.0e-8)

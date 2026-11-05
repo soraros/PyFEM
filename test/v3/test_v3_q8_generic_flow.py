@@ -732,3 +732,239 @@ def test_q8_invalid_orientation_and_relative_singularity_fail_at_compile_boundar
   rendered = str(captured.value)
   assert "cell-source" in rendered
   assert len(rendered) < 8192
+
+
+# Literal independent oracle M for K=M/360 on the unit Q8 with E=1, nu=0.
+_Q8_INTEGER_OPERATOR = np.array(
+  [
+    [312, 85, -308, -100, 146, 15, -104, -20, 138, 35, -172, -20, 124, -15, -136, 20],
+    [85, 312, 20, -136, -15, 124, -20, -172, 35, 138, -20, -104, 15, 146, -100, -308],
+    [-308, 20, 736, 0, -308, -20, 0, -80, -172, -20, 224, 0, -172, 20, 0, 80],
+    [-100, -136, 0, 512, 100, -136, -80, 0, -20, -104, 0, -32, 20, -104, 80, 0],
+    [146, -15, -308, 100, 312, -85, -136, -20, 124, 15, -172, 20, 138, -35, -104, 20],
+    [15, 124, -20, -136, -85, 312, 100, -308, -15, 146, 20, -104, -35, 138, 20, -172],
+    [-104, -20, 0, -80, -136, 100, 512, 0, -136, -100, 0, 80, -104, 20, -32, 0],
+    [-20, -172, -80, 0, -20, -308, 0, 736, 20, -308, 80, 0, 20, -172, 0, 224],
+    [138, 35, -172, -20, 124, -15, -136, 20, 312, 85, -308, -100, 146, 15, -104, -20],
+    [35, 138, -20, -104, 15, 146, -100, -308, 85, 312, 20, -136, -15, 124, -20, -172],
+    [-172, -20, 224, 0, -172, 20, 0, 80, -308, 20, 736, 0, -308, -20, 0, -80],
+    [-20, -104, 0, -32, 20, -104, 80, 0, -100, -136, 0, 512, 100, -136, -80, 0],
+    [124, 15, -172, 20, 138, -35, -104, 20, 146, -15, -308, 100, 312, -85, -136, -20],
+    [-15, 146, 20, -104, -35, 138, 20, -172, 15, 124, -20, -136, -85, 312, 100, -308],
+    [-136, -100, 0, 80, -104, 20, -32, 0, -104, -20, 0, -80, -136, 100, 512, 0],
+    [20, -308, 80, 0, 20, -172, 0, 224, -20, -172, -80, 0, -20, -308, 0, 736],
+  ],
+  dtype=np.float64,
+)
+
+
+def test_q8_literal_operator_and_rigid_body_oracle() -> None:
+  operator = _operator()
+  tangent = operator.evaluate(_inputs(operator)).jacobian_values[0].values[0]
+  expected = _Q8_INTEGER_OPERATOR / 360.0
+  np.testing.assert_allclose(tangent, expected, rtol=0.0, atol=2.0e-14)
+  np.testing.assert_array_equal(_Q8_INTEGER_OPERATOR, _Q8_INTEGER_OPERATOR.T)
+  np.testing.assert_array_equal(_Q8_INTEGER_OPERATOR.sum(axis=1), np.zeros(16))
+  translation_x = np.tile((1.0, 0.0), 8)
+  translation_y = np.tile((0.0, 1.0), 8)
+  rotation = np.array(
+    [component for x, y in _UNIT_COORDINATES for component in (-y, x)]
+  )
+  for mode in (translation_x, translation_y, rotation):
+    np.testing.assert_array_equal(_Q8_INTEGER_OPERATOR @ mode, np.zeros(16))
+
+
+@pytest.mark.parametrize(
+  ("parameters", "code"),
+  [
+    (
+      (MaterialParameterSpec("youngs_modulus", 1.0),),
+      "invalid-material-parameter-schema",
+    ),
+    (
+      (
+        MaterialParameterSpec("youngs_modulus", 1.0),
+        MaterialParameterSpec("poisson_ratio", 0.3),
+        MaterialParameterSpec("density", 1.0),
+      ),
+      "invalid-material-parameter-schema",
+    ),
+    (
+      (
+        MaterialParameterSpec("youngs_modulus", 0.0),
+        MaterialParameterSpec("poisson_ratio", 0.3),
+      ),
+      "invalid-youngs-modulus",
+    ),
+    (
+      (
+        MaterialParameterSpec("youngs_modulus", 1.0),
+        MaterialParameterSpec("poisson_ratio", 0.5),
+      ),
+      "invalid-poisson-ratio",
+    ),
+    (
+      (
+        MaterialParameterSpec("youngs_modulus", True),
+        MaterialParameterSpec("poisson_ratio", 0.3),
+      ),
+      "invalid-material-parameter-type",
+    ),
+  ],
+)
+def test_q8_authored_material_validation(
+  parameters: tuple[MaterialParameterSpec, ...],
+  code: str,
+) -> None:
+  authored = _model()
+  material = replace(authored.materials[0], parameters=parameters)
+  with pytest.raises(ModelCompilationError, match=code):
+    compile_system(replace(authored, materials=(material,)), q8_reference_registry())
+
+
+def test_q8_integer_material_parameters_compile_to_float64() -> None:
+  authored = _model()
+  parameters = (
+    MaterialParameterSpec("youngs_modulus", 210),
+    MaterialParameterSpec("poisson_ratio", 0),
+  )
+  material = replace(authored.materials[0], parameters=parameters)
+  operator = _operator(replace(authored, materials=(material,)))
+  values = operator.payload.material_parameters.values
+  assert values.dtype == np.dtype(np.float64)
+  np.testing.assert_array_equal(values, [[210.0, 0.0]])
+
+
+def test_q8_authored_structure_validation() -> None:
+  authored = _model()
+  two_cell = _two_cell_model()
+  block = authored.mesh.cell_blocks[0]
+  cell = block.cells[0]
+  region = authored.regions[0]
+  cases = (
+    (
+      replace(
+        authored,
+        mesh=replace(
+          authored.mesh,
+          cell_blocks=(
+            replace(block, cells=(replace(cell, node_ids=cell.node_ids[:-1]),)),
+          ),
+        ),
+      ),
+      "invalid-q8-arity",
+    ),
+    (
+      replace(
+        authored,
+        mesh=replace(
+          authored.mesh,
+          cell_blocks=(replace(block, reference_topology="triangle"),),
+        ),
+      ),
+      "incompatible-cell-block",
+    ),
+    (
+      replace(authored, fields=(replace(authored.fields[0], components=("y", "x")),)),
+      "incompatible-field-signature",
+    ),
+    (
+      replace(authored, regions=(replace(region, quadrature="gauss-2x2"),)),
+      "incompatible-quadrature",
+    ),
+    (
+      replace(
+        two_cell,
+        regions=(
+          replace(
+            two_cell.regions[0],
+            cell_refs=two_cell.regions[0].cell_refs[:1],
+          ),
+        ),
+      ),
+      "incomplete-cell-membership",
+    ),
+    (
+      replace(
+        authored,
+        regions=(region, replace(region, id="duplicate", source=_source("duplicate"))),
+      ),
+      "multiple-cell-membership",
+    ),
+  )
+  for model, code in cases:
+    with pytest.raises(ModelCompilationError, match=code):
+      compile_system(model, q8_reference_registry())
+
+
+def _two_cell_model() -> ModelSpec:
+  authored = _model()
+  first = authored.mesh.cell_blocks[0].cells[0]
+  second = CellSpec(
+    id="cell-2",
+    node_ids=(3, 9, 10, 11, 12, 13, 5, 4),
+    source=_source("cell-2-source"),
+  )
+  extra_nodes = tuple(
+    NodeSpec(id=index, coordinates=point, source=_source(f"node-source-{index}"))
+    for index, point in zip(
+      range(9, 14),
+      ((1.5, 0.0), (2.0, 0.0), (2.0, 0.5), (2.0, 1.0), (1.5, 1.0)),
+      strict=True,
+    )
+  )
+  block = replace(authored.mesh.cell_blocks[0], cells=(first, second))
+  region = replace(
+    authored.regions[0],
+    cell_refs=(CellRef(block.id, first.id), CellRef(block.id, second.id)),
+  )
+  return replace(
+    authored,
+    mesh=replace(
+      authored.mesh,
+      nodes=(*authored.mesh.nodes, *extra_nodes),
+      cell_blocks=(block,),
+    ),
+    regions=(region,),
+  )
+
+
+def test_q8_canonical_permutations_and_source_provenance() -> None:
+  authored = _two_cell_model()
+  block = authored.mesh.cell_blocks[0]
+  region = authored.regions[0]
+  material = authored.materials[0]
+  reordered = replace(
+    authored,
+    mesh=replace(
+      authored.mesh,
+      nodes=tuple(reversed(authored.mesh.nodes)),
+      cell_blocks=(replace(block, cells=tuple(reversed(block.cells))),),
+    ),
+    materials=(replace(material, parameters=tuple(reversed(material.parameters))),),
+    regions=(replace(region, cell_refs=tuple(reversed(region.cell_refs))),),
+  )
+  first = compile_system(authored, q8_reference_registry())
+  second = compile_system(reordered, q8_reference_registry())
+  assert first.content_fingerprint == second.content_fingerprint
+  assert first.provenance.manifest.to_bytes() == second.provenance.manifest.to_bytes()
+  assert first.instance_id != second.instance_id
+  np.testing.assert_array_equal(
+    first.entity_blocks[0].incidence.values,
+    second.entity_blocks[0].incidence.values,
+  )
+  assert not np.shares_memory(
+    first.entity_blocks[0].incidence.values,
+    second.entity_blocks[0].incidence.values,
+  )
+  assert first.source_for("cell", ("cells", "cell-2")).source == "cell-2-source"
+
+  changed_node = replace(authored.mesh.nodes[0], source=_source("changed-node-source"))
+  changed = compile_system(
+    replace(
+      authored,
+      mesh=replace(authored.mesh, nodes=(changed_node, *authored.mesh.nodes[1:])),
+    ),
+    q8_reference_registry(),
+  )
+  assert changed.content_fingerprint != first.content_fingerprint
