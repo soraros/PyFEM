@@ -38,7 +38,6 @@ from pyfem.v3.model.operator import (
   ChannelRequest,
   EvaluationStatus,
   OperatorEvaluationInput,
-  evaluation_status,
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec import (
@@ -510,7 +509,7 @@ def test_transaction_repeat_reject_accept_leaves_committed_state_identical() -> 
     "internal-force",
     "material-tangent",
   )
-  assert evaluation_status(first_damage) is EvaluationStatus.OK
+  assert first_damage.status is EvaluationStatus.OK
   first_transaction.stage_physical(trial_physical)
   first_transaction.stage_state(damage_block, first_damage.trial_state)
   first_transaction.stage_state(q8_block, first_q8.trial_state)
@@ -610,9 +609,11 @@ def test_typed_evaluation_outcomes_classify_expected_failures() -> None:
     "spring-force",
     "spring-tangent",
   )
-  assert evaluation_status(snapped) is EvaluationStatus.REJECT_STEP
+  assert snapped.status is EvaluationStatus.REJECT_STEP
   assert snapped.residual_values == ()
   assert snapped.jacobian_values == ()
+  assert snapped.derivative_values == ()
+  assert snapped.nested_references == ()
   np.testing.assert_array_equal(
     snapped.trial_state.values,
     accepted_damage.values,
@@ -628,7 +629,7 @@ def test_typed_evaluation_outcomes_classify_expected_failures() -> None:
     "spring-force",
     "spring-tangent",
   )
-  assert evaluation_status(exhausted) is EvaluationStatus.REJECT_ITERATION
+  assert exhausted.status is EvaluationStatus.REJECT_ITERATION
   np.testing.assert_array_equal(
     exhausted.trial_state.values,
     transaction.accepted_state(slip_block).values,
@@ -641,7 +642,7 @@ def test_typed_evaluation_outcomes_classify_expected_failures() -> None:
     "spring-force",
     "spring-tangent",
   )
-  assert evaluation_status(retried) is EvaluationStatus.OK
+  assert retried.status is EvaluationStatus.OK
   transaction.reject()
   assert _accepted_bytes(owner)[0] == 0
 
@@ -654,10 +655,19 @@ def test_typed_evaluation_outcomes_classify_expected_failures() -> None:
     "internal-force",
     "material-tangent",
   )
-  assert evaluation_status(q8_eval) is EvaluationStatus.OK
+  assert q8_eval.status is EvaluationStatus.OK
+  assert q8_eval.derivative_values == ()
+  assert q8_eval.nested_references == ()
+  header = q8_operator.header
+  assert header.parameters == ()
+  assert header.derivative_channels == ()
+  assert header.nested_execution is None
+  assert header.tangent_class is None
+  assert header.state_layout.initial_rows is None
+  for carrier in (header, header.state_layout, q8_eval):
+    for name in carrier.__dataclass_fields__:
+      assert hasattr(carrier, name), (type(carrier).__name__, name)
   transaction.reject()
-  with pytest.raises(TypeError, match="exact OperatorEvaluation"):
-    evaluation_status(object())
 
 
 def test_irreversible_damage_persists_across_commit() -> None:
@@ -701,7 +711,7 @@ def test_irreversible_damage_persists_across_commit() -> None:
     "spring-force",
     "spring-tangent",
   )
-  assert evaluation_status(unloaded) is EvaluationStatus.OK
+  assert unloaded.status is EvaluationStatus.OK
   np.testing.assert_array_equal(unloaded.trial_state.values[0], [0.3])
   np.testing.assert_allclose(
     unloaded.residual_values[0].values[0],
@@ -902,7 +912,7 @@ def test_researcher_kernel_authored_against_contract_runs_end_to_end() -> None:
     "spring-force",
     "spring-tangent",
   )
-  assert evaluation_status(slipped) is EvaluationStatus.OK
+  assert slipped.status is EvaluationStatus.OK
   committed_slip = float(slipped.trial_state.values[0, 0])
   assert committed_slip > 0.0
   expected_force = 3.0 * (0.5 - committed_slip)
@@ -992,7 +1002,7 @@ def test_trusted_carriers_and_typed_evaluations_resist_reconstruction() -> None:
   for carrier in (SpringOperator, type(damage_operator.header)):
     with pytest.raises(TypeError, match="constructed only by their compiler"):
       carrier()
-  assert evaluation_status(evaluation) is EvaluationStatus.OK
+  assert evaluation.status is EvaluationStatus.OK
 
 
 def _plasticity_system() -> CompiledSystem:
@@ -1064,12 +1074,12 @@ def _plasticity_system() -> CompiledSystem:
 
 
 def test_owner_seeds_accepted_rows_from_compiler_emitted_initial_rows() -> None:
-  # Landed layouts carry no initial rows: the owner keeps zero-initializing.
+  # Layouts without explicit initial rows select zero initialization.
   system = _damage_system()
   owner = StateTransactionOwner(system)
   for operator in system.operators:
     layout = operator.header.state_layout
-    assert getattr(layout, "initial_rows", None) is None
+    assert layout.initial_rows is None
     assert np.all(owner.accepted_state(layout.block_id).values == 0.0)
 
   # The first stateful law binds explicit (zero) initial rows and the owner

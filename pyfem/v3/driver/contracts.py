@@ -380,6 +380,27 @@ class DriverStatistics:
 
 
 @dataclass(frozen=True, slots=True, eq=False)
+class DriverActivitySnapshot:
+  """One driver's immutable activity baseline at a macro-attempt boundary."""
+
+  run_serial: int
+  iteration_count: int
+  statistics: DriverStatistics
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class DriverActivityDelta:
+  """Work and typed failure activity since one driver activity snapshot."""
+
+  iteration_count: int
+  evaluation_count: int
+  factorization_count: int
+  factorization_reuse_count: int
+  linear_solve_count: int
+  failure_class: StepFailureClass | None
+
+
+@dataclass(frozen=True, slots=True, eq=False)
 class NonlinearStaticResult:
   """Typed run outcome: schedule trace, counters, and generation lineage."""
 

@@ -46,8 +46,6 @@ from pyfem.v3.model.operator import (
   ChannelRequest,
   EvaluationStatus,
   OperatorEvaluationInput,
-  evaluation_derivative_values,
-  evaluation_status,
 )
 from pyfem.v3.model.provenance import CanonicalManifest
 from pyfem.v3.model.registry import RegistryDescriptor
@@ -778,8 +776,8 @@ def test_derivative_capable_binding_opens_the_channel_on_the_generic_path() -> N
       ),
     )
   )
-  assert evaluation_status(evaluation) is EvaluationStatus.OK
-  columns = evaluation_derivative_values(evaluation)
+  assert evaluation.status is EvaluationStatus.OK
+  columns = evaluation.derivative_values
   assert len(columns) == 2
   assert np.all(columns[1].values == 0.0)
   unit = compile_system(
@@ -804,7 +802,7 @@ def test_derivative_capable_binding_opens_the_channel_on_the_generic_path() -> N
       request=ChannelRequest(("internal-force",), ()),
     )
   )
-  assert evaluation_derivative_values(primal) == ()
+  assert primal.derivative_values == ()
   np.testing.assert_array_equal(
     evaluation.residual_values[0].values, primal.residual_values[0].values
   )

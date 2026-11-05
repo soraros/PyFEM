@@ -1089,9 +1089,7 @@ class InterfaceOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
-    derivative_ids = tuple(
-      item.channel_id for item in getattr(self.header, "derivative_channels", ())
-    )
+    derivative_ids = tuple(item.channel_id for item in self.header.derivative_channels)
     request = inputs.request
     derivative_request = request.derivative_channel_ids
     if (
@@ -1122,6 +1120,8 @@ class InterfaceOperator(CompilerConstructed):
         jacobian_values=(),
         trial_state=FinalizedArray(accepted_state, dtype=np.float64),
         status=status,
+        derivative_values=(),
+        nested_references=(),
       )
     residual_values = (
       (FinalizedArray(residual, dtype=np.float64),)
@@ -1139,6 +1139,8 @@ class InterfaceOperator(CompilerConstructed):
       jacobian_values=jacobian_values,
       trial_state=FinalizedArray(trial_normal, dtype=np.float64),
       status=status,
+      derivative_values=(),
+      nested_references=(),
     )
 
 
@@ -1335,6 +1337,7 @@ def compile_interface_operator(
         width=2,
         dtype=_FLOAT64_DTYPE,
         lifetime=StateLifetime.ACCEPTED_TRIAL,
+        annotation=None,
       ),
     ),
     entity_offsets=FinalizedArray(
@@ -1344,6 +1347,7 @@ def compile_interface_operator(
     row_width=2,
     dtype=_FLOAT64_DTYPE,
     lifetime=StateLifetime.ACCEPTED_TRIAL,
+    initial_rows=None,
   )
   port = _new(
     PortBinding,
@@ -1393,6 +1397,10 @@ def compile_interface_operator(
     jacobian_channels=(jacobian_channel,),
     state_layout=state_layout,
     coupling_policy=CouplingPolicy.FIXED,
+    parameters=(),
+    derivative_channels=(),
+    nested_execution=None,
+    tangent_class=None,
   )
   payload = _new(
     InterfacePayload,

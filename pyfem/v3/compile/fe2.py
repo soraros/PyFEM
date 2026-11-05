@@ -51,8 +51,6 @@ from pyfem.v3.model.operator import (
   OperatorStateSlot,
   ResidualChannel,
   StateLifetime,
-  evaluation_nested_references,
-  evaluation_status,
 )
 from pyfem.v3.model.provenance import CanonicalManifest, ContentFingerprint
 from pyfem.v3.model.system import CompiledSystem, SystemProvenance
@@ -136,6 +134,7 @@ class FE2ContinuumOperator(CompilerConstructed):
       jacobian_values=(),
       trial_state=accepted_state,
       status=status,
+      derivative_values=(),
       nested_references=(),
     )
 
@@ -203,6 +202,7 @@ class FE2ContinuumOperator(CompilerConstructed):
         jacobian_values=(),
         trial_state=accepted,
         status=EvaluationStatus.OK,
+        derivative_values=(),
         nested_references=(),
       )
 
@@ -284,6 +284,7 @@ class FE2ContinuumOperator(CompilerConstructed):
       ),
       trial_state=FinalizedArray(ip_strains, dtype=np.float64),
       status=EvaluationStatus.OK,
+      derivative_values=(),
       nested_references=references,
     )
 
@@ -445,6 +446,7 @@ def compile_fe2_continuum(
     row_width=3,
     dtype=np.dtype(np.float64).str,
     lifetime=StateLifetime.ACCEPTED_TRIAL,
+    initial_rows=None,
   )
   residual = _new(
     ResidualChannel,
@@ -569,7 +571,7 @@ def compile_fe2_continuum(
     )
   finally:
     runtime.close()
-  if evaluation_status(probe) is not EvaluationStatus.OK:
+  if probe.status is not EvaluationStatus.OK:
     _fail(
       "invalid-nested-probe",
       "FE2 virgin nested evaluation must converge",
@@ -577,7 +579,7 @@ def compile_fe2_continuum(
     )
   if (
     probe.trial_state.values.tobytes() != np.zeros(state_layout.row_shape).tobytes()
-    or len(evaluation_nested_references(probe)) != ip_count
+    or len(probe.nested_references) != ip_count
     or any(not bool(np.isfinite(block.values).all()) for block in probe.jacobian_values)
     or store.encode() != before
   ):

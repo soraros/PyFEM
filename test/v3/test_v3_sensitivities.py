@@ -91,7 +91,6 @@ from pyfem.v3.model.operator import (
   CompiledOperator,
   OperatorEvaluation,
   OperatorEvaluationInput,
-  evaluation_derivative_values,
 )
 from pyfem.v3.spec import ProgramCoordinateSpec
 from pyfem.v3.spec.program import ProgramCoordinateValue, ProgramPoint
@@ -660,7 +659,7 @@ def test_compile_path_param_jac_fd_probe_at_the_consumed_point() -> None:
     entering,
     ChannelRequest((), (), _DERIVATIVE_CHANNELS),
   )
-  for column in evaluation_derivative_values(probe):
+  for column in probe.derivative_values:
     assert np.all(column.values == 0.0)
   # The consumed point: FD of the assembled residual channel over perturbed
   # recompiles, at the same point and the same entering state (exactly the
@@ -668,7 +667,7 @@ def test_compile_path_param_jac_fd_probe_at_the_consumed_point() -> None:
   base = _evaluate(
     operator, converged, entering, ChannelRequest((), (), _DERIVATIVE_CHANNELS)
   )
-  columns = evaluation_derivative_values(base)
+  columns = base.derivative_values
   assert len(columns) == 4
   worst = 0.0
   for index in range(4):

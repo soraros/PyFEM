@@ -692,9 +692,7 @@ class SpringOperator(CompilerConstructed):
       kernel_signals = None
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
-    derivative_ids = tuple(
-      item.channel_id for item in getattr(self.header, "derivative_channels", ())
-    )
+    derivative_ids = tuple(item.channel_id for item in self.header.derivative_channels)
     request = inputs.request
     derivative_request = request.derivative_channel_ids
     if (
@@ -728,6 +726,8 @@ class SpringOperator(CompilerConstructed):
         jacobian_values=(),
         trial_state=FinalizedArray(accepted_state, dtype=np.float64),
         status=status,
+        derivative_values=(),
+        nested_references=(),
       )
     residual_values = (
       (FinalizedArray(force, dtype=np.float64),) if request.residual_channel_ids else ()
@@ -743,6 +743,8 @@ class SpringOperator(CompilerConstructed):
       jacobian_values=jacobian_values,
       trial_state=FinalizedArray(trial_rows, dtype=np.float64),
       status=status,
+      derivative_values=(),
+      nested_references=(),
     )
 
 
@@ -872,6 +874,7 @@ def compile_spring_operator(
         width=slot.width,
         dtype=_FLOAT64_DTYPE,
         lifetime=StateLifetime.ACCEPTED_TRIAL,
+        annotation=None,
       )
       for slot in declaration.state_slots
     ),
@@ -882,6 +885,7 @@ def compile_spring_operator(
     row_width=row_width,
     dtype=_FLOAT64_DTYPE,
     lifetime=StateLifetime.ACCEPTED_TRIAL,
+    initial_rows=None,
   )
   port = _new(
     PortBinding,
@@ -937,6 +941,10 @@ def compile_spring_operator(
     jacobian_channels=(jacobian_channel,),
     state_layout=state_layout,
     coupling_policy=CouplingPolicy.FIXED,
+    parameters=(),
+    derivative_channels=(),
+    nested_execution=None,
+    tangent_class=None,
   )
   payload = _new(SpringPayload, parameters=parameters)
   manifest_content: dict[str, object] = {

@@ -719,9 +719,8 @@ def compile_sensitivity_program(
   """Resolve one requested parameter set onto operator derivative channels.
 
   The resolution keys on the operators' declared ``ResidualDerivativeChannel``
-  values (headers predating the channel read as empty — the
-  ``OperatorStateLayout.initial_rows`` getattr precedent), keeping each
-  operator's header declaration order. Request-time validation fails closed
+  values, keeping each operator's header declaration order. Channel-free
+  operators declare an empty tuple. Request-time validation fails closed
   with coded diagnostics: a parameter no operator declares a derivative
   channel for, a channel not differentiating the operator's residual channel,
   or two channels of one operator answering the same parameter (which would
@@ -752,7 +751,7 @@ def compile_sensitivity_program(
   declared: list[str] = []
   for operator in system.operators:
     header = operator.header
-    channels = getattr(header, "derivative_channels", ())
+    channels = header.derivative_channels
     matched_ids: list[str] = []
     matched_channel_ids: list[str] = []
     for channel in channels:

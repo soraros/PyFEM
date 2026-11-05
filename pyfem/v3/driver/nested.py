@@ -16,11 +16,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from pyfem.v3.driver.contracts import (
+  DriverActivitySnapshot,
   DriverStatistics,
-  DriverStatus,
   NestedFailure,
   NestedSolveStatistics,
-  StepFailureClass,
 )
 from pyfem.v3.driver.task_pool import IntegrationPointTaskPool
 from pyfem.v3.model.operator import NestedExecutionRecipe
@@ -44,7 +43,7 @@ def _seed_store(recipe: NestedExecutionRecipe, store: NestedStateStore) -> None:
         recipe.micro_system.operators, store.layout.blocks, strict=True
       ):
         layout = operator.header.state_layout
-        initial_rows = getattr(layout, "initial_rows", None)
+        initial_rows = layout.initial_rows
         rows = (
           np.zeros(layout.row_shape, dtype=np.float64)
           if initial_rows is None
@@ -62,9 +61,7 @@ def _seed_store(recipe: NestedExecutionRecipe, store: NestedStateStore) -> None:
 @dataclass(frozen=True, slots=True, eq=False)
 class _NestedDriverCursor:
   driver: NonlinearStaticDriver
-  run_serial: int
-  iteration_count: int
-  statistics: DriverStatistics
+  snapshot: DriverActivitySnapshot
 
 
 class PreparedNestedExecution:
@@ -197,9 +194,7 @@ class PreparedNestedExecution:
     return tuple(
       _NestedDriverCursor(
         driver=driver,
-        run_serial=driver._run_serial,
-        iteration_count=driver._workspace.iteration_count,
-        statistics=driver.statistics,
+        snapshot=driver._snapshot_nested_activity(),
       )
       for driver in self._drivers
     )
@@ -312,39 +307,24 @@ def collect_nested_activity(
   failure = None
   for operator_index, operator_cursors in enumerate(cursors):
     for ip_index, cursor in enumerate(operator_cursors):
-      driver = cursor.driver
-      before = cursor.statistics
-      after = driver.statistics
-      cost = NestedSolveStatistics(
-        operator_index=operator_index,
-        ip_index=ip_index,
-        iteration_count=driver._workspace.iteration_count - cursor.iteration_count,
-        evaluation_count=after.evaluation_count - before.evaluation_count,
-        factorization_count=after.factorization_count - before.factorization_count,
-        factorization_reuse_count=(
-          after.factorization_reuse_count - before.factorization_reuse_count
-        ),
-        linear_solve_count=after.linear_solve_count - before.linear_solve_count,
-      )
-      statistics.append(cost)
-      if failure is not None or driver._run_serial == cursor.run_serial:
-        continue
-      result = driver._last_result
-      if result is None:
-        failure_class = StepFailureClass.DRIVER_EVALUATION_ERROR
-      elif result.status is DriverStatus.STEP_FAILED:
-        terminal = result.records[-1] if result.records else None
-        failure_class = (
-          terminal.failure_class
-          if terminal is not None and terminal.failure_class is not None
-          else StepFailureClass.STEP_FAILED
+      delta = cursor.driver._nested_activity_delta(cursor.snapshot)
+      statistics.append(
+        NestedSolveStatistics(
+          operator_index=operator_index,
+          ip_index=ip_index,
+          iteration_count=delta.iteration_count,
+          evaluation_count=delta.evaluation_count,
+          factorization_count=delta.factorization_count,
+          factorization_reuse_count=delta.factorization_reuse_count,
+          linear_solve_count=delta.linear_solve_count,
         )
-      else:
+      )
+      if failure is not None or delta.failure_class is None:
         continue
       failure = NestedFailure(
         code="nested-non-convergence",
         operator_index=operator_index,
         ip_index=ip_index,
-        failure_class=failure_class,
+        failure_class=delta.failure_class,
       )
   return tuple(statistics), failure

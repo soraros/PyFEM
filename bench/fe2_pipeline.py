@@ -29,8 +29,6 @@ from pyfem.v3.model.operator import (
   EvaluationStatus,
   NestedEvaluationInput,
   OperatorEvaluationInput,
-  evaluation_status,
-  operator_nested_execution,
 )
 from pyfem.v3.spec.program import (
   AffineCoefficientSpec,
@@ -139,7 +137,7 @@ class FE2Pipeline:
   @property
   def logical_bytes(self) -> dict[str, int]:
     operator = self.system.operators[0]
-    declaration = operator_nested_execution(operator.header)
+    declaration = operator.header.nested_execution
     assert declaration is not None
     layout = declaration.recipe.layout
     per_ip = 8 * (
@@ -245,7 +243,7 @@ class FE2Pipeline:
       raise RuntimeError(msg)
     accepted_payload = store.encode()
     evaluation = self.nested_evaluation()
-    if evaluation_status(evaluation) is not EvaluationStatus.OK:
+    if evaluation.status is not EvaluationStatus.OK:
       msg = "FE2 evidence requires a successful rejected-trial evaluation"
       raise RuntimeError(msg)
     return self._evidence(accepted_payload, store.encode())
@@ -363,8 +361,8 @@ def gate_fe2(reference: FE2Pipeline, candidate: FE2Pipeline) -> FE2GateResult:
   reference_evaluation = reference.nested_evaluation()
   candidate_evaluation = candidate.nested_evaluation()
   evaluation_passed = (
-    evaluation_status(reference_evaluation) is EvaluationStatus.OK
-    and evaluation_status(candidate_evaluation) is EvaluationStatus.OK
+    reference_evaluation.status is EvaluationStatus.OK
+    and candidate_evaluation.status is EvaluationStatus.OK
   )
   checks.append(
     CheckResult(

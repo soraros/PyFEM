@@ -67,7 +67,6 @@ from pyfem.v3.model.operator import (
   EvaluationStatus,
   OperatorEvaluation,
   OperatorEvaluationInput,
-  evaluation_status,
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec import (
@@ -385,8 +384,8 @@ def test_wired_system_evaluates_identically_to_landed_spring_path() -> None:
     wired_evaluations,
     strict=True,
   ):
-    assert evaluation_status(landed_eval) is EvaluationStatus.OK
-    assert evaluation_status(wired_eval) is EvaluationStatus.OK
+    assert landed_eval.status is EvaluationStatus.OK
+    assert wired_eval.status is EvaluationStatus.OK
     for left, right in zip(
       landed_eval.residual_values,
       wired_eval.residual_values,

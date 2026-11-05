@@ -84,8 +84,6 @@ from pyfem.v3.model.operator import (
   EvaluationStatus,
   OperatorEvaluation,
   OperatorEvaluationInput,
-  evaluation_derivative_values,
-  evaluation_status,
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec.diagnostics import SourceContext
@@ -209,11 +207,14 @@ def test_j2_operator_declares_parameter_derivative_channels() -> None:
   assert request.derivative_channel_ids == ()
   layout = header.state_layout
   evaluation = _evaluate(operator, np.zeros(16), np.zeros(layout.row_shape), request)
-  assert evaluation_derivative_values(evaluation) == ()
+  assert evaluation.derivative_values == ()
   with pytest.raises(TypeError, match="exact immutable tuple"):
     ChannelRequest(("internal-force",), (), ["dinternal-force/dyoungs_modulus"])  # type: ignore[arg-type]
-  with pytest.raises(TypeError, match="exact OperatorEvaluation"):
-    evaluation_derivative_values(object())  # type: ignore[arg-type]
+  assert evaluation.status is EvaluationStatus.OK
+  assert evaluation.nested_references == ()
+  for carrier in (header, layout, evaluation):
+    for name in carrier.__dataclass_fields__:
+      assert hasattr(carrier, name), (type(carrier).__name__, name)
   # Foreign or duplicate derivative channels fail closed.
   for bad in (("foreign-channel",), (_DERIVATIVE_CHANNELS[0],) * 2):
     with pytest.raises(ValueError, match="unavailable or duplicate channel"):
@@ -244,16 +245,24 @@ def test_channel_free_operators_and_validator_are_unchanged() -> None:
   )
   for system in systems:
     operator = system.operators[0]
-    assert not hasattr(operator.header, "parameters")
-    assert not hasattr(operator.header, "derivative_channels")
-    layout = operator.header.state_layout
+    header = operator.header
+    assert header.parameters == ()
+    assert header.derivative_channels == ()
+    assert header.nested_execution is None
+    assert header.tangent_class is None
+    layout = header.state_layout
     evaluation = _evaluate(
       operator,
       np.zeros(16),
       np.zeros(layout.row_shape),
       ChannelRequest(("internal-force",), ()),
     )
-    assert evaluation_derivative_values(evaluation) == ()
+    assert evaluation.status is EvaluationStatus.OK
+    assert evaluation.derivative_values == ()
+    assert evaluation.nested_references == ()
+    for carrier in (header, layout, evaluation):
+      for name in carrier.__dataclass_fields__:
+        assert hasattr(carrier, name), (type(carrier).__name__, name)
     with pytest.raises(ValueError, match="unavailable or duplicate channel"):
       _evaluate(
         operator,
@@ -281,7 +290,12 @@ def test_channel_free_operators_and_validator_are_unchanged() -> None:
       source=SourceContext(source="spring"),
     ),
   )
-  assert not hasattr(spring.header, "derivative_channels")
+  assert spring.header.parameters == ()
+  assert spring.header.derivative_channels == ()
+  assert spring.header.nested_execution is None
+  assert spring.header.tangent_class is None
+  assert spring.header.state_layout.initial_rows is None
+  assert all(slot.annotation is None for slot in spring.header.state_layout.slots)
   with pytest.raises(ValueError, match="unavailable or duplicate channel"):
     spring.evaluate(
       OperatorEvaluationInput(
@@ -443,8 +457,8 @@ def test_operator_derivative_channels_match_fd_of_residual_map() -> None:
       accepted,
       ChannelRequest(("internal-force",), (), _DERIVATIVE_CHANNELS),
     )
-    assert evaluation_status(evaluation) is EvaluationStatus.OK
-    columns = evaluation_derivative_values(evaluation)
+    assert evaluation.status is EvaluationStatus.OK
+    columns = evaluation.derivative_values
     assert len(columns) == 4
     for index in range(4):
       step = _FD_REL_STEP * max(abs(_PARAMETERS[index]), 1.0)
@@ -475,10 +489,10 @@ def test_derivative_channel_order_and_reject_semantics() -> None:
     accepted,
     ChannelRequest((), (), (_DERIVATIVE_CHANNELS[3], _DERIVATIVE_CHANNELS[0])),
   )
-  subset = evaluation_derivative_values(evaluation)
-  full = evaluation_derivative_values(
-    _evaluate(operator, values, accepted, ChannelRequest((), (), _DERIVATIVE_CHANNELS))
-  )
+  subset = evaluation.derivative_values
+  full = _evaluate(
+    operator, values, accepted, ChannelRequest((), (), _DERIVATIVE_CHANNELS)
+  ).derivative_values
   assert len(subset) == 2
   np.testing.assert_array_equal(subset[0].values, full[0].values)  # youngs_modulus
   np.testing.assert_array_equal(subset[1].values, full[3].values)  # hardening_slope
@@ -490,8 +504,8 @@ def test_derivative_channel_order_and_reject_semantics() -> None:
     accepted,
     ChannelRequest(("internal-force",), (), _DERIVATIVE_CHANNELS),
   )
-  assert evaluation_status(evaluation) is EvaluationStatus.REJECT_STEP
-  assert evaluation_derivative_values(evaluation) == ()
+  assert evaluation.status is EvaluationStatus.REJECT_STEP
+  assert evaluation.derivative_values == ()
   assert evaluation.trial_state.values.tobytes() == accepted.tobytes()
 
 
@@ -551,7 +565,7 @@ def _fd_probe_tangent(
     accepted,
     ChannelRequest(("internal-force",), ("material-tangent",)),
   )
-  assert evaluation_status(base) is EvaluationStatus.OK
+  assert base.status is EvaluationStatus.OK
   tangent = base.jacobian_values[0].values[0]
   fd = np.zeros_like(tangent)
   for column in range(16):

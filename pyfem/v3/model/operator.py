@@ -278,9 +278,8 @@ class JacobianChannel(CompilerConstructed):
 class OperatorStateSlot(CompilerConstructed):
   """One named contiguous slice of an operator state row.
 
-  ``annotation`` is optional slot metadata (for example ``envelope-max`` or
-  ``monotone-nondecreasing``); compilers predating annotations leave it unset
-  and consumers read it as ``None``.
+  ``annotation`` carries optional metadata such as ``envelope-max`` or
+  ``monotone-nondecreasing``; unannotated slots emit ``None`` explicitly.
   """
 
   name: str
@@ -294,10 +293,8 @@ class OperatorStateSlot(CompilerConstructed):
 class OperatorStateLayout(CompilerConstructed):
   """The accepted-trial state-row ABI of one operator block.
 
-  ``initial_rows`` is optional: when the compiler sets it, state owners seed
-  the accepted buffer with those rows at construction instead of zeros. Layouts
-  predating the field carry no ``initial_rows`` attribute and consumers read
-  them as ``None`` (zero initialization).
+  When ``initial_rows`` is populated, state owners seed the accepted buffer
+  with those rows at construction; ``None`` selects zero initialization.
   """
 
   schema: str
@@ -317,15 +314,10 @@ class OperatorStateLayout(CompilerConstructed):
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class OperatorHeader(CompilerConstructed):
-  """The compiled channel and state declaration of one operator block.
+  """The complete compiled channel and state declaration of one operator block.
 
-  ``parameters`` and ``derivative_channels`` are optional: compilers
-  predating the parameter-derivative channel (and compilers of channel-free
-  operators) leave both unset, and consumers read them as empty tuples —
-  the ``OperatorStateLayout.initial_rows`` precedent. A header carrying no
-  derivative channels admits no derivative channel requests.
-  ``nested_execution`` and ``tangent_class`` follow the same additive rule:
-  older and direct operators read them as ``None``.
+  Channel-free compilers emit empty parameter and derivative tuples explicitly.
+  Direct operators emit ``None`` for nested execution and tangent class.
   """
 
   block_id: SemanticId
@@ -339,36 +331,8 @@ class OperatorHeader(CompilerConstructed):
   coupling_policy: CouplingPolicy
   parameters: tuple[ParameterBinding, ...]
   derivative_channels: tuple[ResidualDerivativeChannel, ...]
-  nested_execution: NestedExecutionDeclaration | None = None
-  tangent_class: str | None = None
-
-
-def operator_nested_execution(
-  header: OperatorHeader,
-) -> NestedExecutionDeclaration | None:
-  """Read the additive nested-execution declaration, failing closed on foreign data."""
-  if type(header) is not OperatorHeader:
-    msg = "nested execution lookup requires an exact OperatorHeader"
-    raise TypeError(msg)
-  declaration = getattr(header, "nested_execution", None)
-  if declaration is not None and type(declaration) is not NestedExecutionDeclaration:
-    msg = "operator nested execution must be an exact declaration or None"
-    raise TypeError(msg)
-  return declaration
-
-
-def operator_tangent_class(header: OperatorHeader) -> str | None:
-  """Read the optional tangent class; direct operators default to ``None``."""
-  if type(header) is not OperatorHeader:
-    msg = "tangent-class lookup requires an exact OperatorHeader"
-    raise TypeError(msg)
-  tangent_class = getattr(header, "tangent_class", None)
-  if tangent_class is not None and (
-    type(tangent_class) is not str or not tangent_class
-  ):
-    msg = "operator tangent class must be a non-empty exact string or None"
-    raise TypeError(msg)
-  return tangent_class
+  nested_execution: NestedExecutionDeclaration | None
+  tangent_class: str | None
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -414,8 +378,7 @@ class ChannelRequest:
 
   ``derivative_channel_ids`` names the requested ``d(residual)/d(parameter)``
   channels (``ResidualDerivativeChannel`` declarations of the operator
-  header); it defaults to empty, so callers predating the parameter
-  derivative channel construct requests unchanged.
+  header); its empty default selects a primal-only evaluation.
   """
 
   residual_channel_ids: tuple[str, ...]
@@ -454,14 +417,13 @@ class OperatorEvaluationInput:
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class OperatorEvaluation(CompilerConstructed):
-  """The typed result of one operator evaluation.
+  """The complete typed result of one operator evaluation.
 
   ``derivative_values`` carries one ``FinalizedArray`` per requested
   derivative channel in the header's declaration order, mirroring
   ``residual_values`` semantics; each entry follows the referenced residual
-  channel's element-batch layout. Evaluators predating the parameter
-  derivative channel construct evaluations without the slot — read them as
-  empty via ``evaluation_derivative_values`` (the ``status`` precedent).
+  channel's element-batch layout. Evaluations without derivative or nested
+  results emit empty tuples explicitly.
   """
 
   residual_values: tuple[FinalizedArray, ...]
@@ -469,64 +431,7 @@ class OperatorEvaluation(CompilerConstructed):
   trial_state: FinalizedArray
   status: EvaluationStatus
   derivative_values: tuple[FinalizedArray, ...]
-  nested_references: tuple[NestedStateReference, ...] = ()
-
-
-def evaluation_status(evaluation: OperatorEvaluation) -> EvaluationStatus:
-  """Return the typed outcome classification of one operator evaluation.
-
-  Evaluators predating this contract (the landed zero-width Q8 slice) construct
-  evaluations without a status slot; those evaluations are ``OK`` by
-  construction. Any other foreign or malformed value fails closed.
-  """
-  if type(evaluation) is not OperatorEvaluation:
-    msg = "evaluation status requires an exact OperatorEvaluation"
-    raise TypeError(msg)
-  status = getattr(evaluation, "status", EvaluationStatus.OK)
-  if type(status) is not EvaluationStatus:
-    msg = "operator evaluation status must be an exact EvaluationStatus"
-    raise TypeError(msg)
-  return status
-
-
-def evaluation_derivative_values(
-  evaluation: OperatorEvaluation,
-) -> tuple[FinalizedArray, ...]:
-  """Return the requested derivative channel values of one operator evaluation.
-
-  Evaluators predating the parameter derivative channel construct evaluations
-  without a ``derivative_values`` slot, and evaluations that served no
-  derivative request carry an empty tuple; both read as empty by
-  construction. Any other foreign or malformed value fails closed.
-  """
-  if type(evaluation) is not OperatorEvaluation:
-    msg = "evaluation derivative values require an exact OperatorEvaluation"
-    raise TypeError(msg)
-  values = getattr(evaluation, "derivative_values", ())
-  if type(values) is not tuple or any(
-    type(item) is not FinalizedArray for item in values
-  ):
-    msg = "operator evaluation derivative values must be FinalizedArray tuples"
-    raise TypeError(msg)
-  return values
-
-
-def evaluation_nested_references(
-  evaluation: OperatorEvaluation,
-) -> tuple[NestedStateReference, ...]:
-  """Read typed nested references; non-nested evaluations default to empty."""
-  from pyfem.v3.state.nested import NestedStateReference
-
-  if type(evaluation) is not OperatorEvaluation:
-    msg = "evaluation nested references require an exact OperatorEvaluation"
-    raise TypeError(msg)
-  references = getattr(evaluation, "nested_references", ())
-  if type(references) is not tuple or any(
-    type(reference) is not NestedStateReference for reference in references
-  ):
-    msg = "operator evaluation nested references must be exact typed tuples"
-    raise TypeError(msg)
-  return references
+  nested_references: tuple[NestedStateReference, ...]
 
 
 class StateCodec(Protocol):

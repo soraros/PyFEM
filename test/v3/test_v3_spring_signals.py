@@ -45,7 +45,6 @@ from pyfem.v3.model.operator import (
   OperatorEvaluationInput,
   ProgramSignalInput,
   SignalDerivativeInput,
-  evaluation_status,
 )
 from pyfem.v3.model.provenance import CanonicalManifest
 from pyfem.v3.model.system import CompiledSystem
@@ -265,7 +264,7 @@ def test_signal_evaluation_forwards_scalars_and_derivatives() -> None:
       request=ChannelRequest(("spring-force",), ("spring-tangent",)),
     )
   )
-  assert evaluation_status(evaluation) is EvaluationStatus.OK
+  assert evaluation.status is EvaluationStatus.OK
   assert received == [(0.75, (("load", 1.0), ("time", 0.0)))]
   # Zero-copy forwarding: the kernel reads the evaluation's own array.
   np.testing.assert_array_equal(
