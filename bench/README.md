@@ -347,6 +347,21 @@ for the control, a measured 124.638 s (51.2%) reduction. The default
 candidate-versus-control ratio check reports zero regressions. These are
 targeted harness-evidence artifacts, not a promoted baseline.
 
+The M118 Riks deck-route pair is
+`bench/results/run_q13_candidate.json` (candidate `b5c31ab`) and
+`bench/results/run_q13_control_base.json` (control `3a435a8`). Both have clean
+reference-machine manifests, `coverage: "partial"`, the same 27 records and 60
+metric cells: warm `riks-fan/2,8,32,128` at 1/2/4/8/16 threads plus legacy,
+and the cold `riks-fan/32` cells. Every scientific gate passes: committed
+cycles match exactly (31 at n=2, 11 at n=8/32/128), per-cycle correction counts
+match exactly, and per-cycle lam/state retain the documented tolerances. The
+manifests record `harness_matrix` and `harness_wall_s`: 34.618 s candidate
+versus 35.031 s control, a measured 0.413 s (1.2%) reduction. The default
+candidate-versus-control check reports 59 `ok` cells and one informational
+cold-solve improvement (0.776x), with zero regressions, missing cells or
+correctness failures. These are targeted harness-evidence artifacts, not a
+promoted baseline; `baseline_m3.json` remains unchanged.
+
 `bench.run check` compares a candidate against a baseline per cell
 (`category, workload, side, mode, threads, metric`):
 
