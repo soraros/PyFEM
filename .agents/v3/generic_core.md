@@ -531,3 +531,144 @@ belongs only in [migration-execution.md](migration-execution.md).
   Element/Material/Section/Model boundaries is required. Proof-A code proceeds only
   to a bounded simplification pass; the production vertical cut remains a later,
   separately frozen decision.
+
+## 13. NX7-3R performance-first reset and falsification contract
+
+This 2026-11-06 amendment records M123's abandonment and M124's negative
+architecture ruling. It supersedes any reading of the earlier proof portfolio
+that makes generic-only prototype deletion an independent success or assumes a
+credible generic redesign already exists. The exact execution frontier remains
+in [migration-execution.md](migration-execution.md).
+
+M123's final generic fresh-e2e cost was 7.66x/12.77x/9.19x control at
+2x2/8x8/32x32, and its final nonblank reductions were 1,703 production and 1,471
+test lines against required floors of 1,800 and 1,500. This convicts the measured
+representation for the Q8-linear consumer; it does not convict generic semantics.
+Sections 3.3 and 8.3 already require specialized payloads and array/scalar hot
+kernels. Eager derived-array identity, object-rich attribution, and
+unspecialized hot representations are implementation choices, not semantic laws.
+
+### 13.1 Production boundary and acceptable end state
+
+The existing specialized prototype remains the production Q8/skim lane
+temporarily and unchanged. Existing generic FE²/damage/J2/TL/truss/spring/
+researcher-signal/Riks/notebook flows do not route through it. This is not a
+permanent dual-runtime decision and authorizes no new prototype consumer,
+fallback, compatibility facade, or partial consumer migration.
+
+The only acceptable end state is **one generic semantic spine with selectively
+specialized numerical payloads and kernels**. A second compiler, solver, state
+owner, result stack, public `PreparedExecution`, or prototype fallback is not an
+acceptable implementation of that spine. The bounded falsification vertical does
+not edit or delete the prototype and does not itself authorize deletion.
+
+### 13.2 Honest equivalent envelopes before optimization
+
+Establish both comparisons before changing hot code:
+
+1. programmatic arrays -> prototype `pack`/solve versus programmatic arrays ->
+   generic spec/compile/driver; and
+2. identical deck files -> each side's public loader/solver.
+
+For each applicable envelope, report deck read, compile, cold plan, first solve,
+cached-plan solve, and complete fresh end-to-end cost, with cold/warm cache
+ownership explicit. A historical prototype solve-from-assembled cell and a fresh
+generic compile/driver cell are non-comparable context, never acceptance evidence.
+Do not rename an envelope, omit a stage, or use a weak global cache to manufacture
+apparent equivalence. Missing comparable cells are failures, not skipped passes.
+
+### 13.3 Focused performance matrix and 32x32 budget
+
+Every comparable cell at **2x2, 8x8, and 32x32**, for both **PlaneStress and
+PlaneStrain**, at **1 and 16 threads**, must satisfy the existing rule exactly:
+
+```text
+candidate_median / control_median <= 1.25 OR candidate_median - control_median <= 1 ms
+```
+
+A regression requires both ratio > 1.25 and absolute slowdown > 1 ms; neither
+part may be hidden by the other. The M124 control-derived maxima below are
+reporting anchors, not a substitute for evaluating each material/thread cell:
+
+| Size | Load maximum (ms) | Fresh-e2e maximum (ms) |
+|---|---:|---:|
+| 2x2 | 1.1704 | 1.9467 |
+| 8x8 | 1.9177 | 3.1784 |
+| 32x32 | 12.3889 | 54.9259 |
+
+At 32x32, require all of the following on the same measured envelope:
+
+- load <= **12.3889 ms**;
+- complete fresh e2e <= **54.9259 ms**; and
+- plan + cached-plan solve <= **54.9259 ms - measured_load**.
+
+Thus, if load merely reaches 12.3889 ms, plan + solve must be <= **42.5370 ms**,
+compared with 153.5482 ms for those M123 stages. There is no averaging across
+sizes, materials, threads, or stages and no waiver for a near miss.
+
+### 13.4 Representation, COO, and memory ceilings
+
+The single integrated candidate may test only representation changes with a
+direct cost-model rationale:
+
+- semantic/export identity derived lazily from normalized recipes, with array
+  export/persistence work deferred until that boundary is actually requested;
+- columnar entity/source data rather than per-entity object-rich hot paths;
+- the existing fused Q8 numerical kernel behind the same operator contract, with
+  linear tangent reuse and no validation-only B/gradient tensors retained solely
+  for linear evaluation;
+- range-appropriate index widths and owned-array adoption without duplicate
+  owned copies; and
+- explicit validated plan injection/reuse with exact system/map identity,
+  fingerprint, and load validation, not a production global weak cache.
+
+Same-case COO logical bytes and measured candidate memory must not exceed the
+prototype, absent a documented index-range requirement. Record logical bytes,
+`tracemalloc`, and RSS as distinct quantities where used; none substitutes for
+another. No eager derived-array manifest copies are allowed. Any selector-only
+reduction requires proof that the compiled map is a selector; genuine MPC keeps
+its `P` products, and FE² maps are never special-cased by analogy. A
+single-coordinate offset fast path must be raw-equal to the existing
+`math.fsum` semantics or retain the scalar path.
+
+### 13.5 Raw correctness and retained-flow floors
+
+Zero correctness failures and full raw determinism are mandatory. Preserve:
+
+- analytic Q4/T3/Q8/Hex8 and PatchTest8 oracles and independent legacy-v1
+  parser/settings/coefficient-permutation controls;
+- affine MPC chain/cycle/overflow diagnostics, full/reduced balance,
+  reactions/work, and constant-tangent iteration/factorization counts;
+- accepted/trial ownership and rejected-attempt byte identity;
+- raw 1T/nT CSR, state, and nested-payload identity; and
+- every retained FE²/damage/J2/TL/truss/spring/researcher-signal/Riks/notebook
+  behavior, with M121 retirements and M122 deletions unchanged.
+
+Fused tangent/residual arithmetic needs a measured, documented numerical band,
+the existing independent analytic/legacy tolerances, and unchanged iteration and
+factorization counts. Never claim raw old/new arithmetic equality for fused
+evaluation. `bench.run gates`, the headless notebook, both complete digit-mode
+repository suites, and every exact and bare Ruff check/format invocation must
+pass on the same candidate commit. M123's earlier zero-correctness-failure
+artifacts do not satisfy this candidate's gates.
+
+### 13.6 Complexity floors and mandatory abandonment
+
+Before any deletion is considered, the focused candidate's production **and**
+v3-test nonblank line counts must both fall relative to `fbb72fa`, using the
+unified-zero-diff method and excluding only an equivalent benchmark rewrite.
+A focused pass merely authorizes a separate deletion candidate; it does not
+delete the prototype automatically. That candidate must still remove **>=1,800
+production and >=1,500 v3-test nonblank lines** after the same exclusion, then
+pass a full clean matched reference-machine candidate/control run with complete
+coverage, zero missing cells, and zero correctness failures. Historical
+`baseline_m3.json` and benchmark history are never overwritten.
+
+**Abandon the entire vertical without merging if any focused correctness,
+performance, COO/memory, or line gate fails, if any required cell is missing, or
+if success requires another cache, lifecycle, runtime, attribution, or
+micro-optimization round.** Keep current production and record the negative
+result. There is one bounded vertical, not a sequence of retries and no partial
+migration left behind. Only its complete focused pass may open the separate
+deletion review; NX7-4+ remain stopped regardless until a new evidence-backed
+charter decision.
