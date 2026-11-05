@@ -225,6 +225,71 @@ state the envelope difference, and create a reviewed baseline successor only
 from a full clean reference-machine run. Keep old baseline files as history;
 never promote a baseline under load or silently drop missing full-coverage cells.
 
+### 6.1 Measured NX7-3 lesson: representation before another cache round
+
+M123 is a measured counterexample to equating generic semantics with an
+unspecialized runtime representation. Its final fresh-e2e cost remained
+7.66x/12.77x/9.19x control at 2x2/8x8/32x32, while successive remediation rounds
+reduced the net deletion from 2,426/1,593 to 1,703/1,471 nonblank production/test
+lines. The result was neither an acceptable deletion nor a credible generic
+redesign. Do not resume that branch or launch another open-ended optimization
+sequence.
+
+The structural lesson is specific: **eager derived-array identity, object-rich
+attribution, and unspecialized hot representations can make otherwise generic
+code structurally slow**. Recursively copying/serializing/hashing arrays to prove
+identity, constructing per-entity Python records in hot preparation paths,
+retaining validation-only tensors, and using generic `einsum`/int64 COO structures
+where a fused kernel and range-appropriate arrays suffice are not free consequences
+of a clean architecture. A cache can hide repeated work only after ownership and
+identity are correct; it cannot repair an unsuitable representation.
+
+Selective specialized payloads and fused numerical kernels may remain **within
+one generic semantic spine**. That spine retains the same entities, spaces,
+ports/channels, affine maps, driver plan, state transactions, and accepted
+records. It does not acquire a prototype fallback, second compiler/solver/state/
+result runtime, public `PreparedExecution`, or compatibility facade. Temporary
+retention of the current Q8/skim prototype is a production safeguard while one
+bounded candidate is falsified, not an architectural endorsement of two runtimes.
+
+M123 techniques divide into the following dispositions:
+
+**Reusable selectively, with fresh focused correctness and cost evidence:**
+
+- linear Q8 tangent precompute and binding the existing fused Numba kernel behind
+  the same operator contract; use a measured arithmetic band and unchanged
+  iteration/factorization counts rather than claiming raw old/new equality;
+- explicit `DriverAssemblyPlan` injection with exact system/map identity,
+  fingerprint and load validation, plus independent-owner/lifetime tests;
+- whole-mesh geometry batching and quadrature binding only where raw-equal to the
+  scalar/reference path, retaining diagnostic and numerical edge fallbacks;
+- validation-once for immutable compiler-owned values, retaining first-use
+  sabotage tests and exact restore validation;
+- canonical CSR owner/test decoupling, strict sequential and raw 1T/nT oracles,
+  and independent legacy/analytic instruments; and
+- V2's format version, digest, no-pickle deserialization, and V1 migration design
+  **only at an actual persistence/restore boundary after lazy identity exists**.
+
+**Rejected wholesale as acceptance techniques:**
+
+- eager V2 runtime manifests as an optimization or a new runtime-wide identity
+  layer;
+- benchmark `WeakKeyDictionary`/other weak global plan caches as production
+  lifecycle ownership;
+- the measured-neutral normalization/attribution remediation round as a package,
+  while individual raw-provable batching ideas may be evaluated separately;
+- benchmark envelope renames, stage omissions, or comparisons of
+  solve-from-assembled against fresh compile/driver work; and
+- wholesale adoption of the M123 deletion/remediation branch or another
+  cache/lifecycle/runtime round after the bounded candidate fails.
+
+The existing regression rule is pass iff **ratio <= 1.25 OR absolute delta <=
+1 ms**, evaluated for every comparable cell. Honest envelopes, full correctness,
+COO/memory ceilings, and production/test complexity floors are independent gates,
+not evidence that can compensate for one another. The bounded vertical changes no
+benchmark JSON, `baseline_m3.json`, or baseline history; only a later focused-pass
+deletion candidate may request a full clean matched baseline review.
+
 ## 7. Required repository gates
 
 Run tests from the actual checkout root with the project interpreter, always as
