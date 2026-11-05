@@ -85,7 +85,7 @@ def _validated_layout(value: object) -> OperatorStateLayout:
     ):
       msg = "operator state layout slots must be positive-width float64 rows"
       raise TypeError(msg)
-    annotation = getattr(slot, "annotation", None)
+    annotation = slot.annotation
     if annotation is not None and (type(annotation) is not str or not annotation):
       msg = "operator state slot annotations must be non-empty exact strings"
       raise TypeError(msg)
@@ -106,7 +106,7 @@ def _validated_layout(value: object) -> OperatorStateLayout:
   ):
     msg = "operator state layout entity offsets must bound contiguous rows"
     raise TypeError(msg)
-  initial_rows = getattr(layout, "initial_rows", None)
+  initial_rows = layout.initial_rows
   if initial_rows is not None:
     if type(initial_rows) is not FinalizedArray:
       msg = "operator state layout initial rows must be an exact FinalizedArray"
@@ -349,7 +349,7 @@ class StateTransactionOwner:
         codec = Float64StateRowCodec(layout.schema)
       # Layouts carrying compiler-emitted initial rows seed the accepted buffer
       # with them; all other layouts keep zero initialization.
-      initial_rows = getattr(layout, "initial_rows", None)
+      initial_rows = layout.initial_rows
       accepted = (
         np.array(
           initial_rows.values,

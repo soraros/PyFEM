@@ -160,13 +160,14 @@ from pyfem.v3.driver.contracts import (
   _SLOW_CONVERGENCE_CONTRACTION,
   BudgetExhaustionObservation,
   BudgetExhaustionTrend,
+  DriverActivityDelta,
+  DriverActivitySnapshot,
   DriverStatistics,
   DriverStatus,
   HomogenizationObservation,
   HomogenizationReduction,
   HomogenizationRequest,
   IterationRecord,
-  NestedFailure,
   NestedSolveStatistics,
   NonlinearStaticResult,
   NonlinearStaticSettings,
@@ -210,10 +211,6 @@ from pyfem.v3.model.operator import (
   NestedEvaluationInput,
   OperatorEvaluationInput,
   ProgramSignalInput,
-  evaluation_derivative_values,
-  evaluation_nested_references,
-  evaluation_status,
-  operator_nested_execution,
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec.diagnostics import SourceContext, render_diagnostic_value
@@ -488,7 +485,7 @@ class NonlinearStaticDriver:
       msg = "the nonlinear driver owner must be an exact StateTransactionOwner or None"
       raise TypeError(msg)
     declarations = tuple(
-      operator_nested_execution(operator.header) for operator in system.operators
+      operator.header.nested_execution for operator in system.operators
     )
     self._system = system
     self._map = coordinate_map
@@ -682,14 +679,14 @@ class NonlinearStaticDriver:
         )
       )
       evaluated = True
-      if evaluation_status(evaluation) is not EvaluationStatus.OK:
+      if evaluation.status is not EvaluationStatus.OK:
         _evaluation_fail(
           "sensitivity-evaluation-rejected",
           "the derivative evaluation at a converged point rejected; the "
           "primal evaluation at the same point converged, so the operator "
           "contract is broken",
         )
-      values = evaluation_derivative_values(evaluation)
+      values = evaluation.derivative_values
       if len(values) != len(slice_.derivative_channel_ids):
         _evaluation_fail(
           "derivative-channel-count-mismatch",
@@ -906,26 +903,44 @@ class NonlinearStaticDriver:
       tangent=FinalizedArray(macro_tangent, dtype=np.float64),
     )
 
-  def _begin_nested_trial(self) -> None:
-    begin_nested_trial(self._nested_executions)
+  def _snapshot_nested_activity(self) -> DriverActivitySnapshot:
+    return DriverActivitySnapshot(
+      run_serial=self._run_serial,
+      iteration_count=self._workspace.iteration_count,
+      statistics=self.statistics,
+    )
 
-  def _reject_nested_trial(self) -> None:
-    reject_nested_trial(self._nested_executions)
-
-  def _validate_nested_trial(self) -> None:
-    validate_nested_trial(self._nested_executions)
-
-  def _commit_nested_trial(self) -> None:
-    commit_nested_trial(self._nested_executions)
-
-  def _snapshot_nested_drivers(self) -> tuple[tuple[object, ...], ...]:
-    return snapshot_nested_activity(self._nested_executions)
-
-  def _collect_nested_activity(
+  def _nested_activity_delta(
     self,
-    cursors: tuple[tuple[object, ...], ...],
-  ) -> tuple[tuple[NestedSolveStatistics, ...], NestedFailure | None]:
-    return collect_nested_activity(cursors)
+    snapshot: DriverActivitySnapshot,
+  ) -> DriverActivityDelta:
+    if type(snapshot) is not DriverActivitySnapshot:
+      msg = "nested activity deltas require an exact DriverActivitySnapshot"
+      raise TypeError(msg)
+    failure_class = None
+    if self._run_serial != snapshot.run_serial:
+      result = self._last_result
+      if result is None:
+        failure_class = StepFailureClass.DRIVER_EVALUATION_ERROR
+      elif result.status is DriverStatus.STEP_FAILED:
+        terminal = result.records[-1] if result.records else None
+        failure_class = (
+          terminal.failure_class
+          if terminal is not None and terminal.failure_class is not None
+          else StepFailureClass.STEP_FAILED
+        )
+    after = self.statistics
+    before = snapshot.statistics
+    return DriverActivityDelta(
+      iteration_count=self._workspace.iteration_count - snapshot.iteration_count,
+      evaluation_count=after.evaluation_count - before.evaluation_count,
+      factorization_count=after.factorization_count - before.factorization_count,
+      factorization_reuse_count=(
+        after.factorization_reuse_count - before.factorization_reuse_count
+      ),
+      linear_solve_count=after.linear_solve_count - before.linear_solve_count,
+      failure_class=failure_class,
+    )
 
   def _accumulate_nested_statistics(
     self, statistics: tuple[NestedSolveStatistics, ...]
@@ -1007,7 +1022,7 @@ class NonlinearStaticDriver:
     nested_open = False
     iterations: list[IterationRecord] = []
     try:
-      self._begin_nested_trial()
+      begin_nested_trial(self._nested_executions)
       nested_open = True
       reduced = np.array(
         transaction.accepted_physical.values[free_dofs],
@@ -1054,7 +1069,7 @@ class NonlinearStaticDriver:
             )
           )
         workspace.evaluation_count += 1
-        statuses = tuple(evaluation_status(evaluation) for evaluation in evaluations)
+        statuses = tuple(evaluation.status for evaluation in evaluations)
         if EvaluationStatus.REJECT_STEP in statuses:
           iterations.append(
             IterationRecord(iteration, EvaluationStatus.REJECT_STEP, None, None)
@@ -1075,9 +1090,9 @@ class NonlinearStaticDriver:
           increment = 0.5 * increment
           reduced = anchor + increment
           increment_norm = float(np.linalg.norm(increment))
-          self._reject_nested_trial()
+          reject_nested_trial(self._nested_executions)
           nested_open = False
-          self._begin_nested_trial()
+          begin_nested_trial(self._nested_executions)
           nested_open = True
           continue
         residual_batches = tuple(
@@ -1127,12 +1142,12 @@ class NonlinearStaticDriver:
               operator.header.state_layout.block_id,
               evaluation.trial_state,
             )
-            for reference in evaluation_nested_references(evaluation):
+            for reference in evaluation.nested_references:
               transaction.stage_nested(reference)
-          self._validate_nested_trial()
+          validate_nested_trial(self._nested_executions)
           transaction.commit()
           closed = True
-          self._commit_nested_trial()
+          commit_nested_trial(self._nested_executions)
           nested_open = False
           workspace.committed_substep_count += 1
           full_residual = internal - external
@@ -1199,9 +1214,9 @@ class NonlinearStaticDriver:
           closed = True
           workspace.rejected_substep_count += 1
           return False, tuple(iterations), None, None
-        self._reject_nested_trial()
+        reject_nested_trial(self._nested_executions)
         nested_open = False
-        self._begin_nested_trial()
+        begin_nested_trial(self._nested_executions)
         nested_open = True
         reduced = trial_reduced
         iterations.append(
@@ -1224,7 +1239,7 @@ class NonlinearStaticDriver:
     finally:
       workspace.iteration_count += len(iterations)
       if nested_open:
-        self._reject_nested_trial()
+        reject_nested_trial(self._nested_executions)
 
   def run(
     self,
@@ -1310,7 +1325,7 @@ class NonlinearStaticDriver:
           if requires_committed_point
           else None
         )
-        nested_cursors = self._snapshot_nested_drivers()
+        nested_cursors = snapshot_nested_activity(self._nested_executions)
         try:
           committed, iterations, observation, budget_exhaustion = self._newton_substep(
             trial_point,
@@ -1319,12 +1334,10 @@ class NonlinearStaticDriver:
             homogenization_program,
           )
         except BaseException:
-          nested_statistics, _ = self._collect_nested_activity(nested_cursors)
+          nested_statistics, _ = collect_nested_activity(nested_cursors)
           self._accumulate_nested_statistics(nested_statistics)
           raise
-        nested_statistics, nested_failure = self._collect_nested_activity(
-          nested_cursors
-        )
+        nested_statistics, nested_failure = collect_nested_activity(nested_cursors)
         self._accumulate_nested_statistics(nested_statistics)
         failure_class = (
           None if committed else self._classify_failure(iterations, budget_exhaustion)

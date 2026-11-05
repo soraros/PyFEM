@@ -40,10 +40,6 @@ from pyfem.v3.model.operator import (
   NestedExecutionRecipe,
   OperatorEvaluation,
   OperatorEvaluationInput,
-  evaluation_nested_references,
-  evaluation_status,
-  operator_nested_execution,
-  operator_tangent_class,
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec.program import (
@@ -147,7 +143,7 @@ def _deck(
     "settings": micro_settings,
   }
   system = authoring.fe2_continuum(base, **arguments)
-  declaration = operator_nested_execution(system.operators[0].header)
+  declaration = system.operators[0].header.nested_execution
   assert declaration is not None
   runtime = PreparedNestedExecution(declaration.recipe)
   return _Deck(system, micro_system, micro_map, cell, macro_mesh, micro_mesh, runtime)
@@ -239,7 +235,7 @@ def _seed_documented_ip_state(deck: _Deck, strain: np.ndarray) -> None:
         deck.micro_system.operators, store.layout.blocks, strict=True
       ):
         layout = micro_operator.header.state_layout
-        initial = getattr(layout, "initial_rows", None)
+        initial = layout.initial_rows
         rows = (
           np.zeros(layout.row_shape, dtype=np.float64)
           if initial is None
@@ -274,7 +270,7 @@ def _documented_strain() -> np.ndarray:
 def test_header_declares_an_immutable_recipe_not_live_execution_state() -> None:
   deck = _deck(elastic=True)
   operator = deck.system.operators[0]
-  declaration = operator_nested_execution(operator.header)
+  declaration = operator.header.nested_execution
   assert type(declaration) is NestedExecutionDeclaration
   assert declaration.modality is NestedExecutionModality.DRIVER_PER_INTEGRATION_POINT
   recipe = declaration.recipe
@@ -286,7 +282,14 @@ def test_header_declares_an_immutable_recipe_not_live_execution_state() -> None:
   other = _deck(elastic=True)
   assert recipe.provenance.to_bytes() == other.runtime.recipe.provenance.to_bytes()
   other.runtime.close()
-  assert operator_tangent_class(operator.header) == FE2_TANGENT_CLASS
+  assert operator.header.tangent_class == FE2_TANGENT_CLASS
+  assert operator.header.parameters == ()
+  assert operator.header.derivative_channels == ()
+  assert operator.header.state_layout.initial_rows is None
+  for name in operator.header.__dataclass_fields__:
+    assert hasattr(operator.header, name), name
+  for name in operator.header.state_layout.__dataclass_fields__:
+    assert hasattr(operator.header.state_layout, name), name
   assert not hasattr(operator, "drivers")
   assert not hasattr(operator, "nested_store")
   assert not hasattr(operator, "task_pool")
@@ -313,8 +316,8 @@ def test_header_declares_an_immutable_recipe_not_live_execution_state() -> None:
     q8_reference_registry(),
   )
   direct_operator = direct_base.operators[0]
-  assert operator_nested_execution(direct_operator.header) is None
-  assert operator_tangent_class(direct_operator.header) is None
+  assert direct_operator.header.nested_execution is None
+  assert direct_operator.header.tangent_class is None
   direct = direct_operator.evaluate(
     OperatorEvaluationInput(
       port_values=(FinalizedArray(np.zeros((1, 16)), dtype=np.float64),),
@@ -323,8 +326,11 @@ def test_header_declares_an_immutable_recipe_not_live_execution_state() -> None:
       request=ChannelRequest(("internal-force",), ("material-tangent",)),
     )
   )
-  assert evaluation_nested_references(direct) == ()
-  assert evaluation_status(direct) is EvaluationStatus.OK
+  assert direct.nested_references == ()
+  assert direct.status is EvaluationStatus.OK
+  assert direct.derivative_values == ()
+  for name in direct.__dataclass_fields__:
+    assert hasattr(direct, name), name
   # The untouched direct compiler retains deterministic content identity.
   again = compile_system(
     authoring.small_strain_continuum(
@@ -385,14 +391,14 @@ def test_macro_fe2_reported_ip_state_matches_legacy_sigma11() -> None:
   )
   gather = operator.header.ports[0].coefficient_map.values
   evaluation = _evaluate_port(deck, full[gather], accepted)
-  assert evaluation_status(evaluation) is EvaluationStatus.OK
+  assert evaluation.status is EvaluationStatus.OK
   np.testing.assert_allclose(
     evaluation.trial_state.values,
     np.tile(strain, (9, 1)),
     rtol=0.0,
     atol=2.0e-18,
   )
-  assert len(evaluation_nested_references(evaluation)) == 9
+  assert len(evaluation.nested_references) == 9
   # Rejecting the direct evaluation leaves the seeded accepted state intact;
   # observe the same point's solve-free boundary-reaction reduction next.
   store = deck.runtime.store
@@ -546,6 +552,7 @@ def test_retry_iteration_discards_and_reopens_the_nested_scope(
         jacobian_values=(),
         trial_state=inputs.accepted_state,
         status=EvaluationStatus.REJECT_ITERATION,
+        derivative_values=(),
         nested_references=(),
       )
     return evaluation
@@ -678,14 +685,12 @@ def test_nested_accounting_is_primal_byte_transparent(
   control = _cantilever(prescribed=2.0e-4, elastic=True)
   with monkeypatch.context() as disabled:
     disabled.setattr(
-      NonlinearStaticDriver,
-      "_snapshot_nested_drivers",
-      lambda _self: (),
+      "pyfem.v3.driver.nonlinear.snapshot_nested_activity",
+      lambda _runtimes: (),
     )
     disabled.setattr(
-      NonlinearStaticDriver,
-      "_collect_nested_activity",
-      lambda _self, _cursors: ((), None),
+      "pyfem.v3.driver.nonlinear.collect_nested_activity",
+      lambda _cursors: ((), None),
     )
     plain = control.driver.run(
       base_point=_load_point(0.0), target_points=(_load_point(1.0),)
@@ -823,8 +828,8 @@ def test_ip_task_pool_matches_one_thread_raw_uint64_across_macro_steps() -> None
   finally:
     set_num_threads(previous_threads)
 
-  assert evaluation_status(serial_evaluation) is EvaluationStatus.OK
-  assert evaluation_status(parallel_evaluation) is EvaluationStatus.OK
+  assert serial_evaluation.status is EvaluationStatus.OK
+  assert parallel_evaluation.status is EvaluationStatus.OK
   _assert_raw_uint64_equal(
     serial_evaluation.residual_values[0].values,
     parallel_evaluation.residual_values[0].values,
@@ -1003,6 +1008,172 @@ def test_fresh_runtime_rebinding_and_cleanup_are_execution_local() -> None:
     deck.runtime.close()
     foreign.runtime.close()
     fresh.close()
+
+
+def _elastic_riks_driver(thread_count: int) -> tuple[_Deck, RiksDriver]:
+  deck = _deck(
+    elastic=True,
+    micro_settings=NonlinearStaticSettings(nested_ip_thread_count=thread_count),
+  )
+  deck.runtime.close()
+  mesh = deck.macro_mesh
+  left = tuple(node.id for node in mesh.nodes if abs(node.coordinates[0]) < 1.0e-12)
+  right = tuple(
+    node.id for node in mesh.nodes if abs(node.coordinates[0] - 1.0) < 1.0e-12
+  )
+  coordinate_map = compile_constraint_map(
+    deck.system,
+    constraints=authoring.fixed(left, components=("x", "y")),
+    coordinates=(ProgramCoordinateSpec("load", "load"),),
+  )
+  loads = tuple(
+    authoring.nodal_load(node, "x", 0.01, coordinate="load") for node in right
+  )
+  driver = RiksDriver(
+    deck.system,
+    coordinate_map,
+    loads,
+    ArcLengthSettings(tolerance=1.0e-9, fixed_step=True, max_lam=0.5),
+  )
+  runtime = driver.nested_executions[0]
+  assert runtime is not None
+  return replace(deck, runtime=runtime), driver
+
+
+def test_riks_ip_pool_preserves_raw_1t_nt_science_and_first_factorizations() -> None:
+  previous_threads = get_num_threads()
+  drivers: list[RiksDriver] = []
+  try:
+    set_num_threads(1)
+    serial, serial_driver = _elastic_riks_driver(1)
+    drivers.append(serial_driver)
+    serial_result = serial_driver.run(base_point=ProgramPoint())
+    set_num_threads(2)
+    parallel, parallel_driver = _elastic_riks_driver(2)
+    drivers.append(parallel_driver)
+    parallel_result = parallel_driver.run(base_point=ProgramPoint())
+    block_id = serial.system.operators[0].header.state_layout.block_id
+    set_num_threads(1)
+    serial_operator = serial.system.operators[0]
+    serial_gather = serial_operator.header.ports[0].coefficient_map.values
+    serial_evaluation, serial_outputs = _evaluate_with_ip_outputs(
+      serial,
+      serial_driver.owner.accepted_physical().values[serial_gather],
+      serial_driver.owner.accepted_state(block_id),
+    )
+    set_num_threads(2)
+    parallel_operator = parallel.system.operators[0]
+    parallel_gather = parallel_operator.header.ports[0].coefficient_map.values
+    parallel_evaluation, parallel_outputs = _evaluate_with_ip_outputs(
+      parallel,
+      parallel_driver.owner.accepted_physical().values[parallel_gather],
+      parallel_driver.owner.accepted_state(block_id),
+    )
+  finally:
+    set_num_threads(previous_threads)
+    for driver in drivers:
+      driver.close()
+
+  assert serial_result.status is parallel_result.status is DriverStatus.COMPLETED
+  assert serial_result.termination_reason is parallel_result.termination_reason
+  assert len(serial_result.records) == len(parallel_result.records) == 1
+  assert astuple(serial_result.statistics) == astuple(parallel_result.statistics)
+  serial_continuation = serial_result.final_continuation
+  parallel_continuation = parallel_result.final_continuation
+  assert serial_continuation.lam == parallel_continuation.lam
+  assert serial_continuation.dlam_prev == parallel_continuation.dlam_prev
+  assert serial_continuation.factor == parallel_continuation.factor
+  assert serial_continuation.total_factor == parallel_continuation.total_factor
+  assert serial_continuation.cycle == parallel_continuation.cycle
+  _assert_raw_uint64_equal(
+    serial_continuation.da_prev.values,
+    parallel_continuation.da_prev.values,
+  )
+  block_id = serial.system.operators[0].header.state_layout.block_id
+  _assert_raw_uint64_equal(
+    serial_driver.owner.accepted_physical().values,
+    parallel_driver.owner.accepted_physical().values,
+  )
+  _assert_raw_uint64_equal(
+    serial_driver.owner.accepted_state(block_id).values,
+    parallel_driver.owner.accepted_state(block_id).values,
+  )
+  assert serial.runtime.store.encode() == parallel.runtime.store.encode()
+  for serial_record, parallel_record in zip(
+    serial_result.records, parallel_result.records, strict=True
+  ):
+    assert serial_record.status is parallel_record.status
+    for serial_iteration, parallel_iteration in zip(
+      serial_record.iterations, parallel_record.iterations, strict=True
+    ):
+      assert serial_iteration.iteration == parallel_iteration.iteration
+      assert serial_iteration.status is parallel_iteration.status
+      assert serial_iteration.residual_norm == parallel_iteration.residual_norm
+      assert serial_iteration.increment_norm == parallel_iteration.increment_norm
+      assert serial_iteration.load_parameter == parallel_iteration.load_parameter
+      assert (serial_iteration.delta_lam is None) == (
+        parallel_iteration.delta_lam is None
+      )
+      if serial_iteration.delta_lam is not None:
+        assert parallel_iteration.delta_lam is not None
+        # The normal-plane scalar reduction varies by at most 3e-15 relative
+        # across host schedules; 16 eps pins roundoff, not a schedule change.
+        np.testing.assert_allclose(
+          serial_iteration.delta_lam,
+          parallel_iteration.delta_lam,
+          rtol=16.0 * np.finfo(np.float64).eps,
+          atol=0.0,
+        )
+    assert serial_record.lam == parallel_record.lam
+    assert serial_record.factor == parallel_record.factor
+    assert tuple(astuple(item) for item in serial_record.nested_statistics) == tuple(
+      astuple(item) for item in parallel_record.nested_statistics
+    )
+    assert all(
+      cost.factorization_count == 1
+      and cost.factorization_count + cost.factorization_reuse_count
+      == cost.linear_solve_count
+      for cost in serial_record.nested_statistics
+    )
+    assert serial_record.committed_coefficients is not None
+    assert parallel_record.committed_coefficients is not None
+    _assert_raw_uint64_equal(
+      serial_record.committed_coefficients.values,
+      parallel_record.committed_coefficients.values,
+    )
+    assert serial_record.observation is not None
+    assert parallel_record.observation is not None
+    _assert_raw_uint64_equal(
+      serial_record.observation.reactions.values,
+      parallel_record.observation.reactions.values,
+    )
+    assert serial_record.observation.constraint_work == (
+      parallel_record.observation.constraint_work
+    )
+
+  assert serial_evaluation.status is parallel_evaluation.status is EvaluationStatus.OK
+  for serial_channel, parallel_channel in zip(
+    serial_evaluation.residual_values,
+    parallel_evaluation.residual_values,
+    strict=True,
+  ):
+    _assert_raw_uint64_equal(serial_channel.values, parallel_channel.values)
+  for serial_channel, parallel_channel in zip(
+    serial_evaluation.jacobian_values,
+    parallel_evaluation.jacobian_values,
+    strict=True,
+  ):
+    _assert_raw_uint64_equal(serial_channel.values, parallel_channel.values)
+  _assert_raw_uint64_equal(
+    serial_evaluation.trial_state.values,
+    parallel_evaluation.trial_state.values,
+  )
+  for serial_output, parallel_output in zip(
+    serial_outputs, parallel_outputs, strict=True
+  ):
+    assert serial_output is not None and parallel_output is not None
+    _assert_raw_uint64_equal(serial_output[0], parallel_output[0])
+    _assert_raw_uint64_equal(serial_output[1], parallel_output[1])
 
 
 def test_real_elastic_fe2_runs_through_riks_without_macro_owner_access(
@@ -1185,8 +1356,8 @@ def test_fe2_benchmark_pipeline_gate_smoke_matches_1t_and_2t_raw_science() -> No
     candidate_accepted = candidate_runtime.store.encode()
     reference_evaluation = reference.nested_evaluation()
     candidate_evaluation = candidate.nested_evaluation()
-    assert evaluation_status(reference_evaluation) is EvaluationStatus.OK
-    assert evaluation_status(candidate_evaluation) is EvaluationStatus.OK
+    assert reference_evaluation.status is EvaluationStatus.OK
+    assert candidate_evaluation.status is EvaluationStatus.OK
     assert reference_runtime.store.encode() == reference_accepted
     assert candidate_runtime.store.encode() == candidate_accepted
     assert reference_accepted == candidate_accepted

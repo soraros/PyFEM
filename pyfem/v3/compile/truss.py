@@ -21,6 +21,7 @@ from pyfem.v3.model.operator import (
   ChannelRequest,
   CompilerConstructed,
   CouplingPolicy,
+  EvaluationStatus,
   ImplementationIdentity,
   JacobianChannel,
   OperatorEvaluation,
@@ -176,9 +177,7 @@ class TrussOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
-    derivative_ids = tuple(
-      item.channel_id for item in getattr(self.header, "derivative_channels", ())
-    )
+    derivative_ids = tuple(item.channel_id for item in self.header.derivative_channels)
     request = inputs.request
     derivative_request = request.derivative_channel_ids
     if (
@@ -248,6 +247,9 @@ class TrussOperator(CompilerConstructed):
       residual_values=residual_values,
       jacobian_values=jacobian_values,
       trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+      status=EvaluationStatus.OK,
+      derivative_values=(),
+      nested_references=(),
     )
 
 
@@ -900,6 +902,7 @@ def compile_operator(
     row_width=0,
     dtype=np.dtype(np.float64).str,
     lifetime=StateLifetime.ACCEPTED_TRIAL,
+    initial_rows=None,
   )
   port = _new(
     PortBinding,
@@ -936,6 +939,10 @@ def compile_operator(
     jacobian_channels=(jacobian_channel,),
     state_layout=state_layout,
     coupling_policy=CouplingPolicy.FIXED,
+    parameters=(),
+    derivative_channels=(),
+    nested_execution=None,
+    tangent_class=None,
   )
   payload = _new(
     TrussPayload,

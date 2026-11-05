@@ -218,8 +218,6 @@ from pyfem.v3.model.operator import (
   SignalDerivativeInput,
   SignalPortBinding,
   StateLifetime,
-  evaluation_derivative_values,
-  evaluation_status,
 )
 from pyfem.v3.model.provenance import CanonicalManifest
 from pyfem.v3.model.registry import (
@@ -551,9 +549,7 @@ class Q8ContinuumOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
-    derivative_ids = tuple(
-      item.channel_id for item in getattr(self.header, "derivative_channels", ())
-    )
+    derivative_ids = tuple(item.channel_id for item in self.header.derivative_channels)
     request = inputs.request
     derivative_request = request.derivative_channel_ids
     if (
@@ -593,6 +589,9 @@ class Q8ContinuumOperator(CompilerConstructed):
       residual_values=residual_values,
       jacobian_values=jacobian_values,
       trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+      status=EvaluationStatus.OK,
+      derivative_values=(),
+      nested_references=(),
     )
 
 
@@ -701,9 +700,7 @@ class Q8FiniteStrainOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
-    derivative_ids = tuple(
-      item.channel_id for item in getattr(self.header, "derivative_channels", ())
-    )
+    derivative_ids = tuple(item.channel_id for item in self.header.derivative_channels)
     request = inputs.request
     derivative_request = request.derivative_channel_ids
     if (
@@ -757,6 +754,9 @@ class Q8FiniteStrainOperator(CompilerConstructed):
       residual_values=residual_values,
       jacobian_values=jacobian_values,
       trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+      status=EvaluationStatus.OK,
+      derivative_values=(),
+      nested_references=(),
     )
 
 
@@ -825,9 +825,7 @@ class Hex8ContinuumOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
-    derivative_ids = tuple(
-      item.channel_id for item in getattr(self.header, "derivative_channels", ())
-    )
+    derivative_ids = tuple(item.channel_id for item in self.header.derivative_channels)
     request = inputs.request
     derivative_request = request.derivative_channel_ids
     if (
@@ -867,6 +865,9 @@ class Hex8ContinuumOperator(CompilerConstructed):
       residual_values=residual_values,
       jacobian_values=jacobian_values,
       trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+      status=EvaluationStatus.OK,
+      derivative_values=(),
+      nested_references=(),
     )
 
 
@@ -929,9 +930,7 @@ class Q8ThermalOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
-    derivative_ids = tuple(
-      item.channel_id for item in getattr(self.header, "derivative_channels", ())
-    )
+    derivative_ids = tuple(item.channel_id for item in self.header.derivative_channels)
     request = inputs.request
     derivative_request = request.derivative_channel_ids
     if (
@@ -986,6 +985,9 @@ class Q8ThermalOperator(CompilerConstructed):
       residual_values=residual_values,
       jacobian_values=jacobian_values,
       trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+      status=EvaluationStatus.OK,
+      derivative_values=(),
+      nested_references=(),
     )
 
 
@@ -1053,9 +1055,7 @@ class Q8ThermoElasticOperator(CompilerConstructed):
       raise ValueError(msg)
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
-    derivative_ids = tuple(
-      item.channel_id for item in getattr(self.header, "derivative_channels", ())
-    )
+    derivative_ids = tuple(item.channel_id for item in self.header.derivative_channels)
     request = inputs.request
     derivative_request = request.derivative_channel_ids
     if (
@@ -1160,6 +1160,9 @@ class Q8ThermoElasticOperator(CompilerConstructed):
       residual_values=residual_values,
       jacobian_values=jacobian_values,
       trial_state=FinalizedArray(accepted_state, dtype=np.float64),
+      status=EvaluationStatus.OK,
+      derivative_values=(),
+      nested_references=(),
     )
 
 
@@ -1380,10 +1383,8 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
       kernel_signals = ()
     residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
     jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
-    parameters: tuple[ParameterBinding, ...] = getattr(self.header, "parameters", ())
-    derivative_channels: tuple[ResidualDerivativeChannel, ...] = getattr(
-      self.header, "derivative_channels", ()
-    )
+    parameters = self.header.parameters
+    derivative_channels = self.header.derivative_channels
     derivative_ids = tuple(item.channel_id for item in derivative_channels)
     request = inputs.request
     derivative_request = request.derivative_channel_ids
@@ -1466,6 +1467,8 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
         jacobian_values=(),
         trial_state=FinalizedArray(accepted_state, dtype=np.float64),
         status=status,
+        derivative_values=(),
+        nested_references=(),
       )
 
     element_count = values.shape[0]
@@ -1521,6 +1524,7 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
       derivative_values=tuple(
         FinalizedArray(block, dtype=np.float64) for block in derivative_blocks
       ),
+      nested_references=(),
     )
 
 
@@ -3442,6 +3446,7 @@ def _compile_mechanical_linear(
     row_width=0,
     dtype=np.dtype(np.float64).str,
     lifetime=StateLifetime.ACCEPTED_TRIAL,
+    initial_rows=None,
   )
   port = _new(
     PortBinding,
@@ -3478,6 +3483,10 @@ def _compile_mechanical_linear(
     jacobian_channels=(jacobian_channel,),
     state_layout=state_layout,
     coupling_policy=CouplingPolicy.FIXED,
+    parameters=(),
+    derivative_channels=(),
+    nested_execution=None,
+    tangent_class=None,
   )
   payload = _new(
     Q8ContinuumPayload,
@@ -3722,6 +3731,7 @@ def _compile_mechanical_3d(
     row_width=0,
     dtype=np.dtype(np.float64).str,
     lifetime=StateLifetime.ACCEPTED_TRIAL,
+    initial_rows=None,
   )
   port = _new(
     PortBinding,
@@ -3758,6 +3768,10 @@ def _compile_mechanical_3d(
     jacobian_channels=(jacobian_channel,),
     state_layout=state_layout,
     coupling_policy=CouplingPolicy.FIXED,
+    parameters=(),
+    derivative_channels=(),
+    nested_execution=None,
+    tangent_class=None,
   )
   payload = _new(
     Hex8ContinuumPayload,
@@ -4112,7 +4126,6 @@ def _compile_mechanical_stateful(
   )
   parameters: tuple[ParameterBinding, ...] = ()
   derivative_channels: tuple[ResidualDerivativeChannel, ...] = ()
-  channel_fields: dict[str, object] = {}
   if differentiable_names:
     parameters = tuple(
       _new(ParameterBinding, parameter_id=name) for name in differentiable_names
@@ -4126,8 +4139,6 @@ def _compile_mechanical_stateful(
       )
       for name in differentiable_names
     )
-    channel_fields["parameters"] = parameters
-    channel_fields["derivative_channels"] = derivative_channels
   header = _new(
     OperatorHeader,
     block_id=block_id,
@@ -4139,7 +4150,10 @@ def _compile_mechanical_stateful(
     jacobian_channels=(jacobian_channel,),
     state_layout=layout,
     coupling_policy=CouplingPolicy.FIXED,
-    **channel_fields,
+    parameters=parameters,
+    derivative_channels=derivative_channels,
+    nested_execution=None,
+    tangent_class=None,
   )
   payload = _new(
     Q8StatefulContinuumPayload,
@@ -4295,7 +4309,7 @@ def _compile_mechanical_stateful(
       "stateful kernel failed its virgin-state compile probe",
       selection.material.source,
     )
-  if evaluation_status(probe) is not EvaluationStatus.OK:
+  if probe.status is not EvaluationStatus.OK:
     _fail(
       "invalid-kernel-probe",
       "stateful kernel must evaluate its virgin initial state successfully",
@@ -4334,7 +4348,7 @@ def _compile_mechanical_stateful(
         selection.material.source,
       )
   if derivative_channels:
-    probe_derivatives = evaluation_derivative_values(probe)
+    probe_derivatives = probe.derivative_values
     if len(probe_derivatives) != len(derivative_channels) or any(
       block.values.shape != (len(selection.cells), _LOCAL_COEFFICIENT_COUNT)
       or not bool(np.isfinite(block.values).all())
@@ -4665,6 +4679,10 @@ def _compile_mechanical_tl(
     jacobian_channels=(jacobian_channel,),
     state_layout=state_layout,
     coupling_policy=CouplingPolicy.FIXED,
+    parameters=(),
+    derivative_channels=(),
+    nested_execution=None,
+    tangent_class=None,
   )
   payload = _new(
     Q8FiniteStrainPayload,
@@ -4760,6 +4778,7 @@ def _zero_width_state_layout(
     row_width=0,
     dtype=np.dtype(np.float64).str,
     lifetime=StateLifetime.ACCEPTED_TRIAL,
+    initial_rows=None,
   )
 
 
@@ -4927,6 +4946,10 @@ def _compile_thermal(
     jacobian_channels=(jacobian_channel,),
     state_layout=state_layout,
     coupling_policy=CouplingPolicy.FIXED,
+    parameters=(),
+    derivative_channels=(),
+    nested_execution=None,
+    tangent_class=None,
   )
   payload = _new(
     Q8ThermalPayload,
@@ -5327,6 +5350,10 @@ def _compile_coupled(
     jacobian_channels=(mechanical_jacobian, coupling_jacobian, thermal_jacobian),
     state_layout=state_layout,
     coupling_policy=CouplingPolicy.FIXED,
+    parameters=(),
+    derivative_channels=(),
+    nested_execution=None,
+    tangent_class=None,
   )
   payload = _new(
     Q8ThermoElasticPayload,

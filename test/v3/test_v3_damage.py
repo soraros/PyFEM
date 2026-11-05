@@ -82,7 +82,6 @@ from pyfem.v3.model.operator import (
   ChannelRequest,
   EvaluationStatus,
   OperatorEvaluationInput,
-  evaluation_status,
 )
 from pyfem.v3.model.provenance import CanonicalManifest
 from pyfem.v3.model.registry import RegistryDescriptor
@@ -724,7 +723,7 @@ def _operator_tangent(
       request=ChannelRequest((), ("material-tangent",)),
     )
   )
-  assert evaluation_status(evaluation) is EvaluationStatus.OK
+  assert evaluation.status is EvaluationStatus.OK
   return evaluation.jacobian_values[0].values
 
 

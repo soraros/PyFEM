@@ -48,7 +48,6 @@ from pyfem.v3.model.operator import (
   OperatorEvaluationInput,
   ProgramSignalInput,
   SignalDerivativeInput,
-  evaluation_status,
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec import (
@@ -829,7 +828,7 @@ def test_driver_engages_and_disengages_contact_across_substeps() -> None:
   # so the first substep commits the zero state; at lam=1.0 the top row is
   # engaged and pushed down.
   engaged = _evaluate(operator, state.reshape(8, 2), 1.0)
-  assert evaluation_status(engaged) is EvaluationStatus.OK
+  assert engaged.status is EvaluationStatus.OK
   force = engaged.residual_values[0].values
   assert float(np.abs(force).max()) > 0.0
   assert float(state[11]) < 0.0  # node 6 (0.5, 1.0) moved down

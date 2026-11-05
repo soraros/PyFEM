@@ -353,7 +353,7 @@ def _sensitivity_surface(
   declared: list[str] = []
   for operator in system.operators:
     header = operator.header
-    for channel in getattr(header, "derivative_channels", ()):
+    for channel in header.derivative_channels:
       parameter_id = channel.parameter_id
       if type(parameter_id) is str and parameter_id not in differentiable:
         differentiable.append(parameter_id)
