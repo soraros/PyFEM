@@ -27,6 +27,7 @@ numpy, scipy are already in it; the harness adds no dependencies):
                                            # partial coverage: unproduced baseline cells
                                            # report as skipped, not failures
 .venv/bin/python -m bench.run warm       # stage-decomposed warm benchmarks only
+.venv/bin/python -m bench.run fe2        # matched damage FE2 + fresh-process/JIT evidence
 .venv/bin/python -m bench.run cold       # fresh-subprocess cold benchmarks only
 .venv/bin/python -m bench.run gates      # correctness gates only (no timing)
 .venv/bin/python -m bench.run check --candidate bench/results/<run>.json
@@ -134,26 +135,34 @@ candidate at every requested thread count. Before recording that candidate's
 timings, `gate_fe2` requires both macro solves to complete and compares the
 1-thread and n-thread results: committed macro physical values and macro strain
 are raw-uint64 identical, the versioned accepted nested-store payloads are byte
-identical, and a rejected-trial nested evaluation completes with raw-uint64
-identical homogenized internal force, material tangent and trial macro strain.
+identical, iteration/cutback counters are equal, and a rejected-trial nested
+evaluation completes with raw-uint64 identical homogenized internal force,
+material tangent and trial macro strain. The accepted/rejected payload hashes
+and counters are retained as record evidence without another nested evaluation.
 A failed gate produces a failed record, not timings. `bench.run gates` exercises
 the same gate at 1 versus 2 threads for every FE² case.
 
 The FE² stage envelope is deliberately small:
 
 - `load` compiles the macro/micro systems and performs the real virgin nested
-  probe; it is a fixed one-shot measurement.
+  probe. Its fixed one-shot sample comes from the gated candidate's construction;
+  no second compile-only pipeline is built.
 - `nested_evaluation` evaluates homogenized outputs at the committed macro
   state and rejects the nested trial after every call; it uses the normal warm
   adaptive repetitions.
 - `e2e` performs a fresh compilation, virgin nested probe and complete macro
-  nonlinear solve; it is also a fixed one-shot measurement.
+  nonlinear solve. The gated candidate supplies the first fixed sample; when
+  `--e2e-reps N` requests more, exactly N-1 additional fresh compile+solve runs
+  supply the remaining samples.
 
 `bench.run warm` runs all four FE² cases followed by all four FE²-memory cases;
 `bench.run all` includes the same warm records before its separate cold phase.
-There are no FE² cold records. The FE² cases honor `--threads`; a `warm`-only
-artifact is still stamped `partial`, while a default full-matrix `all` run
-includes FE² as part of its full coverage.
+The FE² cases honor `--threads`; a `warm`-only artifact is still stamped
+`partial`, while a default full-matrix `all` run includes FE² as part of its
+full coverage. `bench.run fe2` instead runs the two damage cases (default one
+thread) with `--e2e-reps` (default 1), then records separate `fe2-fresh` and
+`damage-jit` evidence in both cache-present and true-cold modes. Those fresh
+records are not part of `warm` or `all`.
 
 **FE² integration-point threading.** Production
 `NonlinearStaticSettings.nested_ip_thread_count` defaults to 1, which uses the
@@ -192,8 +201,8 @@ sizes, accepted macro-strain bytes and `nested_evaluation_copy=0`.
 
 These logical byte counts are accounting models, not measured allocator traffic
 or resident memory. `traced_step_peak` is a separate `tracemalloc` peak for one
-step. `step.rss_delta_mb` is a hard-coded `0.0` placeholder from `measure_fixed`,
-not an RSS measurement; neither metric is interchangeable with the logical copy
+step. New records encode `step.rss_delta_mb` as `null` because fixed repetitions
+do not measure RSS; neither metric is interchangeable with the logical copy
 fields.
 
 **Family cases (`family/tl-cantilever/<nx>x<ny>`, `family/riks-fan/<n>`).**
@@ -261,17 +270,20 @@ reps (minimum 5, up to 30, targeting `--budget-s` seconds of measured time per
 cell) and report min/median/mean plus all samples. Fixed-repetition exceptions
 include legacy assembly in its superlinear regime (5 reps ≤16x16, 3 at 32x32,
 1 at 64x64, marked in the cell's `note`), the pure-Python `meshgen`/`load`
-stages (3 reps), FE² `load`/`e2e` (1 rep), and FE²-memory `step` (3 reps).
-Cold subprocess cells are single-shot by construction.
+stages (3 reps), FE² `load` (1 rep) and `e2e` (`--e2e-reps`, default 1), and
+FE²-memory `step` (3 reps). Cold and focused fresh/JIT subprocess cells are
+single-shot by construction.
 
 **Memory.** Q8 `logical_bytes` report K_e batch, COO and CSR array sizes; FE²
 uses the nested-state and copy-accounting fields documented above. Adaptive
 `measure` metrics alone use `rss_delta_mb` for the process peak-RSS
 high-water-mark increase across the rep block (not a per-rep allocation
-profile). `measure_fixed` instead hard-codes `rss_delta_mb=0.0`; for FE²
-`load`/`e2e` and FE²-memory `step` this is explicitly a placeholder, not an RSS
-measurement. Cold records separately carry the worker's peak RSS in the `wall`
-metric's `rss_delta_mb`.
+profile). Fixed and single-sample metrics without an RSS measurement, including
+FE² `load`/`e2e`, FE²-memory `step`, and focused fresh/JIT records, encode
+`rss_delta_mb` as JSON `null` (`None` in Python), never as a measured-looking
+`0.0`. Historical numeric values, including old fixed-measurement placeholders,
+remain valid input. Ordinary `cold` records separately carry the worker's peak
+RSS in the `wall` metric's `rss_delta_mb`; their other metrics use `null`.
 
 **Cold modes** (`bench.run cold`). Each measurement is a fresh
 `<venv>/bin/python -m bench.cold_worker` subprocess with
@@ -285,6 +297,13 @@ load / first-assemble / solve breakdown plus peak RSS. Two flavors:
   forcing the ~10 s one-time JIT compile M3 measured. This is the
   cache-cleared mode; it is separate because it belongs to
   first-run-on-a-new-machine accounting, not to commit-to-commit gating.
+
+The focused `bench.run fe2` fresh and JIT probes use the same worker and parent
+launcher. Their `cache-present` records run with the existing cache and their
+`truecold` records each receive an empty temporary cache. FE² fresh records
+retain load/solve/fresh-e2e/wall distinctions and state evidence; damage JIT
+records retain first-call JIT, second-call warm-kernel, wall, response hash and
+repeat-identity evidence.
 
 **Environment manifest.** Every run JSON records CPU, OS, Python, git
 revision, working-tree state, numpy/scipy/numba versions, the numpy
@@ -315,6 +334,16 @@ sizes — and every recorded correctness gate passes. They are candidate/control
 evidence for those workloads and conditions, not full-harness coverage or a
 promoted baseline; `baseline_m3.json` and the historical scaling records remain
 unchanged.
+
+The M116 execution-consolidation pair is
+`bench/results/run_q11_candidate.json` (candidate `caa3ca3`) and
+`bench/results/run_q11_control_base.json` (control `eecfce3`). It repeats the
+same 28-record matrix with clean reference-machine manifests and identical
+scientific correctness/evidence. The manifests record `harness_matrix` and
+`harness_wall_s`: the consolidated candidate took 118.980 s versus 243.618 s
+for the control, a measured 124.638 s (51.2%) reduction. The default
+candidate-versus-control ratio check reports zero regressions. These are
+targeted harness-evidence artifacts, not a promoted baseline.
 
 `bench.run check` compares a candidate against a baseline per cell
 (`category, workload, side, mode, threads, metric`):
@@ -401,18 +430,18 @@ old file; baselines are history).
 
 ```
 bench/
-  run.py             CLI: gates | warm | cold | all | check | manifest
+  run.py             CLI: gates | warm | fe2 | cold | all | check | manifest
   v3_pipeline.py     stage-decomposed v3 timed callables (uniform Q8)
-  fe2_pipeline.py    FE2 drivers, raw identity gate and nested-state memory model
+  fe2_pipeline.py    FE2 drivers, raw identity gate/evidence and memory model
   family_v3.py       v3 family case drivers (finite-strain deck stack, Riks fan)
   legacy_cases.py    generated legacy .dat/.pro writer + legacy drivers (numba-free)
   legacy_settings.py numba-free replica of the v3 skim solver-settings parsers
   gates.py           correctness gates (legacy parity + analytic patch field)
-  cold_worker.py     one fresh-subprocess cold measurement, JSON on stdout
+  cold_worker.py     fresh cold, FE2 and damage-JIT worker, JSON on stdout
   db.py              cell flattening, ratio-gate comparison, provenance reads
   workloads.py       workload registry (Q8, skim, material, FE2 and family)
   manifest.py        environment manifest (incl. working-tree state)
-  common.py          timing core (adaptive reps, stats, RSS), run JSON IO
+  common.py          fresh launcher, timing/statistics/RSS core, run JSON IO
   results/           committed regression DB (baseline_m3.json + runs)
   generated/         generated legacy .dat/.pro (gitignored, reproducible)
 ```

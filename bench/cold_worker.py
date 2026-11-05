@@ -1,9 +1,9 @@
-"""Cold-mode worker: measure one case in a fresh interpreter and print JSON.
+"""Fresh-process cold, FE2, and damage-JIT measurements as JSON on stdout.
 
-Invoked by ``bench.run cold`` as ``python -m bench.cold_worker`` so every
-measurement pays the real import + first-dispatch cost. With the numba cache
-present this is the CI cold mode; with ``NUMBA_CACHE_DIR`` pointed at an empty
-directory it is the true-cold (JIT compile) mode, documented in the README.
+Invoked as ``python -m bench.cold_worker`` so every measurement pays the real
+import + first-dispatch cost. With the numba cache present this is the CI cold
+mode; with ``NUMBA_CACHE_DIR`` pointed at an empty directory it is the true-cold
+(JIT compile) mode, documented in the README.
 """
 
 from __future__ import annotations
@@ -206,13 +206,27 @@ def _run_legacy_family(spec: str) -> tuple[dict[str, float], int, int]:
 
 def main() -> None:
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument(
+  worker = parser.add_mutually_exclusive_group(required=True)
+  worker.add_argument(
     "--case",
-    required=True,
     help="q8patch:<n>:<material>, skim:<name>, or family:<name>:<size>",
   )
-  parser.add_argument("--side", choices=("v3", "legacy"), required=True)
+  worker.add_argument("--fe2-case", metavar="CASE")
+  worker.add_argument("--damage-jit", action="store_true")
+  parser.add_argument("--side", choices=("v3", "legacy"))
+  parser.add_argument("--threads", type=int, default=1)
   args = parser.parse_args()
+
+  if args.fe2_case is not None or args.damage_jit:
+    from bench.fe2_pipeline import _fresh_worker, _jit_worker
+
+    payload = (
+      _jit_worker() if args.damage_jit else _fresh_worker(args.fe2_case, args.threads)
+    )
+    print(json.dumps(payload))
+    return
+  if args.side is None:
+    parser.error("--side is required with --case")
 
   t_import_start = time.perf_counter()
   import pyfem  # noqa: F401
