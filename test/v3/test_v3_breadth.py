@@ -621,11 +621,6 @@ _COMPILER_REJECTIONS = {
     plasticity_reference_registry(),
     "incompatible-material-model",
   ),
-  "tria3-thermal-formulation": (
-    _tria3_model(formulation="small-strain-thermal-continuum"),
-    continuum_reference_registry(),
-    "incompatible-cell-block",
-  ),
   "tria3-bad-cell-arity": (
     _tria3_model(
       block=_block(

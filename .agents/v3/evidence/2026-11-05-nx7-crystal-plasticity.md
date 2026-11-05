@@ -1,11 +1,19 @@
 # Crystal plasticity (v3)
 
-`crystal-plasticity` is a small-strain, rate-dependent single-crystal law for
-the v3 stateful continuum interface. It is registered by
+> **Retired historical evidence — NX7-1, 2026-11-05.** This wholly-v3 page was
+> moved out of the live Sphinx materials toctree. It records the implementation
+> and independent verification at boundary revision `d9e4a12`; it does not
+> describe currently supported physics. Crystal users remain first-class
+> concerns. A future documented consumer-backed mission may reintroduce this
+> capability on the minimal generic kernel, using the literature and oracles
+> below, but must not resurrect a duplicate frozen or prototype runtime.
+
+At `d9e4a12`, `crystal-plasticity` was a small-strain, rate-dependent
+single-crystal law for the v3 stateful continuum interface. It was registered by
 `pyfem.v3.compile.continuum.crystal_reference_registry()` with implementation
-id `pyfem-v3-crystal-plasticity-v1`. The current descriptor uses isotropic
-elasticity and crystal axes aligned with the global axes; two-dimensional
-models use the standard plane-strain embedding into the internal 3D law.
+id `pyfem-v3-crystal-plasticity-v1`. The descriptor used isotropic elasticity
+and crystal axes aligned with the global axes; two-dimensional models used the
+standard plane-strain embedding into the internal 3D law.
 
 ## Slip systems and Schmid kinetics
 
@@ -165,4 +173,6 @@ intentionally designs out five convicted legacy failure modes:
 Verification uses no legacy arithmetic: analytical single-slip hardening and
 stress response, sympy, finite differences, elastic-limit exactness,
 transaction isolation, two-system competition on the full FCC family, and an
-end-to-end compiled-driver derived-`dtime` path.
+end-to-end compiled-driver derived-`dtime` path. The exact test locations,
+including `test_state_transactions_and_typed_rejections`, are indexed in
+[the NX7-1 retirement record](../migration-history.md#nx7-1-retirement-non-kernel-scientific-breadth).

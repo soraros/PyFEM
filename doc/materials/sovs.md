@@ -1,10 +1,14 @@
-# SkorohodOlevsky (SOVS)
+# Legacy SkorohodOlevsky (SOVS)
 
-The `SkorohodOlevsky` model describes viscous sintering of ceramic powder
-compacts: densification driven by the sintering stress and hydrostatic
-stress, plus deviatoric creep, through the Skorohod viscosity functions
-`η = η_ref · (ρ^−n − 1)` with the Arrhenius reference viscosity
-`η_ref = eta0 · exp(Q / (R·T))`.
+This page documents the legacy `SkorohodOlevsky` model. NX7-1 retired the
+experimental v3 `skorohod-olevsky` mapping; its independent oracle locations
+and migration history are preserved in the
+[NX7-1 retirement record](https://github.com/jjcremmers/PyFEM/blob/v3/.agents/v3/migration-history.md#nx7-1-retirement-non-kernel-scientific-breadth).
+
+The model describes viscous sintering of ceramic powder compacts: densification
+driven by the sintering stress and hydrostatic stress, plus deviatoric creep,
+through the Skorohod viscosity functions `η = η_ref · (ρ^−n − 1)` with the
+Arrhenius reference viscosity `η_ref = eta0 · exp(Q / (R·T))`.
 
 ## Overview
 - **Material type:** `SkorohodOlevsky`
@@ -39,8 +43,8 @@ stress, plus deviatoric creep, through the Skorohod viscosity functions
   strain increment reads the UNCLAMPED `dρ`, so the clamp kinks the density
   trajectory but not the stress response of the step.
 - **Output lag:** the reported density output channel lags one step (it
-  reports the pre-update `ρ`). The committed state is the post-update value;
-  the v3 law carries no reporting channel, so the lag has no v3 consequence.
+  reports the pre-update `ρ`). The committed legacy state is the post-update
+  value.
 - **Dormant decks:** the shipped sintering examples carry `eta0 = 1e12`,
   `Q = 5e5`, `T = 1600`, so `η_ref ≈ 2.1e28` Pa·s and the viscous machinery
   is inert (`dρ` rounds to zero) — the decks are effectively elastic. Any
@@ -59,10 +63,10 @@ explicit-map derivative has closed form at the committed density —
 normal-deviatoric block, `G_alg = G(1 − G·dt/2η_s)` shear — exact because the
 map is affine in the strain increment at fixed state. The legacy repair
 landed in M67 (commit 30a5f4e, merge 8a3eae8): the law now assembles the
-true explicit-map tangent. The v3 migration (`pyfem.v3` law
-`skorohod-olevsky`) shipped the same true tangent from day one and starts
-its state at `ρ = ρ0`; the v3 divergence pins flipped to repair-confirmed
-parity in M76 (b0ad9ed, merge 2ffcf20).
+true explicit-map tangent. The former v3 migration and M76 repair-parity
+claims are historical evidence only; the retirement record preserves the M76
+revision (`b0ad9ed`, merge `2ffcf20`) and the exact activated finite-difference
+and symbolic tangent checks.
 
 ## References
 

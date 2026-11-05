@@ -1,9 +1,14 @@
-# Contact Mechanics Model
+# Legacy Contact Mechanics Model
+
+> This page documents the legacy contact model only. NX7-1 retired the
+> experimental v3 contact compiler and authoring helper. Their independent
+> legacy, finite-difference, and tampered-tangent evidence is indexed in the
+> [NX7-1 retirement record](https://github.com/jjcremmers/PyFEM/blob/v3/.agents/v3/migration-history.md#nx7-1-retirement-non-kernel-scientific-breadth).
 
 ## Overview
-The contact model in PyFEM implements a penalty-based contact algorithm for simulating mechanical interactions between deformable bodies and a moving rigid disc in 2D. A simple penalty method enforces non-penetration constraints.
+The legacy contact model implements a penalty-based algorithm for mechanical interactions between deformable bodies and a moving rigid disc in 2D. A simple penalty method enforces non-penetration constraints.
 
-The contact model is implemented as a special model type that can be added to a two-dimensional structural analysis to impose contact constraints between the mesh and the moving obstacle. The legacy 3D sphere-contact branch was removed by M80 (commit `435244b`). Three-dimensional contact compilation is currently rejected with the `unsupported-contact-space` diagnostic pending an independent 3D numerical oracle.
+The legacy model is a special model type added to a two-dimensional structural analysis to impose contact constraints between the mesh and the moving obstacle. Its 3D sphere-contact branch was removed by M80 (commit `435244b`). No v3 contact compiler or 3D diagnostic is advertised here.
 
 ## Theory
 ### Penalty Method

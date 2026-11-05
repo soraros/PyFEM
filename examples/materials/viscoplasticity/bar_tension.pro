@@ -30,8 +30,8 @@
 # Compatibility warning: this legacy material's converged residual is
 # rate-independent J2 consistency plasticity. gamma, n, and dtime only seed a
 # discarded initial guess; positive-time schedules cannot demonstrate physical
-# rate dependence. The separate v3 backward-euler-perzyna law implements true
-# rate physics without changing this deck's meaning.
+# rate dependence. NX7-1 retired the separate experimental v3 rate-law mapping;
+# see .agents/v3/migration-history.md for its literature and oracle record.
 #
 
 input = "bar_tension.dat";

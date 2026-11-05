@@ -13,13 +13,58 @@ and feature-parity instructions are not work to resume. The invariants in
 [design.md](design.md) and [generic_core.md](generic_core.md) still govern the
 surviving kernel; their old migration sequences do not expand this charter.
 
+## NX7-1 implementation and acceptance record
+
+Atomic implementation commit: `288e5f3`.
+
+NX7-1 retired the complete D3 surface against the `d9e4a12` evidence boundary:
+penalty contact, cohesive interfaces and their deck adapter, unsolved
+thermal/thermoelastic operators, Prony viscoelasticity, both Perzyna mappings,
+SOVS, crystal plasticity, and every associated registry, descriptor, authoring,
+and focused-test branch. No compatibility facade or fallback replaced them.
+Interface decks raise `unsupported-element-type`; retired authoring material
+slices raise explicit input errors; direct retired-material specs fail registry
+capture; retired thermal formulations fail with `incompatible-formulation`.
+The exact symbols, fourteen test files, literature, and independent oracle
+locations are indexed in
+[migration-history.md](migration-history.md#nx7-1-retirement-non-kernel-scientific-breadth).
+The wholly-v3 crystal page moved to
+[evidence/2026-11-05-nx7-crystal-plasticity.md](evidence/2026-11-05-nx7-crystal-plasticity.md)
+and left the Sphinx toctree. Valid legacy-only documentation and warnings stay
+live with historical demotion links.
+
+The actual nonblank Python totals, measured recursively against `v3` at
+`64cbb92`, are **49,667 -> 41,876 production lines** (net **7,791 removed**,
+exceeding 6,500) and **47,187 -> 35,697 v3-test lines** (net **11,490
+removed**, exceeding 9,500). The fourteen deleted focused files account for
+11,525 test lines. The retained partial-support multi-space case adds 32
+nonblank lines to `test_v3_q8_generic_flow.py`, the explicit retired-interface
+deck rejection adds eight, and removal of an obsolete thermal-only breadth
+case removes another five, reconciling the final net count exactly.
+
+Retained generic multi-space allocation, parameterized state layouts, J2,
+damage, FE², total-Lagrangian, truss, spring, researcher-signal, and Riks paths
+were not given replacement numerical implementations. The retained notebook's
+analytic PatchTest8 assertion passed; 243 focused compiler/deck/state/authoring
+tests passed; an AST audit parsed 199 production/test/benchmark/notebook files
+and found no deleted-module import; the complete bare and per-tree Ruff
+check/format matrix passed. Both full repository digit-mode suites passed
+**1,366 tests plus 12 subtests each** (normal and `PYTHONINTMAXSTRDIGITS=640`).
+`python -m bench.run gates` reported **0 failures**, including raw-zero FE²
+identity comparisons and unchanged J2, total-Lagrangian, truss, Riks, and family
+oracles. `python -m sphinx -M html doc doc/_build` succeeded with 117 existing
+autoapi/legacy warnings, none naming the changed pages. Generated-HTML audits
+confirmed the deleted v3 module pages and crystal toctree entry are absent and
+all legacy demotions are present. No performance baseline changed, and no shared
+hot numerical implementation changed, so no candidate/control timing or
+performance claim is made.
+
 ## Exact next safe action
 
-Execute **NX7-1 — retire non-kernel breadth and record its evidence**, below.
-Start with the retirement entry and the small retained-space/oracle migrations,
-then delete the named implementations, exports, adapter branches, and tests in
-one atomic change. Do not begin by generalizing the compiler or introducing a
-new execution carrier: that would refactor code which NX7-1 and NX7-2 remove.
+After NX7-1 is independently reviewed and merged, execute **NX7-2 — delete the
+frozen Q8 analysis/result vertical**, below. Do not begin by generalizing the
+compiler or introducing a new execution carrier: that would refactor code which
+NX7-2 removes.
 
 Each later program starts only after the preceding program's consumers,
 numerical gates, both digit-mode suites, Ruff gates, and required benchmark
@@ -42,6 +87,16 @@ legacy coverage. A legacy class, a v3 prototype, a frozen ABI, a manifest, or a
 large test battery is not a scientific consumer. Parity can convict a numerical
 error, but it cannot justify a second runtime or a capability with no maintained
 use. Deleting support is preferable to preserving an misleadingly broad facade.
+
+Potential users of contact/cohesive, thermal/thermoelastic, rate-dependent,
+SOVS, and crystal physics remain first-class concerns. Their absence from the
+current maintained-consumer inventory is not evidence that the domains are
+unimportant or that PyFEM has no intention to serve them. NX7 is a current-scope
+simplification, not a permanent support boundary: each retirement must preserve
+literature, independent oracles, and generic operator/state/driver seams so a
+documented consumer-backed mission can reintroduce the capability on the minimal
+kernel. Re-expansion must never resurrect duplicate frozen or prototype
+runtimes.
 
 A capability is supported only when it has a truthful authored-to-accepted-result
 path and a maintained consumer. Maintained consumers are the v3 notebook,

@@ -1400,6 +1400,14 @@ _PRO_REJECTIONS = {
     ),
     {"unsupported-element-type"},
   ),
+  "retired-interface-element-type": (
+    _mini_pro(
+      element_block=(
+        'ContElem = { type = "Interface"; material = { type = "Dummy"; D = 1.0; }; };\n'
+      ),
+    ),
+    {"unsupported-element-type"},
+  ),
   "missing-material-parameter": (
     _mini_pro(element_block=_MINI_ELEMENT_BLOCK.replace("    nu = 0.25;\n", "")),
     {"missing-material-parameter"},

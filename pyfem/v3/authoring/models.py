@@ -149,13 +149,9 @@ def small_strain_continuum(
   The region covers every cell of the mesh with the qualified
   ``small-strain-continuum`` formulation on a ``gauss-3x3`` quadrature — one
   readable call for the classic teaching continuum. The material is the
-  elastic ``linear_elastic(E, nu)`` slice or a stateful slice
-  (``plasticity(E, nu, syield, hard)``, ``damage(E, nu, kappa0, kappac,
-  k)``, ``prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last)``,
-  ``viscoplasticity(E, nu, syield, hard, gamma, n)``,
-  ``backward_euler_perzyna(E, nu, syield, hard, gamma, n)``, or
-  ``skorohod_olevsky(eta0, Q, T, rho0, sigma_sint, R, n_vol, n_shear)``); a
-  stateful law authors exactly like an elastic one.
+  elastic ``linear_elastic(E, nu)`` slice or a stateful
+  ``plasticity(E, nu, syield, hard)``/``damage(E, nu, kappa0, kappac, k)``
+  slice; a stateful law authors exactly like an elastic one.
   """
   block = _single_block(mesh, builder="small_strain_continuum")
   _require_geometry(
@@ -173,18 +169,10 @@ def small_strain_continuum(
       "plane-stress-linear-elastic",
       "isotropic-hardening-plasticity",
       "plane-strain-damage",
-      "prony-viscoelasticity",
-      "perzyna-viscoplasticity",
-      "backward-euler-perzyna",
-      "skorohod-olevsky",
     ),
     helper=(
-      "linear_elastic(E, nu), plasticity(E, nu, syield, hard), "
-      "damage(E, nu, kappa0, kappac, k), "
-      "prony_viscoelasticity(E, nu, Einf, n, tau_first, tau_last), "
-      "viscoplasticity(E, nu, syield, hard, gamma, n), "
-      "backward_euler_perzyna(E, nu, syield, hard, gamma, n), or "
-      "skorohod_olevsky(eta0, Q, T, rho0, sigma_sint, R, n_vol, n_shear)"
+      "linear_elastic(E, nu), plasticity(E, nu, syield, hard), or "
+      "damage(E, nu, kappa0, kappac, k)"
     ),
   )
   return _model(

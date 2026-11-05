@@ -4,20 +4,12 @@ from __future__ import annotations
 
 from pyfem.v3.authoring.registry import check_registry
 from pyfem.v3.compile.continuum import (
-  BACKWARD_EULER_PERZYNA_MATERIAL_KEY,
   DAMAGE_MATERIAL_KEY,
   PLASTIC_MATERIAL_KEY,
   Q8_MATERIAL_KEY,
-  SOVS_MATERIAL_KEY,
-  VISCOELASTIC_MATERIAL_KEY,
-  VISCOPLASTIC_MATERIAL_KEY,
-  backward_euler_perzyna_reference_registry,
   damage_reference_registry,
   plasticity_reference_registry,
   q8_reference_registry,
-  sovs_reference_registry,
-  viscoelasticity_reference_registry,
-  viscoplasticity_reference_registry,
 )
 from pyfem.v3.compile.diagnostics import (
   ModelCompilationDiagnostic,
@@ -40,10 +32,6 @@ def _default_registry(model: ModelSpec) -> dict[RegistryKey, RegistryDescriptor]
     TRUSS_MATERIAL_KEY[1]: truss_reference_registry,
     PLASTIC_MATERIAL_KEY[1]: plasticity_reference_registry,
     DAMAGE_MATERIAL_KEY[1]: damage_reference_registry,
-    VISCOELASTIC_MATERIAL_KEY[1]: viscoelasticity_reference_registry,
-    VISCOPLASTIC_MATERIAL_KEY[1]: viscoplasticity_reference_registry,
-    BACKWARD_EULER_PERZYNA_MATERIAL_KEY[1]: backward_euler_perzyna_reference_registry,
-    SOVS_MATERIAL_KEY[1]: sovs_reference_registry,
   }
   candidates = [
     name

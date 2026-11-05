@@ -3762,3 +3762,196 @@ integration decision; do not bridge it with a compatibility carrier.
   conflict-free integration, preserved locally at `72c4878`; `v3` was restored to
   `dbc40a9` before push because D3-A requires atomic G1-G4 integration. Independent
   G1-N/G1-A rechecks remain the sole blocker to G2.
+
+
+## NX7-1 retirement: non-kernel scientific breadth
+
+**Boundary:** the retired implementations, tests, and documentation are pinned at
+`d9e4a12` (the M120 evidence boundary; M120's charter merged separately). NX7-1
+retires breadth that had no maintained v3 notebook or registered benchmark
+consumer. The direct implementation modules contained 5,314 nonblank production
+lines and the fourteen focused test files contained 11,525 nonblank lines before
+compiler, registry, authoring, and deck-adapter cleanup. This is a current-scope
+simplification, not a rejection of the physics or a permanent support boundary.
+Potential contact/cohesive, thermal/thermoelastic, rate-dependent, SOVS, and
+crystal users remain first-class concerns; “no maintained consumer today” is not
+“no intention to serve them.” A documented consumer-backed reintroduction
+mission must use the retained generic `ModelSpec`/`ProgramSpec`, discrete-space,
+operator/channel, accepted/trial-state, and driver seams and the independent
+evidence below. It must not resurrect duplicate frozen or prototype runtimes.
+No compatibility facade, skipped retirement test, or silent fallback is part of
+the retirement.
+
+### Deleted symbols, adapters, documents, and focused tests
+
+- Penalty contact: the complete `pyfem/v3/compile/contact.py` module at
+  `d9e4a12`, including `CONTACT_SYSTEM_EXTENSION_SCHEMA`,
+  `PENALTY_DISC_CONTACT_SCHEMA`, `ContactSignalPort`,
+  `ContactSignalDerivative`, `ContactSignalInput`, `ContactKernelResult`,
+  `ContactKernel`, `ContactDeclaration`, `ContactPayload`,
+  `PenaltyContactOperator`, `penalty_disc_kernel`,
+  `penalty_disc_declaration`, `compile_contact_operator`, and
+  `compose_contact_system`; `authoring/contacts.py::penalty_contact`; and the
+  contact kernel-parameter convention. Focused tests:
+  `test_v3_contact.py`, `test_v3_contact_parity.py`, and
+  `test_v3_authoring_contact.py`.
+- Cohesive interfaces: the complete `pyfem/v3/compile/interface.py` module,
+  including `INTERFACE_SYSTEM_EXTENSION_SCHEMA`,
+  `INTERFACE_FRAME_STATE_SCHEMA`, `InterfaceKernelResult`, `InterfaceKernel`,
+  `InterfaceDeclaration`, `InterfacePayload`, `InterfaceOperator`,
+  `xu_needleman_rank2_kernel`, `power_law_mode_i_kernel`,
+  `thouless_mode_i_kernel`, `dummy_interface_kernel`, their four
+  `*_declaration` factories, `compile_interface_operator`, and
+  `compose_interface_system`; all four helpers in `authoring/interfaces.py`
+  (`xu_needleman`, `power_law_mode_i`, `thouless_mode_i`, `dummy_interface`);
+  their kernel-parameter conventions; `ConvertedDeck.interfaces`; and
+  `io/legacy_deck.py::{_InterfaceProfile,_interface_family,_interface_declaration,_check_interface_arities}`
+  with all parsing, composition, solver-policy, and documentation branches.
+  Focused tests: `test_v3_interface.py`, `test_v3_cohesive.py`, and
+  `test_v3_authoring_interfaces.py`. Interface decks now fail explicitly as
+  unsupported input instead of selecting another element or law.
+- Unsolved thermal/thermoelastic continuum support:
+  `Q8ThermalPayload`, `Q8ThermalOperator`, `Q8ThermoElasticPayload`,
+  `Q8ThermoElasticOperator`, `_compile_thermal`, `_compile_coupled`,
+  `THERMAL_FORMULATION_KEY`, `THERMAL_MATERIAL_KEY`,
+  `THERMO_FORMULATION_KEY`, `THERMO_MATERIAL_KEY`, their private parameter
+  tuples and readers, `thermal_descriptor_metadata`,
+  `thermo_elastic_descriptor_metadata`, `thermal_gradient_map`,
+  `linear_thermal_conductor`, `thermo_elastic_kinematics`,
+  `linear_thermo_elastic`, `thermal_reference_registry`,
+  `thermo_elastic_reference_registry`, and the associated formulation,
+  geometry, descriptor, registry-capture, and system-dispatch branches. The
+  focused `test_v3_multifield_continuum.py` file is retired, but its generic
+  `test_support_aware_space_allocation_validates_its_inputs` case is migrated
+  without thermal operators to `test_v3_q8_generic_flow.py`: two fields with
+  different partial node supports retain disjoint native coefficient maps and
+  coded invalid-support rejection. Multiple-discrete-space representation is
+  therefore not retired with the unsolved coupled physics.
+- Prony, both Perzyna mappings, SOVS, and crystal: the complete modules
+  `materials/{prony_viscoelasticity,perzyna_viscoplasticity,perzyna_backward_euler,skorohod_olevsky,crystal_plasticity}.py`,
+  including their public state schemas, metadata/calibration/kernel/initial-
+  state functions, bindings and binding instances, `SlipFrameError`,
+  `schmid_matrix`, and `crystal_slip_frames`. Registry/descriptor cleanup
+  removes `VISCOELASTIC_MATERIAL_KEY`, `VISCOPLASTIC_MATERIAL_KEY`,
+  `BACKWARD_EULER_PERZYNA_MATERIAL_KEY`, `SOVS_MATERIAL_KEY`,
+  `CRYSTAL_MATERIAL_KEY`, `viscoelasticity_reference_registry`,
+  `viscoplasticity_reference_registry`,
+  `backward_euler_perzyna_reference_registry`, `sovs_reference_registry`, and
+  `crystal_reference_registry`. Authoring cleanup removes
+  `prony_viscoelasticity`, `viscoplasticity`, `backward_euler_perzyna`, and
+  `skorohod_olevsky` material constructors; their `*_law` and `*_registry`
+  helpers; default-registry entries; model-helper accepted-model branches;
+  and public exports. Focused tests: `test_v3_viscoelasticity.py`,
+  `test_v3_authoring_viscoelasticity.py`, `test_v3_viscoplasticity.py`,
+  `test_v3_authoring_viscoplasticity.py`, `test_v3_sovs.py`,
+  `test_v3_authoring_skorohod_olevsky.py`, and
+  `test_v3_crystal_plasticity.py`. Unknown or retired material names continue
+  through ordinary coded unsupported/incompatible-input diagnostics; no law is
+  substituted. Scalar program signals and researcher spring state remain.
+- Documentation: the v3 authoring example and “True backward-Euler Perzyna
+  physics in v3” section in
+  `examples/materials/viscoplasticity/README.md`; the v3 support statement in
+  `examples/materials/viscoplasticity/bar_tension.pro`; all v3 mappings and the
+  complete “True v3 `backward-euler-perzyna`” section in
+  `doc/materials/viscoplasticity.md`; the live v3 migration/parity statements
+  in `doc/materials/sovs.md`; and the live Sphinx crystal page
+  `doc/materials/crystal_plasticity.md` plus its `doc/materials/overview.md`
+  toctree entry. The crystal page is preserved as
+  [2026-11-05-nx7-crystal-plasticity.md](evidence/2026-11-05-nx7-crystal-plasticity.md),
+  explicitly marked retired historical evidence at `d9e4a12`. Legacy deck
+  warnings, the legacy rate-independent explanation and negative control, SOVS
+  quirks/tangent repair/bibliography, and valid legacy contact/cohesive
+  documentation remain, with v3 support claims demoted to this record.
+
+### Independent literature and numerical-oracle index
+
+All source and test paths in this index name their exact content at `d9e4a12`.
+Git retains the deleted source; no dead implementation is copied into the
+documentation tree or kept importable as reference production code.
+
+- **Penalty contact.** The mathematical and legacy boundary is the module
+  docstring in `pyfem/v3/compile/contact.py`: frictionless node-vs-disc penalty
+  force `-penalty * overlap * n`, the legacy `pyfem.models.Contact` loop over
+  declared nodes, and the exact symmetric tangent. The independent checks are
+  `test_v3_contact.py::{test_kernel_force_is_bitwise_identical_to_the_legacy_force_law,test_exact_tangent_matches_central_fd_at_the_probe_states,test_legacy_appended_tangent_fails_the_same_fd_by_overlap_over_d,test_planted_legacy_tangent_kernel_fails_compilation,test_boundary_state_is_continuous_and_the_disengaged_side_is_zero}`
+  and `test_v3_contact_parity.py::test_contact_test02_skim_matches_legacy`.
+  The M62/M80 tangent and dead-sphere-branch history in that docstring remains
+  part of the oracle provenance. The authoring tests additionally pin typed
+  input rejection and signal-driven obstacle schedules.
+- **Cohesive interfaces.** `pyfem/v3/compile/interface.py`'s module docstring
+  identifies legacy `pyfem/elements/Interface.py` and
+  `pyfem/materials/{XuNeedleman,PowerLawModeI,ThoulessModeI,Dummy}.py`, the
+  corrected normal, proper-rotation versus reflecting frame, two-point Gauss
+  integration, and exact frame-motion tangent terms. Independent checks are
+  `test_v3_cohesive.py::{test_law_kernel_matches_legacy_bitwise,test_law_tangent_fd_verified_at_nonzero_jumps,test_element_residual_matches_legacy_bitwise_axis_aligned,test_corrected_frame_at_45_degrees_maps_normal_to_normal,test_exact_tangent_diverges_from_legacy_by_the_frame_terms,test_peel_skim_converts_and_matches_legacy,test_traction_oscillations_linear_oracle}`
+  and `test_v3_interface.py::{test_line2_shape_values_match_legacy_bitwise,test_legacy_newton_cotes_flag_is_silent_gauss,test_planted_kernel_tangent_wrong_only_at_nonzero_jumps_is_rejected,test_operator_probe_convicts_a_tampered_assembly,test_virgin_frame_bootstrap_uses_the_corrected_normal,test_frame_sign_continuity_flip_and_alignment,test_frame_follows_the_displaced_midpoint_segment,test_virgin_tangent_is_symmetric_and_deformed_tangent_is_not}`.
+  The M67 normal/Gauss repairs and M80 rank-3 removal are historical evidence,
+  not a reason to preserve a second interface runtime.
+- **Thermal and thermoelastic operators.** The convention and explicit
+  unsupported-driver boundary are documented in
+  `pyfem/v3/compile/continuum.py`'s module docstring and the thermal/coupled
+  descriptor functions. Independent hand-derived blocks and limiting cases are
+  `test_v3_multifield_continuum.py::{test_coupled_operator_matches_hand_derived_blocks_and_mechanical_tangent,test_free_thermal_expansion_produces_no_internal_force,test_thermal_operator_matches_hand_derived_conduction_block,test_coupled_evaluation_is_linear_deterministic_and_channel_gated,test_split_system_allocates_exact_supports_without_ghost_dofs}`.
+  The generic multi-space representation evidence that survives deletion is
+  `test_support_aware_space_allocation_validates_its_inputs`, migrated as
+  described above; `test_v3_q8_generic_flow.py::test_multiple_spaces_have_disjoint_native_coefficient_maps`
+  also remains. The coupled operator was not a supported solve path:
+  `driver/plan.py::_compile_operator_slices` rejects multiple coefficient
+  ports. Reintroduction needs an authored-to-accepted-result consumer, not
+  merely restoration of compile-only blocks.
+- **Prony viscoelasticity.** The module docstring in
+  `materials/prony_viscoelasticity.py` gives the generalized-Maxwell equations,
+  state inventory, exact algorithmic tangent, time-port semantics, and the
+  independent legacy oracle `pyfem/materials/ViscoElasticity.py` (including
+  repaired M55 tangent history and shipped `creep_test.pro` constants). The
+  focused independent checks are
+  `test_v3_viscoelasticity.py::{test_single_step_paths_match_legacy_bitwise,test_relaxation_paths_match_legacy_bitwise,test_creep_ramp_matches_legacy_bitwise,test_stepped_ramp_with_holds_and_unload_matches_legacy_bitwise,test_constant_time_and_backward_time_branches_match_legacy_bitwise,test_tangent_is_the_exact_algorithmic_derivative_by_fd,test_example_deck_configuration_relaxes_toward_equilibrium,test_driver_time_schedule_commits_oracle_state_and_records_time,test_state_codec_round_trips_and_rejects_foreign_schemas}`.
+- **Legacy-mapped `perzyna-viscoplasticity`.** The module docstring in
+  `materials/perzyna_viscoplasticity.py` records that the implementation is
+  rate-independent J2 consistency with a `dtime > 0` gate, not true Perzyna
+  rate physics; its independent oracle is
+  `pyfem/materials/ViscoPlasticity.py`, with the M67/M76 repaired-tangent
+  history. The checks are
+  `test_v3_viscoplasticity.py::{test_elastic_ramp_matches_legacy_bitwise,test_uniaxial_plastic_ramp_matches_legacy_bitwise,test_mixed_shear_after_plastic_matches_legacy_bitwise,test_unload_reload_keeps_kappa_and_returns_to_the_surface,test_dtime_gate_returns_elastic_above_yield_bitwise,test_converged_stress_is_invariant_to_gamma_and_n,test_tangent_repair_confirmed_at_the_amplified_state,test_kernel_tangent_is_the_exact_stress_map_derivative_by_fd,test_symbolic_jacobian_confirms_the_true_tangent,test_driver_response_is_rate_invariant_under_advancing_schedules}`.
+  The legacy documentation and `test_legacy_gamma_invariance_negative_control_for_true_rate_physics`
+  preserve the negative control.
+- **True `backward-euler-perzyna`.** Literature is Perzyna (1966),
+  “Fundamental Problems in Viscoplasticity,” DOI
+  [`10.1016/S0065-2156(08)70009-7`](https://doi.org/10.1016/S0065-2156(08)70009-7),
+  and Simo and Hughes (1998), *Computational Inelasticity*, chapters 2 and 5,
+  DOI [`10.1007/b98904`](https://doi.org/10.1007/b98904). The derivation is
+  preserved in the module docstring, the retired README section “True
+  backward-Euler Perzyna physics in v3,” and the retired
+  `doc/materials/viscoplasticity.md` sections “Verification” and “References.”
+  Independent oracles are
+  `test_v3_viscoplasticity.py::{test_backward_euler_perzyna_matches_scalar_bisection_and_central_fd,test_backward_euler_perzyna_symbolic_implicit_derivative,test_backward_euler_perzyna_elastic_and_rate_independent_limits,test_backward_euler_perzyna_q8_fast_loading_has_higher_overstress,test_backward_euler_perzyna_uninterrupted_and_restart_are_byte_equivalent}`.
+  These combine an independent scalar bisection return-map solve, central
+  finite differences, SymPy implicit differentiation, elastic/rate-independent
+  limits, physical fast-loading overstress, rejected-trial isolation, and
+  uninterrupted-versus-restart raw byte equivalence.
+- **SOVS.** `doc/materials/sovs.md` “References” preserves Skorohod (1972),
+  *Rheological basis of the theory of sintering*, and Olevsky (1998), “Theory
+  of sintering: from discrete to continuum,” *Materials Science and
+  Engineering: R* 23(2), 41–100. The module docstring identifies independent
+  legacy `pyfem/materials/SOVS.py`, activated versus dormant constants, the
+  explicit-map three-leg tangent, and the M67 (`30a5f4e`, merge `8a3eae8`) and
+  M76 (`b0ad9ed`, merge `2ffcf20`) tangent-repair history. The exact checks
+  are `test_v3_sovs.py::{test_activated_tangent_repair_confirmed_by_fd,test_kernel_tangent_is_the_exact_stress_map_derivative_by_fd,test_symbolic_jacobian_confirms_the_closed_form}`,
+  supported by the activated free-sintering/pressure/rho-guard legacy parity
+  tests in the same file.
+- **Crystal plasticity.** The demoted evidence page's “Slip systems and Schmid
+  kinetics,” “Saturation and latent hardening,” and “Why this is fresh, not
+  ported” sections preserve the model and conviction argument. Literature is
+  Peirce, Asaro, and Needleman (1983), DOI
+  [`10.1016/0001-6160(83)90014-7`](https://doi.org/10.1016/0001-6160(83)90014-7),
+  and Kocks and Mecking (2003), DOI
+  [`10.1016/S0079-6425(02)00003-8`](https://doi.org/10.1016/S0079-6425(02)00003-8).
+  Independent checks are
+  `test_v3_crystal_plasticity.py::{test_single_slip_analytical_hardening_response,test_sympy_implicit_return_map_derivative,test_full_tangent_fd_conviction_and_measured_class,test_elastic_limits_are_exact,test_state_transactions_and_typed_rejections,test_two_system_competition_uses_the_complete_fcc_family,test_compiled_layout_derived_dtime_and_driver_commit}`.
+  Removed legacy `Crystal.py` is explicitly **not** a numerical oracle.
+  Conviction comes from the literature, analytical single-slip response,
+  SymPy, finite differences and tampered-tangent controls, exact elastic
+  limits, transaction isolation (input purity, repeated evaluation,
+  committed-state isolation, and typed rejection), complete-family
+  competition, and the compiled-driver derived-`dtime` path—not legacy
+  arithmetic.
