@@ -59,12 +59,60 @@ all legacy demotions are present. No performance baseline changed, and no shared
 hot numerical implementation changed, so no candidate/control timing or
 performance claim is made.
 
+## NX7-2 implementation and acceptance record
+
+Atomic implementation commit: `f766bb2`.
+
+NX7-2 deleted the complete D1 frozen Q8 vertical at the `df31ef4` evidence
+boundary: `compile_model`, `compile_program`, `evaluate_program`, their
+diagnostics and manifest constants, the model compiled/program/state carriers,
+all of `analysis/`, `assembly/`, and `results/`, and their compile/model exports.
+This includes `CompiledModel`, `CompiledProgram`, `PreparedAnalysis`,
+`PreparedAssemblyPlan`, `assemble_reference_linear`, `CommittedAnalysisState`,
+`Solution`, `LinearBalanceLedger`, and `fresh_verify`. The four frozen focused
+test files were deleted after the generic migrations passed. No compatibility
+runtime or replacement `Solution.verify` exists. The exact deleted surface and
+old/new independent-oracle map are indexed in
+[migration-history.md](migration-history.md#nx7-2-retirement-frozen-q8-analysisresult-vertical).
+
+The actual nonblank Python totals, measured recursively against `v3` at
+`df31ef4`, are **41,876 -> 30,912 production lines** (net **10,964 removed**,
+exceeding 10,500) and **35,697 -> 30,824 v3-test lines** (net **4,873 removed**,
+exceeding 4,500). The direct D1 production set contributes 10,861 lines and
+export cleanup another 103. The four deleted test files contribute 5,509 lines;
+the retained migrations add 636: 221 in `test_v3_q8_generic_flow.py`, 112 in
+`test_v3_constraints.py`, 242 in `test_v3_driver_nonlinear.py`, and 61 in
+`test_v3_driver_parity.py`. `test_v3_model_identity.py` is unchanged because it
+contains only shared array/identity/provenance/registry subjects.
+
+The retained tests now cover literal Q8/rigid-body, authored material/topology
+rejection, canonical provenance, prescribed-root/shared-master and overflowing
+affine maps, rational equilibrium/reactions/work, zero-free rigid offsets,
+chained MPC solving, and a real analytic PatchTest8 accepted-record observation
+of full/reduced balance and direct reactions. Existing analytic Q4/T3/Hex8,
+constant-tangent reuse, full/reduced projection, and rejected-attempt byte
+identity tests remain. The migration gate passed **188 focused tests**; the
+post-deletion `test/v3` run passed **958 tests**. The notebook quickstart passed
+its analytic PatchTest8 assertion. An AST audit parsed 174
+production/test/benchmark/notebook files and found no deleted-module import.
+Both complete repository digit-mode suites passed **1,154 tests plus 12
+subtests each** (normal and `PYTHONINTMAXSTRDIGITS=640`). The complete exact and
+bare Ruff check/format matrix passed.
+
+`python -m bench.run gates` reported **0 failures**, including raw-zero FE² and
+J2 comparisons and unchanged passing Q8/skim, total-Lagrangian, truss, Riks, and
+family oracles. No `bench/results/` file or performance baseline changed, and no
+retained shared hot numerical implementation changed, so no candidate/control
+timing or performance claim is made. The branch is ready for independent
+source-to-charter review of the deletion and proof migration.
+
 ## Exact next safe action
 
-After NX7-1 is independently reviewed and merged, execute **NX7-2 — delete the
-frozen Q8 analysis/result vertical**, below. Do not begin by generalizing the
-compiler or introducing a new execution carrier: that would refactor code which
-NX7-2 removes.
+After NX7-2 is independently reviewed and merged, execute **NX7-3 — route every
+maintained consumer through the generic spine, then delete the prototype**, below.
+Migrate the Q8/skim benchmark consumers before removing their prototype runtime;
+do not preserve a second solve lane or promote a performance baseline during the
+migration.
 
 Each later program starts only after the preceding program's consumers,
 numerical gates, both digit-mode suites, Ruff gates, and required benchmark
