@@ -217,6 +217,8 @@ remain stopped; the next safe action is independent source-to-charter review of
 this negative result, not another implementation round.
 
 
+## NX7-1 implementation and acceptance record
+
 Atomic implementation commit: `288e5f3`.
 
 NX7-1 retired the complete D3 surface against the `d9e4a12` evidence boundary:
