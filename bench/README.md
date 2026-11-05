@@ -215,23 +215,24 @@ driven through the F4 finite-strain deck stack
 (`read_legacy_deck`/`compile_deck` + `NonlinearStaticDriver`);
 `riks-fan` is the truss-only shallow-truss fan (n_rays = 8/32/128, mirroring
 the landed structural scale bench; n_rays=2 reproduces the ch.4 geometry),
-driven through the M33 `RiksDriver` over a programmatic ModelSpec (the deck
-converter rejects RiksSolver decks; the fan drops the skim's spring on both
-sides like the landed oracle, since the point-spring family is
-declaration-routed). Both sides solve the identical discretization — the
-legacy side reads the generated deck (`bench/legacy_cases.py` writers, the
-q8patch same-files idiom). Gates are legacy parity per the landed oracles:
-for `tl-cantilever`, final state plus assembled tangent and internal force
-at the converged state within `skims/cantilever8/parity.toml`; for
-`riks-fan`, exact committed cycle-count equality plus per-cycle (lam, state)
-parity within `skims/shallow_truss_riks/parity.toml` and exact per-cycle
-correction-count equality. Timing follows the skim envelope: v3 `load`
-(deck conversion + compilation, resp. system/constraint-map/load
+driven through that same deck route plus the M33 `RiksDriver`. The generated
+fan retains the historical no-point-spring discretization; it has no
+`SpringElem` group and neither uses nor claims `RegionSpec` spring support. Both
+sides read the identical generated deck (`bench/legacy_cases.py` writers, the
+q8patch same-files idiom), so deck conversion and compilation replace the
+former duplicate programmatic fan system/map/load construction. Gates are
+legacy parity per the landed oracles: for `tl-cantilever`, final state plus
+assembled tangent and internal force at the converged state within
+`skims/cantilever8/parity.toml`; for `riks-fan`, exact committed cycle-count
+equality plus per-cycle (lam, state) parity within
+`skims/shallow_truss_riks/parity.toml` and exact per-cycle correction-count
+equality. Timing follows the skim envelope: v3 `load` (deck read/conversion +
 compilation) and `e2e` (a fresh driver run from the virgin state) swept over
 the thread counts; legacy `load` and the solve-only per-rep loop (3 reps
 nonlinear, 5 riks). One cold case per family (`family:tl-cantilever:16x2`,
-`family:riks-fan:32`) records the fresh-process load/first-solve costs —
-including the cache=False TL kernel's per-process JIT recompile.
+`family:riks-fan:32`) records the fresh-process deck read/compile and
+first-solve costs — including the cache=False TL kernel's per-process JIT
+recompile.
 
 ## What is measured
 
@@ -239,7 +240,8 @@ including the cache=False TL kernel's per-process JIT recompile.
 `meshgen`, `load` (pack), `kernel` (batched numba element stiffness),
 `scatter` (COO fill), `dedup` (COO→CSR), `assemble_coo` (the public
 `assemble_loaded` = kernel+scatter+COO, matching M3's "asm" envelope),
-`assemble` (plus CSR), `constrain` (C build + CᵀKC), `factor` (SuperLU),
+`assemble` (plus CSR), `constrain` (constraint build + free-DOF selector
+extraction/reduction, with CᵀKC as the genuine-MPC fallback), `factor` (SuperLU),
 `backsolve` (cached-factorization repeat solve), `solve` (single-shot
 constrained solve), `e2e` (public `prepare_cached_linear(...).solve()`).
 Stages scale differently (D2 §7.3); totals hide regressions. Legacy records

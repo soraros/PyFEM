@@ -668,7 +668,7 @@ def run_riks_fan_case(
   threads: list[int],
   budget_s: float,
 ) -> tuple[list[BenchRecord], GateResult]:
-  """Gate one truss-only fan, then time the M33 Riks driver vs legacy."""
+  """Gate one no-point-spring fan deck, then time its deck stack vs legacy."""
   records: list[BenchRecord] = []
   pro_path = write_legacy_truss_fan(case.n_rays)
   gate = gate_riks_fan(case)
