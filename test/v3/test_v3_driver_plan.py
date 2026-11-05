@@ -27,6 +27,7 @@ from pyfem.v3.driver import (
   DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA,
   DriverEvaluationError,
   DriverPreparationError,
+  NonlinearStaticDriver,
   assemble_internal_force,
   compile_driver_plan,
   evaluate_loads,
@@ -568,6 +569,39 @@ def test_load_compilation_reports_coded_failures() -> None:
         ),
       ),
     )
+
+
+@pytest.mark.parametrize(
+  "value",
+  [
+    AffineValueSpec(constant=1.0e308, source=_source("constant-value")),
+    AffineValueSpec(
+      coefficients=(
+        AffineCoefficientSpec("load", 1.0e308, _source("coefficient-value")),
+      ),
+      source=_source("affine-value"),
+    ),
+  ],
+  ids=("constant", "coordinate-coefficient"),
+)
+def test_load_accumulation_overflow_is_typed_at_driver_boundary(
+  value: AffineValueSpec,
+) -> None:
+  system, coordinate_map = _fixed_truss_map()
+  loads = tuple(
+    NodalLoadSpec(
+      id=f"finite-{index}",
+      target=DofRef(node_id=2, field_id="displacement", component="y"),
+      value=value,
+      source=_source(f"load-{index}"),
+    )
+    for index in range(2)
+  )
+  with pytest.raises(DriverPreparationError, match="accumulated") as captured:
+    NonlinearStaticDriver(system, coordinate_map, loads)
+  assert tuple(item.code for item in captured.value.diagnostics) == (
+    "non-finite-load-value",
+  )
 
 
 def test_load_evaluation_validates_binding() -> None:

@@ -3955,3 +3955,123 @@ documentation tree or kept importable as reference production code.
   committed-state isolation, and typed rejection), complete-family
   competition, and the compiled-driver derived-`dtime` path—not legacy
   arithmetic.
+
+
+## NX7-2 retirement: frozen Q8 analysis/result vertical
+
+**Boundary:** the deleted implementation and its four focused test files are pinned
+at `df31ef4`, the merged M120/M121 charter boundary. The frozen
+`CompiledModel`/`CompiledProgram`/`PreparedAnalysis` path had no maintained v3
+notebook or registered benchmark consumer. It duplicated the generic
+`compile_system` + constraint map + `NonlinearStaticDriver` execution spine with a
+second compiler, assembly preparation path, accepted-state owner, solution
+carrier, and fresh result verifier. NX7-2 deletes that execution stack, not its
+scientific evidence and not the generic Q8 production flow. No compatibility
+runtime, forwarding facade, skipped retirement test, or replacement
+`Solution.verify` is introduced.
+
+### Deleted implementation and focused tests
+
+- `compile/model.py::compile_model` and `ModelCompilationPolicy`;
+  `compile/program.py::{compile_program,evaluate_program}` and the compiled
+  model/program manifest and reduction constants; and the complete
+  `compile/program_diagnostics.py` module.
+- The complete `model/{compiled,program,state}.py` carriers, including
+  `CompiledModel`, `CompiledProgram`, `PreparedAnalysis`-owned physical/program
+  history, `CommittedAnalysisState`, `EntityIndex`, `SourceMap`, and the frozen
+  model/program capability and layout records. Their exports in
+  `compile/__init__.py` and `model/__init__.py` are removed. Shared arrays,
+  identity, canonical manifests, registry snapshots, and generation primitives
+  remain exported and tested.
+- The complete `analysis/`, `assembly/`, and `results/` packages, including
+  `PreparedAnalysis`, `PreparedAssemblyPlan`, `assemble_reference_linear`, the
+  private dense linear solver, `CommittedAnalysisState` transitions, `Solution`,
+  `LinearBalanceLedger`, `validate_state_record`, and `fresh_verify`.
+- `test_v3_model_compile.py`, `test_v3_program_compile.py`,
+  `test_v3_assembly_plan.py`, and `test_v3_linear_analysis.py` (5,509 nonblank
+  lines at `df31ef4`). `test_v3_model_identity.py` remains unchanged because all
+  of its subjects are shared primitives rather than deleted carriers.
+
+Direct `compile_model`/`prepare_analysis` users migrate to `compile_system` +
+`compile_constraint_map` + `NonlinearStaticDriver`; the notebook and benchmark
+routes already used that spine and require no wrapper. The retired source and
+all unported carrier-forgery, private-solver, result-preflight, and verification
+checks remain recoverable at `df31ef4`. Deliberate mutation of compiler-owned
+carriers is not reclassified as external-input evidence.
+
+### Independent oracle and migrated-proof index
+
+All old paths below name their content at `df31ef4`; new paths name the retained
+live tests. The independent literals and authored physical cases are preserved,
+not regenerated from the deleted implementation.
+
+- **Q8 conventions, geometry, authored input, and provenance.** The independent
+  local-node and center shape values in
+  `test_v3_model_compile.py::test_shipped_q8_binding_matches_hard_coded_local_convention_oracle`
+  were already represented by the generic shape/quadrature oracle and remain in
+  `test_v3_q8_generic_flow.py::test_q8_compiler_matches_hard_coded_shape_gradient_and_quadrature_oracle`.
+  The literal 16x16 integer Q8 operator and rigid-body modes from
+  `test_v3_linear_analysis.py` and
+  `test_v3_assembly_plan.py::test_literal_q8_operator_and_affine_rhs_oracles`
+  now live in `test_v3_q8_generic_flow.py::test_q8_literal_operator_and_rigid_body_oracle`.
+  Generic scale/translation stability and inverted/sign-changing/near-singular
+  rejection remain in the same file. Authored material schema/domain/type,
+  integer-to-float64 conversion, arity/topology/field/quadrature/membership
+  rejection move to `test_q8_authored_material_validation`,
+  `test_q8_integer_material_parameters_compile_to_float64`, and
+  `test_q8_authored_structure_validation`. Canonical mesh/cell/material/region
+  permutations, detached arrays, exact source attribution, and source-sensitive
+  fingerprints move to `test_q8_canonical_permutations_and_source_provenance`.
+- **Affine maps and external-input rejection.** The hand-computed mixed map,
+  chained offsets/derivatives, identity and zero-free maps, duplicate/conflict/
+  cycle diagnostics, full/reduced projections, and direct reactions were already
+  generic in `test_v3_constraints.py`. The frozen
+  `test_v3_program_compile.py::{test_chain_through_prescribed_root_composes_negative_factor_and_derivative,test_multiple_slaves_may_share_one_free_master,test_compilation_rejects_nonfinite_chain_intermediate,test_evaluation_rejects_nonfinite_affine_product_and_load_reduction}`
+  chain, prescribed-root, and affine-product obligations move to
+  `test_prescribed_root_and_shared_master_composition` and
+  `test_affine_overflow_is_rejected_at_compile_and_evaluation`. The same frozen
+  evaluation test's additive load-reduction overflow obligation moves to
+  `test_v3_driver_plan.py::test_load_accumulation_overflow_is_typed_at_driver_boundary`,
+  which constructs the public `NonlinearStaticDriver` with two individually
+  finite `1.0e308` constants or coordinate coefficients on one DOF and requires
+  `DriverPreparationError` with `non-finite-load-value`. Declaration-order
+  provenance and unchanged numerical plan arrays are checked by
+  `test_declaration_permutations_preserve_plan_and_change_provenance`; source
+  edits change identity. Existing generic driver-plan tests retain ordinary
+  additive load binding and literal non-finite external load rejection.
+- **Equilibrium, reactions, work, and zero-free response.** The independent
+  rational displacement in
+  `test_v3_linear_analysis.py::test_rational_one_cell_solution_ledgers_and_rigid_derivative`,
+  plus its split-load and constrained-DOF-load cases, moves to
+  `test_v3_driver_nonlinear.py::test_rational_q8_result_preserves_balance_and_reaction_oracles`.
+  It checks the accepted coefficients, full/reduced residual norms against the
+  literal operator, direct constrained-DOF reactions, force/moment equilibrium,
+  and external/internal/constraint work. Generic reaction observations do not
+  copy the frozen ledger's free-master MPC multiplier redistribution; the test
+  separately evaluates the complete full-residual constraint field for that
+  physical balance. Fully prescribed rigid translation and factorization-free
+  commit move to `test_zero_load_rigid_offset_uses_generic_zero_free_path`.
+- **Affine MPC solving and PatchTest8 accepted observations.** The chained MPC
+  with nonzero affine offsets from
+  `test_v3_linear_analysis.py::test_affine_mpc_chain_with_nonzero_offsets_solves_and_verifies`
+  moves to `test_affine_mpc_chain_with_offsets_commits_and_balances`, which checks
+  both constraint equations and full/reduced balance. The analytic prescribed
+  PatchTest8 field and accepted-result audit move to
+  `test_v3_driver_parity.py::test_patch_test8_accepted_record_observes_full_reduced_balance`.
+  It uses the existing committed driver record and generic evaluation/assembly
+  primitives to check the analytic nodal field, full/reduced residual norms,
+  direct reactions, and force/moment balance. This is a fresh numerical test of
+  the accepted record, not a second result/verification stack.
+- **Reuse and rollback.** Generic constant-tangent factorization reuse remains
+  pinned by `test_v3_driver_nonlinear.py::test_linear_system_reuses_one_factorization_across_the_ramp`
+  and `test_v3_driver_parity.py::test_patch_test8_nonlinear_ramp_reuses_one_factorization`.
+  Rejected-attempt accepted-state byte identity and same-generation cutback
+  remain in `test_v3_driver_nonlinear.py`, with owner/nested codecs and rollback
+  in `test_v3_state_transactions.py`, `test_v3_state_nested_codec.py`, and
+  `test_v3_state_nested_rollback.py`. Q4/T3/Hex8 analytic and rigid-mode evidence
+  remains independent in `test_v3_breadth.py`; generic sparse attribution and
+  stable duplicate reduction remain in `test_v3_driver_plan.py`.
+
+Reintroduction of a result-auditing convenience API requires a maintained
+consumer and must read the accepted driver records. It must not restore the
+retired execution carriers or their second solve/verification implementation.

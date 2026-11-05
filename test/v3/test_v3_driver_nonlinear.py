@@ -66,6 +66,7 @@ from pyfem.v3.spec import (
 )
 from pyfem.v3.spec.program import (
   AffineCoefficientSpec,
+  AffineTieSpec,
   AffineValueSpec,
   DofRef,
   NodalLoadSpec,
@@ -959,3 +960,267 @@ def test_divergence_trip_rejection_carries_no_budget_exhaustion() -> None:
   )
   assert failed.status is DriverStatus.STEP_FAILED
   assert all(record.budget_exhaustion is None for record in failed.records)
+
+
+_UNIT_Q8_COORDINATES = (
+  (0.0, 0.0),
+  (0.5, 0.0),
+  (1.0, 0.0),
+  (1.0, 0.5),
+  (1.0, 1.0),
+  (0.5, 1.0),
+  (0.0, 1.0),
+  (0.0, 0.5),
+)
+
+_RATIONAL_Q8_DISPLACEMENT = np.array(
+  [
+    0,
+    0,
+    29 / 12,
+    67 / 24,
+    29 / 6,
+    35 / 6,
+    -23 / 24,
+    33 / 4,
+    -7,
+    32 / 3,
+    -77 / 12,
+    27 / 8,
+    -35 / 6,
+    -7 / 6,
+    -37 / 24,
+    -7 / 12,
+  ],
+  dtype=np.float64,
+)
+
+
+def _unit_q8_model() -> ModelSpec:
+  return authoring.small_strain_continuum(
+    authoring.quad8_mesh(_UNIT_Q8_COORDINATES, [tuple(range(1, 9))]),
+    material=authoring.linear_elastic(1.0, 0.0, id="elastic"),
+  )
+
+
+def _unit_q8_driver(
+  constraints: tuple,
+  loads: tuple = (),
+) -> tuple[NonlinearStaticDriver, CompiledConstraintMap]:
+  from pyfem.v3.compile.continuum import q8_reference_registry
+
+  system = compile_system(_unit_q8_model(), q8_reference_registry())
+  coordinate_map = compile_constraint_map(
+    system,
+    constraints=constraints,
+    coordinates=(ProgramCoordinateSpec(name="load", kind="load"),),
+  )
+  return NonlinearStaticDriver(system, coordinate_map, loads), coordinate_map
+
+
+def _prescribed_q8(
+  node: int,
+  component: str,
+  value: float,
+) -> PrescribedDofSpec:
+  return PrescribedDofSpec(
+    id=f"u-{node}-{component}",
+    target=DofRef(node, "displacement", component),
+    value=AffineValueSpec(constant=value),
+    source=_source(f"u-{node}-{component}"),
+  )
+
+
+def _rational_q8_driver() -> tuple[NonlinearStaticDriver, CompiledConstraintMap]:
+
+  constraints = (
+    _prescribed_q8(1, "x", 0.0),
+    _prescribed_q8(1, "y", 0.0),
+    AffineTieSpec(
+      "tie",
+      DofRef(3, "displacement", "y"),
+      DofRef(3, "displacement", "x"),
+      1.0,
+      AffineValueSpec(
+        coefficients=(AffineCoefficientSpec("load", 1.0),),
+      ),
+      _source("tie"),
+    ),
+  )
+  loads = (
+    NodalLoadSpec(
+      "load-a",
+      DofRef(5, "displacement", "y"),
+      AffineValueSpec(constant=0.25),
+      _source("load-a"),
+    ),
+    NodalLoadSpec(
+      "load-b",
+      DofRef(5, "displacement", "y"),
+      AffineValueSpec(constant=0.75),
+      _source("load-b"),
+    ),
+    NodalLoadSpec(
+      "constrained-load",
+      DofRef(1, "displacement", "x"),
+      AffineValueSpec(constant=2.0),
+      _source("constrained-load"),
+    ),
+  )
+  return _unit_q8_driver(constraints, loads)
+
+
+def test_rational_q8_result_preserves_balance_and_reaction_oracles() -> None:
+  from test_v3_q8_generic_flow import _Q8_INTEGER_OPERATOR
+
+  driver, coordinate_map = _rational_q8_driver()
+  result = _run_ramp(driver, 1.0)
+  assert result.status is DriverStatus.COMPLETED
+  accepted = driver.owner.accepted_physical().values
+  np.testing.assert_allclose(
+    accepted,
+    _RATIONAL_Q8_DISPLACEMENT,
+    rtol=0.0,
+    atol=4.0e-14,
+  )
+
+  observation = result.records[-1].observation
+  assert observation is not None
+  internal = (_Q8_INTEGER_OPERATOR / 360.0) @ accepted
+  external = np.zeros(16, dtype=np.float64)
+  external[9] = 1.0
+  external[0] = 2.0
+  full_residual = internal - external
+  reduced_residual = coordinate_map.prolongation().T @ full_residual
+  assert observation.full_residual_norm == pytest.approx(
+    float(np.linalg.norm(full_residual)),
+    abs=2.0e-14,
+  )
+  assert observation.reduced_residual_norm == pytest.approx(
+    float(np.linalg.norm(reduced_residual)),
+    abs=2.0e-14,
+  )
+  np.testing.assert_allclose(
+    observation.reactions.values[[0, 4, 5]],
+    [-3.0, 0.0, -1.0],
+    rtol=0.0,
+    atol=5.0e-14,
+  )
+  np.testing.assert_allclose(
+    observation.reactions.values[coordinate_map.constrained_dofs.values],
+    full_residual[coordinate_map.constrained_dofs.values],
+    rtol=0.0,
+    atol=2.0e-14,
+  )
+
+  external_work = float(external @ accepted)
+  internal_work = float(internal @ accepted)
+  constraint_work = float(full_residual @ accepted)
+  assert external_work == pytest.approx(32 / 3, abs=5.0e-14)
+  assert internal_work == pytest.approx(29 / 3, abs=8.0e-14)
+  assert constraint_work == pytest.approx(-1.0, abs=6.0e-14)
+  assert observation.constraint_work == pytest.approx(-35 / 6, abs=6.0e-14)
+  assert observation.constraint_work == pytest.approx(
+    float(observation.reactions.values @ accepted),
+    abs=6.0e-14,
+  )
+  assert external_work + constraint_work == pytest.approx(
+    internal_work,
+    abs=8.0e-14,
+  )
+  total_force = (external + full_residual).reshape(8, 2)
+  np.testing.assert_allclose(total_force.sum(axis=0), 0.0, rtol=0.0, atol=2.0e-13)
+  coordinates = np.asarray(_UNIT_Q8_COORDINATES)
+  moment = np.sum(
+    coordinates[:, 0] * total_force[:, 1] - coordinates[:, 1] * total_force[:, 0]
+  )
+  assert float(moment) == pytest.approx(0.0, abs=2.0e-13)
+
+
+def test_zero_load_rigid_offset_uses_generic_zero_free_path() -> None:
+  constraints = tuple(
+    _prescribed_q8(node, component, 2.0 if component == "x" else -3.0)
+    for node in range(1, 9)
+    for component in ("x", "y")
+  )
+  driver, _coordinate_map = _unit_q8_driver(constraints)
+  result = _run_ramp(driver, 0.0)
+  assert result.status is DriverStatus.COMPLETED
+  np.testing.assert_array_equal(
+    driver.owner.accepted_physical().values,
+    np.tile((2.0, -3.0), 8),
+  )
+  assert result.statistics.factorization_count == 0
+  assert result.statistics.factorization_reuse_count == 0
+  assert result.statistics.linear_solve_count == 0
+  observation = result.records[-1].observation
+  assert observation is not None
+  assert observation.reduced_residual_norm == 0.0
+  assert observation.full_residual_norm == pytest.approx(0.0, abs=2.0e-14)
+
+
+def test_affine_mpc_chain_with_offsets_commits_and_balances() -> None:
+  from test_v3_q8_generic_flow import _Q8_INTEGER_OPERATOR
+
+  constraints = (
+    _prescribed_q8(1, "x", 0.0),
+    _prescribed_q8(1, "y", 0.0),
+    AffineTieSpec(
+      "first",
+      DofRef(2, "displacement", "y"),
+      DofRef(2, "displacement", "x"),
+      2.0,
+      AffineValueSpec(
+        constant=1.0,
+        coefficients=(AffineCoefficientSpec("load", 0.5),),
+      ),
+      _source("first"),
+    ),
+    AffineTieSpec(
+      "second",
+      DofRef(3, "displacement", "y"),
+      DofRef(2, "displacement", "y"),
+      -0.5,
+      AffineValueSpec(
+        constant=0.25,
+        coefficients=(AffineCoefficientSpec("load", 1.0),),
+      ),
+      _source("second"),
+    ),
+  )
+  loads = (
+    NodalLoadSpec(
+      "load",
+      DofRef(5, "displacement", "y"),
+      AffineValueSpec(constant=1.0),
+      _source("load"),
+    ),
+  )
+  driver, coordinate_map = _unit_q8_driver(constraints, loads)
+  result = _run_ramp(driver, 2.0)
+  assert result.status is DriverStatus.COMPLETED
+  accepted = driver.owner.accepted_physical().values
+  assert accepted[3] == pytest.approx(2.0 * accepted[2] + 2.0, abs=2.0e-14)
+  assert accepted[5] == pytest.approx(-0.5 * accepted[3] + 2.25, abs=2.0e-14)
+  observation = result.records[-1].observation
+  assert observation is not None
+  external = np.zeros(16, dtype=np.float64)
+  external[9] = 1.0
+  full_residual = (_Q8_INTEGER_OPERATOR / 360.0) @ accepted - external
+  reduced_residual = coordinate_map.prolongation().T @ full_residual
+  assert observation.full_residual_norm == pytest.approx(
+    float(np.linalg.norm(full_residual)),
+    abs=2.0e-14,
+  )
+  assert observation.reduced_residual_norm == pytest.approx(
+    float(np.linalg.norm(reduced_residual)),
+    abs=2.0e-14,
+  )
+  np.testing.assert_allclose(
+    observation.reactions.values[coordinate_map.constrained_dofs.values],
+    full_residual[coordinate_map.constrained_dofs.values],
+    rtol=0.0,
+    atol=2.0e-14,
+  )
+  total_force = (external + full_residual).reshape(8, 2)
+  np.testing.assert_allclose(total_force.sum(axis=0), 0.0, rtol=0.0, atol=2.0e-12)

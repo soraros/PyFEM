@@ -310,6 +310,23 @@ def _finite_exact(value: object, *, label: str, source: SourceContext) -> float:
   return result
 
 
+def _finite_accumulation(
+  total: float,
+  addend: float,
+  *,
+  label: str,
+  source: SourceContext,
+) -> float:
+  result = float(total) + addend
+  if not math.isfinite(result):
+    _preparation_fail(
+      "non-finite-load-value",
+      f"accumulated {label} must be finite",
+      source,
+    )
+  return result
+
+
 def _compile_loads(
   system: CompiledSystem,
   loads: tuple[NodalLoadSpec, ...],
@@ -332,8 +349,13 @@ def _compile_loads(
     if type(value.coefficients) is not tuple:
       msg = "load value coefficients must be an exact tuple"
       raise TypeError(msg)
-    constant[dof] += _finite_exact(
-      value.constant,
+    constant[dof] = _finite_accumulation(
+      constant[dof],
+      _finite_exact(
+        value.constant,
+        label="load value constant",
+        source=value.source,
+      ),
       label="load value constant",
       source=value.source,
     )
@@ -355,8 +377,13 @@ def _compile_loads(
           item.source,
         )
       seen.add(item.coordinate)
-      coefficients[dof, index] += _finite_exact(
-        item.coefficient,
+      coefficients[dof, index] = _finite_accumulation(
+        coefficients[dof, index],
+        _finite_exact(
+          item.coefficient,
+          label="load coordinate coefficient",
+          source=item.source,
+        ),
         label="load coordinate coefficient",
         source=item.source,
       )
