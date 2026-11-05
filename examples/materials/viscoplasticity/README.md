@@ -50,48 +50,12 @@ the loaded nodes, and equivalent plastic strain at the notch. Stress and
 plastic strain concentrate at the notch; the response is elastic below yield
 and follows rate-independent J2 hardening above it whenever time advances.
 
-## True backward-Euler Perzyna physics in v3
+## Retired v3 rate-law record
 
-The separate v3 material key **`backward-euler-perzyna`** implements the
-actual implicit rate law without changing this legacy deck or the
-legacy-mapped v3 key `perzyna-viscoplasticity`:
-
-```python
-from pyfem.v3 import authoring
-
-material = authoring.backward_euler_perzyna(
-  200000.0, 0.3, 250.0, 1000.0, 0.001, 1.0
-)
-model = authoring.small_strain_continuum(
-  authoring.quad8_patch(), material=material
-)
-system = authoring.compile(model)
-```
-
-Its equivalent viscoplastic strain rate is
-
-```text
-κ̇ = gamma <(σ_vm − σ_y(κ))/σ_y(κ)>^n,
-σ_y(κ) = syield + hard κ.
-```
-
-A nonlinear static program must declare a `time` coordinate. The driver derives
-`dtime` from the previous committed program point, and the material solves
-
-```text
-Δκ = gamma Δt <(σ_vm,trial − 3GΔκ − σ_y(κ_n+Δκ))/σ_y(κ_n+Δκ)>^n.
-```
-
-For the same displacement history, a faster physical schedule has less time
-for viscoplastic flow and therefore carries higher overstress; a slower
-schedule flows more and relaxes toward the yield surface. For this law,
-`gamma Δt → 0` approaches the elastic predictor and `gamma Δt → ∞` approaches
-rate-independent J2 consistency. (The directions formerly printed here were
-incorrect.)
-
-The Q8 regression `test_backward_euler_perzyna_q8_fast_loading_has_higher_overstress`
-in `test/v3/test_v3_viscoplasticity.py` compares schedules differing by a
-factor of 100 and checks overstress at every integration point. Other tests
-cover unload/reload state, rejected-trial byte identity, and restart
-byte-equivalence. The legacy gamma-invariance test remains as the negative
-control.
+NX7-1 retired the separate experimental v3 Perzyna mappings and their public
+authoring example. Their implicit return-map equations, literature, independent
+scalar-bisection/SymPy/finite-difference oracles, fast-loading overstress check,
+and restart byte-equivalence evidence are preserved in the
+[NX7-1 retirement record](../../../.agents/v3/migration-history.md#nx7-1-retirement-non-kernel-scientific-breadth).
+The legacy gamma-invariance negative control is indexed there as well. None of
+that retired functionality changes this legacy deck's meaning.

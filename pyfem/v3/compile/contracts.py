@@ -634,8 +634,8 @@ def resolve_material_state_slots(
 
   Widths are either literal positive ints or ``{"parameter": name,
   "scale": int}`` mappings resolved against the validated material parameters
-  at compile time, so parameter-dependent laws (a Crystal-style slip count or a
-  ViscoElasticity-style term count) fit the ABI without field changes.
+  at compile time, so parameter-dependent state layouts fit the ABI without
+  field changes.
   """
   if type(slots) is not list and type(slots) is not tuple:
     msg = "stateful material state_slots must be an exact list of declarations"

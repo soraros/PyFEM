@@ -512,6 +512,41 @@ def test_multiple_spaces_have_disjoint_native_coefficient_maps() -> None:
     )
 
 
+def test_support_aware_space_allocation_validates_its_inputs() -> None:
+  points = compile_system(_model(), q8_reference_registry()).point_blocks[0]
+  displacement = FieldSpec("displacement", ("x", "y"), "node")
+  temperature = FieldSpec("temperature", ("theta",), "node")
+  supports = {
+    "displacement": (1, 2, 3, 4),
+    "temperature": (3, 4, 5, 6, 7, 8),
+  }
+  spaces = compile_discrete_spaces(
+    points,
+    (displacement, temperature),
+    supports=supports,
+  )
+  assert tuple(space.coefficient_range for space in spaces) == ((0, 8), (8, 14))
+  assert spaces[0].coefficient_ids[-1] == ("displacement", 4, "y")
+  assert spaces[1].coefficient_ids[0] == ("temperature", 3, "theta")
+  np.testing.assert_array_equal(
+    spaces[1].coefficient_map.values,
+    np.arange(8, 14, dtype=np.int64).reshape(6, 1),
+  )
+
+  with pytest.raises(ModelCompilationError, match="invalid-space-support"):
+    compile_discrete_spaces(
+      points,
+      (displacement, temperature),
+      supports={"displacement": (1, 2)},
+    )
+  with pytest.raises(ModelCompilationError, match="invalid-space-support"):
+    compile_discrete_spaces(
+      points,
+      (displacement, temperature),
+      supports={"displacement": (1, 2, 3, 4), "temperature": (3, 4, 99)},
+    )
+
+
 def test_compiled_system_owns_metadata_free_arrays_identity_and_attribution() -> None:
   authored = _model()
   reordered = replace(

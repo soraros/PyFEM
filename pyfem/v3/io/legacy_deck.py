@@ -1,226 +1,44 @@
-"""Legacy input-deck converter: skim-format ``.pro``/``.dat`` decks to v3 specs.
+"""Legacy input-deck converter for the retained generic v3 solve spine.
 
-This module reads the legacy input deck subset used by the ``skims/`` parity
-cases and emits authored v3 values — a :class:`~pyfem.v3.spec.model.ModelSpec`
-plus a :class:`~pyfem.v3.spec.program.ProgramSpec`, one
-:class:`~pyfem.v3.compile.spring.SpringDeclaration` per spring group, and one
-:class:`~pyfem.v3.compile.interface.InterfaceDeclaration` per interface
-group —
-through the landed spec contracts only. The emitted specs compile with the
-landed compiler unchanged: :func:`compile_deck` composes ``compile_system``
-(with the ``springs`` channel) and ``compile_constraint_map``, and
-:func:`run_deck` drives the landed ``NonlinearStaticDriver`` or, for
-``RiksSolver`` decks, the landed ``RiksDriver``; nothing here re-implements
-evaluation or reaches into builder internals.
+The adapter reads the maintained skim-format ``.pro``/``.dat`` subset and emits
+``ModelSpec``/``ProgramSpec`` values plus grounded ``SpringDeclaration``
+values. ``compile_deck`` routes those values through ``compile_system`` and
+``compile_constraint_map``; ``run_deck`` uses ``NonlinearStaticDriver`` or
+``RiksDriver``. It owns no evaluator, state owner, or alternate solve path.
 
-Supported subset
-----------------
+Supported element groups are exactly one region-routed
+``SmallStrainContinuum``, ``FiniteStrainContinuum``, or ``Truss`` group plus any
+number of grounded ``Spring`` groups. Small strain supports PlaneStress,
+PlaneStrain, Isotropic, and linear-isotropic-hardening J2 materials on their
+qualified Tria3/Quad4/Quad8/Hex8 geometries. Finite strain retains the Q8
+plane-stress Saint-Venant-Kirchhoff route under a nonlinear solver. Truss uses
+Line2. Springs retain their two-node, one-grounded-end axial mapping and require
+a Newton-based solver. Every other element type raises
+``unsupported-element-type``; no input falls back to another element or
+constitutive implementation.
 
-Deck structure (``.pro`` side):
+The ``.pro`` side requires one readable ``input`` reference and one
+``LinearSolver``, ``NonlinearSolver``, or ``RiksSolver`` block. The adapter
+converts the documented tolerance, iteration, ramp, and arc-length settings,
+records output writers and deliberately unconverted solver flags in
+``ConvertedDeck.not_converted``, and rejects unknown constructs with coded
+``SpecDiagnostic`` values. The ``.dat`` side supports node/element definitions,
+prescribed DOFs, one-master affine ties, and nodal loads. PlaneStress and
+PlaneStrain require 2D; Isotropic requires 3D; J2 and finite strain require Q8.
+DOFs map ``u``/``v``/``w`` to ``x``/``y``/``z`` on the displacement field.
 
-- exactly one ``input = "<mesh>.dat";`` reference, resolved relative to the
-  ``.pro`` file;
-- one ``solver = { ... };`` block of type ``LinearSolver``,
-  ``NonlinearSolver``, or ``RiksSolver``; the nonlinear block may carry
-  ``tol``, ``iterMax``, ``maxCycle``, ``dtime``, ``loadTable = [...]``,
-  ``loadFunc`` (only the identity ramp ``t``), and ``fixedStep`` (parsed,
-  recorded as not converted — the v3 driver owns its own cutback schedule);
-  the riks block may carry ``tol``, ``iterMax``, ``optiter``, ``fixedStep``,
-  ``maxLam``, and ``maxFactor`` (all converted into the arc-length settings;
-  the legacy cycle cap of 1000 is fixed);
-- one element block per mesh group, named after the group, of type
-  ``SmallStrainContinuum`` (with a nested ``material`` block of type
-  ``PlaneStress``, ``PlaneStrain``, or ``Isotropic`` carrying ``E`` and
-  ``nu``, or of type ``IsotropicHardeningPlasticity`` carrying ``E``,
-  ``nu``, ``syield``, and ``hard`` — the linear-hardening configuration the
-  v3 stateful law ships; the legacy hardening-table
-  (``EqPlasStrains``/``Stresses``) and power-law (``q``/``K``) properties
-  reject, citing the M25 scoping decision), of type ``FiniteStrainContinuum``
-  (with a nested ``material`` block of type ``PlaneStress`` carrying ``E``
-  and ``nu`` — the legacy stateless Saint-Venant-Kirchhoff law the v3
-  total-Lagrangian slice ships), ``Truss`` (carrying ``E`` and ``Area``
-  directly), ``Spring`` (carrying ``k`` directly), or ``Interface`` (with a
-  nested ``material`` block of type ``XuNeedleman``, ``PowerLawModeI``,
-  ``ThoulessModeI``, or ``Dummy`` — the four stateless traction-separation
-  laws the v3 cohesive interface family ships, carrying exactly their legacy
-  parameter sets: ``Tult``/``Gc``, ``Tult``/``Gc``, ``Tult``/``Gc``/
-  ``d1d3``/``d2d3``, and ``D`` respectively; the legacy ``XuNeedleman``
-  constructor silently overwrites deck-supplied ``q``/``r`` with ``1.0``/
-  ``0.0``, so those keys reject rather than convert dishonestly; M80 removed
-  the dead and broken legacy rank-3 branch (503cefb), and rank-3 decks are not
-  admitted);
-- exactly one region-routed element group (``SmallStrainContinuum``,
-  ``FiniteStrainContinuum``, or ``Truss``) plus any number of ``Spring``
-  and ``Interface`` groups; the region-routed group forms the base
-  ``ModelSpec`` and each spring group emits one
-  :class:`~pyfem.v3.compile.spring.SpringDeclaration`, composed through
-  ``compile_system``'s ``springs`` channel. Each two-node spring element
-  must have exactly one end with every component prescribed to zero (the
-  grounded end): it then reduces exactly to the v3 grounded point spring at
-  the other node along the element chord, the consistent axial form the H1
-  decision pins. Legacy formerly assembled an isotropic tangent that was not
-  the derivative of its axial residual; M55 repaired it to the same axial
-  tangent as v3 (ed798ae, merge 945a95d; pin flip 88c2f88), so the tangents
-  now match and residual parity is unchanged. Each four-node interface element
-  (bottom pair, then top pair) emits into one
-  :class:`~pyfem.v3.compile.interface.InterfaceDeclaration` per group,
-  composed after the springs; the v3 operator ships the proper-rotation
-  corotational frame and the exact tangent. M67 repaired the legacy normal
-  candidate (9965442, merge 8a3eae8), so the normal candidates now agree and
-  the oblique normal/shear swap is fixed. Axis-aligned residual parity remains
-  bitwise per the M65 parity battery, but the shear-row handedness convention
-  still differs (legacy determinant -1, v3 determinant +1); full frame parity
-  on oblique geometries is not claimed. Legacy still omits the ``d(rot)/da``
-  geometric term, so its tangent
-  divergence from v3 remains documented (see
-  :mod:`pyfem.v3.compile.interface`);
-- ``outputModules = [...]`` naming blocks whose ``type`` is a known legacy
-  writer (``MeshWriter``, ``OutputWriter``, ``GraphWriter``, ``HDF5Writer``,
-  ``DataDump``, ``ContourWriter``, ``ROMSnapshotWriter``). Writers do not
-  affect the computed state; each is recorded in
-  :attr:`ConvertedDeck.not_converted` rather than silently skipped.
+Under ``LinearSolver``, loads and prescribed values apply at one full step.
+Under ``NonlinearSolver``, loads, prescribed values, and tie offsets scale with
+the authored ``load`` ramp. Under ``RiksSolver``, prescribed values and tie
+offsets remain fixed while the continuation owns the load coordinate. Riks
+stops on the documented maximum-load or 1000-cycle conditions.
 
-Mesh structure (``.dat`` side):
-
-- ``<Nodes>``: ``id x y;`` statements on 2D decks, ``id x y z;`` on 3D
-  decks;
-- ``<Elements>``: ``id "Group" n1 ... nk;`` statements — two nodes for
-  ``Truss`` (line2) and ``Spring``; three (tria3), four (quad4), or eight
-  (serendipity quad8) nodes for 2D ``SmallStrainContinuum``; eight nodes
-  (hex8) for 3D ``SmallStrainContinuum``; eight nodes (serendipity quad8)
-  for 2D ``FiniteStrainContinuum``;
-- ``<NodeConstraints>``: prescribed DOFs ``u[i] = value;`` / ``v[i] = value;``
-  (plus ``w[i] = value;`` on 3D decks) and one-master affine ties
-  ``u[i] = offset + factor * v[j];`` (factor may be omitted or follow the
-  master: ``u[i] = v[j];``, ``u[i] = 2.0 * u[j];``);
-- ``<ExternalForces>``: nodal loads ``v[i] = value;``.
-
-Semantics: every deck declares one ``load`` program coordinate. Under
-``LinearSolver`` prescribed values and tie offsets are constant and loads scale
-linearly to a single full step (matching the legacy full-value application);
-under ``NonlinearSolver`` prescribed values, tie offsets, and loads all scale
-with the load coordinate, whose targets are the authored ``loadTable`` values
-or the ``dtime``/``maxCycle`` ramp. Under ``RiksSolver`` prescribed values
-and tie offsets are constant (the legacy solver never scales constraints)
-while loads scale with the arc-length parameter the continuation owns;
-``run_deck`` routes the deck to the landed ``RiksDriver`` and terminates on
-the legacy conditions (``lam > maxLam`` or more than 1000 committed cycles,
-checked after each commit). DOF types map ``u -> x``, ``v -> y`` on
-2D decks and additionally ``w -> z`` on 3D decks, on the node-supported
-``displacement`` field. The ``PlaneStress`` and ``PlaneStrain`` laws require
-a 2D mesh; the ``Isotropic`` law requires a 3D mesh;
-``IsotropicHardeningPlasticity`` requires a 2D serendipity-quad8 mesh.
-``FiniteStrainContinuum`` requires a 2D serendipity-quad8 mesh and a
-``NonlinearSolver`` block (the legacy ``LinearSolver`` assembles the
-zero-state tangent once, while the v3 driver integrates the finite-strain
-residual by Newton iteration — the combination has no faithful mapping).
-``Spring`` groups require a 2D mesh and a Newton-based solver block
-(``NonlinearSolver`` or ``RiksSolver``). Grounded ``Spring`` +
-``LinearSolver`` conversion remains outside the supported subset and rejects
-with ``incompatible-solver-type``.
-
-Rejection codes
----------------
-
-Every out-of-subset construct raises :class:`DeckConversionError` carrying
-coded :class:`~pyfem.v3.spec.diagnostics.SpecDiagnostic` values with source
-context — never a silent skip. Known legacy constructs and their codes:
-
-- ``deck-input-missing`` — unreadable ``.pro`` file, absent ``input = ...``
-  reference, or an unreadable referenced mesh file;
-- ``deck-pro-syntax`` / ``deck-dat-syntax`` — malformed ``.pro`` grammar
-  (bad token, missing ``;``/``=``/``}``, mistyped or non-finite value) or
-  malformed ``.dat`` statements (bad node/element/constraint line, statements
-  outside any section, unterminated statements or sections);
-- ``deck-solver-missing`` — no ``solver`` block;
-- ``unsupported-pro-construct`` — ``include`` directives, dotted keys
-  (``a.b = ...``), duplicate or unknown top-level items;
-- ``unsupported-output-module`` — an ``outputModules`` entry without a block,
-  or a block ``type`` outside the known writer set;
-- ``unsupported-element-type`` — element block type outside
-  ``{SmallStrainContinuum, FiniteStrainContinuum, Truss, Spring,
-  Interface}`` (e.g. ``Beam``, ``Contact``);
-- ``unsupported-element-parameter`` / ``missing-element-parameter`` —
-  extra keys in an element block, or a ``Truss`` block without ``E``/``Area``
-  or a ``Spring`` block without ``k``;
-- ``missing-element-block`` — a mesh group with no same-named ``.pro`` block;
-- ``unsupported-element-groups`` — the mesh declares anything but exactly
-  one region-routed element group: several region-routed groups, or none
-  (a springs-only or interfaces-only deck); ``Spring`` and ``Interface``
-  groups are auxiliary and unrestricted in number;
-- ``unsupported-spring-support`` — a ``Spring`` element whose support
-  pattern has no faithful grounded point-spring mapping: both ends free, both
-  ends fully prescribed, an anchor end with a nonzero or partial
-  prescription, or coincident endpoints;
-- ``unsupported-material-model`` — material type outside
-  ``{PlaneStress, PlaneStrain, Isotropic, IsotropicHardeningPlasticity}``
-  on a ``SmallStrainContinuum`` block, outside ``{PlaneStress}`` on a
-  ``FiniteStrainContinuum`` block (e.g. ``IsotropicKinematicHardening``), or
-  outside ``{XuNeedleman, PowerLawModeI, ThoulessModeI, Dummy}`` on an
-  ``Interface`` block;
-- ``incompatible-solver-type`` — a ``FiniteStrainContinuum`` deck whose
-  solver block is a ``LinearSolver`` (legacy assembles the zero-state
-  tangent once; the v3 driver only integrates the finite-strain residual by
-  Newton iteration, so the combination has no faithful mapping), a deck
-  with ``Spring`` groups whose solver block is a ``LinearSolver`` (grounded
-  ``Spring`` + ``LinearSolver`` conversion remains outside the supported
-  subset), or a deck whose
-  ``Interface`` groups carry a nonlinear law (``XuNeedleman``,
-  ``PowerLawModeI``, ``ThoulessModeI``) under a ``LinearSolver`` (the same
-  one-shot mismatch; the linear ``Dummy`` law converts, since its assembled
-  residual is frame-independent and the single linear solve is exact);
-- ``incompatible-material-geometry`` — a supported material on an
-  incompatible mesh: ``PlaneStress``/``PlaneStrain`` on a 3D mesh,
-  ``Isotropic`` on a 2D mesh;
-- ``unsupported-hardening-form`` — an ``IsotropicHardeningPlasticity``
-  material carrying the legacy hardening-table (``EqPlasStrains``,
-  ``Stresses``) or power-law (``q``, ``K``) properties; the v3 stateful law
-  ships exactly the linear-hardening ``hard`` configuration (the M25 scoping
-  decision: the legacy law's plastic branch reads its ``hard`` property for
-  the tangent, so no other hardening form ever defined plastic behavior);
-- ``unsupported-material-parameter`` / ``missing-material-parameter`` —
-  extra keys in a material block, or a block without its model's required
-  properties (``E``/``nu`` for ``PlaneStress``/``PlaneStrain``/``Isotropic``;
-  ``E``/``nu``/``syield``/``hard`` for ``IsotropicHardeningPlasticity``;
-  ``Tult``/``Gc`` for ``XuNeedleman`` and ``PowerLawModeI`` — whose ``q``/``r``
-  keys reject here, since legacy silently overwrites them —
-  ``Tult``/``Gc``/``d1d3``/``d2d3`` for ``ThoulessModeI``; ``D`` for
-  ``Dummy``);
-- ``invalid-material-parameter-value`` — an interface law parameter that is
-  non-positive where the law requires positive (``Tult``/``Gc``/``D``), or a
-  ``ThoulessModeI`` ratio pair outside ``0 < d1d3 < d2d3 < 1``;
-- ``unsupported-solver-type`` — solver type outside
-  ``{LinearSolver, NonlinearSolver, RiksSolver}``;
-- ``unsupported-solver-parameter`` — solver key outside the supported set;
-- ``unsupported-load-func`` — ``loadFunc`` other than the identity ramp ``t``;
-- ``unsupported-load-table`` — an empty or malformed ``loadTable``;
-- ``unsupported-section`` — unknown or unsupported ``.dat`` sections
-  (e.g. ``<NodeGroup>``, named ``<NodeConstraints name=...>`` tables,
-  duplicate sections);
-- ``unsupported-gmsh-reference`` — ``gmsh = "file.msh";`` mesh references;
-- ``unsupported-mesh-rank`` — node coordinates that are not 2D or 3D;
-- ``unsupported-cell-arity`` — cell node counts with no landed v3 geometry
-  for the deck's element type and mesh rank (e.g. five-node cells, non-hex8
-  cells on a 3D mesh, non-line2 cells for ``Truss``, non-quad8 cells for the
-  stateful law or the finite-strain family, non-four-node cells for
-  ``Interface``), or mixed cell arities inside one mesh group;
-- ``unsupported-dof-type`` — DOF types outside ``{u, v, w}``, or ``w`` on a
-  2D mesh;
-- ``unsupported-node-group`` — named node-group references in constraint
-  left- or right-hand sides (``u[name]``);
-- ``unsupported-tie-form`` — constraint right-hand sides outside the
-  one-master affine form (e.g. multi-master relations);
-- ``duplicate-node-id`` / ``duplicate-cell-id`` / ``unknown-node-reference`` /
-  ``inconsistent-node-coordinates`` / ``empty-mesh`` — structurally malformed
-  meshes.
-
-Two further codes are non-fatal acknowledgments, collected in
-:attr:`ConvertedDeck.not_converted` instead of raising:
-``not-converted-output-module`` (a known legacy writer block — output does not
-affect the computed state) and ``not-converted-solver-option``
-(``fixedStep`` on a ``NonlinearSolver`` block, and a ``maxCycle``/``dtime``
-ramp overridden by ``loadTable`` — the v3 driver owns its own substep
-schedule; on a ``RiksSolver`` block every parsed key converts).
+Every malformed or out-of-subset construct raises ``DeckConversionError`` with
+source context. Diagnostics cover unreadable inputs, syntax, missing or unknown
+solver/element/material constructs, unsupported hardening forms, invalid
+geometry and arity, unsupported DOF/groups/ties, duplicate or unknown mesh IDs,
+and incompatible solver/material combinations. No rejected deck is silently
+skipped or converted through a different law.
 """
 
 from __future__ import annotations
@@ -241,15 +59,6 @@ from pyfem.v3.compile.continuum import (
 from pyfem.v3.compile.contracts import (
   continuum_reference_registry,
   finite_strain_reference_registry,
-)
-from pyfem.v3.compile.interface import (
-  InterfaceDeclaration,
-  compile_interface_operator,
-  compose_interface_system,
-  dummy_interface_declaration,
-  power_law_mode_i_declaration,
-  thouless_mode_i_declaration,
-  xu_needleman_declaration,
 )
 from pyfem.v3.compile.spring import SpringDeclaration, SpringKernelResult
 from pyfem.v3.compile.system import compile_system
@@ -338,20 +147,6 @@ _SPRING_GEOMETRIES = frozenset({(2, 2)})
 _SPRING_STATE_SCHEMA = "legacy-deck-spring-state-v1"
 _SPRING_KERNEL_NAME = "legacy-axial-point-spring"
 _SPRING_IMPLEMENTATION_ID = "legacy-axial-point-spring-v1"
-# A legacy ``Interface`` group converts to the cohesive interface family:
-# four-node (bottom pair, top pair) cells on a 2D mesh — de-facto Gauss-2
-# integration, since the legacy ``NewtonCotes`` flag never existed.
-_INTERFACE_GEOMETRIES = frozenset({(2, 4)})
-_INTERFACE_STATE_SCHEMA = "legacy-deck-interface-frame-state-v1"
-# Legacy interface material type -> its required parameter keys, in the
-# v3 declaration's canonical order (Tult -> ultimate_traction, Gc ->
-# fracture_energy, D -> stiffness).
-_INTERFACE_LAW_PARAMETERS: dict[str, tuple[str, ...]] = {
-  "XuNeedleman": ("Tult", "Gc"),
-  "PowerLawModeI": ("Tult", "Gc"),
-  "ThoulessModeI": ("Tult", "Gc", "d1d3", "d2d3"),
-  "Dummy": ("D",),
-}
 _PLASTICITY_MODEL = "IsotropicHardeningPlasticity"
 _PLASTICITY_VALUE_KEYS = frozenset({"E", "nu", "syield", "hard"})
 _PLASTICITY_TABLE_KEYS = frozenset({"EqPlasStrains", "Stresses", "q", "K"})
@@ -408,11 +203,8 @@ class ConvertedDeck:
 
   ``model`` and ``program`` are plain authored spec values; ``springs``
   holds one :class:`~pyfem.v3.compile.spring.SpringDeclaration` per parsed
-  spring group and ``interfaces`` one
-  :class:`~pyfem.v3.compile.interface.InterfaceDeclaration` per parsed
-  interface group (both empty on a bare continuum deck), composed through
-  ``compile_system``'s ``springs`` channel and the interface family's
-  compile/compose pair; ``not_converted`` lists the
+  spring group, composed through ``compile_system``'s ``springs`` channel;
+  ``not_converted`` lists the
   acknowledged non-physics constructs (output writers, subsumed solver
   policy flags) with their source contexts.
   """
@@ -426,7 +218,6 @@ class ConvertedDeck:
   solver: DeckSolverSettings
   not_converted: tuple[SpecDiagnostic, ...]
   springs: tuple[SpringDeclaration, ...] = ()
-  interfaces: tuple[InterfaceDeclaration, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -1457,28 +1248,12 @@ class _SpringProfile:
 
 
 @dataclass(frozen=True, slots=True)
-class _InterfaceProfile:
-  """One validated ``Interface`` element block: law plus its parameters.
-
-  ``law`` is one of the four shipped traction-separation laws;
-  ``parameters`` carries the law's values in canonical declaration order,
-  each with its source. The per-element node quads resolve later, against
-  the mesh.
-  """
-
-  law: str
-  parameters: tuple[tuple[str, float, SourceContext], ...]
-  source: SourceContext
-
-
-@dataclass(frozen=True, slots=True)
 class _ElementProfile:
   """One parsed element block: its declared type plus the validated payload.
 
-  Exactly one of ``family`` (a region-routed group), ``spring`` (a
-  declaration-routed ``Spring`` group), or ``interface`` (a
-  declaration-routed ``Interface`` group) is set on success; all are
-  ``None`` when the block's diagnostics already record the failure.
+  Exactly one of ``family`` (a region-routed group) or ``spring`` (a
+  declaration-routed ``Spring`` group) is set on success; both are ``None``
+  when the block's diagnostics already record the failure.
   ``element_type`` keeps the declared type either way, so group
   classification follows the authored intent even for unsound blocks.
   """
@@ -1487,7 +1262,6 @@ class _ElementProfile:
   element_type: str | None
   family: _MaterialProfile | None
   spring: _SpringProfile | None
-  interface: _InterfaceProfile | None
   source: SourceContext
 
 
@@ -1945,206 +1719,6 @@ def _spring_profile(
   )
 
 
-def _interface_family(
-  block: _ProBlock,
-  diagnostics: list[SpecDiagnostic],
-) -> _InterfaceProfile | None:
-  """Read an ``Interface`` block: one of the four shipped cohesive laws.
-
-  The legacy ``XuNeedleman`` constructor overwrites deck-supplied ``q``/``r``
-  with hardcoded values AFTER reading the properties, so carrying those keys
-  converts dishonestly — they reject here as unsupported parameters.
-  """
-  material_block: _ProBlock | None = None
-  sound = True
-  for item in block.items:
-    if type(item) is _ProBlock:
-      if item.name == "material" and material_block is None:
-        material_block = item
-        continue
-      diagnostics.append(
-        _diagnostic(
-          "unsupported-element-parameter",
-          f"unsupported nested block {item.name!r} in element block {block.name!r}",
-          item.source,
-        ),
-      )
-      sound = False
-    elif item.name != "type":
-      diagnostics.append(
-        _diagnostic(
-          "unsupported-element-parameter",
-          f"unsupported key {item.name!r} in element block {block.name!r}",
-          item.source,
-        ),
-      )
-      sound = False
-  if material_block is None:
-    diagnostics.append(
-      _diagnostic(
-        "missing-material-parameter",
-        f"element block {block.name!r} has no material block",
-        block.source,
-      ),
-    )
-    return None
-
-  material_type: str | None = None
-  for item in material_block.items:
-    if type(item) is _ProAssignment and item.name == "type":
-      raw = item.value.value
-      material_type = raw if type(raw) is str else None
-  law_parameters = _INTERFACE_LAW_PARAMETERS.get(material_type or "")
-  if law_parameters is None:
-    diagnostics.append(
-      _diagnostic(
-        "unsupported-material-model",
-        f"material model {material_type!r} on an Interface element is outside "
-        "the supported deck subset ('XuNeedleman', 'PowerLawModeI', "
-        "'ThoulessModeI', and 'Dummy' only)",
-        material_block.source,
-      ),
-    )
-    sound = False
-  parameters, params_sound = _block_number(
-    material_block,
-    "material",
-    extra_code="unsupported-material-parameter",
-    allowed=frozenset(("type", *(law_parameters or ()))),
-    diagnostics=diagnostics,
-  )
-  sound = sound and params_sound
-  if law_parameters is None:
-    return None
-  missing = set(law_parameters) - set(parameters)
-  if missing:
-    diagnostics.append(
-      _diagnostic(
-        "missing-material-parameter",
-        f"material block in {block.name!r} misses {sorted(missing)}",
-        material_block.source,
-      ),
-    )
-    sound = False
-  if not sound:
-    return None
-  ordered: list[tuple[str, float, SourceContext]] = []
-  for name in law_parameters:
-    value, value_source = parameters[name]
-    if value <= 0.0:
-      diagnostics.append(
-        _diagnostic(
-          "invalid-material-parameter-value",
-          f"interface law {material_type!r} parameter {name!r} must be positive",
-          value_source,
-        ),
-      )
-      sound = False
-    ordered.append((name, value, value_source))
-  if material_type == "ThoulessModeI" and sound:
-    d1d3 = parameters["d1d3"][0]
-    d2d3 = parameters["d2d3"][0]
-    if not d1d3 < d2d3 < 1.0:
-      diagnostics.append(
-        _diagnostic(
-          "invalid-material-parameter-value",
-          "interface law 'ThoulessModeI' requires 0 < d1d3 < d2d3 < 1 for "
-          "the rise/plateau/softening branches",
-          parameters["d1d3"][1],
-        ),
-      )
-      sound = False
-  if not sound:
-    return None
-  return _InterfaceProfile(
-    law=material_type,
-    parameters=tuple(ordered),
-    source=material_block.source,
-  )
-
-
-def _interface_declaration(
-  group: str,
-  profile: _InterfaceProfile,
-  deck: _DatDeck,
-) -> InterfaceDeclaration:
-  """Build one interface group's declaration from its validated profile."""
-  interface_ids: list[int] = []
-  node_quads: list[tuple[int, int, int, int]] = []
-  for element in deck.elements:
-    if element.group != group:
-      continue
-    interface_ids.append(element.id)
-    node_quads.append(tuple(element.node_ids))
-  values = {name: value for name, value, _ in profile.parameters}
-  if profile.law == "Dummy":
-    return dummy_interface_declaration(
-      block_id=group,
-      space_id=_FIELD_ID,
-      interface_ids=tuple(interface_ids),
-      node_quads=tuple(node_quads),
-      stiffness=values["D"],
-      state_schema=_INTERFACE_STATE_SCHEMA,
-      source=profile.source,
-    )
-  if profile.law == "ThoulessModeI":
-    return thouless_mode_i_declaration(
-      block_id=group,
-      space_id=_FIELD_ID,
-      interface_ids=tuple(interface_ids),
-      node_quads=tuple(node_quads),
-      fracture_energy=values["Gc"],
-      ultimate_traction=values["Tult"],
-      d1d3=values["d1d3"],
-      d2d3=values["d2d3"],
-      state_schema=_INTERFACE_STATE_SCHEMA,
-      source=profile.source,
-    )
-  if profile.law == "PowerLawModeI":
-    return power_law_mode_i_declaration(
-      block_id=group,
-      space_id=_FIELD_ID,
-      interface_ids=tuple(interface_ids),
-      node_quads=tuple(node_quads),
-      fracture_energy=values["Gc"],
-      ultimate_traction=values["Tult"],
-      state_schema=_INTERFACE_STATE_SCHEMA,
-      source=profile.source,
-    )
-  return xu_needleman_declaration(
-    block_id=group,
-    space_id=_FIELD_ID,
-    interface_ids=tuple(interface_ids),
-    node_quads=tuple(node_quads),
-    fracture_energy=values["Gc"],
-    ultimate_traction=values["Tult"],
-    state_schema=_INTERFACE_STATE_SCHEMA,
-    source=profile.source,
-  )
-
-
-def _check_interface_arities(
-  group: str,
-  rank: int,
-  elements: tuple[_DatElement, ...],
-  diagnostics: list[SpecDiagnostic],
-) -> None:
-  """Require four-node (bottom pair, top pair) interface cells on a 2D mesh."""
-  for element in elements:
-    if element.group != group:
-      continue
-    if (rank, len(element.node_ids)) not in _INTERFACE_GEOMETRIES:
-      diagnostics.append(
-        _diagnostic(
-          "unsupported-cell-arity",
-          f"element {element.id} has {len(element.node_ids)} nodes on a "
-          f"{rank}D mesh; interface elements require four nodes (a bottom "
-          "pair and a top pair) on a 2D mesh",
-          element.source,
-        ),
-      )
-
-
 def _element_profile(
   block: _ProBlock,
   diagnostics: list[SpecDiagnostic],
@@ -2156,7 +1730,6 @@ def _element_profile(
       element_type = raw if type(raw) is str else None
   family: _MaterialProfile | None = None
   spring: _SpringProfile | None = None
-  interface: _InterfaceProfile | None = None
   if element_type == "SmallStrainContinuum":
     family = _continuum_family(block, diagnostics)
   elif element_type == "FiniteStrainContinuum":
@@ -2165,15 +1738,13 @@ def _element_profile(
     family = _truss_family(block, diagnostics)
   elif element_type == "Spring":
     spring = _spring_profile(block, diagnostics)
-  elif element_type == "Interface":
-    interface = _interface_family(block, diagnostics)
   else:
     diagnostics.append(
       _diagnostic(
         "unsupported-element-type",
         f"element type {element_type!r} is outside the supported deck subset "
-        "('SmallStrainContinuum', 'FiniteStrainContinuum', 'Truss', "
-        "'Spring', and 'Interface' only)",
+        "('SmallStrainContinuum', 'FiniteStrainContinuum', 'Truss', and "
+        "'Spring' only)",
         block.source,
       ),
     )
@@ -2182,7 +1753,6 @@ def _element_profile(
     element_type=element_type,
     family=family,
     spring=spring,
-    interface=interface,
     source=block.source,
   )
 
@@ -2963,13 +2533,7 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
       if (group_profile := profiles.get(group)) is not None
       and group_profile.element_type == "Spring"
     )
-    interface_groups = tuple(
-      group
-      for group in groups
-      if (group_profile := profiles.get(group)) is not None
-      and group_profile.element_type == "Interface"
-    )
-    declaration_groups = spring_groups + interface_groups
+    declaration_groups = spring_groups
     region_groups = tuple(group for group in groups if group not in declaration_groups)
     if dat_deck.elements and len(region_groups) != 1:
       diagnostics.append(
@@ -2977,14 +2541,12 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
           "unsupported-element-groups",
           f"the mesh declares {len(region_groups)} region-routed element groups "
           f"{region_groups}; the supported deck subset covers exactly one "
-          "region-routed group plus any number of 'Spring' and 'Interface' "
-          "groups",
+          "region-routed group plus any number of 'Spring' groups",
           dat_deck.elements[0].source,
         ),
       )
     geometries: dict[str, _GeometryProfile | None] = {}
     spring_declarations: dict[str, SpringDeclaration] = {}
-    interface_declarations: dict[str, InterfaceDeclaration] = {}
     for group in groups:
       profile = profiles.get(group)
       if profile is None:
@@ -3015,17 +2577,6 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
             )
             if declaration is not None:
               spring_declarations[group] = declaration
-        continue
-      if profile.interface is not None:
-        if rank in _SUPPORTED_MESH_RANKS:
-          recorded = len(diagnostics)
-          _check_interface_arities(group, rank, dat_deck.elements, diagnostics)
-          if len(diagnostics) == recorded:
-            interface_declarations[group] = _interface_declaration(
-              group,
-              profile.interface,
-              dat_deck,
-            )
         continue
       if profile.family is None:
         geometries[group] = None
@@ -3097,28 +2648,6 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
           ),
         ),
       )
-    if dat_deck is not None:
-      for name in interface_groups:
-        profile = profiles[name]
-        if profile.interface is not None and profile.interface.law != "Dummy":
-          diagnostics.append(
-            _diagnostic(
-              "incompatible-solver-type",
-              f"a deck with 'Interface' group {name!r} on the nonlinear law "
-              f"{profile.interface.law!r} requires a NonlinearSolver or "
-              "RiksSolver block: the legacy LinearSolver assembles the "
-              "zero-state tangent once, while the v3 driver integrates the "
-              "cohesive residual by Newton iteration — the combination has "
-              "no faithful mapping (the linear 'Dummy' law converts, since "
-              "its assembled response is frame-independent and the single "
-              "linear solve is exact)",
-              (
-                pro_deck.solver_block.source
-                if pro_deck.solver_block is not None
-                else profile.source
-              ),
-            ),
-          )
 
   if diagnostics:
     raise DeckConversionError(tuple(diagnostics))
@@ -3143,7 +2672,6 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
     else pro_source,
   )
   springs = tuple(spring_declarations[name] for name in spring_groups)
-  interfaces = tuple(interface_declarations[name] for name in interface_groups)
   family = profile.family
   if family.registry_kind == "plasticity":
     registry = plasticity_reference_registry()
@@ -3168,7 +2696,6 @@ def read_legacy_deck(path: Path | str) -> ConvertedDeck:
     solver=settings,
     not_converted=tuple(not_converted),
     springs=springs,
-    interfaces=interfaces,
   )
 
 
@@ -3178,12 +2705,6 @@ def compile_deck(deck: ConvertedDeck) -> CompiledDeck:
     msg = "compile_deck requires an exact ConvertedDeck"
     raise TypeError(msg)
   system = compile_system(deck.model, deck.registry, springs=deck.springs)
-  for declaration in deck.interfaces:
-    interface_block, interface_operator = compile_interface_operator(
-      system,
-      declaration,
-    )
-    system = compose_interface_system(system, interface_block, interface_operator)
   constraint_map = compile_constraint_map(
     system,
     constraints=deck.program.constraints,

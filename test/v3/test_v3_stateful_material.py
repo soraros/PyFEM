@@ -5,8 +5,8 @@
 The parameterized-width mock law in this module is the ABI future-proofing
 witness: it compiles through the same generic stateful path as the shipped
 isotropic-hardening law with no compiler changes, its slot widths resolve from
-spec parameters (the ViscoElasticity ``6 * nterms + 7`` shape), and its nonzero
-initial state rows reach the transaction owner unchanged.
+spec parameters, and its nonzero initial state rows reach the transaction owner
+unchanged.
 """
 
 from __future__ import annotations
@@ -273,30 +273,30 @@ def test_slot_resolution_fixed_and_parameter_computed_widths() -> None:
     ("kappa", 1),
   ]
   assert slots[2].annotation == "monotone-nondecreasing"
-  # The Crystal-style 4 * nslip + 7 shape resolves through the same fields.
-  crystal_slots = resolve_material_state_slots(
+  # A four-series parameter-computed layout resolves through the same fields.
+  parameterized_slots = resolve_material_state_slots(
     [
       {
-        "name": f"slip_{name}",
-        "width": {"parameter": "slip_system_count"},
+        "name": f"component_{name}",
+        "width": {"parameter": "series_count"},
         "dtype": "float64",
         "lifetime": "accepted-trial",
       }
-      for name in ("tau_c", "gamma", "tau", "gamma_cum")
+      for name in ("first", "second", "third", "fourth")
     ]
     + [
       {"name": "sigma", "width": 6, "dtype": "float64", "lifetime": "accepted-trial"},
       {
-        "name": "gamma_total",
+        "name": "total",
         "width": 1,
         "dtype": "float64",
         "lifetime": "accepted-trial",
         "annotation": "monotone-nondecreasing",
       },
     ],
-    {"slip_system_count": 12.0},
+    {"series_count": 12.0},
   )
-  assert [slot.width for slot in crystal_slots] == [12, 12, 12, 12, 6, 1]
+  assert [slot.width for slot in parameterized_slots] == [12, 12, 12, 12, 6, 1]
 
 
 def test_slot_resolution_rejects_invalid_declarations() -> None:
