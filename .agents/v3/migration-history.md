@@ -4075,3 +4075,46 @@ not regenerated from the deleted implementation.
 Reintroduction of a result-auditing convenience API requires a maintained
 consumer and must read the accepted driver records. It must not restore the
 retired execution carriers or their second solve/verification implementation.
+
+
+## NX7-3P bounded Q8-linear performance falsification abandoned
+
+M126 ran the single performance-first vertical from `c4930cf`, not from M123's
+tip. It established fresh equivalent array/deck envelopes before implementation,
+then tested one integrated candidate using deferred semantic export, lazy
+columnar source views, fused Q8 tangent reuse, batched raw-checked geometry,
+compact owned indices, selector-only reductions, and explicit plan injection. No
+prototype file was edited, no global weak cache or second runtime was introduced,
+and no full baseline or historical benchmark JSON was changed.
+
+The complete 2x2/8x8/32x32, PlaneStress/PlaneStrain, 1T/16T matrix and pre-candidate
+stage envelopes are recorded in
+[migration-execution.md](migration-execution.md#nx7-3p-bounded-falsification-outcome--abandoned).
+Every comparable fresh-e2e cell failed both the 1.25 ratio and 1 ms absolute
+allowances. At 32x32, candidate/prototype fresh array e2e was 169.5545/54.2631,
+170.9830/48.8930, 173.4316/47.0801, and 176.9210/46.1985 ms for PlaneStress 1T/16T
+and PlaneStrain 1T/16T, respectively. Fresh deck e2e was 208.2232/63.4111,
+199.6740/62.8428, 195.2032/61.1287, and 209.6066/62.5330 ms. Generic load was
+120.2872--134.1498 ms and plan+cached-plan solve 75.7381--78.4380 ms, all far
+outside the 12.3889 ms load and 54.9259 ms total budgets.
+
+Correctness did not rescue the candidate: cached/cold states were raw-identical,
+all 1T/16T state and tangent hashes matched, iteration/factorization counts stayed
+at 2/1, and COO exactly matched the prototype in every cell. Measured memory still
+exceeded the prototype everywhere (36.686--36.747 MiB versus 10.063 MiB at 32x32),
+and unified-zero-diff complexity was +340 production and -134 test nonblank lines
+against `fbb72fa`, so production did not fall. Fused maximum absolute tangent
+deviation was 1.863e-9 at 32x32; raw old/new arithmetic equality was not claimed.
+
+The focused identity/Q8/constraint/driver-plan suite passed 124 tests. The hard
+stop nevertheless required abandonment. All candidate production, test, harness,
+and generated artifacts were removed before documentation. Current production and
+the prototype remain unchanged; there is no deletion candidate, partial migration,
+baseline successor, or follow-up optimization mission. NX7-4+ remain stopped.
+
+
+Restored-tree verification for the documentation-only outcome passed 1,156 tests
+plus 12 subtests in each complete repository digit-mode run, the headless
+notebook, `python -m bench.run gates` with zero failures, and every bare/per-tree
+Ruff check/format gate. These are baseline-code controls, not candidate acceptance
+evidence.

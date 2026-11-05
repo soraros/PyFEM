@@ -2,8 +2,9 @@
 
 Live state reset on 2026-11-06 against `v3` at `fbb72fa`, after M123's
 evidence-backed abandonment and M124's read-only performance-first survey. M125
-records that charter correction without changing implementation or benchmark
-artifacts. This file is the only current implementation queue.
+recorded that charter correction without changing implementation or benchmark
+artifacts. M126 subsequently executed and abandoned the sole bounded falsification
+vertical; this file records its evidence and the remaining stopped queue.
 
 This charter supersedes M119's preserve-and-consolidate framing, the former
 parity-era dispatch in this file, the original NX7-3 generic-only deletion
@@ -109,7 +110,112 @@ vertical must not run or promote a new full baseline.
 reused selectively and which are rejected wholesale. Reuse does not rehabilitate
 the abandoned branch or authorize another sequence of micro-optimization rounds.
 
-## NX7-1 implementation and acceptance record
+## NX7-3P bounded falsification outcome — abandoned
+
+M126 executed the single bounded vertical from `c4930cf` and **abandoned it on
+measured evidence**. The candidate, its focused harness, and all generated timing
+artifacts were removed; current production and the specialized prototype remain
+unchanged. There is no deletion candidate, no partial consumer migration, and no
+follow-up cache/lifecycle/runtime/attribution/micro-optimization round.
+
+### Honest pre-candidate envelopes
+
+The untouched baseline was measured at 2x2/8x8/32x32 for both materials at 1T and
+16T. Programmatic arrays entered prototype `pack`/fresh solve and generic
+spec/compile/map/fresh driver independently. Identical generated decks entered
+the v3 prototype public loader/solver, the generic public reader/compiler/driver,
+and the legacy control. Each fresh solve assembled and factorized from its packed
+or compiled input; no solve-from-assembled timing was used as an acceptance cell.
+The baseline generic driver had no injectable cached-plan envelope; that stage
+was reported as unavailable rather than filled with a weak cache.
+
+Representative 1T baseline values (ms), with deck read, compile, cold plan, first
+solve, and complete fresh deck e2e separated, were:
+
+| Size/material | Array prototype/generic e2e | Deck read | Compile | Cold plan | First solve | Fresh deck e2e | Prototype deck e2e |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2x2 PlaneStress | 0.7800 / 54.4293 | 1.9970 | 39.7300 | 1.3320 | 3.0841 | 44.5122 | 1.2743 |
+| 2x2 PlaneStrain | 0.7704 / 50.1113 | 2.4830 | 40.8700 | 1.3492 | 3.0174 | 44.4614 | 1.2338 |
+| 8x8 PlaneStress | 2.4528 / 111.6052 | 4.6330 | 89.1250 | 12.3790 | 17.8003 | 115.1898 | 3.5575 |
+| 8x8 PlaneStrain | 2.4797 / 114.3528 | 5.6780 | 92.1500 | 12.5233 | 18.7481 | 114.8501 | 3.7975 |
+| 32x32 PlaneStress | 55.5327 / 1411.5800 | 45.2660 | 986.9480 | 267.3357 | 432.2861 | 1445.1778 | 72.6660 |
+| 32x32 PlaneStrain | 50.1155 / 1387.9006 | 46.4430 | 984.7140 | 280.9428 | 372.9354 | 1418.0507 | 68.7551 |
+
+The 16T baseline cells were also measured and had the same structural failure;
+they were not replaced by historical M123 values. Baseline 32x32 generic COO used
+int64 and occupied 6 MiB with values, and fresh-array tracemalloc was 83.26 MiB
+versus 10.05 MiB for the prototype.
+
+### Integrated candidate and focused matrix
+
+The one candidate used selective normalization fast paths, validation-once
+registry resolution, deferred normalized-recipe export/fingerprints, columnar
+and lazy source views, raw-checked batched Q8 geometry, the existing fused Numba
+Q8 tangent with immutable reuse, lazy diagnostic B/gradient recovery,
+range-appropriate int32 system/map/plan arrays, internal owned-array adoption,
+selector-only reductions, and explicit validated plan injection. It did not use
+a weak global cache, public `PreparedExecution`, a second runtime, a wholesale V2
+manifest, or a prototype fallback. The 124 focused identity/Q8/constraint/driver
+plan tests passed before the full matrix.
+
+Candidate/prototype fresh e2e medians are shown for both equivalent envelopes.
+Generic load is deck read plus compile; plan+cached is cold plan plus a fresh
+driver solve with the explicitly owned injected plan. All values are milliseconds.
+
+| Size/material | Threads | Array candidate/prototype | Deck candidate/prototype | Generic load | Plan+cached solve |
+|---|---:|---:|---:|---:|---:|
+| 2x2 PlaneStress | 1 | 14.4013 / 0.8474 | 14.3941 / 1.2778 | 13.2044 | 1.2098 |
+| 2x2 PlaneStress | 16 | 14.9751 / 1.2140 | 15.8598 / 1.7299 | 14.0231 | 1.2617 |
+| 2x2 PlaneStrain | 1 | 16.9415 / 0.8992 | 16.2602 / 1.2980 | 14.6842 | 1.2699 |
+| 2x2 PlaneStrain | 16 | 16.2086 / 1.2135 | 17.1842 / 1.6581 | 14.7385 | 1.2911 |
+| 8x8 PlaneStress | 1 | 23.1184 / 2.3304 | 23.8988 / 4.4322 | 20.7355 | 3.9713 |
+| 8x8 PlaneStress | 16 | 22.6100 / 2.8847 | 31.8497 / 4.7681 | 21.6346 | 4.2755 |
+| 8x8 PlaneStrain | 1 | 23.0743 / 2.1630 | 26.0545 / 4.3899 | 20.8887 | 4.0661 |
+| 8x8 PlaneStrain | 16 | 24.5067 / 2.7115 | 26.4150 / 5.1148 | 22.9144 | 4.0604 |
+| 32x32 PlaneStress | 1 | 169.5545 / 54.2631 | 208.2232 / 63.4111 | 120.2872 | 76.0956 |
+| 32x32 PlaneStress | 16 | 170.9830 / 48.8930 | 199.6740 / 62.8428 | 121.4704 | 75.7381 |
+| 32x32 PlaneStrain | 1 | 173.4316 / 47.0801 | 195.2032 / 61.1287 | 123.1377 | 76.8481 |
+| 32x32 PlaneStrain | 16 | 176.9210 / 46.1985 | 209.6066 / 62.5330 | 134.1498 | 78.4380 |
+
+Every comparable fresh-e2e cell fails both `ratio <= 1.25` and `delta <= 1 ms`.
+At 32x32 every generic load exceeds 12.3889 ms, every fresh e2e exceeds 54.9259
+ms, and every plan+cached total also exceeds the remaining budget after measured
+load. No cell was omitted or waived.
+
+### Correctness, memory, complexity, and decision
+
+- Cached/cold accepted states were raw-identical, with two iterations and one
+  factorization in every cell. Generic-versus-legacy maximum absolute state
+  deviation ranged from 1.084e-19 to 9.948e-18. Fused-versus-original-contraction
+  maximum absolute tangent deviation was 9.313e-10 at 2x2/8x8 and 1.863e-9 at
+  32x32; raw old/new arithmetic equality was not claimed.
+- All six size/material pairs had identical generic 1T/16T accepted-state and
+  tangent SHA-256 hashes. This is candidate-internal determinism evidence, not a
+  claim of raw equality with the prototype.
+- COO exactly matched the prototype in all cells: 16,384 bytes at 2x2, 262,144 at
+  8x8, and 4,194,304 at 32x32. Tracemalloc nevertheless exceeded the prototype
+  everywhere: PlaneStress 0.379/0.038, 2.522/0.586, and 36.686/10.063 MiB;
+  PlaneStrain 0.411/0.038, 2.544/0.586, and 36.747/10.063 MiB by increasing
+  size. RSS high-water measurements were kept distinct from tracemalloc.
+- Unified-zero-diff nonblank accounting against `fbb72fa`, excluding only the
+  focused benchmark rewrite, was **+340 production** and **-134 v3-test** lines.
+  Production did not fall, so the complexity gate failed independently.
+
+After restoring the tree, both complete repository digit-mode runs passed **1,156
+tests plus 12 subtests each** (151.70 s normal and 103.71 s with
+`PYTHONINTMAXSTRDIGITS=640`). The headless notebook assertion passed,
+`python -m bench.run gates` reported **0 failures** including the Q8, legacy,
+FE², J2, total-Lagrangian, and Riks controls, and every bare/per-tree Ruff
+check/format invocation passed. These are restored-baseline controls for the
+documentation-only final diff, not candidate acceptance evidence.
+
+Performance, measured memory, and production complexity all fail. Correctness and
+COO cannot compensate. M126 therefore ends without merge, without a deletion
+candidate, and without a full baseline or baseline successor. Historical
+`baseline_m3.json` and all historical benchmark JSON remain unchanged. NX7-4+
+remain stopped; the next safe action is independent source-to-charter review of
+this negative result, not another implementation round.
+
 
 Atomic implementation commit: `288e5f3`.
 
@@ -211,24 +317,16 @@ source-to-charter review of the deletion, proof migration, and R1 correction.
 
 ## Exact next safe action
 
-Execute only **NX7-3P — one bounded Q8-linear performance-first falsification
-vertical** (M126), starting from the `fbb72fa` architecture rather than M123's
-tip. First establish honest equivalent benchmark envelopes, then build one
-integrated candidate under the acceptance and abandonment contract in
-[generic_core.md](generic_core.md) and section 5 below. The prototype is neither
-edited nor deleted in this vertical, and no full baseline is run or promoted.
+M126 has completed and **abandoned NX7-3P** on measured performance, memory, and
+production-complexity failures. Review the complete negative record above against
+the charter independently. The candidate and all temporary artifacts were removed;
+current production and the specialized prototype are unchanged. No deletion
+candidate, full baseline, baseline successor, or partial migration was created.
 
-NX7-4+ remain stopped. No parallel cache, lifecycle, runtime, attribution, or
-other micro-optimization mission is authorized. Any focused correctness,
-performance, memory, or complexity failure, or any need for another remediation
-round, abandons the vertical without merging it and leaves current production
-unchanged. Only a complete focused pass may authorize a separate deletion
-candidate and its mandatory full clean matched candidate/control run.
-
-Update this file with the actual focused evidence and either that narrowly
-authorized deletion candidate or the abandonment decision. Never leave a deleted
-capability documented as supported or present temporary prototype retention as
-approval of a permanent second runtime.
+NX7-4+ remain stopped. Do not start another cache, lifecycle, runtime,
+attribution, or micro-optimization round, and do not reinterpret the focused
+correctness or COO evidence as acceptance. A future vertical requires a new
+evidence-backed charter, not a retry of M126.
 
 ## 1. North star and the change of axis
 
@@ -622,10 +720,11 @@ constant-tangent reuse, full/reduced residual, and rejected-attempt byte identit
 pass. Run `bench.run gates`; require no FE²/family numerical change. Both full
 suites and Ruff are mandatory. No performance baseline is promoted for a deletion.
 
-### NX7-3P — one bounded Q8-linear performance falsification vertical
+### NX7-3P protocol record — closed with M126 abandonment
 
-This is the only authorized implementation program. Start from `fbb72fa`, not
-from M123's tip, and do not run parallel optimization missions.
+This was the only authorized implementation program. M126 executed it once from
+`c4930cf` (whose implementation is `fbb72fa`) and abandoned it; the protocol below
+is retained as the falsification contract, not as a live work queue.
 
 1. Establish equivalent envelopes before optimization: programmatic arrays ->
    prototype `pack`/solve versus arrays -> generic spec/compile/driver, and
