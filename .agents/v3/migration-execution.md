@@ -274,8 +274,12 @@ legacy-only documentation:
 
 - In `examples/materials/viscoplasticity/README.md`, remove the live section
   "True backward-Euler Perzyna physics in v3" and its authoring example, and link
-  the remaining legacy deck README to the retirement entry. Preserve the legacy
-  deck's rate-independent explanation and negative control.
+  the remaining legacy deck README to the retirement entry. Apply the same
+  removal or historical demotion to
+  `examples/materials/viscoplasticity/bar_tension.pro:33-34`, whose shipped
+  comment says the separate v3 law implements true rate physics, so no stale
+  support statement survives. Preserve the legacy deck's rate-independent
+  explanation and negative control.
 - In `doc/materials/viscoplasticity.md`, remove the v3 mapping claims and the
   complete "True v3 `backward-euler-perzyna`" section, including its live
   authoring contract. Retain a legacy-only `ViscoPlasticity` page; demote the v3
@@ -306,12 +310,13 @@ locations rather than merely saying "see Git":
   sections; Peirce/Asaro/Needleman (1983, DOI
   `10.1016/0001-6160(83)90014-7`); Kocks and Mecking (2003, DOI
   `10.1016/S0079-6425(02)00003-8`); and
-  `test_v3_crystal_plasticity.py::{test_single_slip_analytical_hardening_response,test_sympy_implicit_return_map_derivative,test_full_tangent_fd_conviction_and_measured_class,test_elastic_limits_are_exact,test_two_system_competition_uses_the_complete_fcc_family,test_compiled_layout_derived_dtime_and_driver_commit}`.
+  `test_v3_crystal_plasticity.py::{test_single_slip_analytical_hardening_response,test_sympy_implicit_return_map_derivative,test_full_tangent_fd_conviction_and_measured_class,test_elastic_limits_are_exact,test_state_transactions_and_typed_rejections,test_two_system_competition_uses_the_complete_fcc_family,test_compiled_layout_derived_dtime_and_driver_commit}`.
   State explicitly that removed legacy `Crystal.py` is not a numerical oracle:
   conviction comes from literature, analytical single-slip response, SymPy,
   finite differences and tampered-tangent controls, elastic limits, transaction
-  isolation, full-family competition, and the compiled-driver derived-`dtime`
-  path, not legacy arithmetic.
+  isolation (input purity, repeated evaluation, committed-state isolation, and
+  typed rejection), full-family competition, and the compiled-driver
+  derived-`dtime` path, not legacy arithmetic.
 - For SOVS, cite `doc/materials/sovs.md` "References" (Skorohod 1972 and
   Olevsky 1998), the documented M67/M76 tangent-repair history, and
   `test_v3_sovs.py::{test_activated_tangent_repair_confirmed_by_fd,test_kernel_tangent_is_the_exact_stress_map_derivative_by_fd,test_symbolic_jacobian_confirms_the_closed_form}`.
@@ -350,7 +355,8 @@ must explain the unexpected scientific gain and amend this charter before merge.
    independent-oracle, and non-legacy crystal verification location, plus the
    retained multi-space test.
 2. Apply D3, including the named edits to
-   `examples/materials/viscoplasticity/README.md`,
+   `examples/materials/viscoplasticity/README.md` and
+   `examples/materials/viscoplasticity/bar_tension.pro:33-34`,
    `doc/materials/{viscoplasticity,crystal_plasticity,sovs}.md`, the crystal
    historical move, and `doc/materials/overview.md`. Remove all exports,
    registry defaults, and deck support in the same commit. No rejected deck may
