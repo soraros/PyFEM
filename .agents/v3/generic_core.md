@@ -1,9 +1,9 @@
 # PyFEM v3 generic semantic core
 
 - Status: **authoritative architecture amendment**
-- Decision date: 2026-08-16
+- Decision date: 2026-08-16; NX8 coherent-specialization amendment: 2026-11-06
 - Scope: the semantic intermediate representation, extension model, trust boundary,
-  and the completed proof portfolio that qualified the production cut
+  the completed proof portfolio, and the durable specialized-production boundary
 - Supersedes: the fixed `topology + quadrature + formulation + material + section`
   decomposition as a core contract; the frozen P2-A through P2-G execution plan
 - Retains: the ownership, identity, state-transaction, contribution-ledger, and
@@ -86,33 +86,30 @@ The core representation is a compiled discrete system:
 authored cases and adapters
         |
         v
-normalized declarations
+normalized ModelSpec + ProgramSpec
         |
         v
-compiler --------------------------------------------------+
-        |                                                   |
-        v                                                   v
-CompiledSystem                                      CompiledProgram
-  entity blocks                                       signals
-  discrete spaces                                     coordinate maps
-  operator blocks                                     program operators
-  state layout                                        initial/evolution data
-  observations
-        |                                                   |
-        +---------------------- join -----------------------+
-                               |
-                               v
-                     PreparedExecution
-                       execution schedule
-                       gather/scatter and sparse plans
-                       backend workspace policy
-                       effective capabilities
-                               |
-                               v
-                    Analysis + state transaction
-                               |
-                               v
-                  accepted result + verification
+compile_system
+        |
+        v
+CompiledSystem
+  entity blocks + discrete spaces
+  operator blocks + specialized payloads
+  channels + state layout + observations
+        |
+        v
+CompiledConstraintMap + DriverAssemblyPlan
+  affine coordinates + signals/loads
+  gather/scatter + sparse/action plans
+        |
+        v
+NonlinearStaticDriver or RiksDriver
+  StateTransactionOwner + nested resources
+  disposable backend workspace
+        |
+        v
+accepted records + solve-free observations
+  independent numerical verification
 ```
 
 Six concepts form the stable **numerical** semantic IR. Input adapters, application
@@ -241,17 +238,18 @@ process or run boundaries, including ROM bases, are versioned artifacts with sch
 content identity, source/target-space identity, implementation compatibility, and
 restore validation; they are not anonymous arrays.
 
-A compiled program owns:
+A normalized `ProgramSpec` declares:
 
 - named typed signals such as time, load, continuation, and environmental values;
 - fixed coordinate maps and parameter-dependent offsets;
-- program-owned operator blocks such as nodal, boundary, body, follower, and
-  interaction contributions;
+- program-owned contributions such as nodal, boundary, body, follower, and
+  interaction terms;
 - initial conditions and signal schedules; and
-- program/interaction state layouts when behavior itself has history.
+- program/interaction state declarations when behavior itself has history.
 
 Model-owned and program-owned operator blocks share the same evaluation contract;
-their ownership and lifetime remain distinct.
+their ownership and lifetime remain distinct. Program declarations do not require
+a separate compiled-program runtime.
 
 ### 3.6 State, execution, and observation
 
@@ -260,10 +258,12 @@ accepted state by block. The core does not divide local state into mandatory
 “material” and “formulation” arrays. A descriptor may expose named sublayouts for
 diagnostics, but atomic trial/commit applies to the whole operator-owned state row.
 
-Prepared execution joins model, program, request, coordinate maps, operator
-couplings, and backend policy. It owns the execution schedule, sparse/action plans,
-gather/scatter slots, caches, and mutable scratch. It owns no authoritative
-accepted physical history.
+`DriverAssemblyPlan` binds the exact system, coordinate map, loads, signals, and
+operator couplings into immutable sparse/action and gather/scatter preparation.
+Drivers own execution schedules and disposable mutable scratch; nested execution
+owns its declared resources. `StateTransactionOwner` alone owns authoritative
+accepted physical history. These existing owners are the prepared-execution
+boundary; no public `PreparedExecution` aggregates their lifetimes.
 
 Observations are solve-free typed projections or reductions from accepted spaces,
 operator state, and attributed ledgers. Stress recovery, failure criteria,
@@ -454,21 +454,27 @@ design.
 
 ## 10. Structural success bar
 
-The generic path is not accepted because its diagrams look cleaner. It must show:
+This was the proof-era acceptance bar, not a live NX8 deletion queue. The generic
+path was not accepted because its diagrams looked cleaner; it had to show:
 
 - executable representation of Proof A and B before broad feature work;
 - no concrete operator import or type-name branch in analysis/result code;
 - one validation pass per authority boundary, with no compiler-private recursive
   model validator imported by assembly or results;
-- a causal deletion map for Q8-only carrier, replay, and repeated-validation code;
+- a causal deletion map for the superseded Q8-only frozen carrier, replay, and
+  repeated-validation code;
 - retained Phase 1 numerical, balance, ownership, transaction, and fresh-result
   evidence;
 - representative allocation/runtime measurements before hot-path specialization;
   and
 - at least two unlike legacy families added without changing the six IR concepts.
 
-Reference implementations may coexist during development. Acceptance requires a
-public migration and deletion path that leaves one maintained semantic core.
+The proof used reference coexistence during development and a later public
+migration/deletion path to reach one maintained semantic core. Section 13
+supersedes any extension of that proof-era requirement into generic-only
+prototype deletion: specialized production coexistence can be durable, and NX8
+acceptance requires scientific usefulness and matched evidence rather than a
+deletion commitment.
 
 ## 11. Completed bounded simplification
 
@@ -532,143 +538,147 @@ belongs only in [migration-execution.md](migration-execution.md).
   to a bounded simplification pass; the production vertical cut remains a later,
   separately frozen decision.
 
-## 13. NX7-3R performance-first reset and falsification contract
+## 13. NX8 coherent specialization and acceptance amendment
 
-This 2026-11-06 amendment records M123's abandonment and M124's negative
-architecture ruling. It supersedes any reading of the earlier proof portfolio
-that makes generic-only prototype deletion an independent success or assumes a
-credible generic redesign already exists. The exact execution frontier remains
-in [migration-execution.md](migration-execution.md).
+This 2026-11-06 amendment records the combined lesson of M123 and M126 and
+supersedes the NX7-3R performance-first deletion contract. It rejects any reading
+of the earlier proof portfolio that makes generic-only prototype deletion an
+independent success, treats specialized execution as temporary by definition, or
+assumes that a semantic diagram outranks measured scientific usefulness. The
+exact execution frontier and program gates remain in
+[migration-execution.md](migration-execution.md).
 
 M123's final generic fresh-e2e cost was 7.66x/12.77x/9.19x control at
 2x2/8x8/32x32, and its final nonblank reductions were 1,703 production and 1,471
-test lines against required floors of 1,800 and 1,500. This convicts the measured
-representation for the Q8-linear consumer; it does not convict generic semantics.
+test lines against its then-required floors. M126 improved substantially on its
+own generic base but failed every comparable fresh-e2e prototype cell, retained
+36.686--36.747 MiB traced at 32x32 versus 10.063 MiB for the prototype, and added
+340 production nonblank lines. Both candidates were abandoned without merge.
+These results convict generic-only deletion and the measured unspecialized
+representations; they do not convict the six semantic concepts.
+
 Sections 3.3 and 8.3 already require specialized payloads and array/scalar hot
-kernels. Eager derived-array identity, object-rich attribution, and
-unspecialized hot representations are implementation choices, not semantic laws.
+kernels. Eager derived-array identity, object-rich attribution, retained
+validation-only tensors, generic contractions, and repeated wide-index ownership
+are implementation choices, not semantic laws. NX8 applies that lesson without
+turning each failed optimization technique into a permanent prohibition.
 
-### 13.1 Production boundary and acceptable end state
+### 13.1 One semantic kernel, best specialized implementation
 
-The existing specialized prototype remains the production Q8/skim lane
-temporarily and unchanged. Existing generic FE²/damage/J2/TL/truss/spring/
-researcher-signal/Riks/notebook flows do not route through it. This is not a
-permanent dual-runtime decision and authorizes no new prototype consumer,
-fallback, compatibility facade, or partial consumer migration.
+The target is **one coherent scientific semantic kernel with the best measured
+specialized implementation for each job**. The generic spine retains normalized
+declarations, `CompiledSystem` entities/spaces/operators, typed specialized
+payloads/channels, `CompiledConstraintMap`, `DriverAssemblyPlan`, explicit state
+transactions, driver schedules, nested resources, and accepted observations.
+Concrete numerical layouts and fused evaluators vary by physics and measured
+cost; semantic coherence does not require one concrete class hierarchy.
 
-The only acceptable end state is **one generic semantic spine with selectively
-specialized numerical payloads and kernels**. A second compiler, solver, state
-owner, result stack, public `PreparedExecution`, or prototype fallback is not an
-acceptable implementation of that spine. The bounded falsification vertical does
-not edit or delete the prototype and does not itself authorize deletion.
+The existing specialized Q8/skim prototype remains supported production where it
+wins. Its retention is not labeled temporary and its deletion is not an NX8 goal
+or implied final step. Existing generic FE²/damage/J2/TL/truss/spring/
+researcher-signal/Riks/notebook flows remain on their truthful generic routes;
+NX8-1 does not reroute prototype or generic consumers. No compatibility facade
+may hide the distinction or dispatch opportunistically between the two.
 
-### 13.2 Honest equivalent envelopes before optimization
+A future consumer-backed proposal may reconsider route ownership only with fresh
+scientific, matched performance, memory, and complexity evidence. Similar
+mathematics alone does not make a measured specialized route duplicate ownership.
+No generic-only deletion or baseline successor is authorized by this amendment.
 
-Establish both comparisons before changing hot code:
+### 13.2 Durable dispositions
 
-1. programmatic arrays -> prototype `pack`/solve versus programmatic arrays ->
-   generic spec/compile/driver; and
-2. identical deck files -> each side's public loader/solver.
+- **KEEP** a scientifically supported implementation while its consumer and
+  independent evidence remain, including the prototype where it wins.
+- **SPECIALIZE** through typed payloads and hot kernels only when a public
+  end-to-end improvement is independently useful, matched against the exact
+  base, and reduces production and test complexity. A microkernel win or a later
+  deletion hypothesis is not enough.
+- **UNIFY or DELETE** only dead code or duplicate ownership with a named
+  surviving owner, retained independent oracles, lower complexity, and no
+  measured performance loss. Do not preserve importable reference runtimes or
+  forwarding facades.
+- **RE-EXPAND** through a maintained consumer and kernel-native features with
+  explicit equations, state timing, observations, diagnostics, and independent
+  evidence. Retired physics may return without restoring the M122 frozen
+  compiler/analysis/result vertical or another compatibility runtime.
 
-For each applicable envelope, report deck read, compile, cold plan, first solve,
-cached-plan solve, and complete fresh end-to-end cost, with cold/warm cache
-ownership explicit. A historical prototype solve-from-assembled cell and a fresh
-generic compile/driver cell are non-comparable context, never acceptance evidence.
-Do not rename an envelope, omit a stage, or use a weak global cache to manufacture
-apparent equivalence. Missing comparable cells are failures, not skipped passes.
+No public `PreparedExecution`, typed DSL, universal dictionary protocol, second
+accepted-state owner, second result/verification stack, weak global plan cache,
+or prototype fallback is an implementation of coherence. Explicit validated
+`DriverAssemblyPlan` reuse is preparation, not a new public lifecycle.
 
-### 13.3 Focused performance matrix and 32x32 budget
+### 13.3 Bounded Q8 specialization
 
-Every comparable cell at **2x2, 8x8, and 32x32**, for both **PlaneStress and
-PlaneStrain**, at **1 and 16 threads**, must satisfy the existing rule exactly:
+NX8-1 may improve the existing generic small-strain Q8 route in place using only:
 
-```text
-candidate_median / control_median <= 1.25 OR candidate_median - control_median <= 1 ms
-```
+1. the existing fused Q8 tangent kernel behind the same operator/channel
+   contract, with immutable linear tangent reuse;
+2. validation once at authored/normalization/compilation/restore authority
+   boundaries, while downstream code trusts exact compiler-owned values;
+3. explicit plan reuse after exact system/map identity, fingerprint, load, and
+   state compatibility validation, with ownership and lifetimes explicit;
+4. range-appropriate owned index arrays without duplicate copies, preserving
+   genuine MPC products, FE² maps, and canonical stable reductions; and
+5. lazy normalized-recipe/export/fingerprint materialization only when an actual
+   export, persistence, provenance, or diagnostic consumer requests it.
 
-A regression requires both ratio > 1.25 and absolute slowdown > 1 ms; neither
-part may be hidden by the other. The M124 control-derived maxima below are
-reporting anchors, not a substitute for evaluating each material/thread cell:
+No eager derived-array runtime manifest, validation-only B/gradient retention on
+the optimized linear path, or duplicate owned index arrays is compatible with
+this representation. Columnar entity/source rewrites, selector-only reductions,
+new offset fast paths, general attribution changes, and new serialization formats
+are outside NX8-1 rather than hidden follow-up work.
 
-| Size | Load maximum (ms) | Fresh-e2e maximum (ms) |
-|---|---:|---:|
-| 2x2 | 1.1704 | 1.9467 |
-| 8x8 | 1.9177 | 3.1784 |
-| 32x32 | 12.3889 | 54.9259 |
+The acceptance comparison is the exact generic base under equivalent
+programmatic-array and identical-deck public envelopes. Prototype measurements
+remain important production context but are not a deletion budget. A candidate
+must improve its declared 32x32 fresh public-e2e cells beyond repeated-base
+variability, avoid resolved losses elsewhere, keep logical index cost at or below
+the exact base while reducing measured memory, and reduce both production and
+v3-test nonblank complexity. It need not claim prototype parity to be independently useful, and
+such usefulness never forces prototype migration.
 
-At 32x32, require all of the following on the same measured envelope:
+### 13.4 Honest evidence and numerical floors
 
-- load <= **12.3889 ms**;
-- complete fresh e2e <= **54.9259 ms**; and
-- plan + cached-plan solve <= **54.9259 ms - measured_load**.
+Use matched base/candidate/base measurements on identical inputs, with the
+repeated base establishing per-cell variability. Report deck read, compile, cold
+plan, first solve, reused-plan solve, and complete fresh end-to-end costs without
+renaming envelopes or omitting stages. Logical bytes, `tracemalloc`, and RSS are
+distinct measurements. Missing comparable cells are failures, not skipped
+passes. The exact matrices, no-loss rule, memory requirements, and complexity
+accounting live in the execution charter and playbook.
 
-Thus, if load merely reaches 12.3889 ms, plan + solve must be <= **42.5370 ms**,
-compared with 153.5482 ms for those M123 stages. There is no averaging across
-sizes, materials, threads, or stages and no waiver for a near miss.
-
-### 13.4 Representation, COO, and memory ceilings
-
-The single integrated candidate may test only representation changes with a
-direct cost-model rationale:
-
-- semantic/export identity derived lazily from normalized recipes, with array
-  export/persistence work deferred until that boundary is actually requested;
-- columnar entity/source data rather than per-entity object-rich hot paths;
-- the existing fused Q8 numerical kernel behind the same operator contract, with
-  linear tangent reuse and no validation-only B/gradient tensors retained solely
-  for linear evaluation;
-- range-appropriate index widths and owned-array adoption without duplicate
-  owned copies; and
-- explicit validated plan injection/reuse with exact system/map identity,
-  fingerprint, and load validation, not a production global weak cache.
-
-Same-case COO logical bytes and measured candidate memory must not exceed the
-prototype, absent a documented index-range requirement. Record logical bytes,
-`tracemalloc`, and RSS as distinct quantities where used; none substitutes for
-another. No eager derived-array manifest copies are allowed. Any selector-only
-reduction requires proof that the compiled map is a selector; genuine MPC keeps
-its `P` products, and FE² maps are never special-cased by analogy. A
-single-coordinate offset fast path must be raw-equal to the existing
-`math.fsum` semantics or retain the scalar path.
-
-### 13.5 Raw correctness and retained-flow floors
-
-Zero correctness failures and full raw determinism are mandatory. Preserve:
+Zero correctness failures and full determinism remain mandatory. Preserve:
 
 - analytic Q4/T3/Q8/Hex8 and PatchTest8 oracles and independent legacy-v1
   parser/settings/coefficient-permutation controls;
 - affine MPC chain/cycle/overflow diagnostics, full/reduced balance,
   reactions/work, and constant-tangent iteration/factorization counts;
 - accepted/trial ownership and rejected-attempt byte identity;
-- raw 1T/nT CSR, state, and nested-payload identity; and
+- raw 1T/nT CSR, state, and nested-payload identity, using the documented
+  always-executed tolerance branch away from the reference platform; and
 - every retained FE²/damage/J2/TL/truss/spring/researcher-signal/Riks/notebook
   behavior, with M121 retirements and M122 deletions unchanged.
 
-Fused tangent/residual arithmetic needs a measured, documented numerical band,
-the existing independent analytic/legacy tolerances, and unchanged iteration and
-factorization counts. Never claim raw old/new arithmetic equality for fused
-evaluation. `bench.run gates`, the headless notebook, both complete digit-mode
+Fused tangent/residual arithmetic needs a measured documented numerical band and
+unchanged solve counts; never claim raw old/new arithmetic equality without
+proof. `bench.run gates`, the headless notebook, both complete digit-mode
 repository suites, and every exact and bare Ruff check/format invocation must
-pass on the same candidate commit. M123's earlier zero-correctness-failure
-artifacts do not satisfy this candidate's gates.
+pass on the same candidate commit. Correctness cannot compensate for performance,
+memory, or complexity failure.
 
-### 13.6 Complexity floors and mandatory abandonment
+### 13.5 No forced merge or remediation sequence
 
-Before any deletion is considered, the focused candidate's production **and**
-v3-test nonblank line counts must both fall relative to `fbb72fa`, using the
-unified-zero-diff method and excluding only an equivalent benchmark rewrite.
-A focused pass merely authorizes a separate deletion candidate; it does not
-delete the prototype automatically. That candidate must still remove **>=1,800
-production and >=1,500 v3-test nonblank lines** after the same exclusion, then
-pass a full clean matched reference-machine candidate/control run with complete
-coverage, zero missing cells, and zero correctness failures. Historical
-`baseline_m3.json` and benchmark history are never overwritten.
+Each NX8 program is one bounded candidate with its own preflight and independent
+source-to-charter review. Any missing cell, scientific/behavioral change outside
+scope, performance or memory failure, complexity shortfall, lifecycle addition,
+or need for another cache/runtime/attribution/micro-optimization remediation
+round abandons that candidate without merge. Keep supported production and the
+negative evidence; do not leave a partial migration or relax a threshold.
 
-**Abandon the entire vertical without merging if any focused correctness,
-performance, COO/memory, or line gate fails, if any required cell is missing, or
-if success requires another cache, lifecycle, runtime, attribution, or
-micro-optimization round.** Keep current production and record the negative
-result. There is one bounded vertical, not a sequence of retries and no partial
-migration left behind. Only its complete focused pass may open the separate
-deletion review; NX7-4+ remain stopped regardless until a new evidence-backed
-charter decision.
+NX8-2 permits only private generic driver consolidation with at least 300 net
+production nonblank lines removed and no behavior change. NX8-3 permits only
+public-surface/test/benchmark deduplication with no new lifecycle owner and no
+loss of consumers, independent oracles, workload coverage, or envelope meaning.
+Neither is a continuation of the stopped NX7 sequence, and neither creates a
+baseline successor. The precise stop conditions are normative in
+[migration-execution.md](migration-execution.md).

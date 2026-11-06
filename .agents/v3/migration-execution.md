@@ -1,428 +1,45 @@
-# PyFEM v3 research-kernel execution charter
+# PyFEM v3 NX8 coherent specialized-kernel charter
 
-Live state reset on 2026-11-06 against `v3` at `fbb72fa`, after M123's
-evidence-backed abandonment and M124's read-only performance-first survey. M125
-recorded that charter correction without changing implementation or benchmark
-artifacts. M126 subsequently executed and abandoned the sole bounded falsification
-vertical; this file records its evidence and the remaining stopped queue.
+Live state reset on 2026-11-06 against `v3` at
+`83aed1d9c29cf91d91ddde70e4f13508d4edacf2`. M127 changes this charter,
+[generic_core.md](generic_core.md), and
+[program-playbook.md](program-playbook.md) only. It changes no implementation,
+test, notebook, benchmark workload, or benchmark result.
 
-This charter supersedes M119's preserve-and-consolidate framing, the former
-parity-era dispatch in this file, the original NX7-3 generic-only deletion
-sequence, and any instruction to port the next legacy family or preserve a v3
-facade for sunk cost. NX7-4 and every later program are stopped.
+NX8 supersedes the live NX7 execution sequence, including generic-only prototype
+deletion, the stopped NX7-4+ queue, and any implication that a baseline successor
+is owed. Completed M121/NX7-1 retirements and M122/NX7-2 deletions remain
+historical decisions; this charter does not restore their frozen runtimes.
 [migration-history.md](migration-history.md), [evidence/](evidence/),
-[parity.md](parity.md), [scaling.md](scaling.md), and `bench/results/` remain
-historical evidence. Their "current", "next", ABI-freeze, and feature-parity
-instructions are not work to resume. The invariants in [design.md](design.md)
-and [generic_core.md](generic_core.md) still govern the surviving kernel; their
-old migration sequences do not expand this charter.
-
-## NX7-3 abandonment and NX7-3R reset record
-
-M123 was **abandoned on measured evidence, not merged**. Its preserved branch is
-`feat/nx7-3-retire-prototype-solve-lane`, with final source at `b9ec035` and
-final evidence documentation at `1e55f90`. Consumer migration at `3d776dc`,
-prototype deletion at `58957f6`, validation/plan/tangent reuse at `f9aba2e`, and
-the final compiler/attribution/validation remediation at `b9ec035` remain
-historical experiments only. None is a production migration to resume.
-
-On `v3` at `fbb72fa`, the specialized prototype Q8/skim production lane remains
-intact and unchanged. No partial M123 consumer migration or deletion was
-adopted. Existing generic FE²/damage/J2/TL/truss/spring/researcher-signal/Riks
-and notebook flows remain on the generic spine and must not be routed through
-the prototype. M121's retired scientific families remain retired; M122's frozen
-compiler/analysis/result vertical and `Solution.verify` remain deleted.
-
-M124 concluded **NO-GO to generic-only prototype deletion** and **NO-GO to
-claiming that a credible performance-first generic redesign already exists**.
-Temporary prototype retention is the current production disposition, not a
-permanent dual-runtime architecture. The acceptable end state remains one
-generic semantic spine with specialized numerical payloads and kernels, without
-a prototype solver/state/result lane, fallback, or facade.
-
-### Final focused measurements and complexity shortfall
-
-Final `bench.common.measure` values are `final remediation / original deletion
-candidate / fbb72fa control`; ratios are final/control on the same Q8 decks.
-
-| Size | Stage | Final / original candidate / control (ms) | Final/control |
-|---|---|---:|---:|
-| 2x2 | load | 5.3822 / 64.4660 / 0.1704 | 31.58x |
-| 2x2 | fresh e2e | 7.2504 / 69.7946 / 0.9467 | 7.66x |
-| 8x8 | load | 22.6281 / 151.6706 / 0.9177 | 24.66x |
-| 8x8 | fresh e2e | 27.8077 / 177.2314 / 2.1784 | 12.77x |
-| 32x32 | load | 250.9108 / 1213.3048 / 9.9111 | 25.32x |
-| 32x32 | fresh e2e | 403.9621 / 1619.2937 / 43.9407 | 9.19x |
-
-At 32x32, separately measured final stages were 17.3841 ms normalization,
-87.4872 ms `DriverAssemblyPlan`, and 66.0610 ms cached-plan solve. The final
-validation round did not materially improve whole-path cost. No later full
-candidate/control benchmark was run, so the original full-run artifacts below
-do not establish final-remediation performance.
-
-The unified-zero-diff nonblank reduction against `fbb72fa` ended at **1,703
-production lines and 1,471 v3-test lines**, below the required **1,800 and
-1,500** floors by **97 and 29 lines**. The earlier post-deletion checkpoint had
-removed 2,426 production and 1,593 test lines; subsequent remediation therefore
-eroded both simplification and failed to close performance. Neither shortfall
-is waived. Correctness at `b9ec035` was green—860 v3 tests, both complete
-repository runs of 1,056 tests plus 12 subtests, the notebook assertion, and all
-Ruff gates—but correctness does not imply performance or complexity acceptance.
-
-M124's source and profile audit identified structural costs rather than a
-single missing cache: eager recursive derived-array copying/serialization/hash
-identity at system, map, operator, and plan boundaries; object-rich per-entity
-declarations and attribution; retained validation-only B/gradient tensors and
-NumPy `einsum` evaluation instead of the existing fused Q8 kernel; and int64
-COO indices/permutations with repeated owned copies. Recorded generic COO bytes
-were 1.5x the prototype at every measured size, including 6,291,456 versus
-4,194,304 bytes at 32x32, before additional plan/payload/manifest arrays. A
-separate tangent probe measured 18.9435 ms for generic `einsum` versus 0.8115 ms
-for warm fused Numba, with 1.648e-14 maximum relative deviation. That is a
-backend hypothesis, not evidence of whole-path viability.
-
-### Preserved evidence and benchmark status
-
-The original clean reference-machine artifacts remain uncommitted and preserved
-at these repository-host paths:
-
-- `.tower/worktrees/wt-123/bench/results/run_nx7_3_candidate.json`, recorded at
-  `58957f6`, 212 records/756 cells, 2080.9 s, SHA-256
-  `467158efb56faa6b781f3597feb9ed715f7e5768d88118bd0b0d5c9c4b04eef6`;
-- `.tower/worktrees/wt-123/bench/results/run_nx7_3_control_base.json`, recorded
-  at `fbb72fa`, 212 records/756 cells, 1321.3 s, SHA-256
-  `77eda94eed3c6514df8217c99647c6d7647c65529752aa5dfdfad549e6998f19`.
-
-All 34 generated decks were byte-identical. Independent raw-JSON comparison
-reproduces 360 flagged cells, zero missing cells, and zero correctness failures:
-319 replaced-route cells (214 scale-v3, 84 skim-v3, and 21 cold-v3) and 41
-same-code cells requiring environmental adjudication rather than a blanket
-waiver. The preserved worktree contains only those two uncommitted artifacts.
-They and the M123 branch are evidence, not merge candidates.
-
-`bench/results/baseline_m3.json` remains unchanged on `v3`, SHA-256
-`d244664a58efdfcef208908cfac279d337e4c5a660cde59d3304edaf4117a172`.
-No `baseline_nx7_3.json` or other successor was created, no historical benchmark
-JSON was rewritten, and M125 changes none of these artifacts. The bounded
-vertical must not run or promote a new full baseline.
-
-[program-playbook.md](program-playbook.md) records which M123 techniques may be
-reused selectively and which are rejected wholesale. Reuse does not rehabilitate
-the abandoned branch or authorize another sequence of micro-optimization rounds.
-
-## NX7-3P bounded falsification outcome — abandoned
-
-M126 executed the single bounded vertical from `c4930cf` and **abandoned it on
-measured evidence**. The candidate, its focused harness, and all generated timing
-artifacts were removed; current production and the specialized prototype remain
-unchanged. There is no deletion candidate, no partial consumer migration, and no
-follow-up cache/lifecycle/runtime/attribution/micro-optimization round.
-
-### Honest pre-candidate envelopes
-
-The untouched baseline was measured at 2x2/8x8/32x32 for both materials at 1T and
-16T. Programmatic arrays entered prototype `pack`/fresh solve and generic
-spec/compile/map/fresh driver independently. Identical generated decks entered
-the v3 prototype public loader/solver, the generic public reader/compiler/driver,
-and the legacy control. Each fresh solve assembled and factorized from its packed
-or compiled input; no solve-from-assembled timing was used as an acceptance cell.
-The baseline generic driver had no injectable cached-plan envelope; that stage
-was reported as unavailable rather than filled with a weak cache.
-
-Representative 1T baseline values (ms), with deck read, compile, cold plan, first
-solve, and complete fresh deck e2e separated, were:
-
-| Size/material | Array prototype/generic e2e | Deck read | Compile | Cold plan | First solve | Fresh deck e2e | Prototype deck e2e |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 2x2 PlaneStress | 0.7800 / 54.4293 | 1.9970 | 39.7300 | 1.3320 | 3.0841 | 44.5122 | 1.2743 |
-| 2x2 PlaneStrain | 0.7704 / 50.1113 | 2.4830 | 40.8700 | 1.3492 | 3.0174 | 44.4614 | 1.2338 |
-| 8x8 PlaneStress | 2.4528 / 111.6052 | 4.6330 | 89.1250 | 12.3790 | 17.8003 | 115.1898 | 3.5575 |
-| 8x8 PlaneStrain | 2.4797 / 114.3528 | 5.6780 | 92.1500 | 12.5233 | 18.7481 | 114.8501 | 3.7975 |
-| 32x32 PlaneStress | 55.5327 / 1411.5800 | 45.2660 | 986.9480 | 267.3357 | 432.2861 | 1445.1778 | 72.6660 |
-| 32x32 PlaneStrain | 50.1155 / 1387.9006 | 46.4430 | 984.7140 | 280.9428 | 372.9354 | 1418.0507 | 68.7551 |
-
-The 16T baseline cells were also measured and had the same structural failure;
-they were not replaced by historical M123 values. Baseline 32x32 generic COO used
-int64 and occupied 6 MiB with values, and fresh-array tracemalloc was 83.26 MiB
-versus 10.05 MiB for the prototype.
-
-### Integrated candidate and focused matrix
-
-The one candidate used selective normalization fast paths, validation-once
-registry resolution, deferred normalized-recipe export/fingerprints, columnar
-and lazy source views, raw-checked batched Q8 geometry, the existing fused Numba
-Q8 tangent with immutable reuse, lazy diagnostic B/gradient recovery,
-range-appropriate int32 system/map/plan arrays, internal owned-array adoption,
-selector-only reductions, and explicit validated plan injection. It did not use
-a weak global cache, public `PreparedExecution`, a second runtime, a wholesale V2
-manifest, or a prototype fallback. The 124 focused identity/Q8/constraint/driver
-plan tests passed before the full matrix.
-
-Candidate/prototype fresh e2e medians are shown for both equivalent envelopes.
-Generic load is deck read plus compile; plan+cached is cold plan plus a fresh
-driver solve with the explicitly owned injected plan. All values are milliseconds.
-
-| Size/material | Threads | Array candidate/prototype | Deck candidate/prototype | Generic load | Plan+cached solve |
-|---|---:|---:|---:|---:|---:|
-| 2x2 PlaneStress | 1 | 14.4013 / 0.8474 | 14.3941 / 1.2778 | 13.2044 | 1.2098 |
-| 2x2 PlaneStress | 16 | 14.9751 / 1.2140 | 15.8598 / 1.7299 | 14.0231 | 1.2617 |
-| 2x2 PlaneStrain | 1 | 16.9415 / 0.8992 | 16.2602 / 1.2980 | 14.6842 | 1.2699 |
-| 2x2 PlaneStrain | 16 | 16.2086 / 1.2135 | 17.1842 / 1.6581 | 14.7385 | 1.2911 |
-| 8x8 PlaneStress | 1 | 23.1184 / 2.3304 | 23.8988 / 4.4322 | 20.7355 | 3.9713 |
-| 8x8 PlaneStress | 16 | 22.6100 / 2.8847 | 31.8497 / 4.7681 | 21.6346 | 4.2755 |
-| 8x8 PlaneStrain | 1 | 23.0743 / 2.1630 | 26.0545 / 4.3899 | 20.8887 | 4.0661 |
-| 8x8 PlaneStrain | 16 | 24.5067 / 2.7115 | 26.4150 / 5.1148 | 22.9144 | 4.0604 |
-| 32x32 PlaneStress | 1 | 169.5545 / 54.2631 | 208.2232 / 63.4111 | 120.2872 | 76.0956 |
-| 32x32 PlaneStress | 16 | 170.9830 / 48.8930 | 199.6740 / 62.8428 | 121.4704 | 75.7381 |
-| 32x32 PlaneStrain | 1 | 173.4316 / 47.0801 | 195.2032 / 61.1287 | 123.1377 | 76.8481 |
-| 32x32 PlaneStrain | 16 | 176.9210 / 46.1985 | 209.6066 / 62.5330 | 134.1498 | 78.4380 |
-
-Every comparable fresh-e2e cell fails both `ratio <= 1.25` and `delta <= 1 ms`.
-At 32x32 every generic load exceeds 12.3889 ms, every fresh e2e exceeds 54.9259
-ms, and every plan+cached total also exceeds the remaining budget after measured
-load. No cell was omitted or waived.
-
-### Correctness, memory, complexity, and decision
-
-- Cached/cold accepted states were raw-identical, with two iterations and one
-  factorization in every cell. Generic-versus-legacy maximum absolute state
-  deviation ranged from 1.084e-19 to 9.948e-18. Fused-versus-original-contraction
-  maximum absolute tangent deviation was 9.313e-10 at 2x2/8x8 and 1.863e-9 at
-  32x32; raw old/new arithmetic equality was not claimed.
-- All six size/material pairs had identical generic 1T/16T accepted-state and
-  tangent SHA-256 hashes. This is candidate-internal determinism evidence, not a
-  claim of raw equality with the prototype.
-- COO exactly matched the prototype in all cells: 16,384 bytes at 2x2, 262,144 at
-  8x8, and 4,194,304 at 32x32. Tracemalloc nevertheless exceeded the prototype
-  everywhere: PlaneStress 0.379/0.038, 2.522/0.586, and 36.686/10.063 MiB;
-  PlaneStrain 0.411/0.038, 2.544/0.586, and 36.747/10.063 MiB by increasing
-  size. RSS high-water measurements were kept distinct from tracemalloc.
-- Unified-zero-diff nonblank accounting against `fbb72fa`, excluding only the
-  focused benchmark rewrite, was **+340 production** and **-134 v3-test** lines.
-  Production did not fall, so the complexity gate failed independently.
-
-After restoring the tree, both complete repository digit-mode runs passed **1,156
-tests plus 12 subtests each** (151.70 s normal and 103.71 s with
-`PYTHONINTMAXSTRDIGITS=640`). The headless notebook assertion passed,
-`python -m bench.run gates` reported **0 failures** including the Q8, legacy,
-FE², J2, total-Lagrangian, and Riks controls, and every bare/per-tree Ruff
-check/format invocation passed. These are restored-baseline controls for the
-documentation-only final diff, not candidate acceptance evidence.
-
-Performance, measured memory, and production complexity all fail. Correctness and
-COO cannot compensate. M126 therefore ends without merge, without a deletion
-candidate, and without a full baseline or baseline successor. Historical
-`baseline_m3.json` and all historical benchmark JSON remain unchanged. NX7-4+
-remain stopped; the next safe action is independent source-to-charter review of
-this negative result, not another implementation round.
-
-
-## NX7-1 implementation and acceptance record
-
-Atomic implementation commit: `288e5f3`.
-
-NX7-1 retired the complete D3 surface against the `d9e4a12` evidence boundary:
-penalty contact, cohesive interfaces and their deck adapter, unsolved
-thermal/thermoelastic operators, Prony viscoelasticity, both Perzyna mappings,
-SOVS, crystal plasticity, and every associated registry, descriptor, authoring,
-and focused-test branch. No compatibility facade or fallback replaced them.
-Interface decks raise `unsupported-element-type`; retired authoring material
-slices raise explicit input errors; direct retired-material specs fail registry
-capture; retired thermal formulations fail with `incompatible-formulation`.
-The exact symbols, fourteen test files, literature, and independent oracle
-locations are indexed in
-[migration-history.md](migration-history.md#nx7-1-retirement-non-kernel-scientific-breadth).
-The wholly-v3 crystal page moved to
-[evidence/2026-11-05-nx7-crystal-plasticity.md](evidence/2026-11-05-nx7-crystal-plasticity.md)
-and left the Sphinx toctree. Valid legacy-only documentation and warnings stay
-live with historical demotion links.
-
-The actual nonblank Python totals, measured recursively against `v3` at
-`64cbb92`, are **49,667 -> 41,876 production lines** (net **7,791 removed**,
-exceeding 6,500) and **47,187 -> 35,697 v3-test lines** (net **11,490
-removed**, exceeding 9,500). The fourteen deleted focused files account for
-11,525 test lines. The retained partial-support multi-space case adds 32
-nonblank lines to `test_v3_q8_generic_flow.py`, the explicit retired-interface
-deck rejection adds eight, and removal of an obsolete thermal-only breadth
-case removes another five, reconciling the final net count exactly.
-
-Retained generic multi-space allocation, parameterized state layouts, J2,
-damage, FE², total-Lagrangian, truss, spring, researcher-signal, and Riks paths
-were not given replacement numerical implementations. The retained notebook's
-analytic PatchTest8 assertion passed; 243 focused compiler/deck/state/authoring
-tests passed; an AST audit parsed 199 production/test/benchmark/notebook files
-and found no deleted-module import; the complete bare and per-tree Ruff
-check/format matrix passed. Both full repository digit-mode suites passed
-**1,366 tests plus 12 subtests each** (normal and `PYTHONINTMAXSTRDIGITS=640`).
-`python -m bench.run gates` reported **0 failures**, including raw-zero FE²
-identity comparisons and unchanged J2, total-Lagrangian, truss, Riks, and family
-oracles. `python -m sphinx -M html doc doc/_build` succeeded with 117 existing
-autoapi/legacy warnings, none naming the changed pages. Generated-HTML audits
-confirmed the deleted v3 module pages and crystal toctree entry are absent and
-all legacy demotions are present. No performance baseline changed, and no shared
-hot numerical implementation changed, so no candidate/control timing or
-performance claim is made.
-
-## NX7-2 implementation and acceptance record
-
-Atomic implementation commit: `f766bb2`.
-
-NX7-2 deleted the complete D1 frozen Q8 vertical at the `df31ef4` evidence
-boundary: `compile_model`, `compile_program`, `evaluate_program`, their
-diagnostics and manifest constants, the model compiled/program/state carriers,
-all of `analysis/`, `assembly/`, and `results/`, and their compile/model exports.
-This includes `CompiledModel`, `CompiledProgram`, `PreparedAnalysis`,
-`PreparedAssemblyPlan`, `assemble_reference_linear`, `CommittedAnalysisState`,
-`Solution`, `LinearBalanceLedger`, and `fresh_verify`. The four frozen focused
-test files were deleted after the generic migrations passed. No compatibility
-runtime or replacement `Solution.verify` exists. The exact deleted surface and
-old/new independent-oracle map are indexed in
-[migration-history.md](migration-history.md#nx7-2-retirement-frozen-q8-analysisresult-vertical).
-
-The actual nonblank Python totals after the R1 correction, measured recursively
-against `v3` at `df31ef4`, are **41,876 -> 30,937 production lines** (net
-**10,939 removed**, exceeding 10,500) and **35,697 -> 30,856 v3-test lines**
-(net **4,841 removed**, exceeding 4,500). The direct D1 production set and
-export cleanup contribute 10,964 removed lines; R1 commit `3eac574` adds 25
-lines for finite additive-load accumulation checks. The four deleted test files
-contribute 5,509 lines; retained migrations and regressions add 668. The
-original 636 comprise 221 in `test_v3_q8_generic_flow.py`, 112 in
-`test_v3_constraints.py`, 242 in `test_v3_driver_nonlinear.py`, and 61 in
-`test_v3_driver_parity.py`; R1 adds 32 in `test_v3_driver_plan.py`.
-`test_v3_model_identity.py` is unchanged because it contains only shared
-array/identity/provenance/registry subjects.
-
-The retained tests now cover literal Q8/rigid-body, authored material/topology
-rejection, canonical provenance, prescribed-root/shared-master and overflowing
-affine maps, rational equilibrium/reactions/work, zero-free rigid offsets,
-chained MPC solving, and a real analytic PatchTest8 accepted-record observation
-of full/reduced balance and direct reactions. R1 commit `3eac574` explicitly
-covers finite-addend constant and coordinate-coefficient load overflow through
-the public `NonlinearStaticDriver`, raising `DriverPreparationError` with
-`non-finite-load-value` before manifest construction while preserving ordinary
-ordered load arithmetic. Existing analytic Q4/T3/Hex8, constant-tangent reuse,
-full/reduced projection, and rejected-attempt byte identity tests remain. The
-migration gate passed **188 focused tests**; the R1 focused run passed **203
-tests**. The notebook quickstart passed its analytic PatchTest8 assertion. An
-AST audit parsed 174 production/test/benchmark/notebook files and found no
-deleted-module import. At `3eac574`, both complete repository digit-mode suites
-passed **1,156 tests plus 12 subtests each** (normal and
-`PYTHONINTMAXSTRDIGITS=640`). The complete exact and bare Ruff check/format
-matrix passed on the same commit.
-
-The deletion acceptance run of `python -m bench.run gates` at `f766bb2` reported
-**0 failures**, including raw-zero FE² and J2 comparisons and unchanged passing
-Q8/skim, total-Lagrangian, truss, Riks, and family oracles. No `bench/results/`
-file or performance baseline changed, and no candidate/control timing or
-performance claim is made. The branch is ready for fresh R2 independent
-source-to-charter review of the deletion, proof migration, and R1 correction.
+[parity.md](parity.md), [scaling.md](scaling.md), and `bench/results/` preserve
+provenance, not additional dispatch queues. The semantic invariants in
+[design.md](design.md) and [generic_core.md](generic_core.md) remain governing
+constraints; their superseded migration sequences do not expand NX8.
 
 ## Exact next safe action
 
-M126 has completed and **abandoned NX7-3P** on measured performance, memory, and
-production-complexity failures. Review the complete negative record above against
-the charter independently. The candidate and all temporary artifacts were removed;
-current production and the specialized prototype are unchanged. No deletion
-candidate, full baseline, baseline successor, or partial migration was created.
+Request independent source-to-charter review of M127 at its exact branch tip.
+The reviewer must check this frontier against current source, consumers, tests,
+and benchmark envelopes, including the three program stop conditions below.
+Documentation-only verification establishes a green base; it is not evidence for
+any future candidate.
 
-NX7-4+ remain stopped. Do not start another cache, lifecycle, runtime,
-attribution, or micro-optimization round, and do not reinterpret the focused
-correctness or COO evidence as acceptance. A future vertical requires a new
-evidence-backed charter, not a retry of M126.
+After a clean review, NX8-1 may begin with its read-only preflight and matched
+base/candidate/base measurements. NX8-2 and NX8-3 are bounded later programs,
+not automatic rewards for an NX8-1 pass. Each requires the preceding outcome to
+be recorded, a fresh exact-base preflight, and its own independent review. A
+failed program is abandoned without merge and without a remediation round; it
+does not force the next program to run and does not create a partial migration.
 
-## 1. North star and the change of axis
+## 1. NX8 north star
 
-PyFEM v3 remains a scientific finite-element library in which convenient
-authored physics is normalized and compiled once into immutable array-backed
-operators; homogeneous numerical work has explicit state and contribution
-contracts; accepted and trial state are separate; constraints and sparse
-structure are reusable; analyses request mathematical channels rather than
-element classes; and accepted results retain enough provenance and balance
-information to audit the answer.
+PyFEM v3 is one coherent scientific semantic kernel with the best measured
+specialized implementation for each job. Coherence means shared mathematical
+meaning, explicit ownership, auditable state, and independent numerical
+conviction. It does **not** mean one concrete class hierarchy, one numerical
+layout, one evaluator, or deletion of every specialized public route.
 
-The implementation axis is now **the smallest coherent research kernel**, not
-legacy coverage. A legacy class, a v3 prototype, a frozen ABI, a manifest, or a
-large test battery is not a scientific consumer. Parity can convict a numerical
-error, but it cannot justify a second runtime or a capability with no maintained
-use. Deleting an unsupported, misleadingly broad facade is preferable to
-preserving it, but deletion is not an independent good: a maintained production
-backend may be retained temporarily while a bounded candidate must satisfy
-scientific, performance, memory, and complexity gates.
-
-Potential users of contact/cohesive, thermal/thermoelastic, rate-dependent,
-SOVS, and crystal physics remain first-class concerns. Their absence from the
-current maintained-consumer inventory is not evidence that the domains are
-unimportant or that PyFEM has no intention to serve them. NX7 is a current-scope
-simplification, not a permanent support boundary: each retirement must preserve
-literature, independent oracles, and generic operator/state/driver seams so a
-documented consumer-backed mission can reintroduce the capability on the minimal
-kernel. Re-expansion must never resurrect duplicate frozen or prototype
-runtimes.
-
-A capability is supported only when it has a truthful authored-to-accepted-result
-path and a maintained consumer. Maintained consumers are the v3 notebook,
-registered benchmark workloads, supported legacy-deck routes used by those
-workloads, and small authoring/extension flows needed by those scientific paths.
-A compile-only operator, a test of its carrier, a legacy source row, or a public
-re-export is not by itself a consumer. Tests provide evidence for a selected
-capability; they do not select it.
-
-## 2. Evidence at the `d9e4a12` boundary
-
-Counts below are nonblank Python lines measured on the checkout, used as a
-repeatable complexity metric rather than a claim about scientific value.
-
-| Surface | Current size | What the consumers actually exercise |
-|---|---:|---|
-| `pyfem/v3/` | 49,667 | Three solve stacks plus direct, composed, and nested operators |
-| `test/v3/` | 47,187 | Strong independent oracles mixed with duplicate carrier and parity tests |
-| `bench/` | 3,863 | Prototype Q8/skim routes and generic FE²/family routes |
-| `notebooks/v3/` | one paired notebook | `authoring` + legacy deck + `NonlinearStaticDriver` on PatchTest8 |
-| `examples/` | one documented v3 authoring example | `examples/materials/viscoplasticity/README.md` uses `authoring.backward_euler_perzyna`; the other examples are legacy |
-
-The decisive consumer facts are:
-
-- The maintained notebook already uses `read_legacy_deck`, `authoring.compile`,
-  `authoring.nonlinear_static`, typed driver status, and accepted coefficients.
-- FE² and damage benchmarks use `CompiledSystem`, nested execution, J2/damage,
-  homogenization, state codecs, and deterministic one-thread/n-thread gates.
-  The M116 controlled pair reports a 51.2% harness-wall reduction for execution
-  consolidation; the M85 pair covers the FE² and memory matrix.
-- Finite-strain and Riks family benchmarks use the deck compiler and generic
-  drivers. The M118 controlled pair covers 27 records/60 metric cells and exact
-  cycle/correction counts with documented state tolerances.
-- Uniform Q8 and skim benchmarks still use `ProblemDefinition`, `pack`,
-  `_prototype_assembly`, and `solver/`. M123's measured failure and M124's reset
-  make their continued use temporary production preservation, not permission for
-  new prototype consumers, a fallback, or a permanent second runtime. Their
-  legacy-v1 comparisons and analytic patch gates are the durable oracles.
-- The frozen `CompiledModel`/`CompiledProgram`/`PreparedAnalysis` vertical has
-  its own assembly, state, `Solution`, and fresh verification implementation,
-  but no notebook or benchmark consumer. Its production files total 10,861
-  nonblank lines.
-- Penalty contact, cohesive interfaces, thermal/thermoelastic operators, and
-  the Prony, two Perzyna, SOVS, and crystal families have no v3 notebook or
-  registered benchmark workload. They nevertheless have named live support:
-  `examples/materials/viscoplasticity/README.md` contains a public compile-only
-  `authoring.backward_euler_perzyna` example, while
-  `doc/materials/{viscoplasticity,crystal_plasticity,sovs}.md` are live Sphinx
-  support pages. D3/NX7-1 explicitly retires those surfaces rather than denying
-  them. The direct implementation files total 5,314 nonblank lines before
-  compiler/adapter cleanup; their fourteen focused test files total 11,525. The
-  generic driver also rejects operators with more than one coefficient port in
-  `driver/plan.py::_compile_operator_slices`, so the coupled thermoelastic
-  compiler is not a supported solve path.
-- Parameter sensitivities are different: the authored J2 flow has independent
-  derivative evidence and shares the converged-factorization/IFT machinery used
-  by homogenization. Keep its explicitly fixed-entering-state meaning; do not
-  advertise total path sensitivity or add speculative state-derivative v2 work.
-
-Historical numbers and revisions are evidence for those exact revisions, not
-permanent minimum test counts or speedup promises.
-
-## 3. Target kernel
-
-### 3.1 One execution spine
+The generic spine is:
 
 ```text
 ModelSpec + ProgramSpec + plain researcher declarations
@@ -432,7 +49,7 @@ ModelSpec + ProgramSpec + plain researcher declarations
                 compile_system
                        |
                 CompiledSystem
-       entities + spaces + operators + provenance
+       entities + spaces + operators + specialized payloads
                        |
         CompiledConstraintMap + DriverAssemblyPlan
                        |
@@ -440,368 +57,553 @@ ModelSpec + ProgramSpec + plain researcher declarations
                        |
  StateTransactionOwner + nested execution + disposable workspace
                        |
- typed records + accepted snapshots + solve-free observations
+       typed accepted records + solve-free observations
 ```
 
-`read_legacy_deck` is an adapter into this spine. `authoring` is a small plain
-Python convenience layer over it. Neither may grow another solver, state owner,
-or result implementation. Linear static problems use the nonlinear driver's
-constant-tangent path; they do not need a second linear runtime.
+`authoring/` and `io/legacy_deck.py` are adapters into this spine. Specialized
+operator payloads and fused array kernels are first-class implementations of its
+channels. They are not architectural failures and need no generic `einsum`
+fallback when their semantics and independent oracles are strong.
 
-### 3.2 Supported modules and scientific roles
+The existing Q8/skim prototype is also supported production where it wins. Its
+`ProblemDefinition`/`pack`/specialized-kernel/solver route is not a deprecation
+queue, a fallback, or a deletion target by definition. NX8 does not require it to
+become temporary, does not migrate its consumers to the generic route, and does
+not make its eventual removal an architectural completion condition. A future
+consumer-backed proposal may change that disposition only with fresh scientific,
+performance, memory, and complexity evidence; generic-only deletion is already
+falsified.
 
-| Surface | KEEP / UNIFY / REBUILD decision |
+One semantic kernel therefore constrains meaning and duplicate ownership, not
+the measured choice of implementation. New work must not add a compatibility
+runtime that forwards between routes, a second accepted-state owner, or a second
+result/verification stack merely to make the routes look identical.
+
+## 2. Current production and scientific consumers
+
+| Consumer or workload | Supported implementation and disposition |
 |---|---|
-| `spec/`, `model/arrays.py`, `identity.py`, `provenance.py`, `registry.py` | **KEEP** the single normalized authoring, ownership, identity, and injected-registry contracts. |
-| `model/system.py`, `model/operator.py` | **KEEP** entities, spaces, ports/channels, state layouts, and direct/nested evaluation; **UNIFY** repeated input/channel validation in compiler helpers. |
-| `compile/system.py`, retained family builders | **REBUILD** per-region composition and one operator-composition path; no legacy-shaped mandatory taxonomy and no typed DSL. |
-| `constraints/` and `driver/plan.py` | **KEEP** one affine coordinate map and one cached CSR/COO assembly plan. |
-| `driver/nonlinear.py`, `driver/riks.py` | **KEEP** Newton/cutback and two-solve arc-length algorithms; **UNIFY** evaluation, factorization, nested-scope, and accounting internals without changing their numerical policy in the refactor. |
-| `state/` | **KEEP** the transaction owner, versioned row/nested/evolution codecs, continuation store, and nested rollback. No third accepted-state owner. |
-| `driver/contracts.py` and accepted driver records | **KEEP** typed status, balance/reaction, sensitivity, homogenization, nested-work, and continuation observations. No universal observation registry is required. |
-| Small-strain Tria3/Quad4/Quad8/Hex8 and plane-stress/plane-strain/3D elastic laws | **KEEP + UNIFY** behind geometry-profiled small-strain payload/evaluator code; remove Q8-only class names rather than scientific geometry support. |
-| Q8 total-Lagrangian Saint-Venant–Kirchhoff | **KEEP** the benchmarked finite-strain route and independent tangent/force oracles. |
-| Truss and grounded/researcher point springs | **KEEP** unlike entity layouts, Riks/skims, custom state, and signal extension points. |
-| J2 isotropic hardening and plane-strain damage | **KEEP** the stateful, sensitivity, nonsymmetric, JIT, and FE² scientific vehicles and their independent references. |
-| Fixed-entering-state parameter sensitivities | **KEEP** the existing bounded semantics and cost pins; total path propagation is out of scope until a real consumer defines it. |
-| Periodic RVE authoring, homogenization, FE², deterministic host pool | **KEEP** the benchmarked multiscale route and retained-buffer/state identity gates; do not add more execution modalities speculatively. |
-| `authoring/` and `io/legacy_deck.py` | **REBUILD** as small adapters over retained physics only; delete duplicate exports and rejected deck branches. |
-| `fem/` numerical primitives | **KEEP** shapes, quadrature, kinematics, link/TL and required constitutive/assembly math; **UNIFY** canonical CSR helpers and remove prototype-only carriers/dispatch. |
-| `notebooks/v3/patch_test8.py` + `.ipynb` | **KEEP** as the executable public quickstart and regenerate the paired artifact only from the Jupytext source. |
+| Uniform Q8 scale cases and linear/nonlinear/Riks skims | **PRESERVE** the current `ProblemDefinition`, `pack`, `_prototype_assembly`, `fem` kernels, and `solver/` route where matched evidence favors it. Keep independent analytic and legacy-v1 gates. |
+| Generic Q4/T3/Q8/Hex8 small-strain and Q8 total-Lagrangian paths | **KEEP** the generic entities/spaces/operators, affine maps, driver plans, and independent geometry/force/tangent oracles. Improve Q8 selectively under NX8-1 without routing other consumers through it. |
+| J2, plane-strain damage, fixed-entering-state sensitivities | **KEEP** the stateful payload/state-transaction semantics, pure references, derivative oracles, and bitwise/determinism gates. |
+| FE², periodic RVE authoring, homogenization, nested execution | **KEEP** explicit nested execution, accepted-state ownership, retained-buffer identity, raw 1T/nT evidence, and resource closure. |
+| Truss, grounded/researcher springs, scalar signals, Riks | **KEEP** the unlike entity layouts, researcher extension points, exact cycle/correction gates, and continuation semantics. |
+| Maintained PatchTest8 notebook and retained legacy-deck routes | **KEEP** the generic authored-to-accepted-result flow and analytic assertion. Adapters do not acquire solver or state ownership. |
+| Historical benchmark records | **PRESERVE** as revision/workload/environment-specific evidence. No historical JSON is rewritten. |
 
-### 3.3 Explicit non-kernel decisions
+A maintained consumer is a notebook, registered benchmark workload, supported
+deck route used by one, or a small authoring/extension flow required by those
+scientific paths. Tests and public exports supply evidence or access; neither by
+itself selects a capability. Source presence, legacy class boundaries, sunk cost,
+and test count are not consumers.
 
-- **No public `PreparedExecution`.** `DriverAssemblyPlan` is already the prepared
-  topology, `StateTransactionOwner` already owns accepted state, and
-  `PreparedNestedExecution` already owns nested resources. Adding a fourth public
-  lifecycle object would duplicate ownership. Any private shared runtime helper
-  requires a separate evidence-backed charter after NX7-3P; no such extraction is
-  currently authorized.
+The M121 retired scientific families remain retired, but retirement is not a
+permanent support boundary. Section 4.4 defines their consumer-backed,
+kernel-native return. The M122 frozen compiler/analysis/result vertical and
+`Solution.verify` remain deleted; accepted driver records and fresh independent
+numerical tests are the audit surfaces.
+
+## 3. Falsification evidence and green production state
+
+### 3.1 M123 — generic-only deletion failed
+
+M123 was **abandoned on measured evidence, not merged**. Its branch
+`feat/nx7-3-retire-prototype-solve-lane`, final source `b9ec035`, and final
+documentation `1e55f90` are historical experiments, not production migrations
+to resume. No partial consumer migration or prototype deletion was adopted.
+
+Final `bench.common.measure` fresh-end-to-end ratios against the intact
+`fbb72fa` prototype control were:
+
+| Size | Final candidate / original deletion candidate / control (ms) | Final/control |
+|---|---|---:|
+| 2x2 | 7.2504 / 69.7946 / 0.9467 | 7.66x |
+| 8x8 | 27.8077 / 177.2314 / 2.1784 | 12.77x |
+| 32x32 | 403.9621 / 1619.2937 / 43.9407 | 9.19x |
+
+The final candidate remained 31.58x/24.66x/25.32x control for load at those
+sizes. Successive remediation reduced the unified-zero-diff nonblank deletion
+from 2,426 production and 1,593 test lines to **1,703 production and 1,471 test
+lines**, missing the then-required 1,800/1,500 floors by 97/29. Green correctness
+did not compensate for performance or complexity failure.
+
+The original clean reference-machine artifacts remain preserved outside the
+commit graph:
+
+- `.tower/worktrees/wt-123/bench/results/run_nx7_3_candidate.json`, at `58957f6`,
+  212 records/756 cells, SHA-256
+  `467158efb56faa6b781f3597feb9ed715f7e5768d88118bd0b0d5c9c4b04eef6`;
+- `.tower/worktrees/wt-123/bench/results/run_nx7_3_control_base.json`, at
+  `fbb72fa`, 212 records/756 cells, SHA-256
+  `77eda94eed3c6514df8217c99647c6d7647c65529752aa5dfdfad549e6998f19`.
+
+All 34 generated decks were byte-identical. Independent comparison found 360
+flagged cells, no missing cells, and no correctness failures. The artifacts and
+branch are falsification evidence, not merge candidates or a baseline request.
+
+M124's source/profile survey identified the structural causes: eager recursive
+array export/serialization/hash identity, object-rich per-entity declarations,
+retained validation-only B/gradient tensors, generic `einsum` rather than the
+existing fused Q8 kernel, and repeated int64 COO/index ownership. Its tangent
+probe measured 18.9435 ms for generic `einsum` versus 0.8115 ms for warm fused
+Numba, with 1.648e-14 maximum relative deviation. That supported a specialized
+kernel hypothesis; it did not establish whole-path viability.
+
+### 3.2 NX7-3P bounded falsification outcome — abandoned
+
+M126 executed one integrated candidate from `c4930cf` and **abandoned it without
+merge**. The candidate used lazy export/identity, columnar views, batched
+geometry, fused tangent reuse, compact indices, selector-only reductions, and
+explicit plan injection. It did not use a weak global cache, public
+`PreparedExecution`, second runtime, or prototype fallback. Its focused 124-test
+suite passed, but those techniques and correctness were not sufficient.
+
+The full 2x2/8x8/32x32, PlaneStress/PlaneStrain, 1T/16T matrix was measured for
+both programmatic-array and identical-deck envelopes. **Every comparable fresh
+end-to-end cell failed both `ratio <= 1.25` and `delta <= 1 ms` against the
+prototype.** The 32x32 results alone make the structural conclusion clear:
+
+| Material / threads | Array candidate / prototype (ms) | Deck candidate / prototype (ms) | Generic load (ms) | Plan + cached solve (ms) |
+|---|---:|---:|---:|---:|
+| PlaneStress / 1T | 169.5545 / 54.2631 | 208.2232 / 63.4111 | 120.2872 | 76.0956 |
+| PlaneStress / 16T | 170.9830 / 48.8930 | 199.6740 / 62.8428 | 121.4704 | 75.7381 |
+| PlaneStrain / 1T | 173.4316 / 47.0801 | 195.2032 / 61.1287 | 123.1377 | 76.8481 |
+| PlaneStrain / 16T | 176.9210 / 46.1985 | 209.6066 / 62.5330 | 134.1498 | 78.4380 |
+
+The pre-candidate 32x32 generic fresh-deck cost was 1418.0507--1445.1778 ms at
+1T. Thus M126 improved its generic base substantially while still failing the
+prototype comparison. NX8 learns both facts: selective generic improvement can
+be useful, and that usefulness does not justify deleting or replacing the
+prototype where the prototype remains better.
+
+Other independent gates also failed:
+
+- COO exactly matched prototype bytes, but 32x32 `tracemalloc` was
+  36.686--36.747 MiB versus 10.063 MiB. Logical COO bytes, traced allocation,
+  and RSS are different quantities.
+- Unified-zero-diff accounting against `fbb72fa`, excluding only the focused
+  benchmark rewrite, was **+340 production and -134 v3-test nonblank lines**.
+  Production complexity increased.
+- Cached/cold states were raw-identical, all candidate 1T/16T accepted-state and
+  tangent hashes matched, iteration/factorization counts stayed at 2/1, and
+  generic-versus-legacy state deviation remained within 9.948e-18 absolute.
+  Fused-versus-original tangent deviation reached 1.863e-9 at 32x32; raw old/new
+  arithmetic equality was not claimed. Correctness could not rescue the other
+  gates.
+
+The complete protocol and stage tables remain recoverable at `f28e852`; the
+summary anchor above is retained for the historical link in
+[migration-history.md](migration-history.md). The candidate, focused harness,
+and generated timing artifacts were removed. NX8-1 is not permission to recover
+that branch or to rerun its broad integrated design.
+
+### 3.3 Restored production is green and unchanged
+
+At `83aed1d`, `pyfem/v3`, `test/v3`, `bench`, and `notebooks/v3` have no
+implementation difference from `fbb72fa`; subsequent commits record the M126
+outcome only. The restored-tree M126 controls passed:
+
+- both complete repository digit-mode suites, **1,156 tests plus 12 subtests
+  each** (151.70 s normally and 103.71 s with `PYTHONINTMAXSTRDIGITS=640`);
+- the headless PatchTest8 notebook analytic assertion;
+- `python -m bench.run gates` with **0 failures**, including Q8, legacy, FE²,
+  J2, total-Lagrangian, and Riks controls; and
+- every exact per-tree and bare Ruff check/format invocation.
+
+These are production-base controls, not evidence for an abandoned candidate or
+for this document diff. M127 then repeated the required documentation gates on
+this NX8 tree: both complete suites again passed **1,156 tests plus 12 subtests
+each** (160.38 s normally and 103.87 s with `PYTHONINTMAXSTRDIGITS=640`), with
+the same 43 existing SciPy sparse-efficiency warnings, and all eight exact
+per-tree Ruff check/format commands plus bare check and bare format passed.
+These M127 results are likewise base-code controls, not implementation evidence;
+no candidate benchmark or baseline artifact was created.
+
+`bench/results/baseline_m3.json` remains unchanged at SHA-256
+`d244664a58efdfcef208908cfac279d337e4c5a660cde59d3304edaf4117a172`.
+There is no `baseline_nx7_3.json`, NX8 successor, rewritten historical result,
+or commitment to create one. NX8 programs produce matched targeted evidence,
+not baseline promotions.
+
+## 4. Durable acceptance policy
+
+### 4.1 Preserve scientific usefulness and specialized wins
+
+A capability must have a truthful authored-to-accepted-result path, a maintained
+consumer, and independent conviction appropriate to its science. A faster
+implementation that weakens any of these fails. A generic implementation that is
+clean but structurally slower is not automatically the best implementation.
+
+Specialized payloads, fused kernels, range-appropriate arrays, and explicit
+preparation are preferred when they express the same mathematical contract and
+win on matched evidence. Keeping the prototype where it wins is a valid durable
+disposition. Prototype deletion, generic consumer migration, and line-count
+reduction are not independent goods.
+
+### 4.2 Delete only duplicate ownership or dead code
+
+DELETE is permitted only after a source-level inventory proves one of:
+
+1. the code is dead: no maintained consumer, live adapter, independent oracle,
+   or required extension boundary uses it; or
+2. it duplicates a meaning whose single surviving owner is named, with every
+   retained behavior and independent oracle mapped to that owner.
+
+A specialized route that provides measured value is not duplicate ownership
+merely because another route expresses similar mathematics. Deletion must remove
+exports/adapters/maintenance obligations coherently, must not add a forwarding
+facade, must reduce net complexity, and must cause **no measured performance
+loss** on affected workloads under section 5. Historical source remains in Git;
+no importable reference runtime or skipped test remains behind.
+
+### 4.3 Optimize only independently useful, complexity-reducing changes
+
+An optimization proceeds only when all are true:
+
+- it is useful on its own, without a later prototype deletion or consumer
+  migration to justify it;
+- a predeclared public end-to-end workload improves beyond matched
+  control/control variability, not merely a private microkernel;
+- no affected comparable workload has a resolved performance loss;
+- numerical, state, determinism, memory, and ownership contracts pass;
+- net nonblank production **and** v3-test complexity both fall against the exact
+  base, with benchmark instrumentation reported separately; and
+- it adds no public lifecycle owner, compatibility runtime, or speculative
+  abstraction.
+
+An optimization that needs a second remediation round has failed. A line
+reduction that removes an independent oracle, hides work in a new runtime, or
+moves complexity into uncounted generated code is not a reduction.
+
+### 4.4 Re-expand through consumers and kernel-native features
+
+Retired or new physics returns through a named maintained consumer and an
+explicit scientific contract: equations, state timing, observations, failure
+behavior, literature or analytic references, and failing controls where
+practical. The feature uses existing entities, discrete spaces, typed operator
+payloads/channels, affine maps, driver plans, state transactions, and accepted
+observations. It adds a second solver/state/result runtime only if a separate
+scientific counterexample proves the current semantics insufficient; NX8 does
+not authorize such a runtime.
+
+Contact/cohesive, thermal/thermoelastic, rate-dependent, SOVS, crystal, beams,
+shells, dynamics, ROM, transient integration, and total path sensitivities are
+therefore possible future consumer-backed work, not hidden NX8 completion tasks.
+Their historical evidence remains addressable. Re-expansion must not resurrect
+the M122 frozen vertical or wrap deleted APIs in a compatibility runtime.
+
+### 4.5 Fixed architectural prohibitions
+
+- **No public `PreparedExecution`.** `DriverAssemblyPlan` owns prepared
+  topology, `StateTransactionOwner` owns accepted state, and
+  `PreparedNestedExecution` owns nested resources. Private helpers may remove
+  duplication but may not become a fourth public lifetime.
 - **No typed DSL.** `ModelSpec`, `ProgramSpec`, registry descriptors, and plain
-  researcher declarations are sufficient. Do not add a language, code generator,
-  general plugin discovery system, or universal dictionary protocol.
-- **No second result/verification stack.** Accepted driver records and fresh
-  numerical tests are the supported audit surfaces. The old Q8 `Solution` and
-  reference evaluator are deleted, not wrapped.
-- **No compatibility facade for deleted APIs.** Pre-1.0 callers migrate to the
-  generic spine in the same change. A deprecation note cannot substitute for a
-  truthful supported implementation.
-- **No speculative physics.** Beams, shells, dynamics, general contact search,
-  irreversible cohesive laws, multi-master nonlinear constraints, ROM, transient
-  integrators, and total path sensitivities require a future consumer and a new
-  charter amendment; they are not hidden remaining work.
+  researcher declarations suffice. No code generator, universal dictionary
+  protocol, or plugin-discovery runtime is a simplification.
+- **No compatibility runtime or second result stack.** No facade dispatches to
+  both prototype and generic solvers, and no replacement `Solution.verify` is
+  introduced. Independent tests may recompute mathematical claims.
+- **No hidden cache ownership.** Explicit validated plan reuse is allowed;
+  process-wide weak caches and ambient accepted state are not.
+- **No baseline successor commitment.** Existing baseline/history stays
+  unchanged throughout NX8-1..3. Any later promotion needs a separate reviewed
+  full-coverage proposal and is not an expected NX8 outcome.
 
-## 4. Authorized dispositions and deletion map
+## 5. Common evidence and hard-stop contract
 
-D1 and D3 are completed retirement records, not work to repeat. D2 is temporarily
-retained under the NX7-3R reset; its inventory becomes actionable only through a
-separate deletion candidate authorized by a complete NX7-3P focused pass. D4 and
-all later cleanup programs are stopped pending a new evidence-backed charter.
-None of these maps is an independent dispatch queue or permission to weaken the
-owning program's consumer, oracle, performance, or complexity gates.
+The detailed numerical, instrumentation, and command rules live in
+[program-playbook.md](program-playbook.md). Every implementation program obeys
+this complete contract on one exact candidate tip.
 
-### 4.1 D1 — frozen Q8 vertical: DELETE
+### 5.1 Atomic candidate and complexity accounting
 
-Delete `compile/model.py::compile_model`,
-`compile/program.py::{compile_program,evaluate_program}`,
-`compile/program_diagnostics.py`, `model/compiled.py`, `model/program.py`,
-`model/state.py`, all of `analysis/`, `assembly/`, and `results/`, and their
-exports in `compile/__init__.py` and `model/__init__.py`. This includes
-`CompiledModel`, `CompiledProgram`, `PreparedAnalysis`, `PreparedAssemblyPlan`,
-`assemble_reference_linear`, `CommittedAnalysisState`, `Solution`,
-`LinearBalanceLedger`, and `fresh_verify`.
+Start from a clean, named base revision. Preflight names affected consumers,
+owners, tests, workloads, expected line delta, and measurement cells before hot
+code changes. Build one integrated candidate only within that program's allowed
+techniques. Do not leave partial consumer migration or combine programs to make
+a failed gate pass.
 
-Delete `test_v3_linear_analysis.py`, `test_v3_assembly_plan.py`,
-`test_v3_program_compile.py`, and `test_v3_model_compile.py` after migrating
-still-relevant authored-input, geometry, constraint, and balance cases to the
-generic compiler/driver tests. Keep and trim `test_v3_model_identity.py` because
-most of it covers shared primitives; keep `test_v3_q8_generic_flow.py` because it
-already tests the surviving system. Do not port tests whose only subject is a
-deleted frozen carrier or deliberate mutation of compiler-owned objects.
+Report unified-zero-diff nonblank Python deltas for `pyfem/v3`, `test/v3`, and
+`bench` separately. Generated files are not complexity exclusions. Record public
+export/signature changes explicitly. Historical counts are comparisons for their
+revisions, not permanent test-count targets.
 
-### 4.2 D2 — prototype public solve lane: TEMPORARILY RETAIN
+### 5.2 Matched performance and memory evidence
 
-The complete specialized Q8/skim lane remains production on `v3`; do not apply
-M123's deletion or consumer-migration commits. NX7-3P may change the existing
-generic path and focused instruments only, not this prototype. No generic
-FE²/TL/Riks/J2/notebook flow may be rerouted to it.
+Use identical generated inputs and equivalent public envelopes for exact-base
+control and candidate on the same machine, numerical-library versions, thread
+counts, cache state, and thermal conditions. Keep deck read, compile, cold plan,
+first solve, reused-plan solve, and complete fresh end-to-end costs distinct
+where applicable. Never compare prototype solve-from-assembled with generic
+fresh compile/driver, rename an envelope, omit a stage, or manufacture cache
+warmth.
 
-The following is the inventory for a possible later deletion candidate, **not
-current deletion permission**:
+Run a matched **base/candidate/base** sequence and report all samples, medians,
+environment provenance, correctness, and missing cells. The repeated base runs
+predeclare the per-cell control/control variability used to distinguish movement
+from noise. The established outer regression ceiling remains:
 
-- Remove `types.py`, `pack.py`, `loader.py`, `registry.py`,
-  `_prototype_assembly.py`, `solver/`, `mesh/`, `elements/`, old IO, their root
-  exports, and all `LoadedProblem` benchmark consumers in one reviewed candidate.
-  Replace retained `types.F64`/`I32` imports with owning-module NumPy aliases,
-  not a compatibility `types.py`; prototype-only Tet4 remains outside the
-  research kernel, but its deletion waits for that candidate.
-- Move `CooCsrPattern`, `compile_csr_pattern`, `dedup_coo_values`,
-  `dedup_coo_segments`, `_PARALLEL_MIN_ENTRIES`, and the explicit serial/parallel
-  reduction kernels from `fem/assembly.py` to `fem/sparse.py` before removing
-  prototype assembly. Preserve small-strain math with generic callers or
-  independent oracles and retain the canonical parallel reduction path.
-- Migrate the strict left-to-right and above-threshold 1T/nT raw-uint64 COO tests
-  to synthetic generic fixtures, add the generic `refill_tangent` integration
-  oracle, and restore the prior Numba thread count. Serial-only is not an accepted
-  simplification without separate numerical and matched performance evidence.
-- Keep `test/v3/_legacy_parity.py` as an independent legacy-v1 oracle with its own
-  settings handling; do not share implementation with the code under test merely
-  to reduce lines. Preserve every analytic/legacy skim gate and coefficient
-  permutation without a facade or second maintained v3 result stack.
+```text
+candidate_median / control_median <= 1.25 OR candidate_median - control_median <= 1 ms
+```
 
-Even after a focused NX7-3P pass, this candidate must separately satisfy the
-1,800-production/1,500-test nonblank deletion floors and the full clean matched
-baseline contract in section 5. M123's old map and tests at `1e55f90` are an
-inventory aid, not accepted performance evidence.
+It is necessary, not a license for a resolved slowdown. A candidate slower than
+control beyond the repeated-base envelope fails **no performance loss**, even if
+it passes that outer ceiling. An optimization's declared primary cells must also
+improve beyond that envelope. There is no averaging across workloads, materials,
+threads, stages, or memory metrics.
 
-### 4.3 D3 — unsupported scientific breadth: DELETE
+Report logical array/COO/CSR bytes, `tracemalloc`, and RSS high-water separately
+when used. None substitutes for another. No candidate may retain eager
+array-valued runtime manifests solely to derive identity, duplicate owned index
+copies, or validation-only tensors that the selected hot path no longer uses.
+Cold/warm/fresh-process/JIT scopes remain distinct. Full baseline runs and
+baseline promotion are outside all three programs.
 
-Delete these complete live families and their authoring exports:
+### 5.3 Numerical and repository gates
 
-- `compile/contact.py`, `authoring/contacts.py::penalty_contact`, and the
-  contact tests. The analytic-disc penalty operator has no search, friction,
-  observation, deck, notebook, or benchmark consumer.
-- `compile/interface.py`, all four helpers in `authoring/interfaces.py`, the
-  `ConvertedDeck.interfaces` field, and
-  `io/legacy_deck.py::{_InterfaceProfile,_interface_family,_interface_declaration,_check_interface_arities}`
-  plus their call sites. Remove the interface/cohesive/authoring-interface tests.
-  The frame/tangent investigations remain historical numerical evidence.
-- `compile/continuum.py::{Q8ThermalPayload,Q8ThermalOperator,Q8ThermoElasticPayload,Q8ThermoElasticOperator,_compile_thermal,_compile_coupled}`,
-  `THERMAL_*`/`THERMO_*` keys, descriptor branches, and dispatch entries. Delete
-  `test_v3_multifield_continuum.py` after moving a small partial-support,
-  multiple-discrete-space test to the generic system tests. Do not confuse
-  deleting unsolved coupled operators with deleting multi-space representation.
-- `materials/{prony_viscoelasticity,perzyna_viscoplasticity,perzyna_backward_euler,skorohod_olevsky,crystal_plasticity}.py`;
-  their registry imports, bindings, descriptor constants and factories in
-  `compile/continuum.py`; `authoring.materials` constructors
-  `prony_viscoelasticity`, `viscoplasticity`, `backward_euler_perzyna`, and
-  `skorohod_olevsky`; and the corresponding `*_law`/`*_registry` helpers in
-  `authoring/registry.py` and `authoring/compile.py::_default_registry`. Delete
-  their focused tests after recording the oracle locations. Scalar program
-  signals remain supported by researcher springs; no built-in rate law is needed
-  to justify that ABI.
+Preserve independent analytic/legacy/literature oracles, accepted/trial
+ownership, rejected-attempt byte identity, constraint diagnostics,
+iteration/factorization/cycle/correction counts, and raw 1T/nT determinism.
+Fused arithmetic requires a measured documented band and unchanged solve
+counts; never claim raw old/new equality without proving it. Raw-bit pins follow
+`test/v3/conftest.py`: the reference platform selects raw uint64, while other
+platforms execute the documented tolerance branch without skipping.
 
-Retire the affected public documentation explicitly, without deleting valid
-legacy-only documentation:
+Each candidate must pass its focused numerical matrix, the headless notebook
+assertion, `python -m bench.run gates` with zero failures, both complete
+repository digit-mode suites, and every exact and bare Ruff check/format command
+in the playbook. A red gate invalidates timing. Existing failures must be shown
+on the exact base and cannot be silently reclassified as candidate passes.
 
-- In `examples/materials/viscoplasticity/README.md`, remove the live section
-  "True backward-Euler Perzyna physics in v3" and its authoring example, and link
-  the remaining legacy deck README to the retirement entry. Apply the same
-  removal or historical demotion to
-  `examples/materials/viscoplasticity/bar_tension.pro:33-34`, whose shipped
-  comment says the separate v3 law implements true rate physics, so no stale
-  support statement survives. Preserve the legacy deck's rate-independent
-  explanation and negative control.
-- In `doc/materials/viscoplasticity.md`, remove the v3 mapping claims and the
-  complete "True v3 `backward-euler-perzyna`" section, including its live
-  authoring contract. Retain a legacy-only `ViscoPlasticity` page; demote the v3
-  return-map/tangent equations, authoring example, and verification references to
-  the retirement entry.
-- Demote the wholly v3 `doc/materials/crystal_plasticity.md` page to
-  `.agents/v3/evidence/2026-11-05-nx7-crystal-plasticity.md`, marked as retired
-  historical evidence at `d9e4a12`, and remove `crystal_plasticity.md` from
-  `doc/materials/overview.md`. Do not leave a live Sphinx link or present the law
-  as supported.
-- In `doc/materials/sovs.md`, retain the legacy model, quirks, repaired-tangent,
-  and bibliography documentation but remove/demote the live v3
-  `skorohod-olevsky` migration and parity claims in the tangent note. Update any
-  v3 support links to point to the retirement entry.
+### 5.4 Independent review and abandonment
 
-Before deletion, append an NX7 retirement entry to `migration-history.md` naming
-`d9e4a12`, these symbols/tests/documents, and the consumer/cost reason for
-retirement. The entry must preserve these independent literature and oracle
-locations rather than merely saying "see Git":
+Independent review must inspect current source and consumers, the candidate diff,
+raw matched artifacts, complexity accounting, and every program-specific gate.
+Prose-only or test-count review is insufficient. Only a clean source-to-charter
+review at the exact tip can recommend merge.
 
-- For backward-Euler Perzyna, cite the README's retired v3 section,
-  `doc/materials/viscoplasticity.md` sections "Verification" and "References",
-  Perzyna (1966, DOI `10.1016/S0065-2156(08)70009-7`), Simo and Hughes (1998,
-  DOI `10.1007/b98904`), and
-  `test_v3_viscoplasticity.py::{test_backward_euler_perzyna_matches_scalar_bisection_and_central_fd,test_backward_euler_perzyna_symbolic_implicit_derivative,test_backward_euler_perzyna_elastic_and_rate_independent_limits,test_backward_euler_perzyna_q8_fast_loading_has_higher_overstress,test_backward_euler_perzyna_uninterrupted_and_restart_are_byte_equivalent}`.
-- For crystal, cite the demoted page's "Slip systems and Schmid kinetics",
-  "Saturation and latent hardening", and "Why this is fresh, not ported"
-  sections; Peirce/Asaro/Needleman (1983, DOI
-  `10.1016/0001-6160(83)90014-7`); Kocks and Mecking (2003, DOI
-  `10.1016/S0079-6425(02)00003-8`); and
-  `test_v3_crystal_plasticity.py::{test_single_slip_analytical_hardening_response,test_sympy_implicit_return_map_derivative,test_full_tangent_fd_conviction_and_measured_class,test_elastic_limits_are_exact,test_state_transactions_and_typed_rejections,test_two_system_competition_uses_the_complete_fcc_family,test_compiled_layout_derived_dtime_and_driver_commit}`.
-  State explicitly that removed legacy `Crystal.py` is not a numerical oracle:
-  conviction comes from literature, analytical single-slip response, SymPy,
-  finite differences and tampered-tangent controls, elastic limits, transaction
-  isolation (input purity, repeated evaluation, committed-state isolation, and
-  typed rejection), full-family competition, and the compiled-driver
-  derived-`dtime` path, not legacy arithmetic.
-- For SOVS, cite `doc/materials/sovs.md` "References" (Skorohod 1972 and
-  Olevsky 1998), the documented M67/M76 tangent-repair history, and
-  `test_v3_sovs.py::{test_activated_tangent_repair_confirmed_by_fd,test_kernel_tangent_is_the_exact_stress_map_derivative_by_fd,test_symbolic_jacobian_confirms_the_closed_form}`.
-  For the other D3 families, name their module docstrings, independent legacy or
-  literature references, and focused tests at `d9e4a12` with the same precision.
+Any missing required cell, scientific or behavioral change outside scope,
+performance or memory failure, complexity shortfall, public-lifecycle addition,
+or need for another cache/lifecycle/attribution/micro-optimization remediation
+round abandons that candidate **without merge**. Restore the base, retain only
+the honest negative record and approved evidence artifacts, and stop. Do not
+rescue the candidate by relaxing thresholds, moving to the next technique, or
+starting the next program as an implicit retry.
 
-Historical source remains recoverable from Git; do not copy dead implementations
-into the documentation tree or keep them importable as "reference" production
-modules.
+## 6. NX8-1 — selective Q8 performance and data layout
 
-### 4.4 D4 — facades and low-value public exports: UNIFY or DELETE
+**Purpose:** improve the existing generic small-strain Q8 route in place. This is
+not a prototype-replacement candidate and has no deletion or consumer-migration
+step.
 
-The root package stops re-exporting a solver facade. `authoring` retains the
-mesh/model/material/program constructors, `compile`, `evaluate`, `trial_vector`,
-`spring`, `fe2_continuum`, `periodic_cell`, `nonlinear_static`, and the typed
-status/settings/result values needed by those flows. `driver.__init__` retains
-the two drivers and their public request/result types, not plan internals,
-`IntegrationPointTaskPool`, or `PreparedNestedExecution` as convenience exports.
-`compile.__init__` no longer presents the frozen Q8 compiler as the package API;
-direct `compile_system` and owning family modules are explicit. `io.__init__`
-exports only the retained deck adapter.
+### 6.1 Bounded scope
 
-Do not replace deleted re-exports with a new mega-facade. Advanced users import
-an owning module; ordinary users follow the notebook.
+The only optimization targets are generic Q8 linear PlaneStress/PlaneStrain
+construction and evaluation, its exact constraint/plan interaction, and identity
+or export work directly required by that route. Q4/T3/Hex8, stateful J2/damage,
+Q8 total-Lagrangian, FE², truss/spring/Riks, and prototype paths are controls,
+not optimization targets; shared changes must preserve and measure every affected
+one.
 
-## 5. Ordered implementation programs
+Only these five techniques are authorized:
 
-Complexity targets are **net** changes after required test/oracle migrations,
-measured with the same nonblank-line method. Partial-file estimates are not
-additive; the final budget is the controlling check. A program that adds lines
-must explain the unexpected scientific gain and amend this charter before merge.
+1. **Fused tangent and reuse.** Bind the existing fused NumPy/Numba small-strain
+   kernel in `fem/element.py` behind `Q8ContinuumOperator`'s existing channel
+   contract, with immutable linear tangent precompute/reuse. Keep geometry and
+   constitutive validation honest and diagnostic recovery explicit.
+2. **Validation once.** Validate external/authored/restore boundaries once and
+   trust exact immutable compiler-owned values downstream. Do not remove public
+   input checks, restore compatibility checks, numerical precondition checks,
+   or first-use sabotage coverage.
+3. **Explicit plan reuse.** Allow an explicitly owned `DriverAssemblyPlan` to be
+   reused through the existing driver boundary after exact system/map identity,
+   fingerprint, load, and state compatibility validation. Define caller/driver
+   lifetimes. No weak global cache or public `PreparedExecution`.
+4. **Range-appropriate arrays.** Use the smallest safe index dtype for actual
+   ranges and SciPy/Numba compatibility, adopt owned arrays without repeated
+   copies, and preserve canonical stable reductions. Genuine MPC products and
+   FE² maps retain their full semantics.
+5. **Lazy export only.** Derive normalized-recipe/export/fingerprint arrays only
+   when an actual export, persistence, provenance, or diagnostic boundary asks
+   for them. Preserve semantic identity and restore behavior without eager
+   derived-array manifests.
 
-### NX7-1 — retire non-kernel breadth and record its evidence
+No columnar entity/source rewrite, selector-only reduction, new offset fast
+path, new serialization format, general attribution rewrite, prototype edit, or
+other optimization is authorized. In particular, do not recover M126's complete
+candidate merely because its individual techniques appear similar.
 
-1. Add the historical retirement entry with every D3-required literature,
-   independent-oracle, and non-legacy crystal verification location, plus the
-   retained multi-space test.
-2. Apply D3, including the named edits to
-   `examples/materials/viscoplasticity/README.md` and
-   `examples/materials/viscoplasticity/bar_tension.pro:33-34`,
-   `doc/materials/{viscoplasticity,crystal_plasticity,sovs}.md`, the crystal
-   historical move, and `doc/materials/overview.md`. Remove all exports,
-   registry defaults, and deck support in the same commit. No rejected deck may
-   silently fall back to another law.
-3. Delete the fourteen obsolete focused test files except for the specifically
-   migrated space case; do not retain skipped tests.
+### 6.2 Required measurements and acceptance
 
-**Consumers affected:** interface decks and direct users of the named contact,
-thermal, rate, SOVS, and crystal helpers now receive explicit unsupported-input
-errors. Readers of the backward-Euler Perzyna README example and the three
-Sphinx pages are directed to the exact historical retirement record; valid
-legacy-only documentation remains live. No registered benchmark or v3 notebook
-uses the deleted families. Researcher springs, J2/damage, FE², TL, and Riks
-remain.
+Preflight reproduces the generic base and records the current prototype only as
+a supported-production reference. The candidate/control acceptance comparison is
+against the **exact generic base**, not the abandoned M126 candidate and not a
+prototype-parity deletion budget.
 
-**Complexity gate:** at least 6,500 net production and 9,500 net v3-test
-nonblank lines removed. Current direct files alone provide 5,314 production and
-11,525 test lines; thermal, compiler, registry, and adapter cleanup supplies the
-rest while allowing for the small retained test.
+Measure programmatic-array and identical-deck public envelopes at 2x2, 8x8, and
+32x32, for PlaneStress and PlaneStrain, at 1 and 16 threads. Report deck read,
+compile, cold plan, first solve, explicit reused-plan solve, and complete fresh
+array/deck end-to-end costs for every cell. The primary useful-improvement cells
+are **all 32x32 fresh array and fresh deck end-to-end cells, for both materials
+and both thread counts**. Every primary cell must improve beyond the repeated
+base envelope. Every other comparable cell must have no resolved performance
+loss and satisfy the outer regression ceiling. Any shared validation, identity,
+array, constraint, plan, or driver change also requires matched affected cells
+for every retained FE²/damage/J2/TL/truss/spring/signal/Riks/notebook route it
+touches, under the same no-loss rule; Q8-only timing cannot clear a shared-code
+change. A private tangent-only win or a prototype comparison cannot substitute
+for a primary public-e2e improvement.
 
-**Acceptance:** retained authored flows and `bench.run gates` pass; FE² raw
-identity and J2/damage oracles are unchanged; both full digit-mode suites and
-all Ruff gates pass; an import/search audit finds no live reference to D3
-symbols. The Sphinx build and a documentation audit must show no live v3
-support claim for the deleted families, no crystal entry in the materials
-toctree, the historical crystal evidence at its exact new path, and all required
-literature/oracle citations in `migration-history.md`. Run matched
-candidate/control timings only if shared hot code changes; otherwise record that
-no performance claim or baseline change is made.
+Acceptance additionally requires:
 
-### NX7-2 — delete the frozen Q8 analysis/result vertical
+- analytic Q8/patch and independent legacy gates, documented fused arithmetic
+  deviation, unchanged accepted states within the declared numerical policy,
+  and exactly unchanged iteration/factorization counts;
+- raw 1T/nT accepted-state, tangent, and sparse-reduction determinism on the
+  reference platform or the documented always-executed tolerance branch;
+- logical COO/index bytes and `tracemalloc` no greater than the exact generic
+  base in every measured cell, with a resolved 32x32 traced-memory reduction;
+  prototype memory is contextual, not a migration acceptance proxy;
+- no eager derived-array manifest, duplicate owned index copy, or retained
+  validation-only B/gradient tensors on the optimized linear Q8 path;
+- negative nonblank deltas in **both** production and v3 tests, with benchmark
+  instrumentation delta reported separately; and
+- all common numerical/repository gates and clean independent review.
 
-1. Migrate the unique generic-input, geometry, affine-map, equilibrium, reaction,
-   rollback, and provenance cases identified in D1 to
-   `test_v3_q8_generic_flow.py`, `test_v3_constraints.py`,
-   `test_v3_driver_nonlinear.py`, and `test_v3_model_identity.py` as appropriate.
-2. Add one PatchTest8 accepted-result check of full/reduced balance and reactions
-   through the existing driver observation. Do not recreate `Solution.verify()`.
-3. Apply D1 and remove the now-empty packages and exports.
+### 6.3 Hard stop
 
-**Consumers affected:** direct `compile_model`/`prepare_analysis` users migrate
-to `compile_system` + `NonlinearStaticDriver`. The notebook and benchmarks need
-no compatibility wrapper.
+Stop without merge if any authorized technique cannot produce the required
+public improvement and complexity reduction on its own, any non-primary cell has
+a resolved loss, memory increases, any manifest/tensor prohibition is violated,
+any required cell or numerical gate fails, or success needs an additional
+optimization/remediation round. Do not migrate Q8/skim consumers, delete any
+prototype file, promote a baseline, or leave an unused plan-injection API behind.
 
-**Complexity gate:** at least 10,500 net production and 4,500 net v3-test lines
-removed. The D1 production set is 10,861 lines; the four deleted test files are
-5,509 lines before the focused migrations.
+## 7. NX8-2 — private generic driver-runtime consolidation
 
-**Acceptance:** analytic Q4/T3/Q8/Hex8 and PatchTest8 oracles, affine MPC,
-constant-tangent reuse, full/reduced residual, and rejected-attempt byte identity
-pass. Run `bench.run gates`; require no FE²/family numerical change. Both full
-suites and Ruff are mandatory. No performance baseline is promoted for a deletion.
+**Purpose:** remove duplicated private orchestration from the existing generic
+drivers without changing behavior. This is a complexity program, not a new
+runtime design.
 
-### NX7-3P protocol record — closed with M126 abandonment
+### 7.1 Preflight and bounded scope
 
-This was the only authorized implementation program. M126 executed it once from
-`c4930cf` (whose implementation is `fbb72fa`) and abandoned it; the protocol below
-is retained as the falsification contract, not as a live work queue.
+Inventory `driver/nonlinear.py`, `driver/riks.py`, `driver/plan.py`,
+`driver/nested.py`, `driver/task_pool.py`, `driver/continuation.py`, their private
+workspace/record interactions, and the owning state interfaces. Name each
+duplicated evaluation/factorization/nested-scope/accounting block, its sole
+surviving owner, and the tests and workloads that falsify behavior changes.
 
-1. Establish equivalent envelopes before optimization: programmatic arrays ->
-   prototype `pack`/solve versus arrays -> generic spec/compile/driver, and
-   identical deck files -> each public loader/solver. Report deck read, compile,
-   cold plan, first solve, cached-plan solve, and full fresh e2e with cache
-   ownership explicit. Old solve-from-assembled versus fresh generic driver is
-   historical non-comparable context, not an acceptance cell or baseline rename.
-2. Build one integrated candidate using only the bounded representation changes
-   in [generic_core.md](generic_core.md): lazy semantic/export identity, columnar
-   entity/source data, specialized fused Q8 evaluation with tangent reuse,
-   range-appropriate indices without duplicate owned copies, and explicit
-   validated plan reuse. Only raw-provable selector and single-coordinate offset
-   fast paths are candidates. No wholesale V2 runtime manifest, weak global plan
-   cache, public `PreparedExecution`, second runtime, or prototype fallback is
-   permitted.
-3. Prove every comparable 2x2/8x8/32x32 cell for PlaneStress and PlaneStrain at
-   1T/16T against **ratio <= 1.25 OR delta <= 1 ms**. At 32x32 require load <=
-   12.3889 ms, fresh e2e <= 54.9259 ms, and plan + cached-plan solve <=
-   54.9259 ms - measured_load. COO and measured memory may not exceed the
-   same-case prototype absent a documented range requirement; no validation-only
-   linear B/gradient tensors or eager derived-array manifest copies may remain.
-4. Preserve all analytic/legacy/FE²/family controls, raw 1T/nT identity,
-   iteration/factorization counts, state/rejection semantics, and independent
-   oracles listed in generic_core.md. Keep fused arithmetic within a measured
-   documented band without claiming raw old/new equality. Pass `bench.run gates`,
-   the headless notebook, both complete digit-mode suites, and all exact and bare
-   Ruff check/format invocations on one commit.
-5. Do not edit or delete the prototype and do not run a full baseline in this
-   vertical. Record exact focused evidence in this file and request independent
-   source-to-charter review.
+The preflight must show a credible path to **at least 300 net production
+nonblank lines removed** after all call-site and private-helper changes. If it
+cannot, stop before implementation. Only private functions/classes within the
+existing driver/state ownership boundary may change. Prototype `solver/`,
+numerical payloads, public signatures/exports, and benchmark scientific gates
+are outside scope.
 
-**Consumers affected:** none during the spike. Current Q8/skim production stays
-on the prototype; all existing generic consumers stay on the generic spine.
-There is no partial migration to leave behind if the hypothesis fails.
+### 7.2 Acceptance
 
-**Focused complexity gate:** production and v3-test nonblank counts must both
-fall relative to `fbb72fa`, measured by unified zero diff after excluding only an
-equivalent benchmark rewrite. If either does not fall, abandon the vertical.
+- Remove **>=300 net production nonblank lines**, measured by unified zero diff
+  against the exact base; v3-test nonblank lines must not grow and behavioral
+  coverage must not decrease.
+- Keep `DriverAssemblyPlan`, `StateTransactionOwner`, nested resources, drivers,
+  and disposable workspaces as the existing owners. Add no public helper export,
+  lifecycle object, accepted-state/factorization owner, typed DSL, or facade.
+- Preserve public signatures and typed diagnostics, Newton/cutback and Riks
+  prediction/two-solve/termination/resume policy, continuation evolution,
+  fixed-entering-state sensitivities, nested commit/reject/resource closure,
+  accepted/rejected bytes, and all iteration/factorization/cycle/correction
+  counts. No tolerance or arithmetic-order change is permitted.
+- Pass analytic, state, constraint, FE², J2/damage, sensitivity, TL,
+  truss/spring/signal, Riks, and notebook controls plus every common repository
+  gate.
+- Run matched base/candidate/base timings on every affected registered generic
+  workload and thread cell, including FE² and family routes and any generic Q8
+  route touched. Require no resolved performance loss, no increase in measured
+  retained/traced memory, no new eager manifest, and no missing correctness
+  cells. A speedup is welcome but not required and cannot offset behavior drift.
+- Obtain clean independent source-to-charter review at the exact tip.
 
-**Hard stop and abandonment:** any focused correctness, performance, COO/memory,
-or complexity failure, any missing required cell, or any need for another cache,
-lifecycle, runtime, attribution, or micro-optimization round ends the vertical
-without merge. Record the negative result and keep current production. There are
-no retries disguised as follow-up remediation.
+### 7.3 Hard stop
 
-**Separate deletion candidate only after a focused pass:** a complete pass may
-authorize, but does not perform, a later D2 deletion review. That candidate must
-remove >=1,800 production and >=1,500 v3-test nonblank lines after the equivalent
-benchmark exclusion and pass a full clean matched reference-machine
-candidate/control run with full coverage, zero missing cells, and zero
-correctness failures. `baseline_m3.json` and all historical benchmark JSON stay
-unchanged; any successor requires its own reviewed full run.
+Stop without merge if the final production reduction is below 300 lines, tests
+or public surface grow to hide the extraction, any behavior/diagnostic/count or
+raw-determinism result changes, any affected workload loses measured performance
+or memory, a new lifecycle owner appears, or another extraction/remediation
+round is needed. Do not proceed by reclassifying numerical changes as harmless
+or by moving public driver behavior into the prototype.
 
-**NX7-4+ stopped:** compiler/operator unification, driver-runtime extraction,
-public-surface cleanup, and every later program remain stopped regardless of the
-spike's outcome until a separate evidence-backed charter authorizes them. This
-vertical is a falsification gate, not a generic-only deletion approval or a
-permanent dual-runtime architecture.
+## 8. NX8-3 — public surface, test, and benchmark consolidation
 
-## 6. Durable execution rules
+**Purpose:** make supported ownership and its evidence easier to understand
+without introducing another lifecycle or deleting measured scientific value.
 
-- [program-playbook.md](program-playbook.md) defines deletion, independent-oracle,
-  numerical, performance, and review discipline. It is part of this charter.
-- A deletion is complete only when implementation, exports, adapters, live tests,
-  benchmark routes, and support documentation agree. Preserving an oracle never
-  requires preserving the deleted runtime.
-- Legacy parity is one possible falsifier, never a requirement for arithmetic or
-  architecture. Independent equations, analytic fields, finite/symbolic
-  derivatives, literature, and corrected legacy behavior may supersede it with a
-  recorded reason and tolerance.
-- Raw-bit assertions follow `test/v3/conftest.py`: the reference platform selects
-  raw-uint64 comparison; other platforms execute the documented tolerance branch,
-  never skip. Tolerances cite observed cross-platform deviation.
-- Performance evidence is workload-, revision-, environment-, and
-  coverage-specific. Use matched candidate/base controls, keep cold and warm
-  costs separate, and never promote a baseline under fleet load.
-- The exact frontier lives only here. Historical mission cards and old "next"
-  sections are provenance, not parallel dispatch queues.
+### 8.1 Preflight and bounded scope
+
+Inventory the actual exports and consumers in `pyfem/v3/__init__.py`,
+`authoring/__init__.py`, `compile/__init__.py`, `driver/__init__.py`, and
+`io/__init__.py`; the notebook, deck, extension, and benchmark import sites;
+duplicate test ownership and independent-oracle coverage; and duplicate bench
+construction/timing/gate helpers. Every proposed deletion names its consumer
+proof and surviving owner/oracle. No symbol is dead merely because it belongs to
+the prototype or looks old.
+
+Only dead/duplicate exports, duplicate tests, and duplicate benchmark harness
+ownership are actionable. Numerical kernels, driver semantics, state ownership,
+scientific workload definitions, and historical benchmark JSON do not change.
+The current prototype public route remains where its consumers and measurements
+justify it; no generic-only migration or baseline successor is added.
+
+### 8.2 Acceptance
+
+- Remove only proven duplicate/dead surface. Ordinary users retain a truthful
+  notebook route; advanced users import owning modules. Do not add a mega-facade,
+  compatibility wrapper, public `PreparedExecution`, or lifecycle owner, and do
+  not re-export private plan/nested/task-pool helpers for convenience.
+- Map every removed test to retained independent numerical/ownership/error
+  coverage before deletion. Preserve analytic and legacy-v1 independence,
+  raw-bit/tolerance behavior, failing controls, state rollback, and exact count
+  assertions. Test-line reduction is not permission to weaken an oracle.
+- Preserve every registered benchmark workload identity, generated input,
+  scientific gate, stage/envelope meaning, size/material/thread coverage, cold
+  versus warm distinction, result schema compatibility, and historical artifact.
+  Harness helpers may unify only where they do not share the candidate with its
+  independent oracle or drop inconvenient cells.
+- Report production/test/bench nonblank deltas separately; their combined total
+  must fall and no tree may grow without a separately justified consumer-backed
+  reason recorded before review. There is no numeric deletion quota.
+- Pass the complete notebook, numerical, benchmark-gate, both-digit, and Ruff
+  contract. Run matched base/candidate/base evidence for every affected workload;
+  require identical coverage/correctness, no resolved production performance
+  loss, no increase in retained/traced memory, and no new eager derived-array
+  manifest. If harness wall time changes, report it separately from solver
+  timings.
+- Obtain clean independent source-to-charter review of the export inventory,
+  oracle map, workload/schema diff, and exact candidate tip.
+
+### 8.3 Hard stop
+
+Stop without merge if a claimed dead export has a maintained consumer, an
+oracle or required diagnostic loses independent coverage, a workload/stage/cell
+changes or disappears, a compatibility/lifecycle runtime becomes necessary,
+combined complexity does not fall, production performance or memory regresses,
+an eager manifest appears, or another cleanup round is needed. Do not delete the
+prototype, rewrite historical results, skip missing benchmark cells, or promote
+a baseline to make the consolidation appear successful.
+
+## 9. Durable record and frontier ownership
+
+This file is the only live NX8 frontier. Old mission cards, proof portfolios,
+retirement maps, and "next" sections are evidence for their revisions, not
+parallel work queues. A later mission amends this file with actual outcomes and
+the next safe action; it does not infer authorization from historical imperative
+wording.
+
+Each outcome records the exact base/tip, consumers and scientific contract,
+public surface and ownership changes, oracle migrations, production/test/bench
+line deltas, all raw performance/memory evidence and missing cells, both complete
+suite results, every Ruff result, benchmark routes/artifacts, and the independent
+review decision. Negative results remain visible. Correctness green, reviewer
+count, a "GO" label, and a lower line count never compensate for missing
+scientific usefulness or measured performance evidence.
