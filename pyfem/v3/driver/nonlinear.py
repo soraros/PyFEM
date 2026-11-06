@@ -119,8 +119,11 @@ Protocol summary:
   shared by all parameter solves; a second batched sweep with gathered ``P U``
   then produces every trial-state derivative. The reduced U and full S bundle
   stages in the same atomic primal commit and appears only as
-  ``observation.total_sensitivities``. A no-Newton plateau carries the accepted
-  bundle forward exactly with no path sweep or factorization. Nested FE2,
+  ``observation.total_sensitivities``. An exact unchanged primal plateau (full
+  coefficients equal to the entering accepted physical state) carries the
+  accepted bundle forward with no path sweep or factorization. No-Newton alone
+  is not proof of a plateau: advancing prescribed steps still take both sweeps,
+  and empty reduced U skips sparse LU. Nested FE2,
   non-J2 operators, stale or reordered lineage, and primal-only continuation
   fail closed. The fixed-entering-state channel above is unchanged.
 - Requested homogenization (``homogenization`` on ``run``) observes, at each
@@ -865,7 +868,7 @@ class NonlinearStaticDriver:
     transaction: StateTransaction,
     jacobian_batches: tuple[np.ndarray, ...],
     *,
-    solved: bool,
+    unchanged: bool,
   ) -> tuple[
     TotalParameterDerivativeBundle,
     tuple[TotalParameterSensitivityObservation, ...],
@@ -873,7 +876,7 @@ class NonlinearStaticDriver:
     entering = transaction.accepted_total_derivatives()
     parameter_count = len(program.parameter_ids)
     generation = transaction.generation.next_accepted()
-    if solved:
+    if not unchanged:
       zero_ports = np.zeros(
         (parameter_count, self._map.full_dof_count),
         dtype=np.float64,
@@ -885,42 +888,43 @@ class NonlinearStaticDriver:
         entering,
         zero_ports,
       )
-      tangent = refill_tangent(self._plan, jacobian_batches)
-      self._workspace.tangent_refill_count += 1
-      try:
-        factorization = splu(reduce_tangent(self._map, tangent).tocsc())
-      except RuntimeError:
-        _evaluation_fail(
-          "singular-total-sensitivity-tangent",
-          "the final converged tangent is singular, so total path derivatives "
-          "have no solution",
-        )
-      self._workspace.factorization_count += 1
       reduced_derivatives = np.empty(
         (parameter_count, self._map.reduced_dof_count),
         dtype=np.float64,
       )
-      for p, parameter_id in enumerate(program.parameter_ids):
-        rhs = assemble_parameter_rhs(
-          self._plan,
-          self._map,
-          tuple(evaluation.residual_derivatives[p].values for evaluation in first),
-        )
-        self._workspace.residual_assembly_count += 1
-        sensitivity = np.asarray(
-          factorization.solve(rhs.values),
-          dtype=np.float64,
-        )
-        self._workspace.linear_solve_count += 1
-        if p > 0:
-          self._workspace.factorization_reuse_count += 1
-        if not bool(np.isfinite(sensitivity).all()):
+      if self._map.reduced_dof_count:
+        tangent = refill_tangent(self._plan, jacobian_batches)
+        self._workspace.tangent_refill_count += 1
+        try:
+          factorization = splu(reduce_tangent(self._map, tangent).tocsc())
+        except RuntimeError:
           _evaluation_fail(
-            "non-finite-total-sensitivity-solution",
-            f"the total path sensitivity solve for {parameter_id!r} produced "
-            "non-finite coefficients",
+            "singular-total-sensitivity-tangent",
+            "the final converged tangent is singular, so total path derivatives "
+            "have no solution",
           )
-        reduced_derivatives[p] = sensitivity
+        self._workspace.factorization_count += 1
+        for p, parameter_id in enumerate(program.parameter_ids):
+          rhs = assemble_parameter_rhs(
+            self._plan,
+            self._map,
+            tuple(evaluation.residual_derivatives[p].values for evaluation in first),
+          )
+          self._workspace.residual_assembly_count += 1
+          sensitivity = np.asarray(
+            factorization.solve(rhs.values),
+            dtype=np.float64,
+          )
+          self._workspace.linear_solve_count += 1
+          if p > 0:
+            self._workspace.factorization_reuse_count += 1
+          if not bool(np.isfinite(sensitivity).all()):
+            _evaluation_fail(
+              "non-finite-total-sensitivity-solution",
+              f"the total path sensitivity solve for {parameter_id!r} produced "
+              "non-finite coefficients",
+            )
+          reduced_derivatives[p] = sensitivity
       full_derivatives = np.stack(
         [
           admissible_increment(self._map, sensitivity).values
@@ -1330,12 +1334,16 @@ class NonlinearStaticDriver:
           )
           total_sensitivities: tuple[TotalParameterSensitivityObservation, ...] = ()
           if total_sensitivity_program is not None:
+            unchanged_primal = np.array_equal(
+              full.values,
+              transaction.accepted_physical.values,
+            )
             total_bundle, total_sensitivities = self._solve_total_sensitivities(
               total_sensitivity_program,
               full,
               transaction,
               jacobian_batches,
-              solved=increment is not None,
+              unchanged=unchanged_primal,
             )
             transaction.stage_total_derivatives(total_bundle)
           transaction.stage_physical(full)

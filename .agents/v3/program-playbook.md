@@ -438,7 +438,8 @@ Reusing the stash from the last Newton correction is not generally the same
 operator. Ordinary total commits therefore add one shared final-tangent
 factorization, two path evaluations, P right-hand-side assemblies/back-substitutions,
 and P-1 factorization reuses; P=1 and P=4 have identical fresh-factorization
-counts. Plateau commits use exact carry-forward and add no path work. Existing
+counts. Verified unchanged-primal plateau commits use exact carry-forward and
+add no path work; no-Newton alone is not sufficient evidence. Existing
 increment-only evaluation/factorization behavior is unchanged.
 
 ### Numerical and lifecycle controls
@@ -517,3 +518,21 @@ The benchmark scientific gate also passed: `python -m bench.run gates` reported
 bitwise gate and all notebook/skim/FE2/TL/Riks controls. Together with the two
 full suites and all exact+bare Ruff checks, this completes the required M131
 verification matrix.
+
+
+## 11. M131 R2 review correction
+
+R1's `solved=increment is not None` shortcut was scientifically invalid: an
+advancing prescribed state can converge at iteration one, and a zero-reduced-DOF
+system never needs a Newton correction. The prescribed zero-reduced-DOF
+regression was run against R1 before the fix and failed with all-zero S at
+scaled complete-re-solve FD error `0.4906108711563023`.
+
+R2 selects exact carry-forward only when full coefficients equal the entering
+accepted physical coefficients. Every other direct-J2 commit evaluates the new
+transition and gathers P*U for S. Empty U skips sparse LU and back-substitution
+but does not skip either sweep. The regression now passes all 19 rows for all
+four parameters with zero factorizations/linear solves, while the original true
+plateau remains bitwise and adds no path work. The focused battery now contains
+60 passing tests. Full two-mode suite and Ruff results are recorded after the
+final commit.

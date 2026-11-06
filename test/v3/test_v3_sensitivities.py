@@ -1109,3 +1109,87 @@ def test_total_authoring_surface_and_explicit_nested_fe2_rejection() -> None:
     assert nested.driver.statistics.evaluation_count == 0
   finally:
     nested.driver.close()
+
+
+def test_total_advancing_first_iteration_prescribed_step_matches_resolve_fd() -> None:
+  """A no-Newton advancing step is not an unchanged primal plateau."""
+  from pyfem.v3.spec.program import (
+    AffineCoefficientSpec,
+    AffineValueSpec,
+    DofRef,
+    PrescribedDofSpec,
+  )
+
+  def prescribed_driver(
+    parameters: tuple[float, ...],
+  ) -> NonlinearStaticDriver:
+    mesh = authoring.quad8_patch(1, 1)
+    model = authoring.small_strain_continuum(
+      mesh,
+      material=authoring.plasticity(*parameters, id="steel"),
+    )
+    system = compile_system(model, plasticity_reference_registry())
+    prescriptions = []
+    for node in mesh.nodes:
+      x, y = node.coordinates
+      for component, value in (
+        ("x", 0.003 * x * x),
+        ("y", 0.0005 * x * y),
+      ):
+        prescriptions.append(
+          PrescribedDofSpec(
+            id=f"prescribed-{node.id}-{component}",
+            target=DofRef(node.id, "displacement", component),
+            value=AffineValueSpec(
+              coefficients=(AffineCoefficientSpec("load", value),),
+            ),
+          )
+        )
+    coordinate_map = compile_constraint_map(
+      system,
+      constraints=tuple(prescriptions),
+      coordinates=(ProgramCoordinateSpec(name="load", kind="load"),),
+    )
+    assert coordinate_map.reduced_dof_count == 0
+    return NonlinearStaticDriver(system, coordinate_map, settings=_TOTAL_SETTINGS)
+
+  def complete_solve(
+    parameters: tuple[float, ...],
+  ) -> tuple[np.ndarray, NonlinearStaticResult]:
+    driver = prescribed_driver(parameters)
+    result = _run_total(driver, 0.0, 0.5)
+    assert result.status is DriverStatus.COMPLETED
+    return (
+      np.array(
+        driver.owner.accepted_state(driver.owner.block_ids[0]).values, copy=True
+      ),
+      result,
+    )
+
+  driver = prescribed_driver(_PARAMETERS)
+  result = _run_total(driver, 0.0, 0.5)
+  assert result.status is DriverStatus.COMPLETED
+  (record,) = result.records
+  assert len(record.iterations) == 1
+  assert record.iterations[0].increment_norm is None
+  assert driver.plan.reduced_dof_count == 0
+  observation = record.observation
+  assert observation is not None
+  for p, step in enumerate(_TOTAL_FD_STEPS):
+    plus = list(_PARAMETERS)
+    minus = list(_PARAMETERS)
+    plus[p] += step
+    minus[p] -= step
+    plus_rows, _ = complete_solve(tuple(plus))
+    minus_rows, _ = complete_solve(tuple(minus))
+    fd = (plus_rows - minus_rows) / (2.0 * step)
+    total = observation.total_sensitivities[p]
+    assert np.all(total.coefficients.values == 0.0)
+    state = total.state_derivatives[0][1].values
+    assert state.shape == (9, 19)
+    assert _scaled_total_state_error(state, fd) < 5.0e-7
+  # Empty U needs no sparse LU or back-substitution, but the new transition
+  # still needs its two path sweeps.
+  assert result.statistics.evaluation_count == 3
+  assert result.statistics.factorization_count == 0
+  assert result.statistics.linear_solve_count == 0

@@ -1277,9 +1277,12 @@ factorization of the FINAL converged Jacobian, rather than the possibly
 previous-iterate Newton stash, is shared by all parameter back-substitutions.
 The second and last batched sweep gathers `P U_n` and emits every 19-row J2
 trial-state derivative. There are at most two path sweeps and one shared fresh
-factorization per non-plateau commit, and no per-parameter factorization. A
-no-Newton plateau carries `U,S` forward exactly with no added path sweep,
-factorization, or linear solve.
+factorization per non-plateau commit, and no per-parameter factorization. An
+exact unchanged primal plateau, verified by full coefficients equal to the
+entering accepted physical state, carries `U,S` forward with no added path
+sweep, factorization, or linear solve. No-Newton alone is not evidence of this
+plateau; advancing prescribed steps still take both sweeps, and empty reduced U
+skips sparse LU.
 
 `StateTransactionOwner` remains the sole accepted-state lifecycle owner. Its
 optional reduced-U/per-block-S buffers stage in the same open transaction and
@@ -1327,3 +1330,28 @@ speedups are `3.00x` at P=1 and `10.04x` at P=4; precompiled-system warm median
 speedups are `4.51x` and `12.29x`. All measured medians favor the direct route.
 The detailed matched samples and cold/warm meanings are recorded in
 `program-playbook.md`.
+
+
+### 2026-11-07 — R2 correction: no-Newton is not a plateau proof
+
+R1 review found that using `increment is not None` to select exact carry-forward
+misclassified advancing first-iteration commits as plateaus. A fully prescribed
+zero-reduced-DOF J2 step advancing from load 0 to 0.5 reproduced the defect on
+R1 commit `397d93b`: all entering derivatives were copied as zero, with scaled
+complete-re-solve FD error `0.4906108711563023`.
+
+The corrected invariant is that only a verified unchanged primal point may skip
+the transition map. For direct J2, full coefficients exactly equal to the
+entering accepted physical coefficients are sufficient: no hidden signal or
+nested state can make that an advancing transition. Any other commit takes both
+path sweeps, even when it converged on its first iteration. When the reduced
+space is empty, U has shape `(P,0)` and no sparse LU, RHS assembly, or
+back-substitution is attempted; the second sweep still evaluates complete S and
+full coefficient observations remain zero because prescribed offsets are
+material-parameter independent.
+
+`test_total_advancing_first_iteration_prescribed_step_matches_resolve_fd` pins
+the formerly red case and every one of the 19 rows for all four parameters. It
+also pins two path evaluations and zero factorizations/linear solves. The
+original true-plateau test still requires bitwise U,S carry-forward and zero
+added path work. All 60 focused sensitivity/state tests pass with the correction.
