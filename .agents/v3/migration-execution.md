@@ -18,17 +18,21 @@ constraints; their superseded migration sequences do not expand NX8.
 
 ## Exact next safe action
 
-Request independent source-to-charter review of the abandoned M128/NX8-1
-candidate and its restored base at the exact branch tip. The reviewer must check
-the complexity failure, focused evidence, and restored source against the three
-program stop conditions below. Documentation-only verification establishes a
-green base; it is not evidence for any future candidate.
+Request independent record-to-implementation review of M132 at the exact branch
+tip against M131 merged at `e0b7001` (`397d93b` plus R2 correction `feb0020`).
+The reviewer must inspect the direct-J2 source and tests, not only this prose,
+and check the increment/total distinction, smooth fixed-active-set evidence
+boundary, final-tangent factorization and two-sweep limits, explicit nested FE²
+rejection, derivative lineage, and advancing-prescribed/no-Newton correction in
+section 3.4. This documentation-only change supplies no new implementation or
+performance evidence; its full-suite and Ruff results are base-code controls.
 
-NX8-2 and NX8-3 are bounded later programs, not automatic rewards for an NX8-1
-pass or retries after its failure. Each requires the preceding outcome to be
-recorded, a fresh exact-base preflight, and its own independent review. A failed
-program is abandoned without merge and without a remediation round; it does not
-force the next program to run and does not create a partial migration.
+After that review, re-expansion remains consumer-backed under section 4.4. No
+generic-only deletion, NX8-2/NX8-3 consolidation, broader-material total
+sensitivity, or nested-FE² derivative program follows automatically from M131
+or this reconciliation. Any such proposal needs its own exact-base preflight,
+scientific contract, and independent review; the failed M128 candidate remains
+abandoned.
 
 ## 1. NX8 north star
 
@@ -84,7 +88,7 @@ result/verification stack merely to make the routes look identical.
 |---|---|
 | Uniform Q8 scale cases and linear/nonlinear/Riks skims | **PRESERVE** the current `ProblemDefinition`, `pack`, `_prototype_assembly`, `fem` kernels, and `solver/` route where matched evidence favors it. Keep independent analytic and legacy-v1 gates. |
 | Generic Q4/T3/Q8/Hex8 small-strain and Q8 total-Lagrangian paths | **KEEP** the generic entities/spaces/operators, affine maps, driver plans, and independent geometry/force/tangent oracles. Improve Q8 selectively under NX8-1 without routing other consumers through it. |
-| J2, plane-strain damage, fixed-entering-state sensitivities | **KEEP** the stateful payload/state-transaction semantics, pure references, derivative oracles, and bitwise/determinism gates. |
+| J2, plane-strain damage, fixed-entering-state and direct-J2 total-path sensitivities | **KEEP** the stateful payload/state-transaction semantics, pure references, derivative oracles, and bitwise/determinism gates. Keep the fixed-entering-state increment surface distinct from the opt-in total surface, with direct-J2 path kernels, full U/S lineage, independent complete-re-solve FD oracles, and shared-final-factorization accounting. M131 supplies no total-path support for other materials or nested FE². |
 | FE², periodic RVE authoring, homogenization, nested execution | **KEEP** explicit nested execution, accepted-state ownership, retained-buffer identity, raw 1T/nT evidence, and resource closure. |
 | Truss, grounded/researcher springs, scalar signals, Riks | **KEEP** the unlike entity layouts, researcher extension points, exact cycle/correction gates, and continuation semantics. |
 | Maintained PatchTest8 notebook and retained legacy-deck routes | **KEEP** the generic authored-to-accepted-result flow and analytic assertion. Adapters do not acquire solver or state ownership. |
@@ -224,6 +228,88 @@ There is no `baseline_nx7_3.json`, NX8 successor, rewritten historical result,
 or commitment to create one. NX8 programs produce matched targeted evidence,
 not baseline promotions.
 
+### 3.4 M131/NX9-1 — direct-J2 total path sensitivities merged
+
+M131 merged at `e0b7001` through implementation `397d93b` and R2 correction
+`feb0020`. It is a consumer-backed RE-EXPANSION inside the existing nonlinear
+driver and state transaction, not a general sensitivity framework. The detailed
+contracts and raw evidence remain in [design.md](design.md) and
+[program-playbook.md](program-playbook.md); this subsection reconciles the live
+frontier with that merged implementation.
+
+The existing `sensitivity_parameters` and `ParameterSensitivityObservation`
+surface remains **increment-only**, with the entering accepted state held fixed.
+The separate opt-in `total_sensitivity_parameters`,
+`TotalParameterSensitivityObservation`, and
+`SubstepObservation.total_sensitivities` surface carries total coefficient
+derivatives U and per-block state derivatives S. The elastic two-step factor-two
+test pins the distinction. Optional path-ABI carriers,
+`Q8StatefulContinuumOperator`, and the `isotropic-hardening-plasticity` direct-J2
+reference and batched kernels implement the transition recurrence without
+reinterpreting the increment channel or adding a second accepted-state owner.
+
+`StateTransactionOwner` stages U/S in the same transaction and generation as the
+primal state. Reject clears derivative staging, cutback re-roots to accepted
+derivatives, and total continuation after a primal-only commit fails closed as
+stale. Parameter order, system/map fingerprints, block schemas/shapes, geometry,
+and generation define the lineage and codec identity. These are merged lifecycle
+controls, not a proposal for another derivative-state runtime.
+
+The supported and evidenced boundary is deliberately narrow:
+
+- compilation requires every operator to declare the direct
+  `isotropic-hardening-plasticity` implementation and optional path ABI; other
+  materials are rejected and have no total-path support under M131;
+- nested FE² is explicitly rejected during preparation with
+  `unsupported-total-sensitivity-nested-fe2`, before evaluation, and has no
+  nested derivative lifecycle;
+- scientific and performance evidence covers smooth load/unload/reload paths
+  with fixed active-branch masks on every complete-re-solve FD leg. It does not
+  establish derivatives through changing active sets or nonsmooth kinks.
+
+An ordinary non-plateau total commit takes at most two batched path sweeps and,
+when reduced DOFs exist, one fresh factorization of the **final converged
+Jacobian**, shared by all P parameter back-substitutions. It adds P right-hand-
+side assemblies/back-substitutions and P-1 factorization reuses, never one
+factorization per parameter; reusing the possibly previous-iterate Newton stash
+is not equivalent. Empty reduced U skips sparse LU, RHS assembly, and back-
+substitution but not either path sweep. A verified unchanged primal plateau,
+with full coefficients exactly equal to the entering accepted physical state,
+carries U/S forward bitwise with no added path sweep, factorization, or linear
+solve. Increment-only evaluation and factorization behavior is unchanged.
+
+R1 exposed a scientific defect in this plateau rule. Its
+`solved=increment is not None` shortcut treated `increment is None`—no Newton
+correction—as proof of a plateau. On `397d93b`, a fully prescribed,
+zero-reduced-DOF J2 step advancing from load 0 to 0.5 therefore copied zero
+entering derivatives instead of evaluating the new transition; the scaled
+complete-re-solve FD error was `0.4906108711563023`. R2 compares the full
+primal coefficients with the entering accepted state instead. The regression
+`test_total_advancing_first_iteration_prescribed_step_matches_resolve_fd`
+checks every one of the 19 state rows for all four parameters, two added path
+evaluations, and zero factorizations/linear solves for empty U. The original
+true-plateau regression still requires bitwise U/S carry-forward and zero added
+path work. Thus advancing first-iteration prescribed states take both sweeps;
+only true unchanged primal plateaus skip path work.
+
+M131 records independent complete-path and complete-re-solve FD, active-mask,
+rollback/cutback, stale-lineage, codec, primal-transparency, and cost controls,
+with 60 focused sensitivity/state tests after the R2 correction. On the recorded
+reference i9-9980HK workload, direct versus `2P` complete-re-solve median
+speedups are `3.00x` fresh and `4.51x` precompiled-warm at P=1, and `10.04x`
+fresh and `12.29x` precompiled-warm at P=4. Those are existing M131 results for
+the smooth fixed-active-set 4x1 Q8 cantilever, not new M132 measurements or
+evidence for other materials, active-set changes, or nested FE².
+
+M132 changes this file only. On its documentation tree based on `e0b7001`, the
+default complete repository suite passed **1,172 tests plus 12 subtests** in
+169.21 s; `PYTHONINTMAXSTRDIGITS=640` passed the same counts in 112.55 s. Both
+reported the same 43 existing SciPy sparse-efficiency warnings. All eight exact
+per-tree Ruff check/format invocations and both bare whole-tree check/format
+invocations passed with the pinned project executable. These are base-code
+controls for the documentation diff, not fresh implementation or performance
+evidence. No notebook, benchmark workload/result, or implementation file changed.
+
 ## 4. Durable acceptance policy
 
 ### 4.1 Preserve scientific usefulness and specialized wins
@@ -286,8 +372,12 @@ scientific counterexample proves the current semantics insufficient; NX8 does
 not authorize such a runtime.
 
 Contact/cohesive, thermal/thermoelastic, rate-dependent, SOVS, crystal, beams,
-shells, dynamics, ROM, transient integration, and total path sensitivities are
-therefore possible future consumer-backed work, not hidden NX8 completion tasks.
+shells, dynamics, ROM, and transient integration are therefore possible future
+consumer-backed work, not hidden NX8 completion tasks. Direct-J2 total path
+sensitivities are no longer future work: M131 is the bounded consumer-backed
+re-expansion recorded in section 3.4. Extending total sensitivities to other
+materials or nested FE², or establishing evidence across changing active sets,
+remains possible future consumer-backed work and is not supported by `e0b7001`.
 Their historical evidence remains addressable. Re-expansion must not resurrect
 the M122 frozen vertical or wrap deleted APIs in a compatibility runtime.
 
@@ -527,8 +617,10 @@ or complete Ruff matrix is claimed. The temporary measurement harness and raw
 timing artifact were removed. The uncommitted candidate diff was discarded; no
 implementation or partial migration remains to review or merge. Restoring the
 base and rerunning the preflight 166-test command passed 166 tests in 6.92 s.
-The next safe action is independent review of this negative record and the
-restored source, not another remediation round or an automatic NX8-2 start.
+At that historical outcome, the next safe action was independent review of this
+negative record and restored source, not another remediation round or an
+automatic NX8-2 start. The current frontier is the merged M131 evidence and its
+record reconciliation above, not a resumed generic-only deletion round.
 
 ## 7. NX8-2 — private generic driver-runtime consolidation
 
