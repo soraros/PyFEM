@@ -18,18 +18,17 @@ constraints; their superseded migration sequences do not expand NX8.
 
 ## Exact next safe action
 
-Request independent source-to-charter review of M127 at its exact branch tip.
-The reviewer must check this frontier against current source, consumers, tests,
-and benchmark envelopes, including the three program stop conditions below.
-Documentation-only verification establishes a green base; it is not evidence for
-any future candidate.
+Request independent source-to-charter review of the abandoned M128/NX8-1
+candidate and its restored base at the exact branch tip. The reviewer must check
+the complexity failure, focused evidence, and restored source against the three
+program stop conditions below. Documentation-only verification establishes a
+green base; it is not evidence for any future candidate.
 
-After a clean review, NX8-1 may begin with its read-only preflight and matched
-base/candidate/base measurements. NX8-2 and NX8-3 are bounded later programs,
-not automatic rewards for an NX8-1 pass. Each requires the preceding outcome to
-be recorded, a fresh exact-base preflight, and its own independent review. A
-failed program is abandoned without merge and without a remediation round; it
-does not force the next program to run and does not create a partial migration.
+NX8-2 and NX8-3 are bounded later programs, not automatic rewards for an NX8-1
+pass or retries after its failure. Each requires the preceding outcome to be
+recorded, a fresh exact-base preflight, and its own independent review. A failed
+program is abandoned without merge and without a remediation round; it does not
+force the next program to run and does not create a partial migration.
 
 ## 1. NX8 north star
 
@@ -480,6 +479,56 @@ a resolved loss, memory increases, any manifest/tensor prohibition is violated,
 any required cell or numerical gate fails, or success needs an additional
 optimization/remediation round. Do not migrate Q8/skim consumers, delete any
 prototype file, promote a baseline, or leave an unused plan-injection API behind.
+
+### 6.4 M128 bounded-candidate outcome — abandoned on complexity
+
+M128 started from exact base `752ef3f570a010e469826ab0c28b5ae31ae7f146`.
+Read-only preflight passed 166 focused Q8/identity/constraint/driver tests. A
+12-cell base matrix covered 2x2/8x8/32x32, both materials, 1/16 threads, and
+both programmatic-array and identical-deck envelopes with three samples per
+stage. Every base solve completed with two iterations and one factorization;
+accepted-state and tangent hashes were raw-identical at 1 and 16 threads.
+The 32x32 fresh end-to-end medians were:
+
+| Material / threads | Array base (ms) | Deck base (ms) | Deck tracemalloc (MiB) |
+|---|---:|---:|---:|
+| PlaneStress / 1T | 1358.7029 | 1402.7759 | 83.684 |
+| PlaneStress / 16T | 1364.1410 | 1447.6754 | 83.682 |
+| PlaneStrain / 1T | 1442.5728 | 1459.1058 | 83.668 |
+| PlaneStrain / 16T | 1412.3881 | 1448.4835 | 83.668 |
+
+Base COO was 6,291,456 bytes in every 32x32 cell. These are preflight controls,
+not candidate improvements or a baseline successor.
+
+The single exploratory candidate used the five authorized techniques: fused
+Q8 tangent precompute with immutable reuse; first-use registry/manifest
+validation with sabotage coverage; explicit plan injection with exact
+instance/fingerprint/load checks; Q8-selected range-appropriate owned arrays;
+and deferred diagnostic/export recipes. It also consolidated duplicated
+continuum-input validation and semantic-DOF lookup. It did not edit the
+prototype, add `PreparedExecution`, add a global/weak plan cache, or add a state,
+result, or compatibility runtime. No Q8/skim consumer was migrated.
+
+Candidate-focused checks passed: 68 identity tests; 77 Q8/constraint/plan
+tests before and after fused evaluation; 164 retained FE2/J2/TL/truss/spring/
+Riks/driver controls; 137 affected linear/TL/stateful evaluator tests; 145
+combined identity/Q8/constraint/plan tests; and 15 explicit plan-injection
+tests. These green numerical checks did not satisfy the independent complexity
+requirement. The final candidate working tree, measured with unified-zero-diff
+nonblank Python accounting against `752ef3f`, was **+156 production lines and
++26 v3-test lines**. Benchmark instrumentation was separate and could not
+offset those increases.
+
+That positive complexity is a mandatory hard stop. M128 therefore abandoned the
+candidate before matched candidate/base timing. No candidate performance or
+memory claim, fused arithmetic band, complete base/candidate/base matrix,
+headless-notebook result, `bench.run gates` result, complete digit-mode suite,
+or complete Ruff matrix is claimed. The temporary measurement harness and raw
+timing artifact were removed. The uncommitted candidate diff was discarded; no
+implementation or partial migration remains to review or merge. Restoring the
+base and rerunning the preflight 166-test command passed 166 tests in 6.92 s.
+The next safe action is independent review of this negative record and the
+restored source, not another remediation round or an automatic NX8-2 start.
 
 ## 7. NX8-2 — private generic driver-runtime consolidation
 
