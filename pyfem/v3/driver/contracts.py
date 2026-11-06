@@ -14,7 +14,7 @@ from enum import Enum
 
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import StateGeneration
-from pyfem.v3.model.operator import EvaluationStatus
+from pyfem.v3.model.operator import EvaluationStatus, SemanticId
 from pyfem.v3.spec.program import ProgramPoint
 
 _NORM_REFERENCE_FLOOR = 1.0e-16
@@ -162,12 +162,27 @@ class ParameterSensitivityObservation:
   (the virgin state — every first step, elastic or plastic), and the
   hardening-parameter columns are exactly zero on every elastic step; from
   the second step on it is the increment's sensitivity, with the entering
-  state's own parameter dependence carried by the declared follow-up
-  state-derivative channels (the M48 survey's v2 scope).
+  state's own parameter dependence is carried separately by
+  ``TotalParameterSensitivityObservation`` when explicitly requested.
   """
 
   parameter_id: str
   coefficients: FinalizedArray
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class TotalParameterSensitivityObservation:
+  """Total path derivative of coefficients and every operator state row.
+
+  Unlike ``ParameterSensitivityObservation``, this includes the entering
+  state's own parameter dependence. ``state_derivatives`` follows compiled
+  block order and ``generation`` identifies the atomic primal/U,S commit.
+  """
+
+  parameter_id: str
+  coefficients: FinalizedArray
+  state_derivatives: tuple[tuple[SemanticId, FinalizedArray], ...]
+  generation: StateGeneration
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -249,7 +264,8 @@ class SubstepObservation:
   run requested sensitivity parameters. ``homogenization`` carries the
   boundary-group reduction of those same reactions and their
   map-coordinate derivatives — ``None`` unless the run requested
-  homogenization.
+  homogenization. ``total_sensitivities`` is the distinct full-path U,S result
+  surface, empty unless explicitly requested.
   """
 
   reactions: FinalizedArray
@@ -258,6 +274,7 @@ class SubstepObservation:
   reduced_residual_norm: float
   sensitivities: tuple[ParameterSensitivityObservation, ...] = ()
   homogenization: HomogenizationObservation | None = None
+  total_sensitivities: tuple[TotalParameterSensitivityObservation, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, eq=False)

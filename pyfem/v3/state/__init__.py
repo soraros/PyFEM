@@ -2,8 +2,14 @@
 
 from pyfem.v3.state.codecs import (
   STATE_ROW_CODEC_FORMAT,
+  TOTAL_DERIVATIVE_CODEC_FORMAT,
+  TOTAL_PARAMETER_DERIVATIVE_STATE_SCHEMA,
   Float64StateRowCodec,
   StateCodecError,
+  TotalParameterDerivativeBlockLayout,
+  TotalParameterDerivativeBundle,
+  TotalParameterDerivativeCodec,
+  TotalParameterDerivativeLayout,
 )
 from pyfem.v3.state.evolution import (
   CONTINUATION_EVOLUTION_STATE_SCHEMA,
@@ -33,6 +39,8 @@ __all__ = [
   "EVOLUTION_CODEC_FORMAT",
   "NESTED_CODEC_FORMAT",
   "STATE_ROW_CODEC_FORMAT",
+  "TOTAL_DERIVATIVE_CODEC_FORMAT",
+  "TOTAL_PARAMETER_DERIVATIVE_STATE_SCHEMA",
   "ContinuationEvolutionCodec",
   "ContinuationEvolutionLayout",
   "ContinuationEvolutionState",
@@ -48,4 +56,8 @@ __all__ = [
   "StateCodecError",
   "StateTransaction",
   "StateTransactionOwner",
+  "TotalParameterDerivativeBlockLayout",
+  "TotalParameterDerivativeBundle",
+  "TotalParameterDerivativeCodec",
+  "TotalParameterDerivativeLayout",
 ]

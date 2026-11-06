@@ -19,6 +19,8 @@ from pyfem.v3.model.provenance import CanonicalManifest
 
 type SemanticId = str | int | tuple[str | int, ...]
 
+PATH_DERIVATIVE_ABI_SCHEMA = "pyfem-v3-operator-path-derivatives-v1"
+
 
 def _exact_tuple(value: object, item_type: type[object], label: str) -> None:
   if type(value) is not tuple or any(type(item) is not item_type for item in value):
@@ -413,6 +415,44 @@ class OperatorEvaluationInput:
     ):
       msg = "operator input nested execution must be an exact input or None"
       raise TypeError(msg)
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class OperatorPathSeed:
+  """Forward seeds for a total derivative of one operator state transition.
+
+  ``parameter_ids`` fixes every derivative array's leading axis. The accepted
+  state derivative includes the complete entering history; the port derivative
+  is zero for the history-right-hand-side sweep and contains the gathered
+  prolonged coefficient derivative for the final trial-state sweep.
+  """
+
+  parameter_ids: tuple[SemanticId, ...]
+  accepted_state_derivatives: FinalizedArray
+  port_derivatives: FinalizedArray
+
+  def __post_init__(self) -> None:
+    if type(self.parameter_ids) is not tuple or not self.parameter_ids:
+      msg = "operator path parameter IDs must be a non-empty exact tuple"
+      raise TypeError(msg)
+    if len(set(self.parameter_ids)) != len(self.parameter_ids):
+      msg = "operator path parameter IDs must be unique"
+      raise ValueError(msg)
+    if (
+      type(self.accepted_state_derivatives) is not FinalizedArray
+      or type(self.port_derivatives) is not FinalizedArray
+    ):
+      msg = "operator path derivative seeds must be exact FinalizedArray values"
+      raise TypeError(msg)
+
+
+@dataclass(frozen=True, slots=True, eq=False, init=False)
+class OperatorPathEvaluation(CompilerConstructed):
+  """Residual-layout and complete trial-state derivatives of a transition."""
+
+  residual_derivatives: tuple[FinalizedArray, ...]
+  trial_state_derivatives: FinalizedArray
+  status: EvaluationStatus
 
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)

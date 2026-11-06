@@ -690,3 +690,506 @@ def test_compile_path_param_jac_fd_probe_at_the_consumed_point() -> None:
   # The M56 battery's assembled-column class (observed <= 2.6e-9 there),
   # now at the driver's consumption point.
   assert worst < 1.0e-8, worst
+
+
+# --- M131: opt-in total path sensitivities -----------------------------------
+
+_TOTAL_FD_STEPS = (0.21, 3.0e-6, 0.025, 0.1)
+_TOTAL_SETTINGS = NonlinearStaticSettings(tolerance=1.0e-12, max_iterations=100)
+
+
+def _run_total(
+  driver: NonlinearStaticDriver,
+  *loads: float,
+  parameters: tuple[str, ...] = _PARAM_NAMES,
+  sensitivity_parameters: tuple[str, ...] = (),
+) -> NonlinearStaticResult:
+  points = _points(*loads)
+  return driver.run(
+    base_point=points[0],
+    target_points=points[1:],
+    sensitivity_parameters=sensitivity_parameters,
+    total_sensitivity_parameters=parameters,
+  )
+
+
+def _complete_solve_snapshot(
+  parameters: tuple[float, ...],
+  schedule: tuple[float, ...],
+) -> tuple[np.ndarray, np.ndarray, NonlinearStaticResult]:
+  driver = _j2_cantilever(parameters, settings=_TOTAL_SETTINGS)
+  result = _run(driver, *schedule)
+  assert result.status is DriverStatus.COMPLETED
+  assert len(result.records) == len(schedule) - 1
+  assert all(record.status is SubstepStatus.COMMITTED for record in result.records)
+  block = driver.owner.block_ids[0]
+  return (
+    np.array(driver.owner.accepted_physical().values, copy=True),
+    np.array(driver.owner.accepted_state(block).values, copy=True),
+    result,
+  )
+
+
+def _scaled_total_state_error(actual: np.ndarray, expected: np.ndarray) -> float:
+  stress_scale = max(1.0, float(np.max(np.abs(expected[:, :6]))))
+  history_scale = max(1.0e-8, float(np.max(np.abs(expected[:, 6:]))))
+  return max(
+    float(np.max(np.abs(actual[:, :6] - expected[:, :6]))) / stress_scale,
+    float(np.max(np.abs(actual[:, 6:] - expected[:, 6:]))) / history_scale,
+  )
+
+
+def test_total_elastic_factor_two_and_distinct_increment_surface() -> None:
+  driver = _j2_cantilever()
+  result = _run_total(
+    driver,
+    0.0,
+    2.0,
+    4.0,
+    sensitivity_parameters=_PARAM_NAMES,
+  )
+  assert result.status is DriverStatus.COMPLETED
+  first, second = (record.observation for record in result.records)
+  assert first is not None and second is not None
+  for p, name in enumerate(_PARAM_NAMES):
+    assert first.total_sensitivities[p].parameter_id == name
+    np.testing.assert_allclose(
+      first.total_sensitivities[p].coefficients.values,
+      first.sensitivities[p].coefficients.values,
+      rtol=2.0e-12,
+      atol=2.0e-15,
+    )
+    fd = _fd_of_solve(p, (0.0, 2.0, 4.0), _FD_STEPS[p])
+    total = second.total_sensitivities[p].coefficients.values
+    increment = second.sensitivities[p].coefficients.values
+    assert float(np.max(np.abs(fd - total))) < 2.0e-9
+    assert float(np.max(np.abs(total - 2.0 * increment))) < 2.0e-9
+    block_id, state = second.total_sensitivities[p].state_derivatives[0]
+    assert block_id == driver.owner.block_ids[0]
+    assert state.values.shape == (36, 19)
+    assert second.total_sensitivities[p].generation.ordinal == 2
+    if p >= 2:
+      assert np.all(total == 0.0)
+  with pytest.raises(TypeError, match="exact tuple"):
+    driver.run(
+      base_point=_points(4.0)[0],
+      target_points=_points(5.0),
+      total_sensitivity_parameters=list(_PARAM_NAMES),  # type: ignore[arg-type]
+    )
+
+
+def test_total_plastic_load_unload_reload_matches_complete_resolve_fd() -> None:
+  schedule = (0.0, 20.0, 10.0, 25.0)
+  nominal = _j2_cantilever(settings=_TOTAL_SETTINGS)
+  result = _run_total(nominal, *schedule)
+  assert result.status is DriverStatus.COMPLETED
+  assert len(result.records) == 3
+  final_rows = nominal.owner.accepted_state(nominal.owner.block_ids[0]).values
+  assert np.count_nonzero(final_rows[:, 18] > 0.0) == 16
+  nominal_prefix = [
+    _complete_solve_snapshot(_PARAMETERS, schedule[: index + 2]) for index in range(3)
+  ]
+  assert np.count_nonzero(nominal_prefix[0][1][:, 18] > 0.0) == 6
+  assert np.count_nonzero(nominal_prefix[1][1][:, 18] > 0.0) == 6
+  np.testing.assert_array_equal(
+    nominal_prefix[1][1][:, 18], nominal_prefix[0][1][:, 18]
+  )
+
+  worst_u = 0.0
+  coarse_state = 0.0
+  fine_state = 0.0
+  for target_index, record in enumerate(result.records):
+    observation = record.observation
+    assert observation is not None
+    for p, name in enumerate(_PARAM_NAMES):
+      fd_legs = []
+      for step in (_TOTAL_FD_STEPS[p], 0.5 * _TOTAL_FD_STEPS[p]):
+        plus = list(_PARAMETERS)
+        minus = list(_PARAMETERS)
+        plus[p] += step
+        minus[p] -= step
+        plus_u, plus_rows, _ = _complete_solve_snapshot(
+          tuple(plus), schedule[: target_index + 2]
+        )
+        minus_u, minus_rows, _ = _complete_solve_snapshot(
+          tuple(minus), schedule[: target_index + 2]
+        )
+        expected_mask = nominal_prefix[target_index][1][:, 18] > 0.0
+        assert np.array_equal(plus_rows[:, 18] > 0.0, expected_mask)
+        assert np.array_equal(minus_rows[:, 18] > 0.0, expected_mask)
+        fd_legs.append(
+          ((plus_u - minus_u) / (2.0 * step), (plus_rows - minus_rows) / (2.0 * step))
+        )
+      total = observation.total_sensitivities[p]
+      state = total.state_derivatives[0][1].values
+      for leg_index, (fd_u, fd_rows) in enumerate(fd_legs):
+        u_error = float(np.max(np.abs(fd_u - total.coefficients.values)))
+        state_error = _scaled_total_state_error(state, fd_rows)
+        worst_u = max(worst_u, u_error)
+        if leg_index == 0:
+          coarse_state = max(coarse_state, state_error)
+        else:
+          fine_state = max(fine_state, state_error)
+        assert u_error < 2.0e-9, (target_index, name, leg_index, u_error)
+        assert state_error < 5.0e-7, (target_index, name, leg_index, state_error)
+      # The independent FD oracle contracts under refinement; it is not a shared
+      # analytic formula or a stored nominal output.
+      assert float(np.max(np.abs(fd_legs[0][0] - fd_legs[1][0]))) < 5.0e-9
+  # Observed: U <= 2.93e-10; coarse state <= 2.66e-7; fine state <= 6.65e-8.
+  # The fine-state gate therefore retains more than 7x observed headroom.
+  assert worst_u < 2.0e-9
+  assert coarse_state < 5.0e-7
+  assert fine_state < 5.0e-7
+
+
+def _assert_same_primal(
+  candidate: NonlinearStaticDriver,
+  control: NonlinearStaticDriver,
+) -> None:
+  np.testing.assert_array_equal(
+    candidate.owner.accepted_physical().values,
+    control.owner.accepted_physical().values,
+  )
+  for block in control.owner.block_ids:
+    np.testing.assert_array_equal(
+      candidate.owner.accepted_state(block).values,
+      control.owner.accepted_state(block).values,
+    )
+
+
+def test_total_cost_primal_transparency_and_plateau_carry_forward() -> None:
+  plain = _j2_cantilever()
+  plain_result = _run(plain, 0.0, 12.0, 20.0)
+  one = _j2_cantilever()
+  one_result = _run_total(one, 0.0, 12.0, 20.0, parameters=("youngs_modulus",))
+  four = _j2_cantilever()
+  four_result = _run_total(four, 0.0, 12.0, 20.0)
+  for result in (one_result, four_result):
+    assert result.status is DriverStatus.COMPLETED
+    assert result.statistics.committed_substep_count == 2
+  _assert_same_primal(one, plain)
+  _assert_same_primal(four, plain)
+  assert len(one_result.records) == len(plain_result.records)
+  assert len(four_result.records) == len(plain_result.records)
+  for candidate in (one_result, four_result):
+    assert [len(record.iterations) for record in candidate.records] == [
+      len(record.iterations) for record in plain_result.records
+    ]
+    assert (
+      candidate.statistics.evaluation_count - plain_result.statistics.evaluation_count
+      == 4
+    )
+    assert (
+      candidate.statistics.factorization_count
+      - plain_result.statistics.factorization_count
+      == 2
+    )
+    assert (
+      candidate.statistics.tangent_refill_count
+      - plain_result.statistics.tangent_refill_count
+      == 2
+    )
+  for result, parameter_count in ((one_result, 1), (four_result, 4)):
+    assert (
+      result.statistics.linear_solve_count - plain_result.statistics.linear_solve_count
+      == 2 * parameter_count
+    )
+    assert (
+      result.statistics.residual_assembly_count
+      - plain_result.statistics.residual_assembly_count
+      == 2 * parameter_count
+    )
+    assert (
+      result.statistics.factorization_reuse_count
+      - plain_result.statistics.factorization_reuse_count
+      == 2 * (parameter_count - 1)
+    )
+  assert (
+    four_result.statistics.factorization_count
+    == one_result.statistics.factorization_count
+  )
+
+  accepted = four.owner.accepted_total_derivatives()
+  before = four.statistics
+  plateau = _run_total(four, 20.0, 20.0)
+  after = four.statistics
+  assert plateau.status is DriverStatus.COMPLETED
+  assert len(plateau.records[0].iterations) == 1
+  current = four.owner.accepted_total_derivatives()
+  np.testing.assert_array_equal(
+    current.coefficients.values, accepted.coefficients.values
+  )
+  for previous_rows, current_rows in zip(
+    accepted.state_derivatives,
+    current.state_derivatives,
+    strict=True,
+  ):
+    np.testing.assert_array_equal(previous_rows.values, current_rows.values)
+  assert after.evaluation_count - before.evaluation_count == 1
+  assert after.factorization_count - before.factorization_count == 0
+  assert after.linear_solve_count - before.linear_solve_count == 0
+  assert after.tangent_refill_count - before.tangent_refill_count == 0
+
+  both = _j2_cantilever()
+  initial = _run_total(
+    both,
+    0.0,
+    20.0,
+    sensitivity_parameters=_PARAM_NAMES,
+  )
+  previous_observation = initial.records[-1].observation
+  assert previous_observation is not None
+  accepted = both.owner.accepted_total_derivatives()
+  plateau = _run_total(
+    both,
+    20.0,
+    20.0,
+    sensitivity_parameters=_PARAM_NAMES,
+  )
+  observation = plateau.records[0].observation
+  assert observation is not None
+  for p in range(4):
+    # The fixed-state RHS is numerically zero; the strain-split identity and
+    # back-substitution leave only roundoff (observed <= 3.84e-19 on plastic
+    # plateaus), while total U,S carry over bitwise.
+    np.testing.assert_allclose(
+      observation.sensitivities[p].coefficients.values,
+      0.0,
+      rtol=0.0,
+      atol=1.0e-18,
+    )
+    np.testing.assert_array_equal(
+      observation.total_sensitivities[p].coefficients.values,
+      previous_observation.total_sensitivities[p].coefficients.values,
+    )
+  current = both.owner.accepted_total_derivatives()
+  np.testing.assert_array_equal(
+    current.coefficients.values, accepted.coefficients.values
+  )
+
+
+def test_total_lineage_fails_after_primal_only_commit() -> None:
+  driver = _j2_cantilever()
+  assert _run_total(driver, 0.0, 20.0).status is DriverStatus.COMPLETED
+  assert _run(driver, 20.0, 21.0).status is DriverStatus.COMPLETED
+  before = driver.statistics.evaluation_count
+  with pytest.raises(DriverPreparationError) as stale:
+    _run_total(driver, 21.0, 22.0)
+  assert stale.value.diagnostics[0].code == "invalid-total-sensitivity-lineage"
+  assert driver.statistics.evaluation_count == before
+
+  fresh = _j2_cantilever()
+  assert _run(fresh, 0.0, 20.0).status is DriverStatus.COMPLETED
+  with pytest.raises(DriverPreparationError) as uninitialized:
+    _run_total(fresh, 20.0, 21.0)
+  assert uninitialized.value.diagnostics[0].code == "invalid-total-sensitivity-lineage"
+
+  ordered = _j2_cantilever()
+  assert _run_total(ordered, 0.0, 20.0).status is DriverStatus.COMPLETED
+  with pytest.raises(DriverPreparationError) as reordered:
+    _run_total(
+      ordered,
+      20.0,
+      21.0,
+      parameters=(
+        "hardening_slope",
+        "youngs_modulus",
+        "poisson_ratio",
+        "initial_yield_stress",
+      ),
+    )
+  assert reordered.value.diagnostics[0].code == "invalid-total-sensitivity-lineage"
+
+
+def test_total_cutback_rereads_accepted_derivatives(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  from pyfem.v3.compile.continuum import Q8StatefulContinuumOperator, _new
+  from pyfem.v3.model.operator import EvaluationStatus
+
+  driver = _j2_cantilever(settings=_TOTAL_SETTINGS)
+  assert _run_total(driver, 0.0, 20.0).status is DriverStatus.COMPLETED
+  accepted = driver.owner.accepted_total_derivatives()
+  reference = _j2_cantilever(settings=_TOTAL_SETTINGS)
+  reference_result = _run_total(reference, 0.0, 20.0, 22.5, 25.0)
+  assert reference_result.status is DriverStatus.COMPLETED
+
+  primal_original = Q8StatefulContinuumOperator.evaluate
+  path_original = Q8StatefulContinuumOperator.evaluate_path
+  calls = 0
+  path_calls = 0
+
+  def reject_first(self: object, inputs: object) -> object:
+    nonlocal calls
+    calls += 1
+    if calls == 1:
+      return _new(
+        OperatorEvaluation,
+        residual_values=(),
+        jacobian_values=(),
+        trial_state=inputs.accepted_state,
+        status=EvaluationStatus.REJECT_STEP,
+        derivative_values=(),
+        nested_references=(),
+      )
+    return primal_original(self, inputs)
+
+  def capture_path(self: object, inputs: object, seed: object) -> object:
+    nonlocal path_calls
+    path_calls += 1
+    if path_calls == 1:
+      np.testing.assert_array_equal(
+        seed.accepted_state_derivatives.values,
+        accepted.state_derivatives[0].values,
+      )
+      np.testing.assert_array_equal(
+        driver.owner.accepted_total_derivatives().coefficients.values,
+        accepted.coefficients.values,
+      )
+    return path_original(self, inputs, seed)
+
+  monkeypatch.setattr(Q8StatefulContinuumOperator, "evaluate", reject_first)
+  monkeypatch.setattr(Q8StatefulContinuumOperator, "evaluate_path", capture_path)
+  result = _run_total(driver, 20.0, 25.0)
+  assert result.status is DriverStatus.COMPLETED
+  assert [record.status for record in result.records] == [
+    SubstepStatus.REJECTED,
+    SubstepStatus.COMMITTED,
+    SubstepStatus.COMMITTED,
+  ]
+  assert result.records[0].observation is None
+  _assert_same_primal(driver, reference)
+  current = driver.owner.accepted_total_derivatives()
+  expected = reference.owner.accepted_total_derivatives()
+  np.testing.assert_allclose(
+    current.coefficients.values, expected.coefficients.values, rtol=0.0, atol=1.0e-12
+  )
+  for actual_rows, expected_rows in zip(
+    current.state_derivatives,
+    expected.state_derivatives,
+    strict=True,
+  ):
+    np.testing.assert_allclose(
+      actual_rows.values, expected_rows.values, rtol=2.0e-10, atol=2.0e-12
+    )
+
+
+def test_total_authoring_surface_and_explicit_nested_fe2_rejection() -> None:
+  from pyfem.v3.authoring.transactions import NonlinearStaticSession
+
+  driver = _j2_cantilever()
+  session = NonlinearStaticSession(driver)
+  result = session.run(
+    {"load": 0.0},
+    {"load": 2.0},
+    total_sensitivities=("youngs_modulus",),
+  )
+  observation = result.records[0].observation
+  assert observation is not None
+  assert observation.sensitivities == ()
+  assert len(observation.total_sensitivities) == 1
+  assert observation.total_sensitivities[0].state_derivatives[0][1].values.shape == (
+    36,
+    19,
+  )
+
+  from test_v3_fe2_operator import _cantilever, _load_point
+
+  nested = _cantilever(elastic=True)
+  try:
+    with pytest.raises(DriverPreparationError) as rejected:
+      nested.driver.run(
+        base_point=_load_point(0.0),
+        target_points=(_load_point(1.0),),
+        total_sensitivity_parameters=("youngs_modulus",),
+      )
+    assert (
+      rejected.value.diagnostics[0].code == "unsupported-total-sensitivity-nested-fe2"
+    )
+    assert nested.driver.statistics.evaluation_count == 0
+  finally:
+    nested.driver.close()
+
+
+def test_total_advancing_first_iteration_prescribed_step_matches_resolve_fd() -> None:
+  """A no-Newton advancing step is not an unchanged primal plateau."""
+  from pyfem.v3.spec.program import (
+    AffineCoefficientSpec,
+    AffineValueSpec,
+    DofRef,
+    PrescribedDofSpec,
+  )
+
+  def prescribed_driver(
+    parameters: tuple[float, ...],
+  ) -> NonlinearStaticDriver:
+    mesh = authoring.quad8_patch(1, 1)
+    model = authoring.small_strain_continuum(
+      mesh,
+      material=authoring.plasticity(*parameters, id="steel"),
+    )
+    system = compile_system(model, plasticity_reference_registry())
+    prescriptions = []
+    for node in mesh.nodes:
+      x, y = node.coordinates
+      for component, value in (
+        ("x", 0.003 * x * x),
+        ("y", 0.0005 * x * y),
+      ):
+        prescriptions.append(
+          PrescribedDofSpec(
+            id=f"prescribed-{node.id}-{component}",
+            target=DofRef(node.id, "displacement", component),
+            value=AffineValueSpec(
+              coefficients=(AffineCoefficientSpec("load", value),),
+            ),
+          )
+        )
+    coordinate_map = compile_constraint_map(
+      system,
+      constraints=tuple(prescriptions),
+      coordinates=(ProgramCoordinateSpec(name="load", kind="load"),),
+    )
+    assert coordinate_map.reduced_dof_count == 0
+    return NonlinearStaticDriver(system, coordinate_map, settings=_TOTAL_SETTINGS)
+
+  def complete_solve(
+    parameters: tuple[float, ...],
+  ) -> tuple[np.ndarray, NonlinearStaticResult]:
+    driver = prescribed_driver(parameters)
+    result = _run_total(driver, 0.0, 0.5)
+    assert result.status is DriverStatus.COMPLETED
+    return (
+      np.array(
+        driver.owner.accepted_state(driver.owner.block_ids[0]).values, copy=True
+      ),
+      result,
+    )
+
+  driver = prescribed_driver(_PARAMETERS)
+  result = _run_total(driver, 0.0, 0.5)
+  assert result.status is DriverStatus.COMPLETED
+  (record,) = result.records
+  assert len(record.iterations) == 1
+  assert record.iterations[0].increment_norm is None
+  assert driver.plan.reduced_dof_count == 0
+  observation = record.observation
+  assert observation is not None
+  for p, step in enumerate(_TOTAL_FD_STEPS):
+    plus = list(_PARAMETERS)
+    minus = list(_PARAMETERS)
+    plus[p] += step
+    minus[p] -= step
+    plus_rows, _ = complete_solve(tuple(plus))
+    minus_rows, _ = complete_solve(tuple(minus))
+    fd = (plus_rows - minus_rows) / (2.0 * step)
+    total = observation.total_sensitivities[p]
+    assert np.all(total.coefficients.values == 0.0)
+    state = total.state_derivatives[0][1].values
+    assert state.shape == (9, 19)
+    assert _scaled_total_state_error(state, fd) < 5.0e-7
+  # Empty U needs no sparse LU or back-substitution, but the new transition
+  # still needs its two path sweeps.
+  assert result.statistics.evaluation_count == 3
+  assert result.statistics.factorization_count == 0
+  assert result.statistics.linear_solve_count == 0

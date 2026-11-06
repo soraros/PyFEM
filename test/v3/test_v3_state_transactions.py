@@ -33,8 +33,13 @@ from pyfem.v3.compile.spring import (
 )
 from pyfem.v3.compile.system import compile_system
 from pyfem.v3.model.arrays import FinalizedArray
-from pyfem.v3.model.identity import IdentityMismatchError, require_generation_successor
+from pyfem.v3.model.identity import (
+  GenerationMismatchError,
+  IdentityMismatchError,
+  require_generation_successor,
+)
 from pyfem.v3.model.operator import (
+  PATH_DERIVATIVE_ABI_SCHEMA,
   ChannelRequest,
   EvaluationStatus,
   OperatorEvaluationInput,
@@ -55,10 +60,14 @@ from pyfem.v3.spec import (
 )
 from pyfem.v3.state import (
   STATE_ROW_CODEC_FORMAT,
+  TOTAL_PARAMETER_DERIVATIVE_STATE_SCHEMA,
   Float64StateRowCodec,
   StateCodecError,
   StateTransaction,
   StateTransactionOwner,
+  TotalParameterDerivativeBlockLayout,
+  TotalParameterDerivativeBundle,
+  TotalParameterDerivativeLayout,
 )
 
 # isort: split
@@ -1134,3 +1143,150 @@ def test_owner_rejects_malformed_initial_rows_and_annotations() -> None:
     TypeError, match="slot annotations must be non-empty exact strings"
   ):
     StateTransactionOwner(system)
+
+
+# --- M131: atomic total-derivative lineage ------------------------------------
+
+
+def _total_layout(
+  system: CompiledSystem,
+  parameter_ids: tuple[str, ...] = ("youngs_modulus", "hardening_slope"),
+) -> TotalParameterDerivativeLayout:
+  return TotalParameterDerivativeLayout(
+    schema=TOTAL_PARAMETER_DERIVATIVE_STATE_SCHEMA,
+    path_abi_schema=PATH_DERIVATIVE_ABI_SCHEMA,
+    parameter_ids=parameter_ids,
+    system_fingerprint=system.content_fingerprint.digest,
+    map_fingerprint="f" * 64,
+    reduced_dof_count=3,
+    blocks=tuple(
+      TotalParameterDerivativeBlockLayout(
+        block_id=operator.header.state_layout.block_id,
+        state_schema=operator.header.state_layout.schema,
+        entity_count=operator.header.state_layout.entity_count,
+        row_width=operator.header.state_layout.row_width,
+      )
+      for operator in system.operators
+    ),
+  )
+
+
+def _total_bundle(
+  layout: TotalParameterDerivativeLayout,
+  generation: object,
+  value: float,
+) -> TotalParameterDerivativeBundle:
+  return TotalParameterDerivativeBundle(
+    coefficients=FinalizedArray(
+      np.full((len(layout.parameter_ids), layout.reduced_dof_count), value),
+      dtype=np.float64,
+    ),
+    state_derivatives=tuple(
+      FinalizedArray(
+        np.full(
+          (len(layout.parameter_ids), block.entity_count, block.row_width),
+          value + block_index,
+        ),
+        dtype=np.float64,
+      )
+      for block_index, block in enumerate(layout.blocks)
+    ),
+    generation=generation,  # type: ignore[arg-type]
+  )
+
+
+def test_total_derivatives_commit_atomically_and_reject_clears_staging() -> None:
+  system = _plasticity_system()
+  layout = _total_layout(system)
+  owner = StateTransactionOwner(system)
+  owner.prepare_total_derivatives(layout)
+  accepted = owner.accepted_total_derivatives()
+  assert accepted.generation is owner.generation
+  assert np.all(accepted.coefficients.values == 0.0)
+
+  transaction = owner.begin()
+  entering = transaction.accepted_total_derivatives()
+  np.testing.assert_array_equal(
+    entering.coefficients.values, accepted.coefficients.values
+  )
+  transaction.stage_physical(np.zeros(system.coefficient_count))
+  for operator in system.operators:
+    state_layout = operator.header.state_layout
+    transaction.stage_state(state_layout.block_id, np.zeros(state_layout.row_shape))
+  transaction.stage_total_derivatives(
+    _total_bundle(layout, transaction.generation.next_accepted(), 1.5)
+  )
+  transaction.reject()
+  assert owner.generation.ordinal == 0
+  assert owner.history == ()
+  np.testing.assert_array_equal(
+    owner.accepted_total_derivatives().coefficients.values,
+    accepted.coefficients.values,
+  )
+
+  transaction = owner.begin()
+  np.testing.assert_array_equal(
+    transaction.accepted_total_derivatives().coefficients.values,
+    accepted.coefficients.values,
+  )
+  transaction.stage_physical(np.zeros(system.coefficient_count))
+  for operator in system.operators:
+    state_layout = operator.header.state_layout
+    transaction.stage_state(state_layout.block_id, np.zeros(state_layout.row_shape))
+  transaction.stage_total_derivatives(
+    _total_bundle(layout, transaction.generation.next_accepted(), 2.5)
+  )
+  transaction.commit()
+  current = owner.accepted_total_derivatives()
+  assert current.generation is owner.generation
+  assert np.all(current.coefficients.values == 2.5)
+  assert np.all(current.state_derivatives[0].values == 2.5)
+  assert owner.history[-1].total_derivatives_staged is True
+
+
+def test_primal_only_commit_makes_total_lineage_fail_closed() -> None:
+  system = _plasticity_system()
+  layout = _total_layout(system)
+  owner = StateTransactionOwner(system)
+  owner.prepare_total_derivatives(layout)
+  transaction = owner.begin()
+  transaction.stage_physical(np.zeros(system.coefficient_count))
+  transaction.stage_total_derivatives(
+    _total_bundle(layout, transaction.generation.next_accepted(), 1.0)
+  )
+  transaction.commit()
+  assert owner.accepted_total_derivatives().generation.ordinal == 1
+
+  transaction = owner.begin()
+  transaction.stage_physical(np.ones(system.coefficient_count))
+  transaction.commit()
+  assert owner.generation.ordinal == 2
+  with pytest.raises(GenerationMismatchError, match="total derivative lineage"):
+    owner.accepted_total_derivatives()
+  with pytest.raises(GenerationMismatchError, match="total derivative lineage"):
+    owner.prepare_total_derivatives(layout)
+  transaction = owner.begin()
+  with pytest.raises(GenerationMismatchError, match="total derivative lineage"):
+    transaction.accepted_total_derivatives()
+  transaction.reject()
+
+  fresh = StateTransactionOwner(system)
+  transaction = fresh.begin()
+  transaction.stage_physical(np.zeros(system.coefficient_count))
+  transaction.commit()
+  with pytest.raises(IdentityMismatchError, match="virgin generation"):
+    fresh.prepare_total_derivatives(layout)
+
+
+def test_total_layout_order_and_staged_generation_are_closed() -> None:
+  system = _plasticity_system()
+  layout = _total_layout(system)
+  owner = StateTransactionOwner(system)
+  owner.prepare_total_derivatives(layout)
+  reversed_layout = _total_layout(system, tuple(reversed(layout.parameter_ids)))
+  with pytest.raises(IdentityMismatchError, match="parameter order or layout changed"):
+    owner.prepare_total_derivatives(reversed_layout)
+  transaction = owner.begin()
+  with pytest.raises(GenerationMismatchError, match="total derivative staging"):
+    transaction.stage_total_derivatives(_total_bundle(layout, owner.generation, 1.0))
+  transaction.reject()

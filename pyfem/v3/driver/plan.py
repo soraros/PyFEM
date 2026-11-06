@@ -60,6 +60,7 @@ from pyfem.v3.fem.assembly import compile_csr_pattern, dedup_coo_segments
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import InstanceId
 from pyfem.v3.model.operator import (
+  PATH_DERIVATIVE_ABI_SCHEMA,
   ProgramSignalInput,
   SemanticId,
   SignalDerivativeInput,
@@ -73,6 +74,11 @@ from pyfem.v3.spec.program import (
   NodalLoadSpec,
   ProgramCoordinateValue,
   ProgramPoint,
+)
+from pyfem.v3.state.codecs import (
+  TOTAL_PARAMETER_DERIVATIVE_STATE_SCHEMA,
+  TotalParameterDerivativeBlockLayout,
+  TotalParameterDerivativeLayout,
 )
 
 DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA = "pyfem-v3-driver-assembly-plan-v1"
@@ -193,6 +199,15 @@ class CompiledSensitivityProgram:
 
   parameter_ids: tuple[str, ...]
   operator_slices: tuple[OperatorDerivativeSlice, ...]
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class CompiledTotalSensitivityProgram:
+  """Validated direct-J2 total-path request and its persistable layout."""
+
+  parameter_ids: tuple[str, ...]
+  operator_slices: tuple[OperatorDerivativeSlice, ...]
+  layout: TotalParameterDerivativeLayout
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -824,6 +839,73 @@ def compile_sensitivity_program(
   return CompiledSensitivityProgram(
     parameter_ids=parameter_ids,
     operator_slices=tuple(slices),
+  )
+
+
+def compile_total_sensitivity_program(
+  system: CompiledSystem,
+  coordinate_map: CompiledConstraintMap,
+  parameter_ids: tuple[str, ...],
+) -> CompiledTotalSensitivityProgram:
+  """Compile the bounded direct-J2 total-path request, rejecting all others."""
+  if type(system) is not CompiledSystem:
+    msg = "total sensitivity compilation requires an exact CompiledSystem"
+    raise TypeError(msg)
+  if type(coordinate_map) is not CompiledConstraintMap:
+    msg = "total sensitivity compilation requires an exact CompiledConstraintMap"
+    raise TypeError(msg)
+  for operator in system.operators:
+    if operator.header.nested_execution is not None:
+      _preparation_fail(
+        "unsupported-total-sensitivity-nested-fe2",
+        "total path sensitivities do not support nested FE2 execution",
+        SourceContext(),
+      )
+  base = compile_sensitivity_program(system, parameter_ids)
+  blocks: list[TotalParameterDerivativeBlockLayout] = []
+  for operator in system.operators:
+    header = operator.header
+    direct_j2 = any(
+      identity.kind == "material" and identity.name == "isotropic-hardening-plasticity"
+      for identity in header.implementations
+    )
+    try:
+      path_schema = operator.path_derivative_abi_schema
+    except (AttributeError, ValueError):
+      path_schema = None
+    if (
+      not direct_j2
+      or path_schema != PATH_DERIVATIVE_ABI_SCHEMA
+      or not callable(getattr(operator, "evaluate_path", None))
+    ):
+      _preparation_fail(
+        "unsupported-total-sensitivity-operator",
+        "total path sensitivities require only direct J2 operators implementing "
+        f"{PATH_DERIVATIVE_ABI_SCHEMA}",
+        SourceContext(),
+      )
+    layout = header.state_layout
+    blocks.append(
+      TotalParameterDerivativeBlockLayout(
+        block_id=layout.block_id,
+        state_schema=layout.schema,
+        entity_count=layout.entity_count,
+        row_width=layout.row_width,
+      )
+    )
+  layout = TotalParameterDerivativeLayout(
+    schema=TOTAL_PARAMETER_DERIVATIVE_STATE_SCHEMA,
+    path_abi_schema=PATH_DERIVATIVE_ABI_SCHEMA,
+    parameter_ids=parameter_ids,
+    system_fingerprint=system.content_fingerprint.digest,
+    map_fingerprint=coordinate_map.content_fingerprint.digest,
+    reduced_dof_count=coordinate_map.reduced_dof_count,
+    blocks=tuple(blocks),
+  )
+  return CompiledTotalSensitivityProgram(
+    parameter_ids=base.parameter_ids,
+    operator_slices=base.operator_slices,
+    layout=layout,
   )
 
 
