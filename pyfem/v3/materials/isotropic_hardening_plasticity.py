@@ -173,6 +173,24 @@ twins are bitwise identical to each other on every path — the same
 predictor-einsum/scalar-return-map split as the primal kernels — and their
 primal outputs are bitwise identical to the primal kernels, both pinned in
 ``test/v3/test_v3_stateful_plasticity.py``.
+
+Total path forward channel (M131). The separate optional
+``path_derivative_kernel`` differentiates the complete transition rather than
+holding entering history fixed. For each requested parameter its predictor
+seed is ``D(sigma_a) + d(ctang) @ dstrain + ctang @ D(dstrain)`` with
+``D(dstrain) = D(strain) - D(epsilon_e,a) - D(epsilon_p,a)``. On the plastic
+branch the same consistency derivative applies, but the fixed part of the
+yield derivative also includes ``hard * D(kappa_a)`` and the direct
+``hardening_slope`` contribution uses the converged total ``kappa``. The
+kernels emit stress derivatives and all 19 trial-row derivatives: stress,
+elastic strain, plastic strain, and kappa. ``strain_derivatives`` is zero for
+the entering-history right-hand-side sweep and contains the gathered global
+coefficient derivative for the final state sweep. Reference and batched
+implementations share the same equations and are checked against complete
+kernel-path central FD, including elastic, plastic, unload, and reload steps;
+a zeroed entering-history seed is retained as a materially failing control.
+This channel is direct-J2-only, smooth-fixed-active-set-only, and does not
+modify the primal or fixed-entering-state kernels above.
 """
 
 from __future__ import annotations
@@ -185,6 +203,7 @@ from numba import njit, prange
 from pyfem.v3.compile.contracts import (
   STATEFUL_MATERIAL_DESCRIPTOR_SCHEMA,
   StatefulContinuumKernelResult,
+  StatefulContinuumPathKernelResult,
 )
 from pyfem.v3.model.operator import EvaluationStatus, OperatorStateLayout
 from pyfem.v3.types import F64
@@ -683,6 +702,200 @@ def isotropic_hardening_plasticity_param_kernel_reference(
   )
 
 
+def _path_reject(
+  accepted_row_derivatives: np.ndarray,
+) -> StatefulContinuumPathKernelResult:
+  parameter_count, entity_count, _ = accepted_row_derivatives.shape
+  return StatefulContinuumPathKernelResult(
+    stress_derivatives=np.zeros((parameter_count, entity_count, 6), dtype=np.float64),
+    trial_row_derivatives=np.array(
+      accepted_row_derivatives,
+      dtype=np.float64,
+      order="C",
+      copy=True,
+    ),
+    status=EvaluationStatus.REJECT_STEP,
+  )
+
+
+def _validated_path_shapes(
+  strains: np.ndarray,
+  accepted_rows: np.ndarray,
+  strain_derivatives: np.ndarray,
+  accepted_row_derivatives: np.ndarray,
+  parameter_indices: np.ndarray,
+  calibration: np.ndarray,
+) -> tuple[int, int]:
+  if calibration.shape != (_CALIBRATION_SIZE,):
+    msg = "isotropic hardening path kernel requires the packed calibration vector"
+    raise TypeError(msg)
+  entity_count = strains.shape[0]
+  parameter_count = parameter_indices.shape[0]
+  if (
+    strains.shape != (entity_count, 6)
+    or accepted_rows.shape != (entity_count, _ROW_WIDTH)
+    or parameter_indices.ndim != 1
+    or parameter_count == 0
+    or parameter_indices.dtype.kind not in "iu"
+    or strain_derivatives.shape != (parameter_count, entity_count, 6)
+    or accepted_row_derivatives.shape != (parameter_count, entity_count, _ROW_WIDTH)
+  ):
+    msg = "isotropic hardening path kernel received inconsistent derivative shapes"
+    raise ValueError(msg)
+  if np.any(parameter_indices < 0) or np.any(parameter_indices >= _PARAMETER_COUNT):
+    msg = "isotropic hardening path parameter indices are out of range"
+    raise ValueError(msg)
+  if len(set(parameter_indices.tolist())) != parameter_count:
+    msg = "isotropic hardening path parameter indices must be unique"
+    raise ValueError(msg)
+  return parameter_count, entity_count
+
+
+def isotropic_hardening_plasticity_path_kernel_reference(
+  strains: np.ndarray,
+  accepted_rows: np.ndarray,
+  strain_derivatives: np.ndarray,
+  accepted_row_derivatives: np.ndarray,
+  parameter_indices: np.ndarray,
+  calibration: np.ndarray,
+) -> StatefulContinuumPathKernelResult:
+  """Differentiate the complete J2 transition, including entering history."""
+  parameter_count, entity_count = _validated_path_shapes(
+    strains,
+    accepted_rows,
+    strain_derivatives,
+    accepted_row_derivatives,
+    parameter_indices,
+    calibration,
+  )
+  if not bool(np.isfinite(strains).all()):
+    return _path_reject(accepted_row_derivatives)
+  eg3 = calibration[2]
+  syield0 = calibration[5]
+  tolerance = calibration[6]
+  ctang = calibration[8:44].reshape(6, 6)
+  table_strains = calibration[44:46]
+  table_stresses = calibration[46:48]
+  dctang_e, dctang_nu, d_eg3_e, d_eg3_nu = _calibration_elastic_derivatives(calibration)
+  stress_derivatives = np.empty((parameter_count, entity_count, 6), dtype=np.float64)
+  trial_row_derivatives = np.empty(
+    (parameter_count, entity_count, _ROW_WIDTH),
+    dtype=np.float64,
+  )
+
+  for index in range(entity_count):
+    row = accepted_rows[index]
+    with np.errstate(over="ignore", invalid="ignore"):
+      dstrain = strains[index] - (row[6:12] + row[12:18])
+      sigma_trial = row[0:6] + ctang @ dstrain
+      smises = _von_mises(sigma_trial)
+    if not bool(np.isfinite(sigma_trial).all()) or not np.isfinite(smises):
+      return _path_reject(accepted_row_derivatives)
+    eqplas = float(row[18])
+    hardening = _hardening(table_strains, table_stresses, eqplas)
+    if hardening is None:
+      return _path_reject(accepted_row_derivatives)
+    syield, hard = hardening
+    plastic = smises > (1.0 + tolerance) * syield
+    if plastic:
+      shydro = 0.333333333333333 * (sigma_trial[0] + sigma_trial[1] + sigma_trial[2])
+      flow = np.array(sigma_trial, copy=True)
+      flow[:3] = flow[:3] - shydro * np.ones(3)
+      flow *= 1.0 / smises
+      syield = syield0
+      deqpl = 0.0
+      rhs = syield
+      iterations = 0
+      while abs(rhs) > tolerance * syield0:
+        iterations += 1
+        if iterations > _LOCAL_NEWTON_LIMIT:
+          return _path_reject(accepted_row_derivatives)
+        rhs = smises - eg3 * deqpl - syield
+        deqpl = deqpl + rhs / (eg3 + hard)
+        if not np.isfinite(deqpl):
+          return _path_reject(accepted_row_derivatives)
+        hardening = _hardening(table_strains, table_stresses, eqplas + deqpl)
+        if hardening is None:
+          return _path_reject(accepted_row_derivatives)
+        syield, hard = hardening
+      eqplas += deqpl
+
+    for p, parameter in enumerate(parameter_indices):
+      accepted_derivative = accepted_row_derivatives[p, index]
+      ddstrain = (
+        strain_derivatives[p, index]
+        - accepted_derivative[6:12]
+        - accepted_derivative[12:18]
+      )
+      dst = np.array(accepted_derivative[0:6], copy=True)
+      if parameter == 0:
+        dst += dctang_e @ dstrain
+      elif parameter == 1:
+        dst += dctang_nu @ dstrain
+      dst += ctang @ ddstrain
+      if not plastic:
+        stress_derivatives[p, index] = dst
+        deplastic = accepted_derivative[12:18]
+        trial_row_derivatives[p, index] = np.concatenate(
+          (
+            dst,
+            strain_derivatives[p, index] - deplastic,
+            deplastic,
+            [accepted_derivative[18]],
+          )
+        )
+        continue
+
+      deg3 = (d_eg3_e, d_eg3_nu, 0.0, 0.0)[parameter]
+      dsy_fixed = hard * accepted_derivative[18]
+      if parameter == 2:
+        dsy_fixed += 1.0
+      elif parameter == 3:
+        dsy_fixed += eqplas
+      dsh = 0.333333333333333 * (dst[0] + dst[1] + dst[2])
+      da2 = 2.0 * (
+        (sigma_trial[0] - sigma_trial[1]) * (dst[0] - dst[1])
+        + (sigma_trial[1] - sigma_trial[2]) * (dst[1] - dst[2])
+        + (sigma_trial[2] - sigma_trial[0]) * (dst[2] - dst[0])
+      )
+      db2 = 2.0 * (
+        sigma_trial[3] * dst[3] + sigma_trial[4] * dst[4] + sigma_trial[5] * dst[5]
+      )
+      dsm = (da2 + 6.0 * db2) / (4.0 * smises)
+      reciprocal = 1.0 / smises
+      drec = -dsm * reciprocal * reciprocal
+      dflow = (dst - _HYDROSTATIC_MASK * dsh) * reciprocal + (
+        sigma_trial - _HYDROSTATIC_MASK * shydro
+      ) * drec
+      ddeqpl = (dsm - deqpl * deg3 - dsy_fixed) / (eg3 + hard)
+      dsy = dsy_fixed + hard * ddeqpl
+      dsigma = dflow * syield + flow * dsy
+      dsigma[:3] += dsh
+      plastic_rate = np.empty(6, dtype=np.float64)
+      plastic_rate[:3] = 1.5 * (dflow[:3] * deqpl + flow[:3] * ddeqpl)
+      plastic_rate[3:] = 3.0 * (dflow[3:] * deqpl + flow[3:] * ddeqpl)
+      deplastic = accepted_derivative[12:18] + plastic_rate
+      stress_derivatives[p, index] = dsigma
+      trial_row_derivatives[p, index] = np.concatenate(
+        (
+          dsigma,
+          strain_derivatives[p, index] - deplastic,
+          deplastic,
+          [accepted_derivative[18] + ddeqpl],
+        )
+      )
+
+  if not bool(np.isfinite(stress_derivatives).all()) or not bool(
+    np.isfinite(trial_row_derivatives).all()
+  ):
+    return _path_reject(accepted_row_derivatives)
+  return StatefulContinuumPathKernelResult(
+    stress_derivatives=stress_derivatives,
+    trial_row_derivatives=trial_row_derivatives,
+    status=EvaluationStatus.OK,
+  )
+
+
 @njit(cache=True)
 def _hardening_lookup(
   table_strains: F64,
@@ -1031,6 +1244,239 @@ def _return_map_param_batched(
   return rejects
 
 
+@njit(cache=True, parallel=True)
+def _return_map_path_batched(
+  sigma_trial: F64,
+  smises: F64,
+  dstrials: F64,
+  accepted_rows: F64,
+  strain_derivatives: F64,
+  accepted_row_derivatives: F64,
+  parameter_indices: F64,
+  calibration: F64,
+  d_eg3_e: float,
+  d_eg3_nu: float,
+  stress_derivatives: F64,
+  trial_row_derivatives: F64,
+) -> int:
+  eg3 = calibration[2]
+  syield0 = calibration[5]
+  tolerance = calibration[6]
+  table_strains = calibration[44:46]
+  table_stresses = calibration[46:48]
+  rejects = 0
+  for index in prange(sigma_trial.shape[0]):
+    row = accepted_rows[index]
+    trial = sigma_trial[index]
+    sm = smises[index]
+    finite = np.isfinite(sm)
+    for component in range(6):
+      if not np.isfinite(trial[component]):
+        finite = False
+    if not finite:
+      rejects += 1
+      continue
+    eqplas = row[18]
+    syield, hard, found = _hardening_lookup(table_strains, table_stresses, eqplas)
+    if not found:
+      rejects += 1
+      continue
+    plastic = sm > (1.0 + tolerance) * syield
+    if plastic:
+      shydro = 0.333333333333333 * (trial[0] + trial[1] + trial[2])
+      flow = trial.copy()
+      for component in range(3):
+        flow[component] -= shydro
+      reciprocal = 1.0 / sm
+      for component in range(6):
+        flow[component] *= reciprocal
+      syield = syield0
+      deqpl = 0.0
+      rhs = syield
+      iterations = 0
+      converged = True
+      while abs(rhs) > tolerance * syield0:
+        iterations += 1
+        if iterations > _LOCAL_NEWTON_LIMIT:
+          converged = False
+          break
+        rhs = sm - eg3 * deqpl - syield
+        deqpl = deqpl + rhs / (eg3 + hard)
+        if not np.isfinite(deqpl):
+          converged = False
+          break
+        syield, hard, found = _hardening_lookup(
+          table_strains,
+          table_stresses,
+          eqplas + deqpl,
+        )
+        if not found:
+          converged = False
+          break
+      if not converged:
+        rejects += 1
+        continue
+      eqplas += deqpl
+
+    for p in range(parameter_indices.shape[0]):
+      parameter = parameter_indices[p]
+      accepted_derivative = accepted_row_derivatives[p, index]
+      dst = dstrials[p, index]
+      if not plastic:
+        for component in range(6):
+          stress_derivatives[p, index, component] = dst[component]
+          deplastic = accepted_derivative[component + 12]
+          trial_row_derivatives[p, index, component] = dst[component]
+          trial_row_derivatives[p, index, component + 6] = (
+            strain_derivatives[p, index, component] - deplastic
+          )
+          trial_row_derivatives[p, index, component + 12] = deplastic
+        trial_row_derivatives[p, index, 18] = accepted_derivative[18]
+        continue
+
+      if parameter == 0:
+        deg3 = d_eg3_e
+      elif parameter == 1:
+        deg3 = d_eg3_nu
+      else:
+        deg3 = 0.0
+      dsy_fixed = hard * accepted_derivative[18]
+      if parameter == 2:
+        dsy_fixed += 1.0
+      elif parameter == 3:
+        dsy_fixed += eqplas
+      dsh = 0.333333333333333 * (dst[0] + dst[1] + dst[2])
+      da2 = 2.0 * (
+        (trial[0] - trial[1]) * (dst[0] - dst[1])
+        + (trial[1] - trial[2]) * (dst[1] - dst[2])
+        + (trial[2] - trial[0]) * (dst[2] - dst[0])
+      )
+      db2 = 2.0 * (trial[3] * dst[3] + trial[4] * dst[4] + trial[5] * dst[5])
+      dsm = (da2 + 6.0 * db2) / (4.0 * sm)
+      drec = -dsm * reciprocal * reciprocal
+      ddeqpl = (dsm - deqpl * deg3 - dsy_fixed) / (eg3 + hard)
+      dsy = dsy_fixed + hard * ddeqpl
+      for component in range(6):
+        if component < 3:
+          mask = 1.0
+          factor = 1.5
+        else:
+          mask = 0.0
+          factor = 3.0
+        dflow = (dst[component] - mask * dsh) * reciprocal + (
+          trial[component] - mask * shydro
+        ) * drec
+        dsigma = dflow * syield + flow[component] * dsy
+        if component < 3:
+          dsigma += dsh
+        plastic_rate = factor * (dflow * deqpl + flow[component] * ddeqpl)
+        deplastic = accepted_derivative[component + 12] + plastic_rate
+        stress_derivatives[p, index, component] = dsigma
+        trial_row_derivatives[p, index, component] = dsigma
+        trial_row_derivatives[p, index, component + 6] = (
+          strain_derivatives[p, index, component] - deplastic
+        )
+        trial_row_derivatives[p, index, component + 12] = deplastic
+      trial_row_derivatives[p, index, 18] = accepted_derivative[18] + ddeqpl
+  return rejects
+
+
+def isotropic_hardening_plasticity_path_kernel(
+  strains: np.ndarray,
+  accepted_rows: np.ndarray,
+  strain_derivatives: np.ndarray,
+  accepted_row_derivatives: np.ndarray,
+  parameter_indices: np.ndarray,
+  calibration: np.ndarray,
+) -> StatefulContinuumPathKernelResult:
+  """Batched forward derivative of the complete direct-J2 transition map."""
+  parameter_count, entity_count = _validated_path_shapes(
+    strains,
+    accepted_rows,
+    strain_derivatives,
+    accepted_row_derivatives,
+    parameter_indices,
+    calibration,
+  )
+  if not bool(np.isfinite(strains).all()):
+    return _path_reject(accepted_row_derivatives)
+  strains64 = np.ascontiguousarray(strains, dtype=np.float64)
+  rows64 = np.ascontiguousarray(accepted_rows, dtype=np.float64)
+  strain_derivatives64 = np.ascontiguousarray(strain_derivatives, dtype=np.float64)
+  accepted_derivatives64 = np.ascontiguousarray(
+    accepted_row_derivatives,
+    dtype=np.float64,
+  )
+  indices64 = np.ascontiguousarray(parameter_indices, dtype=np.int64)
+  calibration64 = np.ascontiguousarray(calibration, dtype=np.float64)
+  ctang = calibration[8:44].reshape(6, 6)
+  dctang_e, dctang_nu, d_eg3_e, d_eg3_nu = _calibration_elastic_derivatives(calibration)
+  with np.errstate(over="ignore", invalid="ignore"):
+    dstrain = strains64 - (rows64[:, 6:12] + rows64[:, 12:18])
+    sigma_trial = rows64[:, 0:6] + np.einsum(
+      "ij,nj->ni",
+      ctang,
+      dstrain,
+      optimize=False,
+    )
+    shear = sigma_trial[:, 3:]
+    smises = (
+      (sigma_trial[:, 0] - sigma_trial[:, 1]) * (sigma_trial[:, 0] - sigma_trial[:, 1])
+      + (sigma_trial[:, 1] - sigma_trial[:, 2])
+      * (sigma_trial[:, 1] - sigma_trial[:, 2])
+      + (sigma_trial[:, 2] - sigma_trial[:, 0])
+      * (sigma_trial[:, 2] - sigma_trial[:, 0])
+    )
+    smises += 6.0 * np.einsum("ni,ni->n", shear, shear, optimize=False)
+    smises = np.sqrt(0.5 * smises)
+    dstrials = np.empty((parameter_count, entity_count, 6), dtype=np.float64)
+    for p, parameter in enumerate(indices64):
+      accepted_derivative = accepted_derivatives64[p]
+      ddstrain = (
+        strain_derivatives64[p]
+        - accepted_derivative[:, 6:12]
+        - accepted_derivative[:, 12:18]
+      )
+      dst = np.array(accepted_derivative[:, 0:6], copy=True)
+      if parameter == 0:
+        dst += np.einsum("ij,nj->ni", dctang_e, dstrain, optimize=False)
+      elif parameter == 1:
+        dst += np.einsum("ij,nj->ni", dctang_nu, dstrain, optimize=False)
+      dst += np.einsum("ij,nj->ni", ctang, ddstrain, optimize=False)
+      dstrials[p] = dst
+
+  stress_derivatives = np.empty((parameter_count, entity_count, 6), dtype=np.float64)
+  trial_row_derivatives = np.empty(
+    (parameter_count, entity_count, _ROW_WIDTH),
+    dtype=np.float64,
+  )
+  rejects = _return_map_path_batched(
+    sigma_trial,
+    smises,
+    dstrials,
+    rows64,
+    strain_derivatives64,
+    accepted_derivatives64,
+    indices64,
+    calibration64,
+    d_eg3_e,
+    d_eg3_nu,
+    stress_derivatives,
+    trial_row_derivatives,
+  )
+  if (
+    rejects
+    or not bool(np.isfinite(stress_derivatives).all())
+    or not bool(np.isfinite(trial_row_derivatives).all())
+  ):
+    return _path_reject(accepted_row_derivatives)
+  return StatefulContinuumPathKernelResult(
+    stress_derivatives=stress_derivatives,
+    trial_row_derivatives=trial_row_derivatives,
+    status=EvaluationStatus.OK,
+  )
+
+
 def isotropic_hardening_plasticity_param_kernel(
   strains: np.ndarray,
   accepted_rows: np.ndarray,
@@ -1231,6 +1677,24 @@ class IsotropicHardeningPlasticityBinding:
   ) -> StatefulContinuumKernelResult:
     return isotropic_hardening_plasticity_param_kernel(
       strains, accepted_rows, calibration
+    )
+
+  def path_derivative_kernel(
+    self,
+    strains: np.ndarray,
+    accepted_rows: np.ndarray,
+    strain_derivatives: np.ndarray,
+    accepted_row_derivatives: np.ndarray,
+    parameter_indices: np.ndarray,
+    calibration: np.ndarray,
+  ) -> StatefulContinuumPathKernelResult:
+    return isotropic_hardening_plasticity_path_kernel(
+      strains,
+      accepted_rows,
+      strain_derivatives,
+      accepted_row_derivatives,
+      parameter_indices,
+      calibration,
     )
 
   def initial_state(

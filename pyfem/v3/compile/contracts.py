@@ -43,6 +43,14 @@ new metadata field — is what keeps the ABI validator untouched: the qualified
 J2 metadata is reused verbatim by teaching bindings whose kernels are
 primal-only (test/v3/test_v3_authoring_plasticity.py), and a metadata
 declaration they inherit but cannot honor would break their compile.
+
+M131 adds a separate optional path-kernel inference, not a metadata or channel
+extension: direct J2 binds ``path_derivative_kernel`` to differentiate its
+complete transition from accepted rows and current strains, including accepted
+and current-port derivative seeds. ``StatefulContinuumPathKernelResult`` carries
+parameter-leading stress and full trial-row derivatives. Existing descriptors,
+parameter channels, and primal kernel calls remain unchanged; nested FE2 and
+other stateful laws do not acquire this capability implicitly.
 """
 
 from __future__ import annotations
@@ -1020,6 +1028,52 @@ class StatefulContinuumKernelResult:
     ):
       msg = "stateful kernel param_derivatives must be a plain float64 ndarray"
       raise TypeError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class StatefulContinuumPathKernelResult:
+  """Total-path derivatives of one batched state-transition evaluation.
+
+  Arrays stack the requested parameters first. ``stress_derivatives`` has shape
+  ``(parameter_count, entity_count, 6)`` and ``trial_row_derivatives`` has shape
+  ``(parameter_count, entity_count, row_width)``. The primal point and entering
+  state are supplied separately; this carrier deliberately contains no second
+  primal result or accepted-state owner.
+  """
+
+  stress_derivatives: np.ndarray
+  trial_row_derivatives: np.ndarray
+  status: EvaluationStatus
+
+  def __post_init__(self) -> None:
+    if type(self.status) is not EvaluationStatus:
+      msg = "stateful path kernel status must be an exact EvaluationStatus"
+      raise TypeError(msg)
+    for label, array in (
+      ("stress_derivatives", self.stress_derivatives),
+      ("trial_row_derivatives", self.trial_row_derivatives),
+    ):
+      if (
+        type(array) is not np.ndarray
+        or array.dtype != np.dtype(np.float64)
+        or array.dtype.metadata is not None
+      ):
+        msg = f"stateful path kernel {label} must be a plain float64 ndarray"
+        raise TypeError(msg)
+
+
+class StatefulContinuumPathKernel(Protocol):
+  """Batched forward derivative of a stateful law's complete transition map."""
+
+  def __call__(
+    self,
+    strains: np.ndarray,
+    accepted_rows: np.ndarray,
+    strain_derivatives: np.ndarray,
+    accepted_row_derivatives: np.ndarray,
+    parameter_indices: np.ndarray,
+    calibration: np.ndarray,
+  ) -> StatefulContinuumPathKernelResult: ...
 
 
 class StatefulContinuumKernel(Protocol):

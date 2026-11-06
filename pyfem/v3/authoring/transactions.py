@@ -39,8 +39,9 @@ Each column is the implicit-function-theorem sensitivity of the committed
 coefficients with the ENTERING committed state held fixed: exact from the
 virgin state (every first step, elastic or plastic) and exactly zero for
 hardening parameters on elastic steps; from the second step on it is the
-increment's sensitivity — never the total path sensitivity, which needs the
-declared follow-up state-derivative channels (the M48 survey's v2 boundary).
+increment's sensitivity — never the total path sensitivity. The separate
+``total_sensitivities`` request carries total coefficient and state paths for
+direct J2 with verified lineage.
 """
 
 from __future__ import annotations
@@ -478,6 +479,7 @@ class NonlinearStaticSession:
     base: dict[str, float] | ProgramPoint,
     *targets: dict[str, float] | ProgramPoint,
     sensitivities: Sequence[str] = (),
+    total_sensitivities: Sequence[str] = (),
   ) -> NonlinearStaticResult:
     """Advance the committed state through the target-point schedule.
 
@@ -506,9 +508,12 @@ class NonlinearStaticSession:
     state — every first step, elastic or plastic), and hardening-parameter
     columns are exactly zero on every elastic step (the elastic map does not
     reference them). From the second step on the column is the INCREMENT's
-    sensitivity, not the total path sensitivity: the entering state's own
-    parameter dependence is carried by the declared follow-up
-    state-derivative channels (the M48 survey's v2 boundary).
+    sensitivity, not the total path sensitivity. ``total_sensitivities`` is the
+    separate opt-in direct-J2 surface whose committed
+    ``observation.total_sensitivities`` records carry the complete coefficient
+    and 19-row state path derivatives. It requires virgin or verified matching
+    derivative lineage, supports smooth fixed-active-set paths only, and
+    rejects nested FE2 explicitly.
     """
     names = _sensitivity_names(sensitivities)
     if names:
@@ -523,6 +528,22 @@ class NonlinearStaticSession:
           constants=constants,
           source=SourceContext(source="authoring.run:sensitivities"),
         )
+    total_names = _sensitivity_names(total_sensitivities)
+    nested = any(
+      operator.header.nested_execution is not None for operator in self.system.operators
+    )
+    if total_names and not nested:
+      differentiable, constants = _sensitivity_surface(self.system)
+      offenders = tuple(
+        dict.fromkeys(name for name in total_names if name not in differentiable)
+      )
+      if offenders:
+        raise_sensitivity_mismatch(
+          offenders=offenders,
+          differentiable=differentiable,
+          constants=constants,
+          source=SourceContext(source="authoring.run:total_sensitivities"),
+        )
     return self._driver.run(
       base_point=self._program_point(base, label="base point"),
       target_points=tuple(
@@ -530,6 +551,7 @@ class NonlinearStaticSession:
         for index, target in enumerate(targets)
       ),
       sensitivity_parameters=names,
+      total_sensitivity_parameters=total_names,
     )
 
 

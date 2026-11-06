@@ -418,3 +418,102 @@ execution charter may change the frontier explicitly; old reviews and mission
 cards remain provenance. Reviewer count, a "GO" word, green tests, or a smaller
 line count cannot compensate for a missing consumer, shared-oracle conflict,
 unsupported numerical semantics, or measured performance loss.
+
+
+## 10. M131 direct-J2 total-path record
+
+M131 is a consumer-backed RE-EXPANSION of total path sensitivities, not a
+rewrite of the M56/M57 increment channel. `OperatorPathSeed` and
+`OperatorPathEvaluation` are optional ABI carriers; the direct J2 binding owns
+reference and batched forward kernels; `Q8StatefulContinuumOperator` owns
+residual-layout assembly; `NonlinearStaticDriver` owns the two-sweep schedule;
+the existing `StateTransactionOwner` remains the only accepted/staged lifecycle
+owner. `TotalParameterSensitivityObservation` and authoring
+`total_sensitivities` are new result/request names. No AD framework, general
+sensitivity registry, second state owner, nested FE2 derivative lifecycle, or
+new assembly-manifest schema was introduced.
+
+The strict nonlinear IFT solve must use the final converged Jacobian batches.
+Reusing the stash from the last Newton correction is not generally the same
+operator. Ordinary total commits therefore add one shared final-tangent
+factorization, two path evaluations, P right-hand-side assemblies/back-substitutions,
+and P-1 factorization reuses; P=1 and P=4 have identical fresh-factorization
+counts. Plateau commits use exact carry-forward and add no path work. Existing
+increment-only evaluation/factorization behavior is unchanged.
+
+### Numerical and lifecycle controls
+
+The 59-test focused command is:
+
+```bash
+python -m pytest -q \
+  test/v3/test_v3_param_derivatives.py test/v3/test_v3_sensitivities.py \
+  test/v3/test_v3_state_transactions.py test/v3/test_v3_state_evolution.py
+```
+
+It passes. Independent complete-path FD covers both J2 forward implementations
+and a joint state/port operator probe. Truncated history is a strong failing
+control. Complete re-solve FD uses `max_iterations=100`, matching one-commit
+schedules and active masks on every leg; requiring only 25 iterations caused an
+oracle-side reload failure and was not hidden. The fine-stencil state deviation
+has more than 7x margin to its `5e-7` gate; the coarse deviation is retained to
+show FD truncation. Plastic-plateau fixed-state increments are numerical zero
+only to their observed roundoff (`3.84e-19`), while total U,S carry bitwise.
+All codec identity/order/schema/shape/generation and malformed-payload branches
+are tested.
+
+### Consumer performance evidence
+
+Workload: the documented 4x1 Q8 direct-J2 cantilever, 36 integration points,
+schedule `(0,20,10,25)`, tolerance `1e-12`, `max_iterations=100`, four material
+parameters, smooth load/unload/reload active sets. P=1 requests
+`youngs_modulus`; P=4 requests all four. The control is `2P` fresh complete
+primal re-solves at the same central-FD parameters used by the scientific gate.
+Every solve completed and branch masks matched.
+
+Environment: macOS 26.7.2 x86_64, Intel i9-9980HK 2.40 GHz, Python 3.13.11,
+NumPy 2.3.5, Numba 0.62.1, SciPy 1.18.0, 16 Numba threads. JIT was warmed before
+all samples. "Fresh model" times full model/map/driver construction plus the
+run. "Precompiled warm" reuses the compiled system/map but constructs a fresh
+driver/plan and run for every solve. Each cell interleaves control/candidate/
+control three times. Values below are milliseconds; the direct cell has three
+samples and the 2P control six.
+
+| P | Route | Direct samples | 2P samples | Direct median | 2P median | 2P/direct |
+|---|---|---|---|---:|---:|---:|
+| 1 | fresh model | 85.06, 90.26, 83.99 | 256.81, 256.93, 254.26, 253.99, 259.57, 252.60 | 85.06 | 255.53 | 3.00x |
+| 1 | precompiled warm | 35.36, 32.67, 34.54 | 156.78, 156.79, 155.40, 154.02, 153.11, 156.47 | 34.54 | 155.94 | 4.51x |
+| 4 | fresh model | 90.84, 93.17, 90.66 | 923.53, 912.46, 909.13, 911.89, 904.27, 912.36 | 90.84 | 912.12 | 10.04x |
+| 4 | precompiled warm | 41.06, 41.05, 36.21 | 515.12, 505.54, 502.02, 503.55, 498.92, 507.80 | 41.05 | 504.54 | 12.29x |
+
+The direct route wins every median; no performance rationale is needed to
+excuse a loss. Memory remains linear in P: reduced U, full observation U, and
+one derivative array per primal state block. The implementation does not retain
+a dense global entering-state Jacobian or per-parameter factorization.
+
+Full digit-mode repository suites, scientific controls, and the complete exact
+and bare Ruff matrix are required after this record; their results are appended
+below rather than presumed from the focused suite.
+
+Change accounting at the implementation tip: production `+1625/-20` lines and
+scoped v3 tests `+973/-1`; no benchmark implementation or artifact changed.
+Design/playbook prose is separate. `state.__init__` exports the two derivative
+codec constants and four layout/bundle/codec types. Total driver observations
+are available through committed records and `driver.contracts`; assembly-plan
+manifest exports and primal codec names are unchanged.
+
+All eight explicit-config Ruff check/format commands and both bare whole-tree
+Ruff check/format commands passed on the implementation tree.
+
+Full-suite result at the implementation tip: the default integer-string mode
+reported `1171 passed, 43 warnings, 12 subtests passed` in 145.25 s;
+`PYTHONINTMAXSTRDIGITS=640` reported the same counts in 109.57 s. The warnings
+are the existing SciPy sparse-CSC conversion warnings. PatchTest8 completed
+under Agg with its known non-interactive-canvas warning. Benchmark-gate results
+are appended when that long-running control completes.
+
+The benchmark scientific gate also passed: `python -m bench.run gates` reported
+`gates: 0 failure(s)`, including the direct-J2 `material/j2-isotropic-hardening/36864`
+bitwise gate and all notebook/skim/FE2/TL/Riks controls. Together with the two
+full suites and all exact+bare Ruff checks, this completes the required M131
+verification matrix.

@@ -75,6 +75,8 @@ from pyfem.v3.materials.isotropic_hardening_plasticity import (
   isotropic_hardening_plasticity_metadata,
   isotropic_hardening_plasticity_param_kernel,
   isotropic_hardening_plasticity_param_kernel_reference,
+  isotropic_hardening_plasticity_path_kernel,
+  isotropic_hardening_plasticity_path_kernel_reference,
 )
 from pyfem.v3.materials.plane_strain_damage import plane_strain_damage_metadata
 from pyfem.v3.model.arrays import FinalizedArray
@@ -84,6 +86,7 @@ from pyfem.v3.model.operator import (
   EvaluationStatus,
   OperatorEvaluation,
   OperatorEvaluationInput,
+  OperatorPathSeed,
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec.diagnostics import SourceContext
@@ -662,3 +665,184 @@ def test_assembled_tangent_fd_at_damaged_states() -> None:
   deviation, skew = _fd_probe_tangent(operator, values, accepted, 1.0e-10)
   assert deviation > 1.0e-3, deviation  # committed-state kink, observed 2.4e-1
   assert skew < 1.0e-12  # the committed-state unloading tangent is symmetric
+
+
+# --- M131: complete direct-J2 transition derivatives ---------------------------
+
+
+def _total_path_calibration(values: object) -> np.ndarray:
+  return isotropic_hardening_calibration(*(float(value) for value in values))  # type: ignore[union-attr]
+
+
+def _complete_kernel_path(
+  parameters: tuple[float, ...],
+  strains: tuple[np.ndarray, ...],
+) -> list[tuple[np.ndarray, np.ndarray]]:
+  rows = np.zeros((1, 19))
+  outputs = []
+  for strain in strains:
+    result = isotropic_hardening_plasticity_kernel(
+      strain[None, :],
+      rows,
+      _total_path_calibration(parameters),
+    )
+    assert result.status is EvaluationStatus.OK
+    rows = result.trial_rows
+    outputs.append((result.stresses[0].copy(), rows[0].copy()))
+  return outputs
+
+
+def _scaled_state_error(actual: np.ndarray, expected: np.ndarray) -> float:
+  stress_scale = max(1.0, float(np.max(np.abs(expected[..., :6]))))
+  history_scale = max(1.0e-8, float(np.max(np.abs(expected[..., 6:]))))
+  return max(
+    float(np.max(np.abs(actual[..., :6] - expected[..., :6]))) / stress_scale,
+    float(np.max(np.abs(actual[..., 6:] - expected[..., 6:]))) / history_scale,
+  )
+
+
+def test_total_path_kernels_match_complete_path_fd_and_reject_truncation() -> None:
+  strains = tuple(
+    np.array([value, 0.0, 0.0, 0.0, 0.0, 0.0])
+    for value in (0.002, 0.004, 0.001, 0.003, 0.0055)
+  )
+  steps = (0.21, 3.0e-6, 0.025, 0.1)
+  plus_minus = []
+  for p, step in enumerate(steps):
+    plus = list(_PARAMETERS)
+    minus = list(_PARAMETERS)
+    plus[p] += step
+    minus[p] -= step
+    plus_minus.append(
+      (
+        _complete_kernel_path(tuple(plus), strains),
+        _complete_kernel_path(tuple(minus), strains),
+      )
+    )
+  indices = np.arange(4, dtype=np.int64)
+  for kernel in (
+    isotropic_hardening_plasticity_path_kernel_reference,
+    isotropic_hardening_plasticity_path_kernel,
+  ):
+    rows = np.zeros((1, 19))
+    derivatives = np.zeros((4, 1, 19))
+    truncated_error = 0.0
+    for step_index, strain in enumerate(strains):
+      result = kernel(
+        strain[None, :],
+        rows,
+        np.zeros((4, 1, 6)),
+        derivatives,
+        indices,
+        _total_path_calibration(_PARAMETERS),
+      )
+      assert result.status is EvaluationStatus.OK
+      for p, step in enumerate(steps):
+        plus_stress, plus_row = plus_minus[p][0][step_index]
+        minus_stress, minus_row = plus_minus[p][1][step_index]
+        fd_stress = (plus_stress - minus_stress) / (2.0 * step)
+        fd_row = (plus_row - minus_row) / (2.0 * step)
+        error = max(
+          float(np.max(np.abs(fd_stress - result.stress_derivatives[p, 0])))
+          / max(1.0, float(np.max(np.abs(fd_stress)))),
+          _scaled_state_error(result.trial_row_derivatives[p, 0], fd_row),
+        )
+        # Observed <= 6.9e-10 across both kernels and all five path points.
+        assert error < 5.0e-9, (kernel.__name__, step_index, p, error)
+        if step_index == 1:
+          truncated = kernel(
+            strain[None, :],
+            rows,
+            np.zeros((4, 1, 6)),
+            np.zeros((4, 1, 19)),
+            indices,
+            _total_path_calibration(_PARAMETERS),
+          )
+          truncated_error = max(
+            truncated_error,
+            float(np.max(np.abs(fd_row - truncated.trial_row_derivatives[p, 0]))),
+          )
+      derivatives = result.trial_row_derivatives
+      rows = isotropic_hardening_plasticity_kernel(
+        strain[None, :],
+        rows,
+        _total_path_calibration(_PARAMETERS),
+      ).trial_rows
+    assert truncated_error > 1.0e3
+
+
+def test_operator_total_path_matches_joint_parameter_state_port_fd() -> None:
+  operator = _j2_system().operators[0]
+  accepted = np.zeros(operator.header.state_layout.row_shape)
+  field = _patch_field(0.003, 0.0005)
+
+  def path_input(
+    values: np.ndarray,
+    rows: np.ndarray,
+  ) -> OperatorEvaluationInput:
+    return OperatorEvaluationInput(
+      port_values=(_finalized(np.asarray(values, dtype=np.float64)[None, :]),),
+      accepted_state=_finalized(rows),
+      signals=(),
+      request=ChannelRequest((), ()),
+    )
+
+  names = tuple(item.parameter_id for item in operator.header.parameters)
+  first = operator.evaluate_path(
+    path_input(0.5 * field, accepted),
+    OperatorPathSeed(
+      parameter_ids=names,
+      accepted_state_derivatives=_finalized(np.zeros((4, *accepted.shape))),
+      port_derivatives=_finalized(np.zeros((4, 1, 16))),
+    ),
+  )
+  assert first.status is EvaluationStatus.OK
+  accepted = _evaluate(
+    operator,
+    0.5 * field,
+    accepted,
+    ChannelRequest(("internal-force",), ()),
+  ).trial_state.values
+  values = 0.75 * field
+  port_seed = np.broadcast_to(0.01 * field, (4, 1, 16)).copy()
+  current = operator.evaluate_path(
+    path_input(values, accepted),
+    OperatorPathSeed(
+      parameter_ids=names,
+      accepted_state_derivatives=first.trial_state_derivatives,
+      port_derivatives=_finalized(port_seed),
+    ),
+  )
+  assert current.status is EvaluationStatus.OK
+  for p, step in enumerate((0.21, 3.0e-6, 0.025, 0.1)):
+    plus_values = list(_PARAMETERS)
+    minus_values = list(_PARAMETERS)
+    plus_values[p] += step
+    minus_values[p] -= step
+    plus_operator = _j2_system(tuple(plus_values)).operators[0]
+    minus_operator = _j2_system(tuple(minus_values)).operators[0]
+    plus = _evaluate(
+      plus_operator,
+      values + step * port_seed[p, 0],
+      accepted + step * first.trial_state_derivatives.values[p],
+      ChannelRequest(("internal-force",), ()),
+    )
+    minus = _evaluate(
+      minus_operator,
+      values - step * port_seed[p, 0],
+      accepted - step * first.trial_state_derivatives.values[p],
+      ChannelRequest(("internal-force",), ()),
+    )
+    fd_residual = (plus.residual_values[0].values - minus.residual_values[0].values) / (
+      2.0 * step
+    )
+    fd_state = (plus.trial_state.values - minus.trial_state.values) / (2.0 * step)
+    residual_error = float(
+      np.max(np.abs(fd_residual - current.residual_derivatives[p].values))
+    ) / max(1.0, float(np.max(np.abs(fd_residual))))
+    state_error = _scaled_state_error(
+      current.trial_state_derivatives.values[p],
+      fd_state,
+    )
+    # Observed <= 1.7e-10, including the gathered nonzero current-port seed.
+    assert max(residual_error, state_error) < 5.0e-9

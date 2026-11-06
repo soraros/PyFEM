@@ -111,9 +111,18 @@ Protocol summary:
   every elastic step (the elastic map does not reference them). From the
   second step on, the entering state's stress and strain rows are
   parameter-dependent even on elastic trajectories, so the column is the
-  increment's sensitivity (pinned by the two-step-elastic factor-2 test);
-  propagating the entering state's own parameter dependence needs
-  state-derivative channels, the M48 survey's declared v2 boundary.
+  increment's sensitivity (pinned by the two-step-elastic factor-2 test).
+- Requested total path sensitivities (``total_sensitivity_parameters``) are a
+  separate direct-J2 opt-in. At each converged, still-open transaction, one
+  batched path sweep evaluates the entering-history right-hand side with zero
+  current-port seed. ONE factorization of the final converged Jacobian is
+  shared by all parameter solves; a second batched sweep with gathered ``P U``
+  then produces every trial-state derivative. The reduced U and full S bundle
+  stages in the same atomic primal commit and appears only as
+  ``observation.total_sensitivities``. A no-Newton plateau carries the accepted
+  bundle forward exactly with no path sweep or factorization. Nested FE2,
+  non-J2 operators, stale or reordered lineage, and primal-only continuation
+  fail closed. The fixed-entering-state channel above is unchanged.
 - Requested homogenization (``homogenization`` on ``run``) observes, at each
   COMMITTED substep, named boundary-group reaction reductions and their
   map-coordinate derivatives. The homogenized stress is a solve-free
@@ -176,6 +185,7 @@ from pyfem.v3.driver.contracts import (
   SubstepObservation,
   SubstepRecord,
   SubstepStatus,
+  TotalParameterSensitivityObservation,
 )
 from pyfem.v3.driver.diagnostics import (
   DriverDiagnostic,
@@ -195,11 +205,13 @@ from pyfem.v3.driver.nested import (
 )
 from pyfem.v3.driver.plan import (
   CompiledSensitivityProgram,
+  CompiledTotalSensitivityProgram,
   DriverAssemblyPlan,
   assemble_internal_force,
   assemble_parameter_rhs,
   compile_driver_plan,
   compile_sensitivity_program,
+  compile_total_sensitivity_program,
   evaluate_loads,
   evaluate_signals,
   refill_tangent,
@@ -210,6 +222,8 @@ from pyfem.v3.model.operator import (
   EvaluationStatus,
   NestedEvaluationInput,
   OperatorEvaluationInput,
+  OperatorPathEvaluation,
+  OperatorPathSeed,
   ProgramSignalInput,
 )
 from pyfem.v3.model.system import CompiledSystem
@@ -219,7 +233,11 @@ from pyfem.v3.spec.program import (
   ProgramCoordinateValue,
   ProgramPoint,
 )
-from pyfem.v3.state import StateTransaction, StateTransactionOwner
+from pyfem.v3.state import (
+  StateTransaction,
+  StateTransactionOwner,
+  TotalParameterDerivativeBundle,
+)
 
 
 def _evaluation_fail(code: str, message: str) -> NoReturn:
@@ -786,6 +804,183 @@ class NonlinearStaticDriver:
       )
     return tuple(observations)
 
+  def _evaluate_total_path_sweep(
+    self,
+    program: CompiledTotalSensitivityProgram,
+    full: FinalizedArray,
+    transaction: StateTransaction,
+    entering: TotalParameterDerivativeBundle,
+    port_derivatives: np.ndarray,
+  ) -> tuple[OperatorPathEvaluation, ...]:
+    evaluations: list[OperatorPathEvaluation] = []
+    for operator_index, operator in enumerate(self._system.operators):
+      gather = operator.header.ports[0].coefficient_map.values
+      seed = OperatorPathSeed(
+        parameter_ids=program.parameter_ids,
+        accepted_state_derivatives=entering.state_derivatives[operator_index],
+        port_derivatives=FinalizedArray(
+          port_derivatives[:, gather],
+          dtype=np.float64,
+        ),
+      )
+      evaluation = operator.evaluate_path(
+        OperatorEvaluationInput(
+          port_values=(
+            FinalizedArray(
+              np.array(full.values[gather], dtype=np.float64, order="C", copy=True),
+              dtype=np.float64,
+            ),
+          ),
+          accepted_state=transaction.accepted_state(
+            operator.header.state_layout.block_id
+          ),
+          signals=(),
+          request=ChannelRequest((), ()),
+        ),
+        seed,
+      )
+      if type(evaluation) is not OperatorPathEvaluation:
+        _evaluation_fail(
+          "invalid-total-sensitivity-evaluation",
+          "an operator returned a foreign total path evaluation carrier",
+        )
+      if evaluation.status is not EvaluationStatus.OK:
+        _evaluation_fail(
+          "total-sensitivity-evaluation-rejected",
+          "the total path evaluation rejected at a converged primal point",
+        )
+      if len(evaluation.residual_derivatives) != len(program.parameter_ids):
+        _evaluation_fail(
+          "total-sensitivity-column-count-mismatch",
+          "an operator returned the wrong number of total path residual columns",
+        )
+      evaluations.append(evaluation)
+    self._workspace.evaluation_count += 1
+    return tuple(evaluations)
+
+  def _solve_total_sensitivities(
+    self,
+    program: CompiledTotalSensitivityProgram,
+    full: FinalizedArray,
+    transaction: StateTransaction,
+    jacobian_batches: tuple[np.ndarray, ...],
+    *,
+    solved: bool,
+  ) -> tuple[
+    TotalParameterDerivativeBundle,
+    tuple[TotalParameterSensitivityObservation, ...],
+  ]:
+    entering = transaction.accepted_total_derivatives()
+    parameter_count = len(program.parameter_ids)
+    generation = transaction.generation.next_accepted()
+    if solved:
+      zero_ports = np.zeros(
+        (parameter_count, self._map.full_dof_count),
+        dtype=np.float64,
+      )
+      first = self._evaluate_total_path_sweep(
+        program,
+        full,
+        transaction,
+        entering,
+        zero_ports,
+      )
+      tangent = refill_tangent(self._plan, jacobian_batches)
+      self._workspace.tangent_refill_count += 1
+      try:
+        factorization = splu(reduce_tangent(self._map, tangent).tocsc())
+      except RuntimeError:
+        _evaluation_fail(
+          "singular-total-sensitivity-tangent",
+          "the final converged tangent is singular, so total path derivatives "
+          "have no solution",
+        )
+      self._workspace.factorization_count += 1
+      reduced_derivatives = np.empty(
+        (parameter_count, self._map.reduced_dof_count),
+        dtype=np.float64,
+      )
+      for p, parameter_id in enumerate(program.parameter_ids):
+        rhs = assemble_parameter_rhs(
+          self._plan,
+          self._map,
+          tuple(evaluation.residual_derivatives[p].values for evaluation in first),
+        )
+        self._workspace.residual_assembly_count += 1
+        sensitivity = np.asarray(
+          factorization.solve(rhs.values),
+          dtype=np.float64,
+        )
+        self._workspace.linear_solve_count += 1
+        if p > 0:
+          self._workspace.factorization_reuse_count += 1
+        if not bool(np.isfinite(sensitivity).all()):
+          _evaluation_fail(
+            "non-finite-total-sensitivity-solution",
+            f"the total path sensitivity solve for {parameter_id!r} produced "
+            "non-finite coefficients",
+          )
+        reduced_derivatives[p] = sensitivity
+      full_derivatives = np.stack(
+        [
+          admissible_increment(self._map, sensitivity).values
+          for sensitivity in reduced_derivatives
+        ]
+      )
+      second = self._evaluate_total_path_sweep(
+        program,
+        full,
+        transaction,
+        entering,
+        full_derivatives,
+      )
+      state_derivatives = tuple(
+        evaluation.trial_state_derivatives.values for evaluation in second
+      )
+    else:
+      reduced_derivatives = np.array(
+        entering.coefficients.values,
+        dtype=np.float64,
+        order="C",
+        copy=True,
+      )
+      full_derivatives = np.stack(
+        [
+          admissible_increment(self._map, sensitivity).values
+          for sensitivity in reduced_derivatives
+        ]
+      )
+      state_derivatives = tuple(rows.values for rows in entering.state_derivatives)
+
+    bundle = TotalParameterDerivativeBundle(
+      coefficients=FinalizedArray(reduced_derivatives, dtype=np.float64),
+      state_derivatives=tuple(
+        FinalizedArray(rows, dtype=np.float64) for rows in state_derivatives
+      ),
+      generation=generation,
+    )
+    observations: list[TotalParameterSensitivityObservation] = []
+    for p, parameter_id in enumerate(program.parameter_ids):
+      observations.append(
+        TotalParameterSensitivityObservation(
+          parameter_id=parameter_id,
+          coefficients=FinalizedArray(full_derivatives[p], dtype=np.float64),
+          state_derivatives=tuple(
+            (
+              block.block_id,
+              FinalizedArray(rows[p], dtype=np.float64),
+            )
+            for block, rows in zip(
+              program.layout.blocks,
+              state_derivatives,
+              strict=True,
+            )
+          ),
+          generation=generation,
+        )
+      )
+    return bundle, tuple(observations)
+
   def _solve_homogenization(
     self,
     program: _CompiledHomogenizationProgram,
@@ -990,6 +1185,7 @@ class NonlinearStaticDriver:
     point: ProgramPoint,
     committed_point: ProgramPoint | None,
     sensitivity_program: CompiledSensitivityProgram | None,
+    total_sensitivity_program: CompiledTotalSensitivityProgram | None,
     homogenization_program: _CompiledHomogenizationProgram | None,
   ) -> tuple[
     bool,
@@ -1132,6 +1328,16 @@ class NonlinearStaticDriver:
             if sensitivity_program is not None
             else None
           )
+          total_sensitivities: tuple[TotalParameterSensitivityObservation, ...] = ()
+          if total_sensitivity_program is not None:
+            total_bundle, total_sensitivities = self._solve_total_sensitivities(
+              total_sensitivity_program,
+              full,
+              transaction,
+              jacobian_batches,
+              solved=increment is not None,
+            )
+            transaction.stage_total_derivatives(total_bundle)
           transaction.stage_physical(full)
           for operator, evaluation in zip(
             self._system.operators,
@@ -1177,6 +1383,7 @@ class NonlinearStaticDriver:
             reduced_residual_norm=residual_norm,
             sensitivities=sensitivities,
             homogenization=homogenization,
+            total_sensitivities=total_sensitivities,
           )
           return True, tuple(iterations), observation, None
         if first_residual_norm is None:
@@ -1247,6 +1454,7 @@ class NonlinearStaticDriver:
     base_point: ProgramPoint,
     target_points: tuple[ProgramPoint, ...],
     sensitivity_parameters: tuple[str, ...] = (),
+    total_sensitivity_parameters: tuple[str, ...] = (),
     homogenization: HomogenizationRequest | None = None,
   ) -> NonlinearStaticResult:
     """Advance the committed state through the exact target-point schedule.
@@ -1281,6 +1489,9 @@ class NonlinearStaticDriver:
     if type(sensitivity_parameters) is not tuple:
       msg = "driver sensitivity parameters must be an exact tuple of names"
       raise TypeError(msg)
+    if type(total_sensitivity_parameters) is not tuple:
+      msg = "driver total sensitivity parameters must be an exact tuple of names"
+      raise TypeError(msg)
     if homogenization is not None and type(homogenization) is not HomogenizationRequest:
       msg = "driver homogenization must be an exact HomogenizationRequest or None"
       raise TypeError(msg)
@@ -1289,6 +1500,23 @@ class NonlinearStaticDriver:
       if sensitivity_parameters
       else None
     )
+    total_sensitivity_program = (
+      compile_total_sensitivity_program(
+        self._system,
+        self._map,
+        total_sensitivity_parameters,
+      )
+      if total_sensitivity_parameters
+      else None
+    )
+    if total_sensitivity_program is not None:
+      try:
+        self._owner.prepare_total_derivatives(total_sensitivity_program.layout)
+      except ValueError as exc:
+        _preparation_fail(
+          "invalid-total-sensitivity-lineage",
+          str(exc),
+        )
     homogenization_program = (
       _compile_homogenization_program(self._map, homogenization)
       if homogenization is not None
@@ -1331,6 +1559,7 @@ class NonlinearStaticDriver:
             trial_point,
             committed_point,
             sensitivity_program,
+            total_sensitivity_program,
             homogenization_program,
           )
         except BaseException:

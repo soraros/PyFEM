@@ -1242,3 +1242,88 @@ become authored builders, evaluator components, analysis policies, or observatio
 sinks rather than mandatory core kinds. The old path stays frozen as an oracle;
 R2-E, P2-H, and R2-F must falsify or prove the replacement and its causal deletion
 cut before production migration.
+
+
+### 2026-11-07 — Direct-J2 total path derivatives inside the existing transaction
+
+The fixed-entering-state parameter channel remains an increment sensitivity. The
+elastic two-step counterexample makes the missing term explicit: at the second
+step the complete derivative is twice the fixed-state increment, while the
+existing channel intentionally stays fixed to the entering state. M131 adds a
+separate opt-in total result surface for that missing research consumer; it does
+not reinterpret `ParameterSensitivityObservation` or change `ChannelRequest`,
+operator headers, assembly manifests, or primal state codecs.
+
+The alternatives were automatic differentiation or unrolled Newton
+differentiation, `2P` complete re-solves for central finite differences, dense
+global entering-state Jacobians, and a second derivative-state owner. They are
+rejected respectively for framework/lifecycle breadth, truncating unrolling and
+run-to-run cost, unnecessary global storage, and split atomicity. Nested FE2 is
+outside this amendment and fails preparation explicitly.
+
+For reduced total coefficient derivative `U_n = dq_n/dp` and complete operator
+state derivative `S_n = ds_n/dp`, the implementation uses the forward recurrence
+
+```text
+K_q U_n = -P.T B_n,
+B_n = R_p + R_s S_(n-1),
+S_n = T_p + T_s S_(n-1) + T_u (P U_n).
+```
+
+A direct-J2-only optional path ABI evaluates the transition map without dense
+global/local state Jacobians. The first batched sweep at the converged point
+uses zero current-port derivative seed and produces residual-layout `B_n`. One
+factorization of the FINAL converged Jacobian, rather than the possibly
+previous-iterate Newton stash, is shared by all parameter back-substitutions.
+The second and last batched sweep gathers `P U_n` and emits every 19-row J2
+trial-state derivative. There are at most two path sweeps and one shared fresh
+factorization per non-plateau commit, and no per-parameter factorization. A
+no-Newton plateau carries `U,S` forward exactly with no added path sweep,
+factorization, or linear solve.
+
+`StateTransactionOwner` remains the sole accepted-state lifecycle owner. Its
+optional reduced-U/per-block-S buffers stage in the same open transaction and
+commit to the same next generation as primal coefficients and operator rows.
+Reject clears derivative staging; a cutback transaction publishes the accepted
+derivative generation again. A primal-only later commit deliberately leaves the
+derivative generation stale, and later total continuation fails closed. A total
+lineage starts only at the virgin generation or a matching live derivative
+layout/generation; parameter order, system/map fingerprints, block schemas, and
+geometry cannot change mid-lineage.
+
+`TotalParameterSensitivityObservation` and
+`SubstepObservation.total_sensitivities` are the distinct total result surface.
+Each observation snapshots full-space coefficient derivatives and every block's
+state derivatives at its commit generation. Authoring exposes the same request
+as `total_sensitivities`. The request-owned derivative bundle has a separate
+versioned layout/codec: canonical ordered ASCII JSON header, parameter order,
+system/map fingerprints, path ABI, coefficient/block schemas and shapes,
+generation ordinal, exact byte count, and finite C-order float64 body. Foreign,
+malformed, noncanonical, truncated, padded, and non-finite payloads fail closed.
+
+Acceptance evidence is in `test_v3_param_derivatives.py`,
+`test_v3_sensitivities.py`, `test_v3_state_transactions.py`, and
+`test_v3_state_evolution.py` (59 focused tests passing at this amendment):
+
+- reference and batched J2 kernels match independent complete-kernel-path FD on
+  elastic/plastic/unload/reload paths; a zeroed entering-history seed fails by
+  more than `1e3` absolute in the control;
+- the compiled operator matches joint parameter/entering-state/current-port FD
+  to observed scaled error `1.7e-10` (gate `5e-9`);
+- the elastic total derivative matches complete re-solve FD and the factor-two
+  relation; plastic load/unload/reload U and every 19-row S match two-stencil
+  complete re-solves with identical active-branch masks. Worst absolute U error
+  is `2.93e-10` (gate `2e-9`); coarse/fine scaled state errors are `2.66e-7`
+  and `6.65e-8` (gate `5e-7`);
+- rollback, cutback re-rooting, stale-lineage rejection, exact plateau
+  carry-forward, codec roundtrips/malformation rejection, nested-FE2 rejection,
+  primal byte transparency, and P=1 versus P=4 factorization invariance are
+  exercised directly.
+
+On the reference i9-9980HK, Python 3.13.11, NumPy 2.3.5, Numba 0.62.1, SciPy
+1.18.0, and 16 Numba threads, the public 4x1 Q8 cantilever schedule
+`(0,20,10,25)` was compared with `2P` complete re-solves. Fresh-model median
+speedups are `3.00x` at P=1 and `10.04x` at P=4; precompiled-system warm median
+speedups are `4.51x` and `12.29x`. All measured medians favor the direct route.
+The detailed matched samples and cold/warm meanings are recorded in
+`program-playbook.md`.

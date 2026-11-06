@@ -10,6 +10,12 @@ structures. A rejected transaction discards its staged trial and leaves the
 committed state byte-identical; a commit validates everything staged before
 writing anything, then swings physical coefficients and per-block state rows
 in one indivisible transition.
+
+Optional total-path derivative buffers use the same owner and transaction:
+reduced coefficient derivatives and every operator-state derivative row stage
+with the primal candidate and advance to the same next generation. Rejection
+clears that staging; a primal-only commit leaves derivative lineage stale, so
+later total requests fail rather than silently truncating entering history.
 """
 
 from __future__ import annotations
@@ -19,7 +25,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from pyfem.v3.model.arrays import FinalizedArray
-from pyfem.v3.model.identity import IdentityMismatchError, StateGeneration
+from pyfem.v3.model.identity import (
+  IdentityMismatchError,
+  StateGeneration,
+  require_generation_successor,
+  require_same_generation,
+)
 from pyfem.v3.model.operator import (
   OperatorStateLayout,
   OperatorStateSlot,
@@ -28,7 +39,11 @@ from pyfem.v3.model.operator import (
   StateLifetime,
 )
 from pyfem.v3.model.system import CompiledSystem
-from pyfem.v3.state.codecs import Float64StateRowCodec
+from pyfem.v3.state.codecs import (
+  Float64StateRowCodec,
+  TotalParameterDerivativeBundle,
+  TotalParameterDerivativeLayout,
+)
 from pyfem.v3.state.nested import NestedStateReference, NestedStateStore
 
 _TRANSACTION_SEAL = object()
@@ -47,6 +62,7 @@ class GenerationRecord:
   physical_staged: bool
   staged_block_ids: tuple[SemanticId, ...]
   nested_references: tuple[NestedStateReference, ...] = ()
+  total_derivatives_staged: bool = False
 
 
 def _validated_layout(value: object) -> OperatorStateLayout:
@@ -136,7 +152,7 @@ def _detached(array: np.ndarray) -> FinalizedArray:
   return FinalizedArray(array, dtype=np.float64)
 
 
-def _owned_rows(value: object, shape: tuple[int, int], label: str) -> np.ndarray:
+def _owned_rows(value: object, shape: tuple[int, ...], label: str) -> np.ndarray:
   if type(value) is FinalizedArray:
     source = value.values
   elif type(value) is np.ndarray:
@@ -158,6 +174,44 @@ def _owned_rows(value: object, shape: tuple[int, int], label: str) -> np.ndarray
   return owned
 
 
+def _owned_derivative_bundle(
+  layout: TotalParameterDerivativeLayout,
+  bundle: TotalParameterDerivativeBundle,
+) -> TotalParameterDerivativeBundle:
+  if type(bundle) is not TotalParameterDerivativeBundle:
+    msg = "total derivative staging requires an exact TotalParameterDerivativeBundle"
+    raise TypeError(msg)
+  if type(bundle.generation) is not StateGeneration:
+    msg = "total derivative staging requires an exact StateGeneration"
+    raise TypeError(msg)
+  parameter_count = len(layout.parameter_ids)
+  coefficients = _owned_rows(
+    bundle.coefficients,
+    (parameter_count, layout.reduced_dof_count),
+    "total derivative coefficients",
+  )
+  if type(bundle.state_derivatives) is not tuple or len(
+    bundle.state_derivatives
+  ) != len(layout.blocks):
+    msg = "total derivative state blocks must follow the compiled block order"
+    raise ValueError(msg)
+  state_derivatives = tuple(
+    _detached(
+      _owned_rows(
+        rows,
+        (parameter_count, block.entity_count, block.row_width),
+        f"total derivative state block {block.block_id!r}",
+      )
+    )
+    for block, rows in zip(layout.blocks, bundle.state_derivatives, strict=True)
+  )
+  return TotalParameterDerivativeBundle(
+    coefficients=_detached(coefficients),
+    state_derivatives=state_derivatives,
+    generation=bundle.generation,
+  )
+
+
 class StateTransaction:
   """One open trial rooted at a published accepted generation.
 
@@ -169,11 +223,13 @@ class StateTransaction:
 
   __slots__ = (
     "_accepted_blocks",
+    "_accepted_derivatives",
     "_accepted_physical",
     "_closed",
     "_generation",
     "_owner",
     "_staged_blocks",
+    "_staged_derivatives",
     "_staged_nested",
     "_staged_nested_keys",
     "_staged_physical",
@@ -187,6 +243,7 @@ class StateTransaction:
     generation: StateGeneration,
     accepted_physical: FinalizedArray,
     accepted_blocks: dict[SemanticId, FinalizedArray],
+    accepted_derivatives: TotalParameterDerivativeBundle | None = None,
   ) -> None:
     if _seal is not _TRANSACTION_SEAL:
       msg = "state transactions are issued only by StateTransactionOwner.begin"
@@ -195,8 +252,10 @@ class StateTransaction:
     self._generation = generation
     self._accepted_physical = accepted_physical
     self._accepted_blocks = accepted_blocks
+    self._accepted_derivatives = accepted_derivatives
     self._staged_physical: np.ndarray | None = None
     self._staged_blocks: dict[SemanticId, np.ndarray] = {}
+    self._staged_derivatives: TotalParameterDerivativeBundle | None = None
     self._staged_nested: list[NestedStateReference] = []
     self._staged_nested_keys: set[tuple[object, int]] = set()
     self._closed = False
@@ -220,6 +279,19 @@ class StateTransaction:
     """Return the detached read-only accepted state rows of one block."""
     return self._accepted_blocks[self._owner._block_key(block_id)]
 
+  def accepted_total_derivatives(self) -> TotalParameterDerivativeBundle:
+    """Return entering derivatives only when their lineage is current."""
+    bundle = self._accepted_derivatives
+    if bundle is None:
+      msg = "total derivative lineage has not been initialized for this owner"
+      raise RuntimeError(msg)
+    require_same_generation(
+      self._generation,
+      bundle.generation,
+      context="total derivative lineage",
+    )
+    return bundle
+
   def stage_physical(self, values: FinalizedArray | np.ndarray) -> None:
     """Stage the trial global physical coefficient vector for commit."""
     self._require_open()
@@ -242,6 +314,20 @@ class StateTransaction:
       binding.layout.row_shape,
       "trial operator state rows",
     )
+
+  def stage_total_derivatives(self, bundle: TotalParameterDerivativeBundle) -> None:
+    """Stage complete U,S derivatives for the same atomic primal commit."""
+    self._require_open()
+    layout = self._owner._derivative_layout
+    if layout is None:
+      msg = "total derivative staging requires an initialized derivative layout"
+      raise RuntimeError(msg)
+    require_generation_successor(
+      self._generation,
+      bundle.generation,
+      context="total derivative staging",
+    )
+    self._staged_derivatives = _owned_derivative_bundle(layout, bundle)
 
   def stage_nested(self, reference: NestedStateReference) -> None:
     """Stage one macro integration point's nested-state reference for commit.
@@ -291,6 +377,10 @@ class StateTransactionOwner:
 
   __slots__ = (
     "_blocks",
+    "_derivative_coefficients",
+    "_derivative_generation",
+    "_derivative_layout",
+    "_derivative_states",
     "_generation",
     "_history",
     "_nested_block_ids",
@@ -377,6 +467,10 @@ class StateTransactionOwner:
     self._generation = StateGeneration.initial()
     self._history: tuple[GenerationRecord, ...] = ()
     self._open: StateTransaction | None = None
+    self._derivative_layout: TotalParameterDerivativeLayout | None = None
+    self._derivative_coefficients: np.ndarray | None = None
+    self._derivative_states: dict[SemanticId, np.ndarray] = {}
+    self._derivative_generation: StateGeneration | None = None
 
   @classmethod
   def for_nested_point(
@@ -495,6 +589,88 @@ class StateTransactionOwner:
     """Return a detached read-only copy of one block's accepted state rows."""
     return _detached(self._current_state(block_id))
 
+  @property
+  def total_derivative_layout(self) -> TotalParameterDerivativeLayout | None:
+    """Return the initialized total-path request layout, if one exists."""
+    return self._derivative_layout
+
+  def prepare_total_derivatives(self, layout: TotalParameterDerivativeLayout) -> None:
+    """Initialize or verify live U,S lineage for one exact request layout."""
+    if type(layout) is not TotalParameterDerivativeLayout:
+      msg = "total derivative preparation requires an exact derivative layout"
+      raise TypeError(msg)
+    if self._nested_point is not None:
+      msg = "nested point-backed owners do not support total path derivatives"
+      raise RuntimeError(msg)
+    if self._open is not None:
+      msg = "total derivative preparation requires no open state transaction"
+      raise RuntimeError(msg)
+    if layout.system_fingerprint != self._system.content_fingerprint.digest:
+      msg = "total derivative layout belongs to a foreign compiled system"
+      raise IdentityMismatchError(msg)
+    if tuple(block.block_id for block in layout.blocks) != tuple(self._blocks):
+      msg = "total derivative layout block order does not match the state owner"
+      raise IdentityMismatchError(msg)
+    for block in layout.blocks:
+      state_layout = self._blocks[block.block_id].layout
+      if (
+        block.state_schema != state_layout.schema
+        or block.entity_count != state_layout.entity_count
+        or block.row_width != state_layout.row_width
+      ):
+        msg = f"total derivative layout contradicts state block {block.block_id!r}"
+        raise IdentityMismatchError(msg)
+    if self._derivative_layout is None:
+      if self._generation.ordinal != 0:
+        msg = "total derivative lineage can start only from the virgin generation"
+        raise IdentityMismatchError(msg)
+      parameter_count = len(layout.parameter_ids)
+      self._derivative_layout = layout
+      self._derivative_coefficients = np.zeros(
+        (parameter_count, layout.reduced_dof_count),
+        dtype=np.float64,
+      )
+      self._derivative_states = {
+        block.block_id: np.zeros(
+          (parameter_count, block.entity_count, block.row_width),
+          dtype=np.float64,
+        )
+        for block in layout.blocks
+      }
+      self._derivative_generation = self._generation
+    elif self._derivative_layout != layout:
+      msg = "total derivative parameter order or layout changed within one lineage"
+      raise IdentityMismatchError(msg)
+    require_same_generation(
+      self._generation,
+      self._derivative_generation,
+      context="total derivative lineage",
+    )
+
+  def _derivative_snapshot(self) -> TotalParameterDerivativeBundle:
+    layout = self._derivative_layout
+    coefficients = self._derivative_coefficients
+    generation = self._derivative_generation
+    if layout is None or coefficients is None or generation is None:
+      msg = "total derivative lineage has not been initialized for this owner"
+      raise RuntimeError(msg)
+    return TotalParameterDerivativeBundle(
+      coefficients=_detached(coefficients),
+      state_derivatives=tuple(
+        _detached(self._derivative_states[block.block_id]) for block in layout.blocks
+      ),
+      generation=generation,
+    )
+
+  def accepted_total_derivatives(self) -> TotalParameterDerivativeBundle:
+    """Return detached U,S snapshots, failing closed on stale lineage."""
+    require_same_generation(
+      self._generation,
+      self._derivative_generation,
+      context="total derivative lineage",
+    )
+    return self._derivative_snapshot()
+
   def encode_state(self, block_id: SemanticId) -> bytes:
     """Encode one block's accepted state rows with its versioned codec."""
     binding = self._binding(block_id)
@@ -531,6 +707,9 @@ class StateTransactionOwner:
       accepted_blocks={
         block_id: _detached(self._current_state(block_id)) for block_id in self._blocks
       },
+      accepted_derivatives=(
+        self._derivative_snapshot() if self._derivative_layout is not None else None
+      ),
     )
     self._open = transaction
     return transaction
@@ -541,9 +720,17 @@ class StateTransactionOwner:
       raise RuntimeError(msg)
     staged_physical = transaction._staged_physical
     staged_blocks = transaction._staged_blocks
-    if staged_physical is None and not staged_blocks:
+    staged_derivatives = transaction._staged_derivatives
+    if staged_physical is None and not staged_blocks and staged_derivatives is None:
       msg = "a state transaction commit requires at least one staged value"
       raise ValueError(msg)
+    next_generation = self._generation.next_accepted()
+    if staged_derivatives is not None:
+      require_same_generation(
+        next_generation,
+        staged_derivatives.generation,
+        context="total derivative commit",
+      )
     # Every staged value was validated and ownership-copied at staging time.
     # A point-backed microstep writes only its store's trial buffers; a macro
     # owner writes its own accepted buffers and never writes nested payloads.
@@ -558,7 +745,23 @@ class StateTransactionOwner:
         np.copyto(self._physical, staged_physical)
       for block_id, rows in staged_blocks.items():
         np.copyto(self._blocks[block_id].accepted, rows)
-    self._generation = self._generation.next_accepted()
+      if staged_derivatives is not None:
+        assert self._derivative_coefficients is not None
+        np.copyto(
+          self._derivative_coefficients,
+          staged_derivatives.coefficients.values,
+        )
+        layout = self._derivative_layout
+        assert layout is not None
+        for block, rows in zip(
+          layout.blocks,
+          staged_derivatives.state_derivatives,
+          strict=True,
+        ):
+          np.copyto(self._derivative_states[block.block_id], rows.values)
+    self._generation = next_generation
+    if staged_derivatives is not None:
+      self._derivative_generation = next_generation
     self._history = (
       *self._history,
       GenerationRecord(
@@ -566,6 +769,7 @@ class StateTransactionOwner:
         physical_staged=staged_physical is not None,
         staged_block_ids=tuple(staged_blocks),
         nested_references=tuple(transaction._staged_nested),
+        total_derivatives_staged=staged_derivatives is not None,
       ),
     )
     transaction._closed = True
@@ -577,6 +781,7 @@ class StateTransactionOwner:
       raise RuntimeError(msg)
     transaction._staged_physical = None
     transaction._staged_blocks = {}
+    transaction._staged_derivatives = None
     transaction._staged_nested = []
     transaction._staged_nested_keys = set()
     transaction._closed = True

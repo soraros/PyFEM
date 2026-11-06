@@ -24,14 +24,21 @@ if sys.version_info < (3, 13):
 
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import StateGeneration, require_same_generation
+from pyfem.v3.model.operator import PATH_DERIVATIVE_ABI_SCHEMA
 from pyfem.v3.state import (
   CONTINUATION_EVOLUTION_STATE_SCHEMA,
   EVOLUTION_CODEC_FORMAT,
+  TOTAL_DERIVATIVE_CODEC_FORMAT,
+  TOTAL_PARAMETER_DERIVATIVE_STATE_SCHEMA,
   ContinuationEvolutionCodec,
   ContinuationEvolutionLayout,
   ContinuationEvolutionState,
   ContinuationEvolutionStore,
   StateCodecError,
+  TotalParameterDerivativeBlockLayout,
+  TotalParameterDerivativeBundle,
+  TotalParameterDerivativeCodec,
+  TotalParameterDerivativeLayout,
 )
 
 _FINGERPRINT_A = "0" * 63 + "a"
@@ -433,3 +440,209 @@ def test_failed_decodes_leave_the_store_byte_identical() -> None:
     ContinuationEvolutionStore.decode(layout, generation, "not-bytes")  # type: ignore[arg-type]
   assert store.encode() == payload_before
   require_same_generation(store.generation, generation.next_accepted())
+
+
+# --- M131: total derivative bundle codec --------------------------------------
+
+
+def _derivative_layout(
+  *,
+  schema: str = TOTAL_PARAMETER_DERIVATIVE_STATE_SCHEMA,
+  parameter_ids: tuple[str, ...] = ("youngs_modulus", "hardening_slope"),
+  map_fingerprint: str = _FINGERPRINT_A,
+  reduced_dof_count: int = 3,
+  row_width: int = 19,
+) -> TotalParameterDerivativeLayout:
+  return TotalParameterDerivativeLayout(
+    schema=schema,
+    path_abi_schema=PATH_DERIVATIVE_ABI_SCHEMA,
+    parameter_ids=parameter_ids,
+    system_fingerprint=_FINGERPRINT_B,
+    map_fingerprint=map_fingerprint,
+    reduced_dof_count=reduced_dof_count,
+    blocks=(
+      TotalParameterDerivativeBlockLayout(
+        block_id=("cells", "j2"),
+        state_schema="pyfem-v3-j2-isotropic-hardening-state-v1|test",
+        entity_count=2,
+        row_width=row_width,
+      ),
+    ),
+  )
+
+
+def _derivative_bundle(
+  layout: TotalParameterDerivativeLayout,
+  generation: StateGeneration,
+) -> TotalParameterDerivativeBundle:
+  parameter_count = len(layout.parameter_ids)
+  coefficients = np.arange(
+    parameter_count * layout.reduced_dof_count,
+    dtype=np.float64,
+  ).reshape(parameter_count, layout.reduced_dof_count)
+  states = []
+  for block in layout.blocks:
+    shape = (parameter_count, block.entity_count, block.row_width)
+    states.append(
+      FinalizedArray(
+        np.linspace(-1.0, 1.0, int(np.prod(shape)), dtype=np.float64).reshape(shape),
+        dtype=np.float64,
+      )
+    )
+  return TotalParameterDerivativeBundle(
+    coefficients=FinalizedArray(coefficients, dtype=np.float64),
+    state_derivatives=tuple(states),
+    generation=generation,
+  )
+
+
+def _rewrite_derivative_header(
+  payload: bytes,
+  **changes: object,
+) -> bytes:
+  header, _, body = payload.partition(b"\n")
+  declared = json.loads(header)
+  declared.update(changes)
+  replacement = json.dumps(
+    declared,
+    ensure_ascii=True,
+    separators=(",", ":"),
+    sort_keys=True,
+  ).encode("ascii")
+  return replacement + b"\n" + body
+
+
+def test_total_derivative_codec_round_trip_and_canonical_header() -> None:
+  layout = _derivative_layout()
+  generation = StateGeneration.initial().next_accepted()
+  bundle = _derivative_bundle(layout, generation)
+  codec = TotalParameterDerivativeCodec()
+  payload = codec.encode(layout, bundle)
+  header, _, body = payload.partition(b"\n")
+  declared = json.loads(header)
+  assert declared["format"] == TOTAL_DERIVATIVE_CODEC_FORMAT
+  assert declared["schema"] == TOTAL_PARAMETER_DERIVATIVE_STATE_SCHEMA
+  assert declared["path_abi_schema"] == PATH_DERIVATIVE_ABI_SCHEMA
+  assert declared["parameter_ids"] == list(layout.parameter_ids)
+  assert declared["generation_ordinal"] == 1
+  assert declared["order"] == "C"
+  assert declared["dtype"] == "<f8"
+  assert declared["coefficient_shape"] == [2, 3]
+  assert declared["state_shapes"] == [[2, 2, 19]]
+  assert len(body) == 8 * (2 * 3 + 2 * 2 * 19)
+  assert header == json.dumps(
+    declared,
+    ensure_ascii=True,
+    separators=(",", ":"),
+    sort_keys=True,
+  ).encode("ascii")
+
+  decoded = codec.decode(layout, payload, generation)
+  require_same_generation(decoded.generation, generation)
+  np.testing.assert_array_equal(
+    decoded.coefficients.values,
+    bundle.coefficients.values,
+  )
+  for actual, expected in zip(
+    decoded.state_derivatives,
+    bundle.state_derivatives,
+    strict=True,
+  ):
+    np.testing.assert_array_equal(actual.values, expected.values)
+    assert not actual.values.flags.writeable
+  assert codec.encode(layout, decoded) == payload
+
+
+def test_total_derivative_codec_zero_width_round_trip() -> None:
+  layout = _derivative_layout(reduced_dof_count=0, row_width=0)
+  generation = StateGeneration.initial()
+  bundle = _derivative_bundle(layout, generation)
+  codec = TotalParameterDerivativeCodec()
+  payload = codec.encode(layout, bundle)
+  assert payload.endswith(b"\n")
+  decoded = codec.decode(layout, payload, generation)
+  assert decoded.coefficients.values.shape == (2, 0)
+  assert decoded.state_derivatives[0].values.shape == (2, 2, 0)
+  assert codec.encode(layout, decoded) == payload
+
+
+def test_total_derivative_codec_rejects_foreign_headers_and_generations() -> None:
+  layout = _derivative_layout()
+  generation = StateGeneration.initial().next_accepted()
+  codec = TotalParameterDerivativeCodec()
+  payload = codec.encode(layout, _derivative_bundle(layout, generation))
+  foreign = TotalParameterDerivativeCodec("foreign-total-derivatives-v0")
+  with pytest.raises(StateCodecError, match="does not match"):
+    foreign.encode(layout, _derivative_bundle(layout, generation))
+  with pytest.raises(StateCodecError, match="does not match"):
+    foreign.decode(layout, payload, generation)
+  with pytest.raises(StateCodecError, match="contradicts"):
+    codec.decode(
+      _derivative_layout(map_fingerprint=_FINGERPRINT_B),
+      payload,
+      generation,
+    )
+  with pytest.raises(StateCodecError, match="contradicts"):
+    codec.decode(layout, payload, generation.next_accepted())
+
+  changes = (
+    {"schema": "foreign-total-derivatives-v0"},
+    {"format": "pyfem-v3-total-derivative-bundle-float64-v0"},
+    {"path_abi_schema": "foreign-path-abi-v0"},
+    {"parameter_ids": list(reversed(layout.parameter_ids))},
+    {"system_fingerprint": _FINGERPRINT_A},
+    {"map_fingerprint": _FINGERPRINT_B},
+    {"coefficient_shape": [2, 4]},
+    {"state_shapes": [[2, 2, 18]]},
+    {"generation_ordinal": 2},
+    {"order": "F"},
+    {"dtype": ">f8"},
+    {"extra": 1},
+  )
+  for change in changes:
+    with pytest.raises(StateCodecError, match="contradicts"):
+      codec.decode(layout, _rewrite_derivative_header(payload, **change), generation)
+  tampered_block = json.loads(payload.partition(b"\n")[0])
+  tampered_block["blocks"][0]["state_schema"] = "foreign-state-schema"
+  header = json.dumps(tampered_block, separators=(",", ":"), sort_keys=True).encode()
+  with pytest.raises(StateCodecError, match="contradicts"):
+    codec.decode(layout, header + b"\n" + payload.partition(b"\n")[2], generation)
+  noncanonical = payload.replace(b'{"blocks"', b'{ "blocks"', 1)
+  with pytest.raises(StateCodecError, match="canonical ordered"):
+    codec.decode(layout, noncanonical, generation)
+
+
+def test_total_derivative_codec_rejects_malformed_bodies_and_encode_shapes() -> None:
+  layout = _derivative_layout()
+  generation = StateGeneration.initial().next_accepted()
+  bundle = _derivative_bundle(layout, generation)
+  codec = TotalParameterDerivativeCodec()
+  payload = codec.encode(layout, bundle)
+  header, _, body = payload.partition(b"\n")
+  for malformed in (payload[:-4], payload + b"\x00" * 8):
+    with pytest.raises(StateCodecError, match="byte count"):
+      codec.decode(layout, malformed, generation)
+  for poison in (np.nan, np.inf):
+    values = np.full(len(body) // 8, poison)
+    with pytest.raises(StateCodecError, match="non-finite"):
+      codec.decode(layout, header + b"\n" + values.tobytes(), generation)
+  for malformed in (b"no-header-line", b"not-json\n" + body, b"[1,2]\n" + body):
+    with pytest.raises(StateCodecError):
+      codec.decode(layout, malformed, generation)
+  with pytest.raises(TypeError, match="exact bytes"):
+    codec.decode(layout, "not-bytes", generation)  # type: ignore[arg-type]
+
+  wrong_shape = TotalParameterDerivativeBundle(
+    coefficients=FinalizedArray(np.zeros((2, 4)), dtype=np.float64),
+    state_derivatives=bundle.state_derivatives,
+    generation=generation,
+  )
+  with pytest.raises(StateCodecError, match="shape"):
+    codec.encode(layout, wrong_shape)
+  nonfinite = TotalParameterDerivativeBundle(
+    coefficients=FinalizedArray(np.full((2, 3), np.nan), dtype=np.float64),
+    state_derivatives=bundle.state_derivatives,
+    generation=generation,
+  )
+  with pytest.raises(StateCodecError, match="finite"):
+    codec.encode(layout, nonfinite)

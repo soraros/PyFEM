@@ -53,6 +53,8 @@ from pyfem.v3.compile.contracts import (
   TRIA3_TOPOLOGY_KEY,
   StatefulContinuumKernel,
   StatefulContinuumKernelResult,
+  StatefulContinuumPathKernel,
+  StatefulContinuumPathKernelResult,
   StatefulContinuumSignalDerivative,
   StatefulContinuumSignalInput,
   StatefulContinuumSignalKernel,
@@ -91,6 +93,7 @@ from pyfem.v3.materials.plane_strain_damage import (
 from pyfem.v3.materials.plane_stress import plane_stress_matrix
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
+  PATH_DERIVATIVE_ABI_SCHEMA,
   BalanceRole,
   ChannelRequest,
   CompiledOperator,
@@ -102,6 +105,8 @@ from pyfem.v3.model.operator import (
   OperatorEvaluation,
   OperatorEvaluationInput,
   OperatorHeader,
+  OperatorPathEvaluation,
+  OperatorPathSeed,
   OperatorStateLayout,
   ParameterBinding,
   PortBinding,
@@ -902,6 +907,183 @@ class Q8StatefulContinuumOperator(CompilerConstructed):
   content_manifest: CanonicalManifest
   kernel: StatefulContinuumKernel | StatefulContinuumSignalKernel
   param_kernel: StatefulContinuumKernel | StatefulContinuumSignalKernel | None
+  path_kernel: StatefulContinuumPathKernel | None
+
+  @property
+  def path_derivative_abi_schema(self) -> str:
+    if self.path_kernel is None:
+      msg = "this stateful operator has no total path derivative binding"
+      raise ValueError(msg)
+    return PATH_DERIVATIVE_ABI_SCHEMA
+
+  def evaluate_path(
+    self,
+    inputs: OperatorEvaluationInput,
+    seed: OperatorPathSeed,
+  ) -> OperatorPathEvaluation:
+    """Evaluate residual-layout and full-state total path derivatives."""
+    if (
+      type(inputs) is not OperatorEvaluationInput or type(seed) is not OperatorPathSeed
+    ):
+      msg = "path evaluation requires exact operator input and path seed values"
+      raise TypeError(msg)
+    if self.path_kernel is None:
+      msg = "this stateful operator has no total path derivative binding"
+      raise ValueError(msg)
+    if self.header.nested_execution is not None or inputs.nested_execution is not None:
+      msg = "total path derivatives do not support nested FE2 execution"
+      raise ValueError(msg)
+    if self.header.signal_ports or inputs.signals:
+      msg = "the direct J2 total path derivative does not accept program signals"
+      raise ValueError(msg)
+    if type(inputs.port_values) is not tuple or len(inputs.port_values) != 1:
+      msg = "path evaluation requires exactly one displacement port batch"
+      raise TypeError(msg)
+    values = inputs.port_values[0].values
+    expected = self.header.ports[0].coefficient_map.values.shape
+    if (
+      values.dtype != np.dtype(np.float64)
+      or values.dtype.metadata is not None
+      or values.shape != expected
+      or not bool(np.isfinite(values).all())
+    ):
+      msg = "path displacement port values must be a finite float64 batch"
+      raise TypeError(msg)
+    layout = self.header.state_layout
+    accepted_state = inputs.accepted_state.values
+    if (
+      accepted_state.dtype != np.dtype(np.float64)
+      or accepted_state.dtype.metadata is not None
+      or accepted_state.shape != layout.row_shape
+      or not bool(np.isfinite(accepted_state).all())
+    ):
+      msg = "path accepted state must match the compiled state layout"
+      raise TypeError(msg)
+    request = inputs.request
+    residual_ids = tuple(item.channel_id for item in self.header.residual_channels)
+    jacobian_ids = tuple(item.channel_id for item in self.header.jacobian_channels)
+    if (
+      type(request) is not ChannelRequest
+      or request.derivative_channel_ids
+      or not set(request.residual_channel_ids).issubset(residual_ids)
+      or not set(request.jacobian_channel_ids).issubset(jacobian_ids)
+    ):
+      msg = "path evaluation request contains an unavailable derivative channel"
+      raise ValueError(msg)
+    parameter_names = tuple(item.parameter_id for item in self.header.parameters)
+    try:
+      parameter_indices = np.array(
+        [parameter_names.index(parameter_id) for parameter_id in seed.parameter_ids],
+        dtype=np.int64,
+      )
+    except ValueError:
+      msg = "path seed names a parameter the operator does not declare"
+      raise ValueError(msg) from None
+    parameter_count = len(seed.parameter_ids)
+    accepted_derivatives = seed.accepted_state_derivatives.values
+    port_derivatives = seed.port_derivatives.values
+    if (
+      accepted_derivatives.dtype != np.dtype(np.float64)
+      or accepted_derivatives.dtype.metadata is not None
+      or accepted_derivatives.shape != (parameter_count, *layout.row_shape)
+      or port_derivatives.dtype != np.dtype(np.float64)
+      or port_derivatives.dtype.metadata is not None
+      or port_derivatives.shape != (parameter_count, *expected)
+      or not bool(np.isfinite(accepted_derivatives).all())
+      or not bool(np.isfinite(port_derivatives).all())
+    ):
+      msg = "path derivative seeds must be finite float64 arrays in compiled layouts"
+      raise TypeError(msg)
+
+    scales = self.payload.geometry_scales.values
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+      b_matrix = (
+        self.payload.normalized_strain_displacement.values / scales[:, None, None, None]
+      )
+      weights = (
+        self.payload.normalized_integration_weights.values
+        * scales[:, None]
+        * scales[:, None]
+      )
+      strain_voigt = np.einsum("epai,ei->epa", b_matrix, values, optimize=True)
+      derivative_voigt = np.einsum(
+        "epai,qei->qepa",
+        b_matrix,
+        port_derivatives,
+        optimize=True,
+      )
+    strains = np.zeros((layout.entity_count, 6), dtype=np.float64)
+    flat = strain_voigt.reshape(layout.entity_count, 3)
+    strains[:, 0] = flat[:, 0]
+    strains[:, 1] = flat[:, 1]
+    strains[:, 5] = flat[:, 2]
+    strain_derivatives = np.zeros(
+      (parameter_count, layout.entity_count, 6),
+      dtype=np.float64,
+    )
+    derivative_flat = derivative_voigt.reshape(parameter_count, layout.entity_count, 3)
+    strain_derivatives[:, :, 0] = derivative_flat[:, :, 0]
+    strain_derivatives[:, :, 1] = derivative_flat[:, :, 1]
+    strain_derivatives[:, :, 5] = derivative_flat[:, :, 2]
+    result = self.path_kernel(
+      strains,
+      accepted_state,
+      strain_derivatives,
+      accepted_derivatives,
+      parameter_indices,
+      self.payload.calibration.values,
+    )
+    if type(result) is not StatefulContinuumPathKernelResult:
+      msg = "path kernels must return an exact StatefulContinuumPathKernelResult"
+      raise TypeError(msg)
+    if result.stress_derivatives.shape != (
+      parameter_count,
+      layout.entity_count,
+      6,
+    ) or result.trial_row_derivatives.shape != (
+      parameter_count,
+      *layout.row_shape,
+    ):
+      msg = "path kernel arrays must match the declared batched derivative shapes"
+      raise TypeError(msg)
+    if result.status is not EvaluationStatus.OK:
+      return _new(
+        OperatorPathEvaluation,
+        residual_derivatives=(),
+        trial_state_derivatives=FinalizedArray(
+          result.trial_row_derivatives,
+          dtype=np.float64,
+        ),
+        status=result.status,
+      )
+    if not bool(np.isfinite(result.stress_derivatives).all()) or not bool(
+      np.isfinite(result.trial_row_derivatives).all()
+    ):
+      msg = "path kernel derivative arrays must be finite for a successful evaluation"
+      raise TypeError(msg)
+    element_count = values.shape[0]
+    residual_derivatives: list[FinalizedArray] = []
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+      for p in range(parameter_count):
+        stress3 = result.stress_derivatives[p].reshape(
+          element_count,
+          _POINT_COUNT,
+          6,
+        )[:, :, [0, 1, 5]]
+        block = continuum_internal_force_batched(b_matrix, weights, stress3)
+        if not bool(np.isfinite(block).all()):
+          msg = "path residual derivatives are not representable as finite float64"
+          raise ValueError(msg)
+        residual_derivatives.append(FinalizedArray(block, dtype=np.float64))
+    return _new(
+      OperatorPathEvaluation,
+      residual_derivatives=tuple(residual_derivatives),
+      trial_state_derivatives=FinalizedArray(
+        result.trial_row_derivatives,
+        dtype=np.float64,
+      ),
+      status=EvaluationStatus.OK,
+    )
 
   def evaluate(
     self,
@@ -3205,6 +3387,9 @@ def _compile_mechanical_stateful(
   param_kernel = getattr(binding, "param_derivative_kernel", None)
   if not callable(param_kernel):
     param_kernel = None
+  path_kernel = getattr(binding, "path_derivative_kernel", None)
+  if not callable(path_kernel):
+    path_kernel = None
   differentiable_names = parameter_names if param_kernel is not None else ()
   try:
     with warnings.catch_warnings():
@@ -3445,6 +3630,7 @@ def _compile_mechanical_stateful(
     content_manifest=manifest,
     kernel=kernel,
     param_kernel=param_kernel,
+    path_kernel=path_kernel,
   )
 
   # The virgin probe mirrors runtime input mutability exactly: read-only
