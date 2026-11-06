@@ -1,19 +1,18 @@
-# PyFEM v3 research-kernel program playbook
+# PyFEM v3 NX8 program playbook
 
-This is the working discipline for the NX7 charter in
+This is the working discipline for the NX8 charter in
 [migration-execution.md](migration-execution.md). It supersedes the former
-parity-preservation, frozen-ABI, and feature-dispatch lessons in this file.
-Numerical findings in [migration-history.md](migration-history.md),
-[evidence/](evidence/), [parity.md](parity.md), [scaling.md](scaling.md), and
-`bench/results/` remain valuable; their old process instructions do not select
-new work.
+parity-preservation, frozen-ABI, generic-only deletion, and feature-dispatch
+lessons in this file. Numerical findings in
+[migration-history.md](migration-history.md), [evidence/](evidence/),
+[parity.md](parity.md), [scaling.md](scaling.md), and `bench/results/` remain
+valuable; their old process instructions do not select new work.
 
-## 1. Selection before implementation
+## 1. Select scientific value before implementation shape
 
-The north star is a compiled, data-oriented, explicitly stateful FE library whose
-accepted answers are scientifically auditable. The means is the smallest
-coherent research kernel with real consumers, not the largest defensible subset
-of legacy or earlier v3.
+The north star is one coherent, explicitly stateful scientific kernel with the
+best measured specialized implementation for each job. It is neither the largest
+defensible legacy subset nor the smallest generic-only codebase.
 
 Review every proposed capability in this order:
 
@@ -21,69 +20,47 @@ Review every proposed capability in this order:
    retained deck route, or required extension of one of those flows?
 2. **Scientific contract:** what equations, state timing, observations, failure
    behavior, and independent conviction make the answer meaningful?
-3. **Architectural fit:** can it use the existing entities/spaces/operators,
-   affine map, driver plan, transaction owner, and typed records without a second
-   runtime?
-4. **Cost:** how many implementations, exports, validators, tests, benchmark
-   lanes, and mental lifetime rules does it add?
-5. **Disposition:** only then choose KEEP, UNIFY, REBUILD, or DELETE.
+3. **Semantic fit:** can existing entities/spaces/operators, affine maps, driver
+   plans, transaction ownership, and typed records express it without duplicate
+   lifecycle ownership?
+4. **Specialized implementation:** which payload, layout, fused kernel, and
+   preparation strategy best serve that contract on matched measurements?
+5. **Cost:** how many implementations, exports, validators, tests, benchmark
+   lanes, allocations, and lifetime rules does it add or remove?
+6. **Disposition:** only then choose KEEP, SPECIALIZE, UNIFY, RE-EXPAND, or
+   DELETE.
 
-- **KEEP** means a real consumer and independent evidence justify the capability
-  at its current boundary.
-- **UNIFY** means the behavior survives but one existing implementation becomes
-  the only owner. Compatibility wrappers are not unification.
-- **REBUILD** means the consumer and science survive while the inadequate
-  implementation or public route is replaced and the old path deleted.
-- **DELETE** means live support, exports, adapters, and maintenance obligations
-  end. Historical evidence remains addressable.
+- **KEEP** means a real consumer and independent evidence justify the current
+  boundary. Keeping the Q8/skim prototype where it wins is a valid durable KEEP,
+  not a temporary failure to delete it.
+- **SPECIALIZE** means a measured implementation improves an existing scientific
+  route without changing its meaning. It must be independently useful and reduce
+  complexity; a private-kernel speedup alone is insufficient.
+- **UNIFY** means behavior survives while one existing owner replaces duplicate
+  ownership. A forwarding compatibility wrapper is not unification.
+- **RE-EXPAND** means a named consumer returns or adds physics through the
+  kernel-native operator/state/observation contracts, with independent evidence.
+- **DELETE** means only dead code or duplicate ownership is removed, with no
+  performance loss and no loss of independent scientific evidence. Historical
+  source remains addressable in Git.
 
 Source presence, a public name, sunk implementation cost, an old ABI manifest,
-or a large test file is not a consumer. A passing test can be excellent evidence
-for a capability that should nevertheless be retired. Conversely, deleting a
-family is not permission to delete its independent scientific findings.
+or a large test file is not a consumer. Conversely, a cleaner generic route is
+not automatically the best route, and prototype deletion is not a completion
+metric.
 
-## 2. Deletion is a supported-state transition
+## 2. One owner per meaning, specialized payloads per job
 
-The retirement decisions named in the execution charter are approved dispositions
-under [migration_workflow.md](migration_workflow.md); that document's coverage
-vocabulary and evidence grades remain useful, but its generic warning that a
-proposed retirement is not approved does not block an explicitly authorized NX7
-retirement. Coverage of the legacy inventory is no longer the completion goal.
-
-A deletion mission must carry one atomic accounting unit:
-
-- exact symbols and files removed;
-- exports, registry defaults, adapter branches, diagnostics, and docs updated;
-- every in-repo consumer migrated or explicitly rejected with a coded error;
-- useful behavior tests mapped to retained contracts before duplicate tests go;
-- historical source revision and independent oracle location recorded outside
-  the live implementation;
-- benchmark workload/baseline consequences declared;
-- numerical and performance gates run on the resulting tree.
-
-Do not leave importable "reference" implementations in production, skip their
-old tests, or add a facade that forwards to both old and new paths. A historical
-revision is the archive; Git can execute it when an investigator truly needs the
-old implementation. The current checkout keeps only live support and independent
-oracles.
-
-A compatibility shim is justified only by a separately identified external
-consumer with a bounded migration window. No such consumer is assumed by NX7.
-"Someone might use it" is not evidence.
-
-## 3. One owner per meaning
-
-Cross-mission duplication is a design defect even when each implementation is
-correct. The kernel has exactly one owner for each of these meanings:
+The generic semantic spine has exactly one owner for each of these meanings:
 
 | Meaning | Owner |
 |---|---|
 | Authored model/program values and normalization | `spec/` |
-| Immutable arrays, live/content/generation identity, manifests | `model/arrays.py`, `identity.py`, `provenance.py` |
+| Immutable arrays, live/content/generation identity, export provenance | `model/arrays.py`, `identity.py`, `provenance.py` |
 | Entities, discrete spaces, operator/channel/state declarations | `model/system.py`, `model/operator.py` |
-| Family-specific payload construction and direct/nested evaluation | retained `compile/` family modules |
+| Family-specific payload construction and direct/nested evaluation | retained `compile/` family modules and numerical `fem/` kernels |
 | Fixed affine coordinates, offsets, reactions, reductions | `constraints/` |
-| Fixed COO/CSR topology, load/signal binding, stable value refill | `driver/plan.py` plus numerical sparse helpers |
+| Fixed COO/CSR topology, load/signal binding, stable value refill | `driver/plan.py` plus canonical sparse helpers |
 | Accepted physical/operator state and atomic trial transitions | `state/owner.py` |
 | Nested accepted state and execution resources | `state/nested.py`, `driver/nested.py` |
 | Continuation evolution | `state/evolution.py` |
@@ -93,14 +70,85 @@ correct. The kernel has exactly one owner for each of these meanings:
 | Legacy deck syntax conversion | `io/legacy_deck.py` |
 
 `DriverAssemblyPlan` is preparation; drivers are schedules; workspaces are
-disposable. No public `PreparedExecution` may duplicate those lifetimes. Private
-helper extraction is acceptable only when it removes measured duplication and
-adds no public lifecycle object or accepted-state owner.
+disposable. No public `PreparedExecution` may duplicate those lifetimes.
+`PreparedNestedExecution` remains the nested-resource owner, not a new universal
+execution facade. Private helpers are acceptable only when they remove actual
+duplication without acquiring public lifecycle, accepted-state, or factorization
+ownership.
 
-No typed DSL, universal operator dictionary, plugin auto-discovery, second
-compiler, alternative state transaction, or second result verifier is a
-simplification. Specialized numerical payloads are encouraged; specialized
-copies of generic validation and ownership are not.
+Specialized numerical payloads are encouraged. They receive arrays and scalars
+at hot boundaries, not registries, model dictionaries, or solver objects. Fused
+evaluation may produce a total while diagnostic requests retain attributable
+parts. The existing prototype route may remain the best Q8/skim implementation;
+do not force it through a generic facade or reroute its consumers merely to make
+the architecture diagram uniform.
+
+No typed DSL, universal operator dictionary, plugin auto-discovery, alternative
+accepted-state transaction, compatibility runtime, or second result verifier is
+a simplification. New physics uses a typed specialized payload and explicit
+channels rather than a second compiler/solver/state/result stack.
+
+## 3. Acceptance by disposition
+
+### 3.1 Deletion inventory
+
+Before deleting dead or duplicate code, carry one atomic accounting unit:
+
+- exact symbols and files removed and why they are dead or duplicate;
+- the sole surviving owner for each retained meaning;
+- exports, registry defaults, adapter branches, diagnostics, and docs updated;
+- every in-repo consumer retained or explicitly rejected with a coded error;
+- useful behavior and independent-oracle coverage mapped before duplicate tests
+  are removed;
+- historical source revision and independent oracle locations preserved outside
+  live production;
+- benchmark workload, envelope, and artifact consequences declared;
+- net production/test/bench complexity reported; and
+- numerical and matched performance gates passing on the resulting tree.
+
+No measured performance loss is allowed on an affected workload. The matched
+base/candidate/base protocol in section 6 decides whether a slowdown is resolved;
+the outer 1.25/1 ms regression ceiling is necessary but does not excuse a slowdown
+beyond repeated-base variability.
+
+Do not leave importable reference implementations, skip old tests, or add a
+facade that forwards to old and new paths. Do not call a route duplicate merely
+because it is specialized: measured scientific or performance value blocks
+deletion. No compatibility shim is assumed; a separately identified external
+consumer and bounded migration window would require its own charter decision.
+
+### 3.2 Optimization inventory
+
+An independently useful optimization names before implementation:
+
+- the existing public consumer and exact-base bottleneck;
+- the bounded technique and why it preserves semantics;
+- the primary public end-to-end cells that must improve beyond repeated-base
+  variability;
+- every secondary workload that must not regress;
+- logical bytes, traced allocation, and RSS measurements where relevant;
+- the expected production and v3-test nonblank reductions; and
+- the condition that abandons the candidate without another optimization round.
+
+Both production and v3-test nonblank complexity must fall for NX8-1. New
+benchmark instrumentation is reported separately and cannot hide production
+growth. An optimization whose value depends on later prototype deletion or
+consumer migration is not independently useful.
+
+### 3.3 Consumer-backed re-expansion
+
+A returned or new scientific feature starts with a maintained consumer, not a
+legacy inventory row. Its mission states equations, field/operator/channel
+semantics, accepted/trial timing, observations, diagnostics, independent
+literature/analytic/numerical evidence, resource ownership, and cost. It must use
+the existing semantic spine and a specialized payload wherever that is the best
+implementation.
+
+A new file format produces normalized declarations, not another compiler. A new
+analysis names channels and evolution semantics, not concrete element classes.
+A new output reads accepted observations and never advances history. Retired
+contact/cohesive, thermal, rate, SOVS, crystal, and other physics may return this
+way; the M122 frozen analysis/result vertical and `Solution.verify` do not.
 
 ## 4. Oracles outlive implementations
 
@@ -111,22 +159,21 @@ Keep four kinds of evidence distinct:
    and deliberately simple numerical references. These remain in tests when they
    cover retained behavior.
 2. **Legacy-v1 comparisons** — an external implementation and shipped decks used
-   to falsify v3 behavior at documented tolerances. The v1 side may remain
-   independent even where that duplicates a parser or settings helper; forcing
-   the oracle and candidate to share code weakens the instrument.
-3. **Historical v3 implementations** — old prototypes and frozen verticals.
-   Their source and tests remain recoverable at recorded Git revisions. They are
-   not live dependencies, fallback paths, or permanent benchmark sides.
-4. **Historical performance records** — `bench/results/*.json`, including M85,
-   M116, and M118 controlled pairs. They establish exactly their recorded
-   workload, revision, environment, and coverage. They do not prove universal
-   scaling or require the old route to remain available.
+   to falsify v3 behavior at documented tolerances. The v1 side may retain an
+   independent parser/settings helper; sharing implementation with the candidate
+   weakens the instrument.
+3. **Historical v3 implementations** — old prototypes, abandoned candidates, and
+   frozen verticals. Recorded Git revisions preserve them. They are not hidden
+   dependencies, fallbacks, or compatibility-runtime components.
+4. **Historical performance records** — `bench/results/*.json`, including the
+   M85, M116, and M118 controlled pairs. They establish exactly their recorded
+   workload, revision, environment, and coverage, not universal scaling or a
+   requirement to delete a route.
 
-For a retirement, record the source revision, mathematical references, test/oracle
-locations, known limitations, and corrected-legacy episodes in the historical
-record. Do not silently rewrite an old result or turn a known bug into a parity
-target. Do not copy thousands of lines of dead code into `.agents/` to make them
-"archived".
+For retirement, record source revision, mathematical references, test/oracle
+locations, known limitations, and corrected-legacy episodes. Never rewrite an
+old result or turn a known bug into a parity target. Do not copy dead production
+implementations into `.agents/` as an archive.
 
 The [migration_workflow.md](migration_workflow.md) E0–E4 grades describe evidence,
 not entitlement to support. A retained public scientific flow needs E3-level
@@ -146,14 +193,16 @@ legacy-v1 comparisons are preferred according to the question.
 
 Converged residuals and consistent tangents are separate claims. Use directional
 finite differences at nonzero, non-kink states for assembled and homogenized
-Jacobians; include the deliberately wrong construction failing the same probe.
+Jacobians; include a deliberately wrong construction failing the same probe.
 Use symbolic differentiation for nontrivial closed-form reassembly when the dev
 stack supports it. Preserve objectivity, geometry, balance, and constraint-work
 checks where they address the physics.
 
 Tolerance changes are scientific changes. Record normalization, state, load path,
 observed deviation, and why the new band is honest. Four-way old/new × loose/tight
-experiments remain the standard when convergence slack could explain a movement.
+experiments remain the standard when convergence slack could explain movement.
+Fused kernels use a measured band against the original contraction and unchanged
+iteration/factorization counts; raw old/new arithmetic equality is never assumed.
 
 ### 5.2 State and generation
 
@@ -182,32 +231,47 @@ uint64 on the recorded reference platform; an always-executed documented
 rtol/atol branch elsewhere. A tolerance call site must cite observed
 cross-platform deviation. Platform selection is not a skip mechanism.
 
-### 5.4 Riks and sensitivity semantics
+### 5.4 Driver, Riks, and sensitivity semantics
 
-Algorithm consolidation must not silently change Riks prediction, two-solve
-normal-plane constraint, commit, termination, resume, or continuation evolution.
-A later scientific redesign may change legacy quirks, but it needs its own
-consumer, independent branch/limit-point oracle, and explicit migration of exact
-cycle/correction-count gates. Parity is not a reason to preserve a defect.
+Private driver consolidation must not change diagnostics, Newton/cutback,
+factorization reuse, nested scope, continuation evolution, or accounting. Riks
+prediction, two-solve normal-plane constraint, commit, termination, resume, and
+exact cycle/correction-count gates are behavior, not implementation noise. A
+later scientific redesign needs its own consumer and independent
+branch/limit-point oracle; parity is not a reason to preserve a defect.
 
 Homogenization derivatives along map coordinates and material-parameter
 sensitivities are different channels. Keep their meanings, right-hand sides,
 factorization reuse, and observations separate even when they share linear
 algebra.
 
-## 6. Performance governance
+## 6. Performance and memory governance
 
-Measure the public prepared and end-to-end routes, not private kernels alone.
-Every timing record states model/DOF/state complexity, hardware and numerical
-library versions, thread count, cold versus warm scope, correctness result, and
-working-tree provenance. Logical copy/byte accounting, `tracemalloc`, and RSS are
-different measurements and are never interchanged.
+Measure public prepared and end-to-end routes, not private kernels alone. Every
+timing record states model/DOF/state complexity, exact base/candidate revisions,
+working-tree provenance, hardware and numerical-library versions, thread count,
+cold versus warm scope, correctness result, and all samples.
 
-Use matched candidate and base-revision control runs under comparable clean
-conditions. The established regression signal is ratio above 1.25 with absolute
-slowdown above 1 ms unless a cell has a documented variance override. A failed
-ratio is investigated, not hidden by changing thresholds. Fleet/thermal
-contamination requires the candidate/control overlap evidence described in
+Use identical generated inputs and equivalent public envelopes under matched
+conditions. Run **base/candidate/base** so the repeated base establishes per-cell
+control/control variability before candidate movement is called real. Keep deck
+read, compile, cold plan, first solve, reused-plan solve, and complete fresh
+end-to-end costs separate where applicable. A historical prototype
+solve-from-assembled cell and a fresh generic compile/driver cell are
+non-comparable context, never acceptance evidence.
+
+The established outer regression signal is:
+
+```text
+candidate_median / control_median <= 1.25 OR candidate_median - control_median <= 1 ms
+```
+
+Every comparable cell must satisfy it unless a stricter program rule applies. A
+candidate slower than control beyond repeated-base variability still fails no
+performance loss. An optimization's primary cells must improve beyond that
+variability. Never average away a size/material/thread/stage failure, rename an
+envelope, omit a costly stage, or use a weak global cache to manufacture warmth.
+Fleet/thermal contamination requires the candidate/control overlap evidence in
 `bench/README.md`.
 
 Keep workload identities honest:
@@ -217,85 +281,66 @@ Keep workload identities honest:
 - FE² retains raw 1/n-thread identity and explicit serial/default versus opt-in
   host-pool policy. GIL-bound damage records are not parallel-scaling claims.
 - FE²-memory is a synthetic copy/state protocol, not another physics solve.
-- TL/Riks family routes retain their independent force/tangent/branch gates.
+- TL/Riks family routes retain independent force/tangent/branch and exact count
+  gates.
 - Cold, true-cold, warm, fresh-process, and JIT measurements remain distinct.
 
-A deleted implementation is not a baseline exception. Migrate the workload,
-state the envelope difference, and create a reviewed baseline successor only
-from a full clean reference-machine run. Keep old baseline files as history;
-never promote a baseline under load or silently drop missing full-coverage cells.
+Logical array/copy/COO/CSR bytes, `tracemalloc`, and RSS high-water are different
+measurements and are never interchanged. No eager derived-array runtime manifest
+or duplicate owned index copy is an acceptable way to make identity faster.
+Range-appropriate arrays must preserve genuine MPC/FE² semantics and canonical
+reductions. Report missing cells as failures, not skipped passes.
 
-### 6.1 Measured NX7-3 lesson: representation before another cache round
+A deleted implementation is not a baseline exception, but NX8 does not presume
+deletion or baseline promotion. Preserve `baseline_m3.json` and every historical
+artifact. NX8-1..3 produce targeted matched evidence only; a later baseline
+successor would need a separate full-clean, full-coverage, reference-machine
+proposal and review.
 
-M123 is a measured counterexample to equating generic semantics with an
-unspecialized runtime representation. Its final fresh-e2e cost remained
-7.66x/12.77x/9.19x control at 2x2/8x8/32x32, while successive remediation rounds
-reduced the net deletion from 2,426/1,593 to 1,703/1,471 nonblank production/test
-lines. The result was neither an acceptable deletion nor a credible generic
-redesign. Do not resume that branch or launch another open-ended optimization
-sequence.
+## 7. What M123 and M126 actually proved
 
-The structural lesson is specific: **eager derived-array identity, object-rich
-attribution, and unspecialized hot representations can make otherwise generic
-code structurally slow**. Recursively copying/serializing/hashing arrays to prove
-identity, constructing per-entity Python records in hot preparation paths,
-retaining validation-only tensors, and using generic `einsum`/int64 COO structures
-where a fused kernel and range-appropriate arrays suffice are not free consequences
-of a clean architecture. A cache can hide repeated work only after ownership and
-identity are correct; it cannot repair an unsuitable representation.
+M123's final generic fresh-e2e cost remained 7.66x/12.77x/9.19x prototype control
+at 2x2/8x8/32x32, while remediation eroded its production/test deletion to
+1,703/1,471 nonblank lines. M126 substantially improved its generic base yet
+failed every comparable fresh-e2e prototype cell, exceeded prototype memory, and
+added 340 production lines. Both were abandoned without merge.
 
-Selective specialized payloads and fused numerical kernels may remain **within
-one generic semantic spine**. That spine retains the same entities, spaces,
-ports/channels, affine maps, driver plan, state transactions, and accepted
-records. It does not acquire a prototype fallback, second compiler/solver/state/
-result runtime, public `PreparedExecution`, or compatibility facade. Temporary
-retention of the current Q8/skim prototype is a production safeguard while one
-bounded candidate is falsified, not an architectural endorsement of two runtimes.
+The architectural lesson is not "generic semantics are slow" and not "specialized
+code must be deleted." It is that eager derived-array identity, object-rich hot
+preparation, retained validation tensors, unspecialized contractions, and
+repeated wide-index ownership can make an otherwise clean implementation
+structurally costly. A cache cannot repair an unsuitable representation, and a
+fast private tangent cannot prove a useful public route.
 
-M123 techniques divide into the following dispositions:
+Under NX8-1 only the following ideas are eligible for fresh, selective evaluation:
 
-**Reusable selectively, with fresh focused correctness and cost evidence:**
+- existing fused Q8 tangent construction with immutable linear reuse and a
+  documented arithmetic band;
+- validation once at immutable authority boundaries, retaining public input and
+  restore checks;
+- explicit validated `DriverAssemblyPlan` reuse with clear ownership;
+- range-appropriate owned arrays without duplicate copies or changed reductions;
+  and
+- lazy normalized-recipe/export identity without eager array manifests.
 
-- linear Q8 tangent precompute and binding the existing fused Numba kernel behind
-  the same operator contract; use a measured arithmetic band and unchanged
-  iteration/factorization counts rather than claiming raw old/new equality;
-- explicit `DriverAssemblyPlan` injection with exact system/map identity,
-  fingerprint and load validation, plus independent-owner/lifetime tests;
-- whole-mesh geometry batching and quadrature binding only where raw-equal to the
-  scalar/reference path, retaining diagnostic and numerical edge fallbacks;
-- validation-once for immutable compiler-owned values, retaining first-use
-  sabotage tests and exact restore validation;
-- canonical CSR owner/test decoupling, strict sequential and raw 1T/nT oracles,
-  and independent legacy/analytic instruments; and
-- V2's format version, digest, no-pickle deserialization, and V1 migration design
-  **only at an actual persistence/restore boundary after lazy identity exists**.
+M126's columnar source/entity rewrite, selector-only reductions, new offset fast
+paths, broad attribution work, and integrated candidate are outside NX8-1.
+Eager V2 runtime manifests, weak global plan caches, envelope renames, stage
+omissions, and prototype fallback are rejected as acceptance techniques. Do not
+resume either abandoned branch or launch a remediation sequence after a failed
+gate.
 
-**Rejected wholesale as acceptance techniques:**
+The new decision rule is deliberately different from generic-only deletion: a
+selective generic improvement may be merged only if it is useful and simpler on
+its own, while the prototype remains supported wherever matched evidence favors
+it. Neither outcome requires consumer migration or a baseline successor.
 
-- eager V2 runtime manifests as an optimization or a new runtime-wide identity
-  layer;
-- benchmark `WeakKeyDictionary`/other weak global plan caches as production
-  lifecycle ownership;
-- the measured-neutral normalization/attribution remediation round as a package,
-  while individual raw-provable batching ideas may be evaluated separately;
-- benchmark envelope renames, stage omissions, or comparisons of
-  solve-from-assembled against fresh compile/driver work; and
-- wholesale adoption of the M123 deletion/remediation branch or another
-  cache/lifecycle/runtime round after the bounded candidate fails.
-
-The existing regression rule is pass iff **ratio <= 1.25 OR absolute delta <=
-1 ms**, evaluated for every comparable cell. Honest envelopes, full correctness,
-COO/memory ceilings, and production/test complexity floors are independent gates,
-not evidence that can compensate for one another. The bounded vertical changes no
-benchmark JSON, `baseline_m3.json`, or baseline history; only a later focused-pass
-deletion candidate may request a full clean matched baseline review.
-
-## 7. Required repository gates
+## 8. Required repository gates
 
 Run tests from the actual checkout root with the project interpreter, always as
-`python -m pytest`, never bare `pytest` or `uv run pytest`. Before requesting
-independent review of a charter-level or cross-cutting change, run the complete
-repository suite in both integer-string modes:
+`python -m pytest`, never bare `pytest` or `uv run pytest`. Before independent
+review of a charter-level or cross-cutting change, run the complete repository
+suite in both integer-string modes:
 
 ```bash
 python -m pytest -q
@@ -305,6 +350,13 @@ PYTHONINTMAXSTRDIGITS=640 python -m pytest -q
 In a worktree, use the primary checkout's absolute `.venv/bin/python` while
 remaining in the worktree. Read-only review may add `PYTHONDONTWRITEBYTECODE=1`
 and `-p no:cacheprovider`; these do not reduce coverage.
+
+Implementation candidates also run the scientific controls:
+
+```bash
+MPLBACKEND=Agg python notebooks/v3/patch_test8.py
+python -m bench.run gates
+```
 
 Run all exact CI Ruff invocations, using the pinned project Ruff rather than
 `PATH` (CI spells the executable `uv run --no-sync ruff`):
@@ -320,42 +372,49 @@ uv run --no-sync ruff format --check bench --config bench/ruff.toml
 uv run --no-sync ruff format --check notebooks/v3 --config notebooks/v3/ruff.toml
 ```
 
-Also run the invocation-invariant bare check required by the root guidance:
+Also run both invocation-invariant bare gates required by the root guidance:
 
 ```bash
 ruff check pyfem/v3 test/v3 bench notebooks/v3
+ruff format --check pyfem/v3 test/v3 bench notebooks/v3
 ```
 
 The local substitute for either command form is the pinned absolute
 `.venv/bin/ruff` with identical arguments. A changed-files-only lint is not a
-whole-tree gate. Documentation-only missions still run the full matrix so the
-review starts from a known base, but must report that the tests are base-code
-evidence rather than implementation evidence for the document diff.
+whole-tree gate. Documentation-only missions still run the full test and Ruff
+matrix so review starts from a known base, but must report that these are
+base-code controls rather than implementation evidence for the document diff.
 
-## 8. Review and durable record
+## 9. Hard stop, review, and durable record
+
+Every NX8 program has one bounded candidate. Any missing required measurement,
+scientific or out-of-scope behavior change, performance/memory regression,
+complexity shortfall, lifecycle addition, or need for an extra remediation round
+abandons it without merge. Do not relax a threshold, rename a failed cell, move
+to another technique, or use the next program as an implicit retry. Restore the
+base and preserve the honest negative result.
 
 Independent review must inspect current source and consumers, not just prose or
-test counts. For a plan, the reviewer checks every named symbol/file, whether the
-claimed consumer exists, whether shared numerical dependencies survive, whether
-deletion targets are actually unsupported, and whether acceptance gates can
-falsify the proposal. For implementation, the reviewer reproduces numerical and
-performance evidence at the exact branch tip.
+test counts. For a plan, the reviewer checks named symbols/files, real consumers,
+shared numerical dependencies, deletion claims, benchmark envelopes, and whether
+acceptance can falsify the proposal. For implementation, the reviewer inspects
+the exact diff and raw matched evidence and reproduces appropriate numerical and
+performance gates at the exact branch tip. Only clean source-to-charter review
+can recommend merge.
 
 A mission record answers:
 
 - what consumer and scientific contract changed;
-- what was kept, unified, rebuilt, or deleted, with exact symbols;
+- what was kept, specialized, unified, re-expanded, or deleted, with exact
+  symbols and owners;
 - which independent oracles moved and which historical records stayed behind;
 - actual production/test/bench line deltas and public export changes;
-- both suite results, all Ruff results, benchmark routes/artifacts and coverage;
+- matched performance/memory artifacts, coverage, missing cells, and correctness;
+- notebook and benchmark gates, both suite results, and all Ruff results;
 - remaining unsupported combinations and the next safe action.
 
 Append corrections rather than silently rewriting historical claims. The live
 execution charter may change the frontier explicitly; old reviews and mission
-cards remain provenance. Reviewer count, a "GO" word, or a green suite cannot
-compensate for a missing consumer, a shared-oracle conflict, or unsupported
-numerical semantics.
-
-The durable product is a small, comprehensible scientific kernel and instruments
-that can convict it. Preserve the instruments and evidence; do not preserve every
-implementation that happened to produce them.
+cards remain provenance. Reviewer count, a "GO" word, green tests, or a smaller
+line count cannot compensate for a missing consumer, shared-oracle conflict,
+unsupported numerical semantics, or measured performance loss.
