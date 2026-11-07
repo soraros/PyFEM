@@ -80,6 +80,7 @@ from pyfem.v3.driver import (
   NonlinearStaticDriver,
   NonlinearStaticResult,
   NonlinearStaticSettings,
+  SubstepRecord,
   SubstepStatus,
   assemble_internal_force,
   assemble_parameter_rhs,
@@ -713,27 +714,44 @@ def _run_total(
   )
 
 
+def _committed_target_records(
+  result: NonlinearStaticResult,
+) -> tuple[SubstepRecord, ...]:
+  """Audit every adaptive attempt and return each requested target's commit."""
+  assert result.status is DriverStatus.COMPLETED
+  assert [record.target_index for record in result.records] == sorted(
+    record.target_index for record in result.records
+  )
+  targets = []
+  covered_count = 0
+  for target_index, target_point in enumerate(result.target_points):
+    attempts = tuple(
+      record for record in result.records if record.target_index == target_index
+    )
+    assert attempts, (target_index, result.records)
+    covered_count += len(attempts)
+    for attempt in attempts:
+      if attempt.status is SubstepStatus.COMMITTED:
+        assert attempt.observation is not None
+      else:
+        assert attempt.status is SubstepStatus.REJECTED
+        assert attempt.observation is None
+    target = attempts[-1]
+    assert target.status is SubstepStatus.COMMITTED
+    assert target.progress == 1.0
+    assert target.point == target_point
+    targets.append(target)
+  assert covered_count == len(result.records)
+  return tuple(targets)
+
+
 def _complete_solve_snapshot(
   parameters: tuple[float, ...],
   schedule: tuple[float, ...],
 ) -> tuple[np.ndarray, np.ndarray, NonlinearStaticResult]:
   driver = _j2_cantilever(parameters, settings=_TOTAL_SETTINGS)
   result = _run(driver, *schedule)
-  assert result.status is DriverStatus.COMPLETED
-  assert len(result.records) == len(schedule) - 1, [
-    (
-      record.target_index,
-      record.point.values[0].value,
-      record.status,
-      record.cutback_level,
-      record.failure_class,
-      len(record.iterations),
-      record.budget_exhaustion,
-      record.iterations[-1].residual_norm,
-    )
-    for record in result.records
-  ]
-  assert all(record.status is SubstepStatus.COMMITTED for record in result.records)
+  _committed_target_records(result)
   block = driver.owner.block_ids[0]
   return (
     np.array(driver.owner.accepted_physical().values, copy=True),
@@ -794,8 +812,11 @@ def test_total_plastic_load_unload_reload_matches_complete_resolve_fd() -> None:
   schedule = (0.0, 20.0, 10.0, 25.0)
   nominal = _j2_cantilever(settings=_TOTAL_SETTINGS)
   result = _run_total(nominal, *schedule)
-  assert result.status is DriverStatus.COMPLETED
-  assert len(result.records) == 3
+  target_records = _committed_target_records(result)
+  assert len(target_records) == 3
+  # The smooth target active sets contain six yielded rows after loading, the
+  # same six after unloading, and sixteen after reloading. Both stencils of
+  # every parameter leg must reproduce those masks at every requested target.
   final_rows = nominal.owner.accepted_state(nominal.owner.block_ids[0]).values
   assert np.count_nonzero(final_rows[:, 18] > 0.0) == 16
   nominal_prefix = [
@@ -810,7 +831,10 @@ def test_total_plastic_load_unload_reload_matches_complete_resolve_fd() -> None:
   worst_u = 0.0
   coarse_state = 0.0
   fine_state = 0.0
-  for target_index, record in enumerate(result.records):
+  # Iteration-budget cutbacks may insert different rejected and intermediate
+  # committed records across platforms. The helper above audits all of them;
+  # these FD comparisons use the exact commits of the three requested targets.
+  for target_index, record in enumerate(target_records):
     observation = record.observation
     assert observation is not None
     for p, name in enumerate(_PARAM_NAMES):
