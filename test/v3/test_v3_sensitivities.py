@@ -720,7 +720,19 @@ def _complete_solve_snapshot(
   driver = _j2_cantilever(parameters, settings=_TOTAL_SETTINGS)
   result = _run(driver, *schedule)
   assert result.status is DriverStatus.COMPLETED
-  assert len(result.records) == len(schedule) - 1
+  assert len(result.records) == len(schedule) - 1, [
+    (
+      record.target_index,
+      record.point.values[0].value,
+      record.status,
+      record.cutback_level,
+      record.failure_class,
+      len(record.iterations),
+      record.budget_exhaustion,
+      record.iterations[-1].residual_norm,
+    )
+    for record in result.records
+  ]
   assert all(record.status is SubstepStatus.COMMITTED for record in result.records)
   block = driver.owner.block_ids[0]
   return (
