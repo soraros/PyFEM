@@ -14,7 +14,11 @@ deck and the M50 snap-through guard deck.
 
 from __future__ import annotations
 
+import dataclasses
+import enum
+import hashlib
 import sys
+import uuid
 from collections.abc import Callable
 
 import numpy as np
@@ -1224,3 +1228,107 @@ def test_affine_mpc_chain_with_offsets_commits_and_balances() -> None:
   )
   total_force = (external + full_residual).reshape(8, 2)
   np.testing.assert_allclose(total_force.sum(axis=0), 0.0, rtol=0.0, atol=2.0e-12)
+
+
+def _raw_characterization(value: object) -> tuple[str, str, np.ndarray]:
+  exact: list[tuple[object, ...]] = []
+  float_paths: list[str] = []
+  floats: list[float] = []
+
+  def visit(item: object, path: str) -> None:
+    if dataclasses.is_dataclass(item) and not isinstance(item, type):
+      for field in dataclasses.fields(item):
+        visit(getattr(item, field.name), f"{path}.{field.name}")
+    elif isinstance(item, enum.Enum):
+      exact.append((path, type(item).__name__, item.value))
+    elif isinstance(item, uuid.UUID):
+      exact.append((path, "instance-local"))
+    elif isinstance(item, np.ndarray):
+      exact.append((path + ".shape", item.shape))
+      if item.dtype.kind == "f":
+        for index, entry in enumerate(item.flat):
+          float_paths.append(f"{path}[{index}]")
+          floats.append(float(entry))
+      else:
+        for index, entry in enumerate(item.flat):
+          exact.append((f"{path}[{index}]", int(entry)))
+    elif hasattr(item, "values") and isinstance(item.values, np.ndarray):
+      visit(item.values, path + ".values")
+    elif isinstance(item, tuple | list):
+      exact.append((path + ".length", len(item)))
+      for index, entry in enumerate(item):
+        visit(entry, f"{path}[{index}]")
+    elif isinstance(item, bytes):
+      exact.append((path, item.hex()))
+    elif isinstance(item, float):
+      float_paths.append(path)
+      floats.append(item)
+    elif item is None or isinstance(item, str | int | bool):
+      exact.append((path, item))
+    else:
+      raise TypeError((path, type(item)))
+
+  visit(value, "result")
+  exact_hash = hashlib.sha256(repr(tuple(exact)).encode()).hexdigest()
+  path_hash = hashlib.sha256(repr(tuple(float_paths)).encode()).hexdigest()
+  return exact_hash, path_hash, np.asarray(floats, dtype=np.float64)
+
+
+def _assert_raw_characterization(
+  value: object,
+  *,
+  exact_hash: str,
+  path_hash: str,
+  expected_floats: list[float],
+  bitwise_pin: Callable[..., None],
+) -> None:
+  actual_exact, actual_paths, actual_floats = _raw_characterization(value)
+  assert actual_exact == exact_hash
+  assert actual_paths == path_hash
+  # Off-reference tolerance covers the 8.9e-16 assembly and 7.1e-15
+  # constitutive deviations recorded in test/v3/conftest.py, with margin for
+  # the reduced sparse solves in these complete trajectory snapshots.
+  bitwise_pin(
+    actual_floats,
+    np.asarray(expected_floats, dtype=np.float64),
+    rtol=1.0e-10,
+    atol=1.0e-10,
+  )
+
+
+def test_legacy_nonlinear_result_and_state_are_raw_characterized(
+  bitwise_pin: Callable[..., None],
+) -> None:
+  driver = _truss_driver()
+  result = _run_ramp(driver, 100.0)
+  _assert_raw_characterization(
+    (result, _owner_snapshot(driver.owner)),
+    exact_hash="e2abe6091276d292b209ce1e50bc008fa39fd4b377c765cef13acc44aef6933b",
+    path_hash="298b3c697a89f975862688dd36e56ea528d2534f3850fdc5ff30c971345731b9",
+    expected_floats=[
+      0.0,
+      100.0,
+      1.0,
+      100.0,
+      100.0,
+      0.04015009371097408,
+      11.722622108292242,
+      0.006122291266184509,
+      0.25643489518211027,
+      0.00014003958293793225,
+      0.00013295872258822783,
+      7.268437899609189e-08,
+      3.581135388230905e-11,
+      7.268437899609189e-08,
+      1102.3231393332983,
+      49.999999999982094,
+      -1102.3231393332983,
+      49.999999999982094,
+      0.0,
+      0.0,
+      0.0,
+      1560.523183749358,
+      3.581135388230905e-11,
+    ],
+    bitwise_pin=bitwise_pin,
+  )

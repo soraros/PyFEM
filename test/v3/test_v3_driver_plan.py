@@ -4,7 +4,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -635,3 +638,359 @@ def test_load_evaluation_validates_binding() -> None:
     evaluate_loads(plan.loads, object())  # type: ignore[arg-type]
   with pytest.raises(TypeError, match="exact CompiledLoadProgram"):
     evaluate_loads(object(), _point(0.0))  # type: ignore[arg-type]
+
+
+def test_legacy_v1_plan_is_raw_characterized(
+  bitwise_pin: Callable[..., None],
+) -> None:
+  system, coordinate_map = _fixed_truss_map()
+  plan = compile_driver_plan(system, coordinate_map, _apex_load())
+  manifest_bytes = plan.provenance.manifest.to_bytes()
+  assert hashlib.sha256(manifest_bytes).hexdigest() == (
+    "2ffdbde4a5a582a9de87b15b1bade5e904b4609d808811aeb102a45d89f1e890"
+  )
+  assert plan.content_fingerprint.digest == hashlib.sha256(manifest_bytes).hexdigest()
+  node = json.loads(manifest_bytes.split(b"\n", 1)[1])
+  assert [pair[0] for pair in node[1]] == [
+    "compatible_map",
+    "compatible_system",
+    "constant_tangent",
+    "coo_column_indices",
+    "coo_row_indices",
+    "coordinates",
+    "csr_indices",
+    "csr_indptr",
+    "csr_segment_offsets",
+    "csr_sort_permutation",
+    "loads",
+    "numeric_policy",
+    "operators",
+    "residual_scatter",
+    "schema",
+  ]
+  content = {pair[0]: pair[1] for pair in node[1]}
+  assert content["schema"] == ["str", "pyfem-v3-driver-assembly-plan-v1"]
+  assert "signals" not in content
+  (slice_,) = plan.operator_slices
+  gather = np.array([[0, 1, 4, 5], [2, 3, 4, 5]], dtype=np.int64)
+  np.testing.assert_array_equal(slice_.gather.values, gather)
+  np.testing.assert_array_equal(plan.residual_scatter.values, gather.reshape(-1))
+  np.testing.assert_array_equal(
+    plan.coo_row_indices.values,
+    np.array(
+      [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        4,
+        4,
+        4,
+        4,
+        5,
+        5,
+        5,
+        5,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        4,
+        4,
+        4,
+        4,
+        5,
+        5,
+        5,
+        5,
+      ],
+      dtype=np.int64,
+    ),
+  )
+  np.testing.assert_array_equal(
+    plan.coo_column_indices.values,
+    np.array(
+      [
+        0,
+        1,
+        4,
+        5,
+        0,
+        1,
+        4,
+        5,
+        0,
+        1,
+        4,
+        5,
+        0,
+        1,
+        4,
+        5,
+        2,
+        3,
+        4,
+        5,
+        2,
+        3,
+        4,
+        5,
+        2,
+        3,
+        4,
+        5,
+        2,
+        3,
+        4,
+        5,
+      ],
+      dtype=np.int64,
+    ),
+  )
+  np.testing.assert_array_equal(
+    plan.csr_sort_permutation.values,
+    np.array(
+      [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        8,
+        9,
+        24,
+        25,
+        10,
+        26,
+        11,
+        27,
+        12,
+        13,
+        28,
+        29,
+        14,
+        30,
+        15,
+        31,
+      ],
+      dtype=np.int64,
+    ),
+  )
+  np.testing.assert_array_equal(
+    plan.csr_segment_offsets.values,
+    np.array(
+      [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        22,
+        24,
+        25,
+        26,
+        27,
+        28,
+        30,
+      ],
+      dtype=np.int64,
+    ),
+  )
+  np.testing.assert_array_equal(
+    plan.csr_indptr.values,
+    np.array([0, 4, 8, 12, 16, 22, 28], dtype=np.int64),
+  )
+  np.testing.assert_array_equal(
+    plan.csr_indices.values,
+    np.array(
+      [
+        0,
+        1,
+        4,
+        5,
+        0,
+        1,
+        4,
+        5,
+        2,
+        3,
+        4,
+        5,
+        2,
+        3,
+        4,
+        5,
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+      ],
+      dtype=np.int64,
+    ),
+  )
+  assert plan.loads.load_count == 1
+  # Off-reference tolerance covers the 8.9e-16 assembly and 7.1e-15
+  # constitutive deviations recorded in test/v3/conftest.py.
+  bitwise_pin(
+    plan.loads.constant.values,
+    np.zeros(6, dtype=np.float64),
+    rtol=1.0e-12,
+    atol=1.0e-12,
+  )
+  expected_load = np.zeros((6, 1), dtype=np.float64)
+  expected_load[5, 0] = -100.0
+  bitwise_pin(
+    plan.loads.coordinate_coefficients.values,
+    expected_load,
+    rtol=1.0e-12,
+    atol=1.0e-12,
+  )
+
+  rng = np.random.default_rng(20261111)
+  residual = rng.normal(size=(2, 4))
+  jacobian = rng.normal(size=(2, 4, 4))
+  expected_residual = np.array(
+    [
+      4606367233248919855,
+      4601541969880299266,
+      4605257501929663291,
+      4602546725558248733,
+      13834333070236650854,
+      4607289225055850688,
+    ],
+    dtype=np.uint64,
+  ).view(np.float64)
+  bitwise_pin(
+    assemble_internal_force(plan, (residual,)),
+    expected_residual,
+    rtol=1.0e-12,
+    atol=1.0e-12,
+  )
+  expected_tangent = np.array(
+    [
+      13826212326263411520,
+      4595695076581017631,
+      4603684715274051669,
+      4611951444776807048,
+      4607380867564874844,
+      13819062395900259200,
+      13809232134666749154,
+      13830660748708673763,
+      4606706553032887780,
+      13831961100744031784,
+      4602451897068726319,
+      4603184867650720471,
+      4604213764441163075,
+      4592977475413166027,
+      13830922564643342152,
+      13825436046688941706,
+      13828335704245189212,
+      13826062542340635535,
+      4607189637798261417,
+      4606831158514832232,
+      13834751211325990205,
+      4607747427953002326,
+      13829747869901721432,
+      4608171972901854912,
+      4591901369605248996,
+      13830347509117733887,
+      4608106147151232707,
+      4603711463546804031,
+    ],
+    dtype=np.uint64,
+  ).view(np.float64)
+  bitwise_pin(
+    refill_tangent(plan, (jacobian,)).data,
+    expected_tangent,
+    rtol=1.0e-12,
+    atol=1.0e-12,
+  )
+
+
+def test_legacy_identity_signal_manifest_is_raw_characterized() -> None:
+  from test_v3_signals import _strain_ramp_driver
+
+  plan = _strain_ramp_driver().plan
+  manifest_bytes = plan.provenance.manifest.to_bytes()
+  assert hashlib.sha256(manifest_bytes).hexdigest() == (
+    "d49729a9ce5ceaf0f94429b214ced09c6013db3914898c7beacb9b166d5b82dd"
+  )
+  node = json.loads(manifest_bytes.split(b"\n", 1)[1])
+  assert [pair[0] for pair in node[1]][-2:] == ["schema", "signals"]
+  content = {pair[0]: pair[1] for pair in node[1]}
+  assert content["signals"] == [
+    "sequence",
+    [
+      [
+        "mapping",
+        [
+          [
+            "block_id",
+            ["sequence", [["str", "cells"], ["str", "domain"]]],
+          ],
+          [
+            "ports",
+            [
+              "sequence",
+              [
+                [
+                  "mapping",
+                  [
+                    [
+                      "derivative_coordinates",
+                      ["sequence", [["str", "time"], ["str", "eps"]]],
+                    ],
+                    ["port_id", ["str", "time"]],
+                    ["signal_coordinate", ["str", "time"]],
+                  ],
+                ],
+              ],
+            ],
+          ],
+        ],
+      ],
+    ],
+  ]
