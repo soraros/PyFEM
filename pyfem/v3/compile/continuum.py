@@ -22,6 +22,13 @@ kernel, which compilation probes against qualified zero-state and fixed
 uniform-gradient reference assemblies. The operator has zero-width state and
 nonlinear symmetric material/geometric tangent channels.
 
+The fresh steady T3 thermoelastic formulation binds displacement and temperature
+in role order, including either physical displacement component order. Its
+one-point affine response has two INTERNAL residual channels and constant
+``u,u``, ``u,T``, and ``T,T`` Jacobians; the absent ``T,u`` block emits no
+topology. Construction lives in ``compile/thermoelastic.py`` and introduces no
+transient or second driver runtime.
+
 Every cell belongs to exactly one region; each region draws cells from exactly
 one cell block; each cell block feeds exactly one region; every declared field
 and material is referenced. Geometry, material, rank, quadrature, registry, and
@@ -39,6 +46,7 @@ from typing import NoReturn
 
 import numpy as np
 
+from pyfem.v3.compile import thermoelastic as _thermoelastic_builder
 from pyfem.v3.compile.contracts import (
   CONTINUUM_3D_FORMULATION_KEY,
   HEX8_QUADRATURE_KEY,
@@ -47,6 +55,8 @@ from pyfem.v3.compile.contracts import (
   PLANE_STRAIN_MATERIAL_KEY,
   QUAD4_QUADRATURE_KEY,
   QUAD4_TOPOLOGY_KEY,
+  THERMOELASTIC_FORMULATION_KEY,
+  THERMOELASTIC_MATERIAL_KEY,
   TL_FORMULATION_KEY,
   TL_MATERIAL_KEY,
   TRIA3_QUADRATURE_KEY,
@@ -154,10 +164,17 @@ _DISPLACEMENT_3D_ROLE = ("displacement", ("x", "y", "z"))
 _FORMULATION_CONTRACTS = {
   Q8_FORMULATION_KEY[1]: (_DISPLACEMENT_ROLE,),
   TL_FORMULATION_KEY[1]: (_DISPLACEMENT_ROLE,),
+  THERMOELASTIC_FORMULATION_KEY[1]: (
+    _DISPLACEMENT_ROLE,
+    ("temperature", "scalar"),
+  ),
 }
 # The small-strain formulation is the open stateful seam; finite strain keeps
 # its closed plane-stress Saint-Venant-Kirchhoff material set.
-_FORMULATION_MATERIAL_MODELS = {TL_FORMULATION_KEY[1]: TL_MATERIAL_KEY[1]}
+_FORMULATION_MATERIAL_MODELS = {
+  TL_FORMULATION_KEY[1]: TL_MATERIAL_KEY[1],
+  THERMOELASTIC_FORMULATION_KEY[1]: THERMOELASTIC_MATERIAL_KEY[1],
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,6 +287,9 @@ _FORMULATION_GEOMETRIES = {
   ),
   # The landed TL kernel is the two-dimensional serendipity-quad8 slice only.
   TL_FORMULATION_KEY[1]: frozenset((_Q8_GEOMETRY.geometry_interpolation,)),
+  THERMOELASTIC_FORMULATION_KEY[1]: frozenset(
+    (_TRIA3_GEOMETRY.geometry_interpolation,)
+  ),
 }
 _BREADTH_DESCRIPTOR_KEYS = frozenset(
   (
@@ -1336,6 +1356,8 @@ def q8_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
 
 
 def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
+  if key in (THERMOELASTIC_FORMULATION_KEY, THERMOELASTIC_MATERIAL_KEY):
+    return _thermoelastic_builder.thermoelastic_descriptor_metadata(*key)
   if key in (TL_FORMULATION_KEY, TL_MATERIAL_KEY):
     return finite_strain_descriptor_metadata(*key)
   if key == PLASTIC_MATERIAL_KEY:
@@ -1572,6 +1594,17 @@ def _select_region(
           field.source,
         )
       continue
+    if (
+      region.formulation == THERMOELASTIC_FORMULATION_KEY[1] and role == "displacement"
+    ):
+      if len(field.components) != 2 or set(field.components) != {"x", "y"}:
+        _fail(
+          "incompatible-field-signature",
+          "thermoelastic displacement must carry the x and y components in "
+          "either order",
+          field.source,
+        )
+      continue
     expected_components = (
       profile.field_components
       if region.formulation == Q8_FORMULATION_KEY[1]
@@ -1661,6 +1694,9 @@ def _required_keys(selection: ContinuumSelection) -> tuple[RegistryKey, ...]:
     elif formulation == Q8_FORMULATION_KEY[1]:
       keys.add(profile.formulation_key)
       keys.add(("material", region_selection.material.model))
+    elif formulation == THERMOELASTIC_FORMULATION_KEY[1]:
+      keys.add(THERMOELASTIC_FORMULATION_KEY)
+      keys.add(THERMOELASTIC_MATERIAL_KEY)
   return tuple(sorted(keys))
 
 
@@ -1694,6 +1730,8 @@ def capture_registry(
         profile.formulation_key,
         ("material", region_selection.material.model),
       )
+    elif formulation == THERMOELASTIC_FORMULATION_KEY[1]:
+      selected = THERMOELASTIC_FORMULATION_KEY, THERMOELASTIC_MATERIAL_KEY
     sources.setdefault(selected[0], region_selection.region.source)
     sources.setdefault(selected[1], region_selection.material.source)
   for key in required:
@@ -2586,6 +2624,16 @@ def compile_operator(
 ) -> tuple[IncidenceEntityBlock, CompiledOperator]:
   """Compile the concrete payload and return it behind the open operator header."""
   formulation = selection.region.formulation
+  if formulation == THERMOELASTIC_FORMULATION_KEY[1]:
+    return _thermoelastic_builder.compile_t3_thermoelastic_operator(
+      selection,
+      coordinates=coordinates,
+      node_dense=node_dense,
+      spaces=spaces,
+      snapshot=snapshot,
+      index_dtype=index_dtype,
+      geometry_relative_tolerance=geometry_relative_tolerance,
+    )
   if formulation == TL_FORMULATION_KEY[1]:
     return _compile_mechanical_tl(
       selection,

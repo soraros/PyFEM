@@ -12,8 +12,11 @@ re-derived per Newton iteration.
   is byte-deterministic and platform/SIMD-independent (``np.add.reduceat``'s
   per-segment SIMD inner loop is not). The pattern is validated once against
   scipy's own COO->CSR conversion at compile time.
-- The internal-force scatter is one concatenated flat index vector consumed by
-  a single ``np.bincount`` per evaluation.
+- Legacy single-port internal force keeps its original flat scatter and one
+  ``np.bincount``. Nonlegacy operators declare ordered residual and rectangular
+  Jacobian channels; residual streams are grouped by balance role and receive one
+  bincount per present role, while all Jacobians share one COO refill. Full
+  balance is ``I - X - L`` with tangent ``dI - dX``; CONSTRAINT is rejected.
 - Parameter-sensitivity right-hand sides assemble through the SAME residual
   scatter: a requested parameter set resolves onto the operators' declared
   ``d(residual)/d(parameter)`` channels (``compile_sensitivity_program``,
@@ -61,6 +64,8 @@ from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import InstanceId
 from pyfem.v3.model.operator import (
   PATH_DERIVATIVE_ABI_SCHEMA,
+  BalanceRole,
+  OperatorHeader,
   ProgramSignalInput,
   SemanticId,
   SignalDerivativeInput,
@@ -82,6 +87,9 @@ from pyfem.v3.state.codecs import (
 )
 
 DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA = "pyfem-v3-driver-assembly-plan-v1"
+MULTIPORT_DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA = (
+  "pyfem-v3-driver-assembly-plan-multiport-v1"
+)
 
 _FLOATING_DTYPE = np.dtype(np.float64)
 _INDEX_DTYPE = np.dtype(np.int64)
@@ -104,8 +112,35 @@ def _evaluation_fail(code: str, message: str) -> NoReturn:
 
 
 @dataclass(frozen=True, slots=True, eq=False)
+class OperatorResidualAssemblySlice:
+  """One residual channel's segment of its balance-role scatter stream."""
+
+  channel_id: str
+  target_port_id: str
+  balance_role: BalanceRole
+  offset: int
+  length: int
+  target_count: int
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class OperatorJacobianAssemblySlice:
+  """One rectangular Jacobian channel's segment of the common COO stream."""
+
+  channel_id: str
+  residual_channel_id: str
+  target_port_id: str
+  source_port_id: str
+  balance_role: BalanceRole
+  offset: int
+  length: int
+  target_count: int
+  source_count: int
+
+
+@dataclass(frozen=True, slots=True, eq=False)
 class OperatorAssemblySlice:
-  """One operator's gather maps and its segment of the plan COO buffers."""
+  """Operator gathers and channel segments; legacy fields are first-channel views."""
 
   block_id: SemanticId
   entity_count: int
@@ -114,6 +149,9 @@ class OperatorAssemblySlice:
   residual_offset: int
   coo_offset: int
   coo_length: int
+  port_gathers: tuple[FinalizedArray, ...]
+  residual_channels: tuple[OperatorResidualAssemblySlice, ...]
+  jacobian_channels: tuple[OperatorJacobianAssemblySlice, ...]
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -228,6 +266,8 @@ class DriverAssemblyPlan:
   operator_slices: tuple[OperatorAssemblySlice, ...]
   signal_slices: tuple[tuple[OperatorSignalPortSlice, ...], ...]
   residual_scatter: FinalizedArray
+  residual_role_scatters: tuple[tuple[BalanceRole, FinalizedArray], ...]
+  legacy_single_port: bool
   coo_row_indices: FinalizedArray
   coo_column_indices: FinalizedArray
   csr_sort_permutation: FinalizedArray
@@ -410,9 +450,30 @@ def _compile_loads(
   )
 
 
+def _legacy_operator_signature(header: OperatorHeader) -> bool:
+  return (
+    len(header.ports) == 1
+    and len(header.residual_channels) == 1
+    and len(header.jacobian_channels) == 1
+    and header.residual_channels[0].balance_role is BalanceRole.INTERNAL
+    and header.jacobian_channels[0].balance_role is BalanceRole.INTERNAL
+    and header.jacobian_channels[0].residual_channel_id
+    == header.residual_channels[0].channel_id
+    and header.jacobian_channels[0].target_port_id == header.ports[0].port_id
+    and header.jacobian_channels[0].source_port_id == header.ports[0].port_id
+    and header.residual_channels[0].target_port_id == header.ports[0].port_id
+  )
+
+
 def _compile_operator_slices(
   system: CompiledSystem,
-) -> tuple[tuple[OperatorAssemblySlice, ...], np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[
+  tuple[OperatorAssemblySlice, ...],
+  np.ndarray,
+  np.ndarray,
+  np.ndarray,
+  tuple[tuple[BalanceRole, FinalizedArray], ...],
+]:
   if not system.operators:
     _preparation_fail(
       "empty-operator-list",
@@ -423,60 +484,221 @@ def _compile_operator_slices(
   scatter_parts: list[np.ndarray] = []
   row_parts: list[np.ndarray] = []
   column_parts: list[np.ndarray] = []
+  role_parts: dict[BalanceRole, list[np.ndarray]] = {
+    BalanceRole.INTERNAL: [],
+    BalanceRole.EXTERNAL: [],
+  }
+  role_offsets = {BalanceRole.INTERNAL: 0, BalanceRole.EXTERNAL: 0}
   residual_offset = 0
   coo_offset = 0
   for operator in system.operators:
     header = operator.header
-    if len(header.ports) != 1:
-      _preparation_fail(
-        "unsupported-operator-port-count",
-        "the nonlinear driver supports exactly one coefficient port per operator",
-        SourceContext(),
-      )
-    if len(header.residual_channels) != 1 or len(header.jacobian_channels) != 1:
+    if not header.ports or not header.residual_channels or not header.jacobian_channels:
       _preparation_fail(
         "unsupported-channel-signature",
-        "the nonlinear driver supports exactly one residual and one Jacobian "
-        "channel per operator",
+        "each driver operator requires ports, residual channels, and Jacobians",
         SourceContext(),
       )
-    port = header.ports[0]
-    gather = np.asarray(port.coefficient_map.values, dtype=_INDEX_DTYPE)
-    if gather.ndim != 2:
-      _preparation_fail(
-        "unsupported-gather-shape",
-        "operator port coefficient maps must be two-dimensional",
-        SourceContext(),
+    for label, identifiers in (
+      ("port", tuple(port.port_id for port in header.ports)),
+      ("residual channel", tuple(item.channel_id for item in header.residual_channels)),
+      ("Jacobian channel", tuple(item.channel_id for item in header.jacobian_channels)),
+    ):
+      if any(
+        type(identifier) is not str or not identifier for identifier in identifiers
+      ):
+        _preparation_fail(
+          "invalid-channel-id",
+          f"operator {label} IDs must be non-empty exact strings",
+          SourceContext(),
+        )
+      if len(set(identifiers)) != len(identifiers):
+        _preparation_fail(
+          "duplicate-channel-id",
+          f"operator {label} IDs must be unique",
+          SourceContext(),
+        )
+    port_indices = {port.port_id: index for index, port in enumerate(header.ports)}
+    residual_by_id = {item.channel_id: item for item in header.residual_channels}
+    gathers: list[FinalizedArray] = []
+    gather_arrays: list[np.ndarray] = []
+    entity_count: int | None = None
+    for port in header.ports:
+      raw_gather = port.coefficient_map.values
+      gather = np.asarray(raw_gather, dtype=_INDEX_DTYPE)
+      if gather.ndim != 2 or raw_gather.dtype.kind not in "iu":
+        _preparation_fail(
+          "unsupported-gather-shape",
+          "operator port coefficient maps must be two-dimensional integer arrays",
+          SourceContext(),
+        )
+      if gather.size and (
+        int(gather.min()) < 0 or int(gather.max()) >= system.coefficient_count
+      ):
+        _preparation_fail(
+          "gather-out-of-range",
+          "operator port coefficient maps reference an invalid global DOF",
+          SourceContext(),
+        )
+      if entity_count is None:
+        entity_count = int(gather.shape[0])
+      elif gather.shape[0] != entity_count:
+        _preparation_fail(
+          "operator-entity-count-mismatch",
+          "all operator ports must share one entity count",
+          SourceContext(),
+        )
+      gather_arrays.append(gather)
+      gathers.append(FinalizedArray(gather, dtype=_INDEX_DTYPE))
+    assert entity_count is not None
+
+    residual_slices: list[OperatorResidualAssemblySlice] = []
+    first_residual_offset = residual_offset
+    first_target_count = 0
+    for channel_index, channel in enumerate(header.residual_channels):
+      if channel.balance_role is BalanceRole.CONSTRAINT:
+        _preparation_fail(
+          "unsupported-constraint-channel",
+          "operator CONSTRAINT channels are not supported by this driver",
+          SourceContext(),
+        )
+      if channel.balance_role not in role_parts:
+        _preparation_fail(
+          "unsupported-balance-role",
+          "residual channels must declare INTERNAL or EXTERNAL balance",
+          SourceContext(),
+        )
+      target_index = port_indices.get(channel.target_port_id)
+      if target_index is None:
+        _preparation_fail(
+          "unknown-residual-target-port",
+          "a residual channel targets an undeclared coefficient port",
+          SourceContext(),
+        )
+      gather = gather_arrays[target_index]
+      target_count = int(gather.shape[1])
+      length = entity_count * target_count
+      role = channel.balance_role
+      residual_slices.append(
+        OperatorResidualAssemblySlice(
+          channel_id=channel.channel_id,
+          target_port_id=channel.target_port_id,
+          balance_role=role,
+          offset=role_offsets[role],
+          length=length,
+          target_count=target_count,
+        )
       )
-    entity_count, element_dof_count = gather.shape
-    scatter_parts.append(gather.reshape(-1))
-    rows = np.broadcast_to(gather[:, :, None], (*gather.shape, element_dof_count))
-    columns = np.broadcast_to(gather[:, None, :], (*gather.shape, element_dof_count))
-    row_parts.append(
-      np.array(rows.reshape(-1), dtype=_INDEX_DTYPE, order="C", copy=True)
-    )
-    column_parts.append(
-      np.array(columns.reshape(-1), dtype=_INDEX_DTYPE, order="C", copy=True)
-    )
-    coo_length = entity_count * element_dof_count * element_dof_count
+      role_parts[role].append(gather.reshape(-1))
+      role_offsets[role] += length
+      if channel_index == 0:
+        first_target_count = target_count
+        scatter_parts.append(gather.reshape(-1))
+        residual_offset += length
+
+    jacobian_slices: list[OperatorJacobianAssemblySlice] = []
+    first_coo_offset = coo_offset
+    first_coo_length = 0
+    for channel_index, channel in enumerate(header.jacobian_channels):
+      residual = residual_by_id.get(channel.residual_channel_id)
+      if residual is None:
+        _preparation_fail(
+          "unknown-jacobian-residual",
+          "a Jacobian references an undeclared residual channel",
+          SourceContext(),
+        )
+      target_index = port_indices.get(channel.target_port_id)
+      source_index = port_indices.get(channel.source_port_id)
+      if target_index is None or source_index is None:
+        _preparation_fail(
+          "unknown-jacobian-port",
+          "a Jacobian targets or sources an undeclared coefficient port",
+          SourceContext(),
+        )
+      if (
+        channel.target_port_id != residual.target_port_id
+        or channel.balance_role is not residual.balance_role
+      ):
+        _preparation_fail(
+          "jacobian-residual-mismatch",
+          "Jacobian target and balance role must match their residual channel",
+          SourceContext(),
+        )
+      if channel.balance_role is BalanceRole.CONSTRAINT:
+        _preparation_fail(
+          "unsupported-constraint-channel",
+          "operator CONSTRAINT channels are not supported by this driver",
+          SourceContext(),
+        )
+      target = gather_arrays[target_index]
+      source = gather_arrays[source_index]
+      target_count = int(target.shape[1])
+      source_count = int(source.shape[1])
+      if target_count != source_count and channel.symmetric:
+        _preparation_fail(
+          "rectangular-symmetric-jacobian",
+          "rectangular Jacobian channels cannot be declared symmetric",
+          SourceContext(),
+        )
+      rows = np.broadcast_to(
+        target[:, :, None],
+        (entity_count, target_count, source_count),
+      )
+      columns = np.broadcast_to(
+        source[:, None, :],
+        (entity_count, target_count, source_count),
+      )
+      row_parts.append(
+        np.array(rows.reshape(-1), dtype=_INDEX_DTYPE, order="C", copy=True)
+      )
+      column_parts.append(
+        np.array(columns.reshape(-1), dtype=_INDEX_DTYPE, order="C", copy=True)
+      )
+      coo_length = entity_count * target_count * source_count
+      jacobian_slices.append(
+        OperatorJacobianAssemblySlice(
+          channel_id=channel.channel_id,
+          residual_channel_id=channel.residual_channel_id,
+          target_port_id=channel.target_port_id,
+          source_port_id=channel.source_port_id,
+          balance_role=channel.balance_role,
+          offset=coo_offset,
+          length=coo_length,
+          target_count=target_count,
+          source_count=source_count,
+        )
+      )
+      if channel_index == 0:
+        first_coo_length = coo_length
+      coo_offset += coo_length
+    first_target = gather_arrays[
+      port_indices[header.residual_channels[0].target_port_id]
+    ]
     slices.append(
       OperatorAssemblySlice(
         block_id=header.block_id,
         entity_count=entity_count,
-        element_dof_count=element_dof_count,
-        gather=FinalizedArray(gather, dtype=_INDEX_DTYPE),
-        residual_offset=residual_offset,
-        coo_offset=coo_offset,
-        coo_length=coo_length,
+        element_dof_count=first_target_count,
+        gather=FinalizedArray(first_target, dtype=_INDEX_DTYPE),
+        residual_offset=first_residual_offset,
+        coo_offset=first_coo_offset,
+        coo_length=first_coo_length,
+        port_gathers=tuple(gathers),
+        residual_channels=tuple(residual_slices),
+        jacobian_channels=tuple(jacobian_slices),
       )
     )
-    residual_offset += entity_count * element_dof_count
-    coo_offset += coo_length
+  role_scatters = tuple(
+    (role, FinalizedArray(np.concatenate(role_parts[role]), dtype=_INDEX_DTYPE))
+    for role in (BalanceRole.INTERNAL, BalanceRole.EXTERNAL)
+    if role_parts[role]
+  )
   return (
     tuple(slices),
     np.concatenate(scatter_parts),
     np.concatenate(row_parts),
     np.concatenate(column_parts),
+    role_scatters,
   )
 
 
@@ -664,7 +886,17 @@ def compile_driver_plan(
       "system coefficient count and map full DOF count disagree",
       SourceContext(),
     )
-  slices, scatter, coo_rows, coo_columns = _compile_operator_slices(system)
+  slices, scatter, coo_rows, coo_columns, role_scatters = _compile_operator_slices(
+    system
+  )
+  legacy = all(
+    _legacy_operator_signature(operator.header) for operator in system.operators
+  )
+  schema = (
+    DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA
+    if legacy
+    else MULTIPORT_DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA
+  )
   signal_slices = _compile_signal_slices(system, coordinate_map.coordinate_names)
   permutation, segment_offsets, csr_indptr, csr_indices = _compile_csr_pattern(
     coo_rows,
@@ -672,11 +904,13 @@ def compile_driver_plan(
     system.coefficient_count,
   )
   constant_tangent = all(
-    operator.header.jacobian_channels[0].linear for operator in system.operators
+    channel.linear
+    for operator in system.operators
+    for channel in operator.header.jacobian_channels
   )
   load_program = _compile_loads(system, loads, coordinate_map.coordinate_names)
   manifest_content: dict[str, object] = {
-    "schema": DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA,
+    "schema": schema,
     "numeric_policy": {
       "floating_dtype": _FLOATING_DTYPE.str,
       "index_dtype": _INDEX_DTYPE.str,
@@ -685,16 +919,6 @@ def compile_driver_plan(
     "compatible_map": str(coordinate_map.content_fingerprint),
     "coordinates": list(coordinate_map.coordinate_names),
     "constant_tangent": constant_tangent,
-    "operators": [
-      {
-        "block_id": slice_.block_id,
-        "entity_count": slice_.entity_count,
-        "element_dof_count": slice_.element_dof_count,
-        "gather": slice_.gather.values,
-      }
-      for slice_ in slices
-    ],
-    "residual_scatter": scatter,
     "coo_row_indices": coo_rows,
     "coo_column_indices": coo_columns,
     "csr_sort_permutation": permutation,
@@ -707,6 +931,63 @@ def compile_driver_plan(
       "load_count": load_program.load_count,
     },
   }
+  if legacy:
+    manifest_content["operators"] = [
+      {
+        "block_id": slice_.block_id,
+        "entity_count": slice_.entity_count,
+        "element_dof_count": slice_.element_dof_count,
+        "gather": slice_.gather.values,
+      }
+      for slice_ in slices
+    ]
+    manifest_content["residual_scatter"] = scatter
+  else:
+    manifest_content["operators"] = [
+      {
+        "block_id": slice_.block_id,
+        "entity_count": slice_.entity_count,
+        "ports": [
+          {
+            "port_id": port.port_id,
+            "space_id": port.space_id,
+            "gather": gather.values,
+          }
+          for port, gather in zip(
+            operator.header.ports,
+            slice_.port_gathers,
+            strict=True,
+          )
+        ],
+        "residual_channels": [
+          {
+            "channel_id": channel.channel_id,
+            "target_port_id": channel.target_port_id,
+            "balance_role": channel.balance_role.value,
+            "offset": channel.offset,
+            "length": channel.length,
+          }
+          for channel in slice_.residual_channels
+        ],
+        "jacobian_channels": [
+          {
+            "channel_id": channel.channel_id,
+            "residual_channel_id": channel.residual_channel_id,
+            "target_port_id": channel.target_port_id,
+            "source_port_id": channel.source_port_id,
+            "balance_role": channel.balance_role.value,
+            "offset": channel.offset,
+            "length": channel.length,
+          }
+          for channel in slice_.jacobian_channels
+        ],
+      }
+      for operator, slice_ in zip(system.operators, slices, strict=True)
+    ]
+    manifest_content["residual_scatters"] = [
+      {"balance_role": role.value, "indices": indices.values}
+      for role, indices in role_scatters
+    ]
   if any(signal_slices):
     manifest_content["signals"] = [
       {
@@ -721,7 +1002,7 @@ def compile_driver_plan(
     ]
   manifest = CanonicalManifest(manifest_content)
   provenance = DriverPlanProvenance(
-    schema=DRIVER_ASSEMBLY_PLAN_MANIFEST_SCHEMA,
+    schema=schema,
     manifest=manifest,
     floating_dtype=_FLOATING_DTYPE.str,
     index_dtype=_INDEX_DTYPE.str,
@@ -744,6 +1025,8 @@ def compile_driver_plan(
     operator_slices=slices,
     signal_slices=signal_slices,
     residual_scatter=FinalizedArray(scatter, dtype=_INDEX_DTYPE),
+    residual_role_scatters=role_scatters,
+    legacy_single_port=legacy,
     coo_row_indices=FinalizedArray(coo_rows, dtype=_INDEX_DTYPE),
     coo_column_indices=FinalizedArray(coo_columns, dtype=_INDEX_DTYPE),
     csr_sort_permutation=FinalizedArray(permutation, dtype=_INDEX_DTYPE),
@@ -772,6 +1055,25 @@ def compile_sensitivity_program(
   if type(system) is not CompiledSystem:
     msg = "sensitivity program compilation requires an exact CompiledSystem"
     raise TypeError(msg)
+  for operator in system.operators:
+    if any(
+      channel.balance_role is BalanceRole.EXTERNAL
+      for channel in (
+        *operator.header.residual_channels,
+        *operator.header.jacobian_channels,
+      )
+    ):
+      _preparation_fail(
+        "unsupported-external-sensitivity",
+        "operator EXTERNAL sensitivities require unavailable coordinate derivatives",
+        SourceContext(),
+      )
+    if not _legacy_operator_signature(operator.header):
+      _preparation_fail(
+        "unsupported-multiport-sensitivity",
+        "fixed-parameter sensitivities support only the legacy single-port signature",
+        SourceContext(),
+      )
   if (
     type(parameter_ids) is not tuple
     or not parameter_ids
@@ -854,6 +1156,14 @@ def compile_total_sensitivity_program(
   if type(coordinate_map) is not CompiledConstraintMap:
     msg = "total sensitivity compilation requires an exact CompiledConstraintMap"
     raise TypeError(msg)
+  if any(
+    not _legacy_operator_signature(operator.header) for operator in system.operators
+  ):
+    _preparation_fail(
+      "unsupported-multiport-total-sensitivity",
+      "total path sensitivities support only the legacy single-port signature",
+      SourceContext(),
+    )
   for operator in system.operators:
     if operator.header.nested_execution is not None:
       _preparation_fail(
@@ -1071,6 +1381,9 @@ def assemble_internal_force(
   if type(plan) is not DriverAssemblyPlan:
     msg = "internal force assembly requires an exact DriverAssemblyPlan"
     raise TypeError(msg)
+  if not plan.legacy_single_port:
+    msg = "legacy internal force assembly requires a legacy single-port plan"
+    raise TypeError(msg)
   if type(residual_batches) is not tuple or len(residual_batches) != len(
     plan.operator_slices
   ):
@@ -1131,6 +1444,9 @@ def refill_tangent(
   if type(plan) is not DriverAssemblyPlan:
     msg = "tangent refill requires an exact DriverAssemblyPlan"
     raise TypeError(msg)
+  if not plan.legacy_single_port:
+    msg = "legacy tangent refill requires a legacy single-port plan"
+    raise TypeError(msg)
   if type(jacobian_batches) is not tuple or len(jacobian_batches) != len(
     plan.operator_slices
   ):
@@ -1148,6 +1464,131 @@ def refill_tangent(
       raise TypeError(msg)
     end = slice_.coo_offset + slice_.coo_length
     coo_values[slice_.coo_offset : end] = batch.reshape(-1)
+  data = dedup_coo_segments(
+    coo_values,
+    plan.csr_sort_permutation.values,
+    plan.csr_segment_offsets.values,
+  )
+  return csr_matrix(
+    (data, plan.csr_indices.values, plan.csr_indptr.values),
+    shape=plan.csr_shape,
+  )
+
+
+def assemble_residual_role(
+  plan: DriverAssemblyPlan,
+  residual_batches: tuple[tuple[np.ndarray, ...], ...],
+  role: BalanceRole,
+) -> np.ndarray:
+  """Assemble one balance role with one bincount over its prepared stream."""
+  if type(plan) is not DriverAssemblyPlan:
+    msg = "residual role assembly requires an exact DriverAssemblyPlan"
+    raise TypeError(msg)
+  if type(role) is not BalanceRole or role is BalanceRole.CONSTRAINT:
+    msg = "residual role assembly supports only INTERNAL and EXTERNAL roles"
+    raise TypeError(msg)
+  if type(residual_batches) is not tuple or len(residual_batches) != len(
+    plan.operator_slices
+  ):
+    msg = "residual channels must contain one channel tuple per operator"
+    raise TypeError(msg)
+  if plan.legacy_single_port:
+    if role is BalanceRole.EXTERNAL:
+      return np.zeros(plan.full_dof_count, dtype=_FLOATING_DTYPE)
+    return assemble_internal_force(
+      plan,
+      tuple(
+        _sole_operator_channel(channels, slice_.residual_channels)
+        for channels, slice_ in zip(
+          residual_batches,
+          plan.operator_slices,
+          strict=True,
+        )
+      ),
+    )
+  scatter = dict(plan.residual_role_scatters).get(role)
+  flat = np.empty(
+    0 if scatter is None else scatter.values.shape[0],
+    dtype=_FLOATING_DTYPE,
+  )
+  for slice_, channels in zip(plan.operator_slices, residual_batches, strict=True):
+    if type(channels) is not tuple or len(channels) != len(slice_.residual_channels):
+      msg = "each operator residual tuple must follow header declaration order"
+      raise TypeError(msg)
+    for channel, batch in zip(slice_.residual_channels, channels, strict=True):
+      if (
+        type(batch) is not np.ndarray
+        or batch.dtype != _FLOATING_DTYPE
+        or batch.shape != (slice_.entity_count, channel.target_count)
+      ):
+        msg = "residual channels must be float64 arrays with their compiled shape"
+        raise TypeError(msg)
+      if channel.balance_role is role:
+        end = channel.offset + channel.length
+        flat[channel.offset : end] = batch.reshape(-1)
+  if scatter is None:
+    return np.zeros(plan.full_dof_count, dtype=_FLOATING_DTYPE)
+  return np.bincount(
+    scatter.values,
+    weights=flat,
+    minlength=plan.full_dof_count,
+  )
+
+
+def _sole_operator_channel(
+  channels: tuple[np.ndarray, ...],
+  descriptors: tuple[object, ...],
+) -> np.ndarray:
+  if type(channels) is not tuple or len(channels) != 1 or len(descriptors) != 1:
+    msg = "legacy residual assembly requires exactly one channel per operator"
+    raise TypeError(msg)
+  return channels[0]
+
+
+def refill_tangent_channels(
+  plan: DriverAssemblyPlan,
+  jacobian_batches: tuple[tuple[np.ndarray, ...], ...],
+) -> csr_matrix:
+  """Refill one signed tangent from all rectangular channels in stream order."""
+  if type(plan) is not DriverAssemblyPlan:
+    msg = "channel tangent refill requires an exact DriverAssemblyPlan"
+    raise TypeError(msg)
+  if type(jacobian_batches) is not tuple or len(jacobian_batches) != len(
+    plan.operator_slices
+  ):
+    msg = "Jacobian channels must contain one channel tuple per operator"
+    raise TypeError(msg)
+  if plan.legacy_single_port:
+    legacy: list[np.ndarray] = []
+    for channels, slice_ in zip(
+      jacobian_batches,
+      plan.operator_slices,
+      strict=True,
+    ):
+      if type(channels) is not tuple or len(channels) != 1:
+        msg = "legacy tangent refill requires one Jacobian per operator"
+        raise TypeError(msg)
+      legacy.append(channels[0])
+    return refill_tangent(plan, tuple(legacy))
+  coo_values = np.empty(plan.coo_entry_count, dtype=_FLOATING_DTYPE)
+  for slice_, channels in zip(plan.operator_slices, jacobian_batches, strict=True):
+    if type(channels) is not tuple or len(channels) != len(slice_.jacobian_channels):
+      msg = "each operator Jacobian tuple must follow header declaration order"
+      raise TypeError(msg)
+    for channel, batch in zip(slice_.jacobian_channels, channels, strict=True):
+      if (
+        type(batch) is not np.ndarray
+        or batch.dtype != _FLOATING_DTYPE
+        or batch.shape
+        != (slice_.entity_count, channel.target_count, channel.source_count)
+      ):
+        msg = "Jacobian channels must be float64 arrays with their compiled shape"
+        raise TypeError(msg)
+      end = channel.offset + channel.length
+      if channel.balance_role is BalanceRole.EXTERNAL:
+        coo_values[channel.offset : end] = np.negative(batch.reshape(-1))
+      else:
+        coo_values[channel.offset : end] = batch.reshape(-1)
   data = dedup_coo_segments(
     coo_values,
     plan.csr_sort_permutation.values,
