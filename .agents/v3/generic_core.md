@@ -709,3 +709,28 @@ Jacobians. The absent `T,u` zero emits no entries. Its steady conduction block i
 `A k G G.T`; M134's positive-off-diagonal `G.T G` oracle was dimensionally and
 numerically wrong and is superseded by the tower-confirmed physical oracle. No
 retired thermal symbols, transient capacity, or compatibility runtime returned.
+
+## 15. NX10-2 bounded AT2 phase-field history
+
+The second multiport consumer is a fresh plane-strain Q4 AT2 operator with
+`displacement` and scalar `phase` spaces, two INTERNAL residuals, and all four
+rectangular Jacobians. Its one-float-per-quadrature-point history is
+operator-owned accepted/trial state annotated `monotone-nondecreasing`; every
+evaluation allocates a fresh trial row and the existing transaction owner alone
+commits it. The stock versioned float64 state codec provides byte-exact restart
+rows. No legacy PhaseField object graph or accepted-row alias returns.
+
+The spectral split and AT2 residual use exact Macaulay parts and engineering
+input/physical output shear. Active history differentiates the phase residual's
+current positive energy, so `K_du=K_ud.T`; inactive history holds that energy
+fixed, so `K_du=0` while `K_ud` generally remains nonzero. The implementation
+therefore does not declare universal coupled symmetry or a variational-unloading
+energy derivative. Spectral eigenvalue/trace kinks and the `psi+=H` history kink
+raise a typed preparation error on tangent requests rather than inventing a
+branch-consistent derivative.
+
+Out-of-range phase coefficients return `REJECT_ITERATION` with a detached copy
+of accepted history, allowing the existing Newton retry/cutback protocol without
+mutation. The bounded compiler rejects initial crack declarations. Transient and
+staggered schedules, general crack benchmarks, and multiport sensitivity support
+remain outside this slice rather than implicit capabilities.

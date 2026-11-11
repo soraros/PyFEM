@@ -55,7 +55,9 @@ other stateful laws do not acquire this capability implicitly.
 The fresh steady T3 thermoelastic descriptors are independent of that
 single-displacement stateful ABI. They bind displacement and temperature ports
 with constant coupled tangent channels; they do not restore the retired thermal
-runtime, transient capacity, or its formulation/material symbols.
+runtime, transient capacity, or its formulation/material symbols. The separate
+Q4 AT2 descriptors bind displacement and phase ports with irreversible
+operator-owned history and branch-consistent coupled channels.
 """
 
 from __future__ import annotations
@@ -474,6 +476,56 @@ def thermoelastic_descriptor_metadata(kind: str, name: str) -> dict[str, object]
       "tangent_class": "constant-nonsymmetric",
     }
   msg = "no steady T3 thermoelastic descriptor metadata exists for that registry key"
+  raise KeyError(msg)
+
+
+PHASE_FIELD_FORMULATION_KEY: RegistryKey = (
+  "formulation",
+  "at2-spectral-split-quad4",
+)
+PHASE_FIELD_MATERIAL_KEY: RegistryKey = (
+  "material",
+  "plane-strain-at2-spectral-split",
+)
+
+
+def phase_field_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
+  """Return the fresh Q4 AT2 spectral-split descriptor conventions."""
+  key = kind, name
+  if key == PHASE_FIELD_FORMULATION_KEY:
+    return {
+      "schema": "pyfem-v3-formulation-descriptor-v1",
+      "field_quantity": "displacement-phase",
+      "field_location": "node",
+      "field_components": ["x", "y", "phase"],
+      "dofs_per_node": 3,
+      "kinematic_regime": "small-strain-at2-spectral-split",
+      "strain_measure": "infinitesimal",
+      "strain_voigt_order": ["xx", "yy", "xy"],
+      "shear_convention": "engineering",
+      "formulation_history_width": 1,
+      "tangent_contribution": "degraded-spectral-elastic-fracture",
+      "tangent_symmetry": "branch-dependent-block-nonsymmetric",
+    }
+  if key == PHASE_FIELD_MATERIAL_KEY:
+    return {
+      "schema": "pyfem-v3-material-descriptor-v1",
+      "law": "at2-spectral-split-phase-field",
+      "stress_state": "plane-strain",
+      "parameter_names": [
+        "youngs_modulus",
+        "poisson_ratio",
+        "critical_energy_release_rate",
+        "length_scale",
+        "residual_stiffness",
+      ],
+      "parameter_dtype": "float64",
+      "stress_voigt_order": ["xx", "yy", "xy"],
+      "strain_shear_convention": "engineering",
+      "material_history_width": 0,
+      "tangent_class": "branch-consistent-at2-spectral",
+    }
+  msg = "no Q4 AT2 phase-field descriptor metadata exists for that registry key"
   raise KeyError(msg)
 
 
