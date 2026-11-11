@@ -116,6 +116,16 @@ from pyfem.v3.constraints.compile import (
   reduce_residual,
   reduce_tangent,
 )
+from pyfem.v3.driver._evaluation import (
+  JacobianBatches,
+  assemble_evaluation_balance,
+  evaluate_operator_round,
+  evaluation_channel_batches,
+  primal_channel_requests,
+  refill_evaluation_tangent,
+  restart_nested_trial,
+  stage_and_commit_trial,
+)
 from pyfem.v3.driver.continuation import (
   ArcLengthIterationRecord,
   ArcLengthResult,
@@ -141,28 +151,22 @@ from pyfem.v3.driver.nested import (
   begin_nested_trial,
   close_nested_executions,
   collect_nested_activity,
-  commit_nested_trial,
   prepare_nested_executions,
   reject_nested_trial,
   snapshot_nested_activity,
-  validate_nested_trial,
 )
 from pyfem.v3.driver.plan import (
   DriverAssemblyPlan,
-  assemble_internal_force,
   compile_driver_plan,
   evaluate_loads,
   evaluate_signals,
-  refill_tangent,
 )
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.identity import require_same_generation
 from pyfem.v3.model.operator import (
-  ChannelRequest,
   EvaluationStatus,
   NestedEvaluationInput,
   OperatorEvaluation,
-  OperatorEvaluationInput,
 )
 from pyfem.v3.model.system import CompiledSystem
 from pyfem.v3.spec.diagnostics import SourceContext
@@ -283,19 +287,21 @@ class RiksDriver:
     self._map = coordinate_map
     self._settings = settings
     self._plan = compile_driver_plan(system, coordinate_map, loads)
+    if any(
+      role.value == "external" for role, _scatter in self._plan.residual_role_scatters
+    ):
+      _preparation_fail(
+        "unsupported-riks-external-channel",
+        "Riks does not support operator EXTERNAL channels without their "
+        "load-coordinate derivatives",
+      )
     self._evolution_layout = ContinuationEvolutionLayout(
       schema=CONTINUATION_EVOLUTION_STATE_SCHEMA,
       reduced_dof_count=coordinate_map.reduced_dof_count,
       map_fingerprint=coordinate_map.content_fingerprint.digest,
     )
     self._workspace = _RiksWorkspace()
-    self._requests = tuple(
-      ChannelRequest(
-        (operator.header.residual_channels[0].channel_id,),
-        (operator.header.jacobian_channels[0].channel_id,),
-      )
-      for operator in system.operators
-    )
+    self._requests = primal_channel_requests(system)
     (load_index,) = load_indices
     self._load_coordinate_name = coordinate_map.coordinate_names[load_index]
     fhat_full = np.array(
@@ -428,59 +434,44 @@ class RiksDriver:
     transaction: StateTransaction,
     reduced: np.ndarray,
     point: ProgramPoint,
-  ) -> tuple[FinalizedArray, list[OperatorEvaluation], tuple[EvaluationStatus, ...]]:
+  ) -> tuple[
+    FinalizedArray,
+    tuple[OperatorEvaluation, ...],
+    tuple[EvaluationStatus, ...],
+  ]:
     """Run one counted operator evaluation round at one trial iterate."""
     full = full_coefficients(self._map, reduced, point)
     signal_inputs = evaluate_signals(self._plan, point)
-    evaluations = []
-    for operator, request, signals, nested_input in zip(
-      self._system.operators,
+    evaluations, statuses = evaluate_operator_round(
+      self._system,
+      self._plan,
       self._requests,
+      full,
+      transaction,
       signal_inputs,
       self._nested_inputs,
-      strict=True,
-    ):
-      gather = operator.header.ports[0].coefficient_map.values
-      port_values = (
-        FinalizedArray(
-          np.array(full.values[gather], dtype=np.float64, order="C", copy=True),
-          dtype=np.float64,
-        ),
-      )
-      evaluations.append(
-        operator.evaluate(
-          OperatorEvaluationInput(
-            port_values=port_values,
-            accepted_state=transaction.accepted_state(
-              operator.header.state_layout.block_id
-            ),
-            signals=signals,
-            request=request,
-            nested_execution=nested_input,
-          )
-        )
-      )
+    )
     self._workspace.evaluation_count += 1
-    statuses = tuple(evaluation.status for evaluation in evaluations)
     return full, evaluations, statuses
 
   def _reduced_residual(
     self,
-    evaluations: list[OperatorEvaluation],
+    evaluations: tuple[OperatorEvaluation, ...],
     external: np.ndarray,
   ) -> tuple[np.ndarray, np.ndarray]:
-    """Assemble the internal force and the reduced residual channel."""
-    residual_batches = tuple(
-      evaluation.residual_values[0].values for evaluation in evaluations
+    """Assemble signed full residual and its reduced Newton right-hand side."""
+    full_residual, rhs_full, _jacobian = assemble_evaluation_balance(
+      self._plan,
+      evaluations,
+      external,
     )
-    internal = assemble_internal_force(self._plan, residual_batches)
     self._workspace.residual_assembly_count += 1
-    reduced = reduce_residual(self._map, external - internal).values
-    return internal, np.asarray(reduced, dtype=np.float64)
+    reduced = reduce_residual(self._map, rhs_full).values
+    return full_residual, np.asarray(reduced, dtype=np.float64)
 
   def _factorization(
     self,
-    jacobian_batches: tuple[np.ndarray, ...],
+    jacobian_batches: JacobianBatches,
   ) -> SuperLU | None:
     """Factor the reduced tangent, or return None for cutback.
 
@@ -492,7 +483,7 @@ class RiksDriver:
     if plan.constant_tangent and workspace.cached_factorization is not None:
       workspace.factorization_reuse_count += 1
       return workspace.cached_factorization
-    tangent = refill_tangent(plan, jacobian_batches)
+    tangent = refill_evaluation_tangent(plan, jacobian_batches)
     workspace.tangent_refill_count += 1
     reduced_tangent = reduce_tangent(self._map, tangent)
     try:
@@ -581,18 +572,13 @@ class RiksDriver:
           or EvaluationStatus.REJECT_ITERATION in statuses
         ):
           return rejected(lam, point)
-        factorization = self._factorization(
-          tuple(evaluation.jacobian_values[0].values for evaluation in evaluations)
-        )
+        factorization = self._factorization(evaluation_channel_batches(evaluations)[1])
         if factorization is None:
           return rejected(lam, point)
         da1 = self._back_substitute(factorization, lam * self._fhat_reduced)
         if da1 is None:
           return rejected(lam, point)
-        reject_nested_trial(self._nested_executions)
-        nested_open = False
-        begin_nested_trial(self._nested_executions)
-        nested_open = True
+        restart_nested_trial(self._nested_executions)
       else:
         da1 = attempt_factor * baseline.da_prev
         dlam1 = attempt_factor * baseline.dlam_prev
@@ -642,13 +628,10 @@ class RiksDriver:
           da = anchor_da + increment
           dlam = anchor_dlam + increment_lam
           increment_norm = float(np.linalg.norm(increment))
-          reject_nested_trial(self._nested_executions)
-          nested_open = False
-          begin_nested_trial(self._nested_executions)
-          nested_open = True
+          restart_nested_trial(self._nested_executions)
           continue
         external = evaluate_loads(self._plan.loads, point).values
-        internal, residual_reduced = self._reduced_residual(evaluations, external)
+        full_residual, residual_reduced = self._reduced_residual(evaluations, external)
         residual_norm = float(np.linalg.norm(residual_reduced))
         anchor_reduced = reduced
         anchor_lam = lam
@@ -672,25 +655,21 @@ class RiksDriver:
               increment_lam,
             )
           )
-          transaction.stage_physical(full)
-          for operator, evaluation in zip(
-            self._system.operators,
+
+          def mark_owner_committed() -> None:
+            nonlocal closed
+            closed = True
+
+          stage_and_commit_trial(
+            self._system,
+            transaction,
+            full,
             evaluations,
-            strict=True,
-          ):
-            transaction.stage_state(
-              operator.header.state_layout.block_id,
-              evaluation.trial_state,
-            )
-            for reference in evaluation.nested_references:
-              transaction.stage_nested(reference)
-          validate_nested_trial(self._nested_executions)
-          transaction.commit()
-          closed = True
-          commit_nested_trial(self._nested_executions)
+            self._nested_executions,
+            mark_owner_committed,
+          )
           nested_open = False
           workspace.committed_substep_count += 1
-          full_residual = internal - external
           reactions = reaction_forces(coordinate_map, full_residual)
           observation = SubstepObservation(
             reactions=reactions,
@@ -737,9 +716,7 @@ class RiksDriver:
             )
           )
           return rejected(lam, point)
-        factorization = self._factorization(
-          tuple(evaluation.jacobian_values[0].values for evaluation in evaluations)
-        )
+        factorization = self._factorization(evaluation_channel_batches(evaluations)[1])
         if factorization is None:
           iterations.append(
             ArcLengthIterationRecord(
@@ -793,10 +770,7 @@ class RiksDriver:
         )
         if not bool(np.isfinite(reduced).all()) or not math.isfinite(lam):
           return rejected(lam, point)
-        reject_nested_trial(self._nested_executions)
-        nested_open = False
-        begin_nested_trial(self._nested_executions)
-        nested_open = True
+        restart_nested_trial(self._nested_executions)
       return rejected(lam, point)
     except BaseException:
       if not closed:

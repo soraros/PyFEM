@@ -167,6 +167,16 @@ from pyfem.v3.constraints.compile import (
   reduce_residual,
   reduce_tangent,
 )
+from pyfem.v3.driver._evaluation import (
+  JacobianBatches,
+  assemble_evaluation_balance,
+  evaluate_operator_round,
+  gather_port_values,
+  primal_channel_requests,
+  refill_evaluation_tangent,
+  restart_nested_trial,
+  stage_and_commit_trial,
+)
 from pyfem.v3.driver.contracts import (
   _NORM_REFERENCE_FLOOR,
   _SLOW_CONVERGENCE_CONTRACTION,
@@ -200,24 +210,20 @@ from pyfem.v3.driver.nested import (
   begin_nested_trial,
   close_nested_executions,
   collect_nested_activity,
-  commit_nested_trial,
   prepare_nested_executions,
   reject_nested_trial,
   snapshot_nested_activity,
-  validate_nested_trial,
 )
 from pyfem.v3.driver.plan import (
   CompiledSensitivityProgram,
   CompiledTotalSensitivityProgram,
   DriverAssemblyPlan,
-  assemble_internal_force,
   assemble_parameter_rhs,
   compile_driver_plan,
   compile_sensitivity_program,
   compile_total_sensitivity_program,
   evaluate_loads,
   evaluate_signals,
-  refill_tangent,
 )
 from pyfem.v3.model.arrays import FinalizedArray
 from pyfem.v3.model.operator import (
@@ -512,13 +518,7 @@ class NonlinearStaticDriver:
     self._map = coordinate_map
     self._settings = settings
     self._plan = compile_driver_plan(system, coordinate_map, loads)
-    self._requests = tuple(
-      ChannelRequest(
-        (operator.header.residual_channels[0].channel_id,),
-        (operator.header.jacobian_channels[0].channel_id,),
-      )
-      for operator in system.operators
-    )
+    self._requests = primal_channel_requests(system)
     runtimes = prepare_nested_executions(
       tuple(
         None if declaration is None else declaration.recipe
@@ -626,7 +626,7 @@ class NonlinearStaticDriver:
 
   def _solve_reduced(
     self,
-    jacobian_batches: tuple[np.ndarray, ...],
+    jacobian_batches: JacobianBatches,
     rhs: np.ndarray,
   ) -> np.ndarray | None:
     """Solve the reduced Newton correction, or return None for cutback."""
@@ -636,7 +636,7 @@ class NonlinearStaticDriver:
       workspace.factorization_reuse_count += 1
       factorization = workspace.cached_factorization
     else:
-      tangent = refill_tangent(plan, jacobian_batches)
+      tangent = refill_evaluation_tangent(plan, jacobian_batches)
       workspace.tangent_refill_count += 1
       reduced_tangent = reduce_tangent(self._map, tangent)
       try:
@@ -674,24 +674,20 @@ class NonlinearStaticDriver:
     """
     columns: list[tuple[FinalizedArray, ...] | None] = []
     evaluated = False
-    for operator, slice_, signals in zip(
-      self._system.operators,
-      program.operator_slices,
-      signal_inputs,
-      strict=True,
+    for operator_index, (operator, slice_, signals) in enumerate(
+      zip(
+        self._system.operators,
+        program.operator_slices,
+        signal_inputs,
+        strict=True,
+      )
     ):
       if not slice_.derivative_channel_ids:
         columns.append(None)
         continue
-      gather = operator.header.ports[0].coefficient_map.values
       evaluation = operator.evaluate(
         OperatorEvaluationInput(
-          port_values=(
-            FinalizedArray(
-              np.array(full.values[gather], dtype=np.float64, order="C", copy=True),
-              dtype=np.float64,
-            ),
-          ),
+          port_values=gather_port_values(self._plan, operator_index, full),
           accepted_state=transaction.accepted_state(
             operator.header.state_layout.block_id
           ),
@@ -723,7 +719,7 @@ class NonlinearStaticDriver:
     self,
     program: CompiledSensitivityProgram,
     columns: tuple[tuple[FinalizedArray, ...] | None, ...],
-    jacobian_batches: tuple[np.ndarray, ...],
+    jacobian_batches: JacobianBatches,
     *,
     solved: bool,
   ) -> tuple[ParameterSensitivityObservation, ...]:
@@ -745,7 +741,7 @@ class NonlinearStaticDriver:
     elif solved and workspace.stashed_factorization is not None:
       factorization = workspace.stashed_factorization
     else:
-      tangent = refill_tangent(plan, jacobian_batches)
+      tangent = refill_evaluation_tangent(plan, jacobian_batches)
       workspace.tangent_refill_count += 1
       try:
         factorization = splu(reduce_tangent(self._map, tangent).tocsc())
@@ -817,7 +813,7 @@ class NonlinearStaticDriver:
   ) -> tuple[OperatorPathEvaluation, ...]:
     evaluations: list[OperatorPathEvaluation] = []
     for operator_index, operator in enumerate(self._system.operators):
-      gather = operator.header.ports[0].coefficient_map.values
+      gather = self._plan.operator_slices[operator_index].port_gathers[0].values
       seed = OperatorPathSeed(
         parameter_ids=program.parameter_ids,
         accepted_state_derivatives=entering.state_derivatives[operator_index],
@@ -828,12 +824,7 @@ class NonlinearStaticDriver:
       )
       evaluation = operator.evaluate_path(
         OperatorEvaluationInput(
-          port_values=(
-            FinalizedArray(
-              np.array(full.values[gather], dtype=np.float64, order="C", copy=True),
-              dtype=np.float64,
-            ),
-          ),
+          port_values=gather_port_values(self._plan, operator_index, full),
           accepted_state=transaction.accepted_state(
             operator.header.state_layout.block_id
           ),
@@ -866,7 +857,7 @@ class NonlinearStaticDriver:
     program: CompiledTotalSensitivityProgram,
     full: FinalizedArray,
     transaction: StateTransaction,
-    jacobian_batches: tuple[np.ndarray, ...],
+    jacobian_batches: JacobianBatches,
     *,
     unchanged: bool,
   ) -> tuple[
@@ -893,7 +884,7 @@ class NonlinearStaticDriver:
         dtype=np.float64,
       )
       if self._map.reduced_dof_count:
-        tangent = refill_tangent(self._plan, jacobian_batches)
+        tangent = refill_evaluation_tangent(self._plan, jacobian_batches)
         self._workspace.tangent_refill_count += 1
         try:
           factorization = splu(reduce_tangent(self._map, tangent).tocsc())
@@ -988,7 +979,7 @@ class NonlinearStaticDriver:
   def _solve_homogenization(
     self,
     program: _CompiledHomogenizationProgram,
-    jacobian_batches: tuple[np.ndarray, ...],
+    jacobian_batches: JacobianBatches,
     reactions: FinalizedArray,
     *,
     solved: bool,
@@ -1017,7 +1008,7 @@ class NonlinearStaticDriver:
     plan = self._plan
     workspace = self._workspace
     coordinate_map = self._map
-    tangent = refill_tangent(plan, jacobian_batches)
+    tangent = refill_evaluation_tangent(plan, jacobian_batches)
     workspace.tangent_refill_count += 1
     fresh = False
     if plan.constant_tangent and workspace.cached_factorization is not None:
@@ -1240,36 +1231,16 @@ class NonlinearStaticDriver:
       increment_norm: float | None = None
       for iteration in range(1, settings.max_iterations + 1):
         full = full_coefficients(coordinate_map, reduced, point)
-        evaluations = []
-        for operator, request, signals, nested_input in zip(
-          self._system.operators,
+        evaluations, statuses = evaluate_operator_round(
+          self._system,
+          plan,
           self._requests,
+          full,
+          transaction,
           signal_inputs,
           self._nested_inputs,
-          strict=True,
-        ):
-          gather = operator.header.ports[0].coefficient_map.values
-          port_values = (
-            FinalizedArray(
-              np.array(full.values[gather], dtype=np.float64, order="C", copy=True),
-              dtype=np.float64,
-            ),
-          )
-          evaluations.append(
-            operator.evaluate(
-              OperatorEvaluationInput(
-                port_values=port_values,
-                accepted_state=transaction.accepted_state(
-                  operator.header.state_layout.block_id
-                ),
-                signals=signals,
-                request=request,
-                nested_execution=nested_input,
-              )
-            )
-          )
+        )
         workspace.evaluation_count += 1
-        statuses = tuple(evaluation.status for evaluation in evaluations)
         if EvaluationStatus.REJECT_STEP in statuses:
           iterations.append(
             IterationRecord(iteration, EvaluationStatus.REJECT_STEP, None, None)
@@ -1290,20 +1261,15 @@ class NonlinearStaticDriver:
           increment = 0.5 * increment
           reduced = anchor + increment
           increment_norm = float(np.linalg.norm(increment))
-          reject_nested_trial(self._nested_executions)
-          nested_open = False
-          begin_nested_trial(self._nested_executions)
-          nested_open = True
+          restart_nested_trial(self._nested_executions)
           continue
-        residual_batches = tuple(
-          evaluation.residual_values[0].values for evaluation in evaluations
+        full_residual, rhs_full, jacobian_batches = assemble_evaluation_balance(
+          plan,
+          evaluations,
+          external,
         )
-        jacobian_batches = tuple(
-          evaluation.jacobian_values[0].values for evaluation in evaluations
-        )
-        internal = assemble_internal_force(plan, residual_batches)
         workspace.residual_assembly_count += 1
-        rhs_reduced = reduce_residual(coordinate_map, external - internal).values
+        rhs_reduced = reduce_residual(coordinate_map, rhs_full).values
         residual_norm = float(np.linalg.norm(rhs_reduced))
         anchor = reduced
         if reference_norm >= _NORM_REFERENCE_FLOOR:
@@ -1346,25 +1312,21 @@ class NonlinearStaticDriver:
               unchanged=unchanged_primal,
             )
             transaction.stage_total_derivatives(total_bundle)
-          transaction.stage_physical(full)
-          for operator, evaluation in zip(
-            self._system.operators,
+
+          def mark_owner_committed() -> None:
+            nonlocal closed
+            closed = True
+
+          stage_and_commit_trial(
+            self._system,
+            transaction,
+            full,
             evaluations,
-            strict=True,
-          ):
-            transaction.stage_state(
-              operator.header.state_layout.block_id,
-              evaluation.trial_state,
-            )
-            for reference in evaluation.nested_references:
-              transaction.stage_nested(reference)
-          validate_nested_trial(self._nested_executions)
-          transaction.commit()
-          closed = True
-          commit_nested_trial(self._nested_executions)
+            self._nested_executions,
+            mark_owner_committed,
+          )
           nested_open = False
           workspace.committed_substep_count += 1
-          full_residual = internal - external
           reactions = reaction_forces(coordinate_map, full_residual)
           sensitivities: tuple[ParameterSensitivityObservation, ...] = ()
           if sensitivity_program is not None and sensitivity_columns is not None:
@@ -1429,10 +1391,7 @@ class NonlinearStaticDriver:
           closed = True
           workspace.rejected_substep_count += 1
           return False, tuple(iterations), None, None
-        reject_nested_trial(self._nested_executions)
-        nested_open = False
-        begin_nested_trial(self._nested_executions)
-        nested_open = True
+        restart_nested_trial(self._nested_executions)
         reduced = trial_reduced
         iterations.append(
           IterationRecord(
@@ -1525,6 +1484,13 @@ class NonlinearStaticDriver:
           "invalid-total-sensitivity-lineage",
           str(exc),
         )
+    if homogenization is not None and any(
+      role.value == "external" for role, _scatter in self._plan.residual_role_scatters
+    ):
+      _preparation_fail(
+        "unsupported-external-homogenization",
+        "operator EXTERNAL homogenization requires unavailable coordinate derivatives",
+      )
     homogenization_program = (
       _compile_homogenization_program(self._map, homogenization)
       if homogenization is not None

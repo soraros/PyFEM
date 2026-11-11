@@ -51,6 +51,11 @@ and current-port derivative seeds. ``StatefulContinuumPathKernelResult`` carries
 parameter-leading stress and full trial-row derivatives. Existing descriptors,
 parameter channels, and primal kernel calls remain unchanged; nested FE2 and
 other stateful laws do not acquire this capability implicitly.
+
+The fresh steady T3 thermoelastic descriptors are independent of that
+single-displacement stateful ABI. They bind displacement and temperature ports
+with constant coupled tangent channels; they do not restore the retired thermal
+runtime, transient capacity, or its formulation/material symbols.
 """
 
 from __future__ import annotations
@@ -420,6 +425,56 @@ def continuum_reference_registry() -> dict[RegistryKey, RegistryDescriptor]:
     for key, (implementation_id, binding) in bindings.items()
   )
   return {descriptor.key: descriptor for descriptor in descriptors}
+
+
+THERMOELASTIC_FORMULATION_KEY: RegistryKey = (
+  "formulation",
+  "steady-thermoelastic-tria3",
+)
+THERMOELASTIC_MATERIAL_KEY: RegistryKey = (
+  "material",
+  "plane-strain-thermoelastic",
+)
+
+
+def thermoelastic_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
+  """Return the fresh steady T3 thermoelastic descriptor conventions."""
+  key = kind, name
+  if key == THERMOELASTIC_FORMULATION_KEY:
+    return {
+      "schema": "pyfem-v3-formulation-descriptor-v1",
+      "field_quantity": "displacement-temperature",
+      "field_location": "node",
+      "field_components": ["x", "y", "temperature"],
+      "dofs_per_node": 3,
+      "kinematic_regime": "small-strain-steady-thermoelastic",
+      "strain_measure": "infinitesimal",
+      "strain_voigt_order": ["xx", "yy", "xy"],
+      "shear_convention": "engineering",
+      "formulation_history_width": 0,
+      "tangent_contribution": "material-thermal-coupling",
+      "tangent_symmetry": "nonsymmetric-block-triangular",
+    }
+  if key == THERMOELASTIC_MATERIAL_KEY:
+    return {
+      "schema": "pyfem-v3-material-descriptor-v1",
+      "law": "linear-thermoelastic-steady-conduction",
+      "stress_state": "plane-strain",
+      "parameter_names": [
+        "youngs_modulus",
+        "poisson_ratio",
+        "thermal_expansion",
+        "conductivity",
+        "reference_temperature",
+      ],
+      "parameter_dtype": "float64",
+      "stress_voigt_order": ["xx", "yy", "xy"],
+      "strain_shear_convention": "engineering",
+      "material_history_width": 0,
+      "tangent_class": "constant-nonsymmetric",
+    }
+  msg = "no steady T3 thermoelastic descriptor metadata exists for that registry key"
+  raise KeyError(msg)
 
 
 TL_FORMULATION_KEY: RegistryKey = ("formulation", "total-lagrangian-continuum")

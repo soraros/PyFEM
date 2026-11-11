@@ -91,7 +91,7 @@ from pyfem.v3.state import (
 
 # isort: split
 
-from test_v3_driver_nonlinear import _truss_model
+from test_v3_driver_nonlinear import _assert_raw_characterization, _truss_model
 
 _BASE_POINT = ProgramPoint()
 
@@ -1174,3 +1174,56 @@ def test_reject_and_cutback_leave_store_bytes_unchanged() -> None:
   assert result.statistics.rejected_substep_count == 3
   assert store.encode() == reference_bytes
   assert store.generation.ordinal == reference_store.generation.ordinal == 1
+
+
+def test_legacy_riks_result_and_state_are_raw_characterized(
+  bitwise_pin: Callable[..., None],
+) -> None:
+  driver = _truss_driver(_settings(max_lam=0.5))
+  result = driver.run(base_point=_BASE_POINT)
+  _assert_raw_characterization(
+    (result, _owner_snapshot(driver.owner)),
+    exact_hash="466bb35bfdbd09651d0a43d835a5cf45c3206a265fded571ba6bf40339d9cf15",
+    path_hash="8e864ff3f75826ab00c4684396bb5522f0d67f07fae9dd01413bd2b7c545bb76",
+    expected_floats=[
+      0.8827737789170775,
+      0.8827737789170775,
+      1.0,
+      11.722622108292242,
+      8.673617379884035e-19,
+      1.0,
+      -0.11722622108292241,
+      0.0,
+      8.673617379884035e-19,
+      0.8827737789170775,
+      -0.11722622108292241,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      -0.04015009371097408,
+      959.8499062890257,
+      44.13868894585388,
+      -959.8499062890257,
+      44.13868894585388,
+      0.0,
+      0.0,
+      0.0,
+      1358.8672241723327,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      1.0,
+      1.0,
+      1.0,
+      0.8827737789170775,
+      0.0,
+      -0.04015009371097408,
+      0.8827737789170775,
+      1.0,
+      1.0,
+    ],
+    bitwise_pin=bitwise_pin,
+  )

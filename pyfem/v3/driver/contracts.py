@@ -56,9 +56,12 @@ class BudgetExhaustionTrend(Enum):
 class NonlinearStaticSettings:
   """Exact numeric policy for the nonlinear static schedule.
 
-  ``tolerance`` bounds the reduced residual norm relative to the reduced
-  external-force norm (absolute below ``_NORM_REFERENCE_FLOOR``, matching the
-  legacy ``DofSpace`` convention). ``max_iterations`` budgets Newton
+  ``tolerance`` bounds the reduced residual norm relative to the reduced affine
+  nodal-load norm (absolute below ``_NORM_REFERENCE_FLOOR``, matching the legacy
+  ``DofSpace`` convention). Operator EXTERNAL terms enter the signed residual
+  but not this reference norm; supported multiport acceptance cases therefore
+  use nondimensional values rather than a mixed-unit scaling claim.
+  ``max_iterations`` budgets Newton
   corrections and operator retry-iteration outcomes together per substep.
   ``max_cutbacks`` bounds the halving cascade per target point; exhausting it
   is the typed ``STEP_FAILED`` outcome, not an exception.
@@ -259,7 +262,9 @@ class SubstepObservation:
   coordinate map (the full residual on constrained DOFs, zero elsewhere).
   ``constraint_work`` is ``f_c . u`` under the map basis. Both are derived
   from the same full residual that drove convergence; nothing is
-  re-evaluated. ``sensitivities`` carries the per-parameter IFT coefficient
+  re-evaluated. Operator CONSTRAINT channels are rejected, so these fields
+  cannot conflate coordinate-map reactions with operator constraint forces.
+  ``sensitivities`` carries the per-parameter IFT coefficient
   sensitivities of the committed point in request order — empty unless the
   run requested sensitivity parameters. ``homogenization`` carries the
   boundary-group reduction of those same reactions and their

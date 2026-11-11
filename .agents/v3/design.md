@@ -1355,3 +1355,69 @@ the formerly red case and every one of the 19 rows for all four parameters. It
 also pins two path evaluations and zero factorizations/linear solves. The
 original true-plateau test still requires bitwise U,S carry-forward and zero
 added path work. All 60 focused sensitivity/state tests pass with the correction.
+
+
+### 2026-11-11 — NX10-1 channel-driven multiport execution and steady T3 thermoelasticity
+
+The prepared-execution boundary remains `DriverAssemblyPlan` plus the existing
+drivers and `StateTransactionOwner`; no public lifecycle object or second runtime
+was added. The assembly plan now admits ordered coefficient ports, residual
+channels, and rectangular Jacobian channels. Result values follow header
+declaration order filtered by request. Local Jacobians use `(entity,target,source)`
+layout and scatter into the existing global square COO/CSR pattern; absent blocks
+are exact zeros with no topology. Stream order is operator order followed by
+header channel order, with stable left-to-right duplicate summation.
+
+With operator INTERNAL `I`, operator EXTERNAL `X`, and affine nodal loads `L`,
+full balance and tangent are
+
+```text
+r = I - X - L,
+K = dI/dx - dX/dx.
+```
+
+One residual bincount runs per present role and one tangent refill per evaluation.
+Reactions use this same signed full residual. CONSTRAINT remains rejected because
+map reactions and operator constraint forces are not separately observable. Riks
+EXTERNAL and operator-EXTERNAL sensitivity/homogenization requests fail until
+coordinate derivatives exist. Fixed-parameter and total-path requests fail for
+every nonlegacy signature. Affine nodal loads alone define the legacy convergence
+reference norm, so the supported multifield vertical uses nondimensional values;
+this is not a general mixed-unit metric policy.
+
+The legacy signature—one coefficient port, one INTERNAL residual, and one
+INTERNAL self Jacobian—retains manifest schema `pyfem-v3-driver-assembly-plan-v1`,
+key presence/order, gathers, residual/COO/CSR streams, loads/signals, numerical
+operation order, counters, state, and Riks trajectories. Only nonlegacy signatures
+use `pyfem-v3-driver-assembly-plan-multiport-v1`. Private stateless helpers in
+`driver/_evaluation.py` share port gathers, one validated evaluation round,
+balance assembly, tangent refill, and nested trial restart/commit sequencing;
+they own neither accepted state nor factorizations.
+
+The fresh steady one-point T3 consumer uses plane-strain `C`, expansion
+`h = A alpha B.T C (1,1,0)`, and
+
+```text
+R_u = K_uu u - h (N T - T_ref),
+R_T = K_TT T,
+K_uu = A B.T C B,
+K_uT = -h N,
+K_TT = A k G G.T.
+```
+
+It declares INTERNAL `u`/`T` residuals and `u,u`, `u,T`, `T,T` Jacobians. The
+structurally absent `T,u` block is zero and emits no entries, so one element has
+63 COO entries. M134's thermal oracle contained both a dimensional and sign
+error: the nodal block is `G G.T`, not `G.T G`, and the physically correct unit
+right-triangle matrix is `[[3,-1.5,-1.5],[-1.5,1.5,0],[-1.5,0,1.5]]`, giving
+`R_T=(-0.9,0.3,0.6)` at `T=(0.4,0.6,0.8)`. Tower confirmed this correction on
+2026-11-11; all other exact M134 values remain. The incorrect historical positive
+off-diagonal oracle must not be reused.
+
+`test_v3_multifield_execution.py` and `test_v3_thermoelastic.py` prove mixed-role
+signs, fail-closed bounds, every local rectangular block by central FD (including
+absent `T,u`), exact matrices/residuals/free expansion, full COO, constrained
+dense residual/tangent/reactions and rollback, source-remapped field/component
+order, factorization reuse, and two nondimensional Riks cycles against independent
+dense predictors/corrections. The characterization pins landed before production
+as commit `b070a67`.

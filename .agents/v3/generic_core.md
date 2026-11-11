@@ -682,3 +682,30 @@ loss of consumers, independent oracles, workload coverage, or envelope meaning.
 Neither is a continuation of the stopped NX7 sequence, and neither creates a
 baseline successor. The precise stop conditions are normative in
 [migration-execution.md](migration-execution.md).
+
+## 14. NX10-1 bounded multiport execution
+
+The generic channel contract now has an executable rectangular multiport slice.
+`DriverAssemblyPlan` prepares every port gather, per-role residual scatter, and a
+single operator/header-ordered COO stream for all Jacobian channels. Rectangular
+local axes are target then source; target/source ports need not coincide. Missing
+blocks emit no topology. Full balance is `I-X-L`, with corresponding tangent
+`dI-dX`, and one residual bincount per present role plus one tangent refill.
+
+This is a generalization of the existing preparation/evaluation seam, not a new
+`PreparedExecution`, typed DSL, accepted-state owner, result stack, or solver
+runtime. Private helpers only share the current drivers' operator round and
+nested trial mechanics. Legacy single-port v1 manifests and streams are unchanged;
+only nonlegacy signatures select the multiport manifest schema.
+
+The supported bounds remain explicit: no CONSTRAINT channels, Riks operator
+EXTERNAL, operator-EXTERNAL derivative observations, or multiport fixed/total
+sensitivities. Nodal loads retain their existing affine program and convergence
+reference; general mixed-unit scaling is not claimed.
+
+The first consumer is a fresh steady T3 thermoelastic operator with displacement
+and temperature spaces, two INTERNAL residuals, and constant `u,u`, `u,T`, `T,T`
+Jacobians. The absent `T,u` zero emits no entries. Its steady conduction block is
+`A k G G.T`; M134's positive-off-diagonal `G.T G` oracle was dimensionally and
+numerically wrong and is superseded by the tower-confirmed physical oracle. No
+retired thermal symbols, transient capacity, or compatibility runtime returned.

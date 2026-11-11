@@ -305,6 +305,7 @@ _OPERATOR_FAMILY_BUILDERS: tuple[
   ...,
 ] = (
   (_continuum_builder.Q8_FORMULATION_KEY[1], _continuum_builder),
+  (_continuum_builder.THERMOELASTIC_FORMULATION_KEY[1], _continuum_builder),
   (_truss_builder.TRUSS_FORMULATION_KEY[1], _truss_builder),
   (POINT_SPRING_FORMULATION_KEY[1], _PointSpringFamilyBuilder),
 )

@@ -459,11 +459,13 @@ class OperatorPathEvaluation(CompilerConstructed):
 class OperatorEvaluation(CompilerConstructed):
   """The complete typed result of one operator evaluation.
 
-  ``derivative_values`` carries one ``FinalizedArray`` per requested
-  derivative channel in the header's declaration order, mirroring
-  ``residual_values`` semantics; each entry follows the referenced residual
-  channel's element-batch layout. Evaluations without derivative or nested
-  results emit empty tuples explicitly.
+  Residual and Jacobian tuples follow header declaration order filtered by the
+  requested set. A residual batch has shape ``(entity, target)``; a Jacobian
+  batch has shape ``(entity, target, source)`` and may be rectangular across
+  different target/source ports. ``derivative_values`` carries one
+  ``FinalizedArray`` per requested derivative channel in the same order, with
+  the referenced residual channel's element-batch layout. Evaluations without
+  derivative or nested results emit empty tuples explicitly.
   """
 
   residual_values: tuple[FinalizedArray, ...]
