@@ -14,7 +14,7 @@ if sys.version_info < (3, 13):
   pytest.skip("pyfem.v3 requires Python 3.13+", allow_module_level=True)
 
 from pyfem.v3.compile.thermoelastic import T3ThermoElasticOperator
-from pyfem.v3.constraints import full_coefficients
+from pyfem.v3.constraints import compile_constraint_map, full_coefficients
 from pyfem.v3.driver import (
   DriverPreparationError,
   DriverStatus,
@@ -46,6 +46,19 @@ from pyfem.v3.model.system import CompiledSystem
 
 # isort: split
 
+from test_v3_phase_field import (
+  _PHASE,
+  _unit_displacement,
+)
+from test_v3_phase_field import (
+  _dense as _phase_dense,
+)
+from test_v3_phase_field import (
+  _evaluate as _evaluate_phase,
+)
+from test_v3_phase_field import (
+  _system as _phase_system,
+)
 from test_v3_thermoelastic import (
   _T,
   _U,
@@ -412,3 +425,35 @@ def test_legacy_assembly_rejects_nonlegacy_plans() -> None:
     assemble_internal_force(plan, ())
   with pytest.raises(TypeError, match="legacy single-port plan"):
     refill_tangent(plan, ())
+
+
+def test_phase_field_four_channels_fill_full_multiport_coo() -> None:
+  system = _phase_system()
+  operator = system.operators[0]
+  plan = compile_driver_plan(system, compile_constraint_map(system), ())
+  assert plan.provenance.schema == "pyfem-v3-driver-assembly-plan-multiport-v1"
+  assert plan.coo_entry_count == 144
+  for accepted in (np.zeros((4, 1)), np.full((4, 1), 0.03)):
+    evaluation = _evaluate_phase(
+      operator,
+      _unit_displacement(),
+      _PHASE,
+      accepted,
+    )
+    tangent = refill_tangent_channels(
+      plan,
+      (tuple(value.values for value in evaluation.jacobian_values),),
+    )
+    np.testing.assert_allclose(
+      tangent.toarray(), _phase_dense(evaluation), rtol=0.0, atol=2.0e-14
+    )
+    full_residual, rhs, _jacobian = assemble_evaluation_balance(
+      plan,
+      (evaluation,),
+      np.zeros(12),
+    )
+    expected_residual = np.concatenate(
+      tuple(value.values[0] for value in evaluation.residual_values)
+    )
+    np.testing.assert_allclose(full_residual, expected_residual, rtol=0.0, atol=2.0e-14)
+    np.testing.assert_allclose(rhs, -expected_residual, rtol=0.0, atol=2.0e-14)

@@ -29,6 +29,13 @@ one-point affine response has two INTERNAL residual channels and constant
 topology. Construction lives in ``compile/thermoelastic.py`` and introduces no
 transient or second driver runtime.
 
+The fresh Q4 AT2 formulation binds displacement and scalar phase ports through
+``compile/phase_field.py``. Its spectral positive/negative energy, four coupled
+Jacobian blocks, and monotone accepted history are branch-consistent away from
+explicitly rejected spectral/history kinks; inactive history does not symmetrize
+the rectangular coupling. It adds neither initial cracks nor staggered/transient
+execution.
+
 Every cell belongs to exactly one region; each region draws cells from exactly
 one cell block; each cell block feeds exactly one region; every declared field
 and material is referenced. Geometry, material, rank, quadrature, registry, and
@@ -46,12 +53,15 @@ from typing import NoReturn
 
 import numpy as np
 
+from pyfem.v3.compile import phase_field as _phase_field_builder
 from pyfem.v3.compile import thermoelastic as _thermoelastic_builder
 from pyfem.v3.compile.contracts import (
   CONTINUUM_3D_FORMULATION_KEY,
   HEX8_QUADRATURE_KEY,
   HEX8_TOPOLOGY_KEY,
   ISOTROPIC_MATERIAL_KEY,
+  PHASE_FIELD_FORMULATION_KEY,
+  PHASE_FIELD_MATERIAL_KEY,
   PLANE_STRAIN_MATERIAL_KEY,
   QUAD4_QUADRATURE_KEY,
   QUAD4_TOPOLOGY_KEY,
@@ -168,12 +178,17 @@ _FORMULATION_CONTRACTS = {
     _DISPLACEMENT_ROLE,
     ("temperature", "scalar"),
   ),
+  PHASE_FIELD_FORMULATION_KEY[1]: (
+    _DISPLACEMENT_ROLE,
+    ("phase", "scalar"),
+  ),
 }
 # The small-strain formulation is the open stateful seam; finite strain keeps
 # its closed plane-stress Saint-Venant-Kirchhoff material set.
 _FORMULATION_MATERIAL_MODELS = {
   TL_FORMULATION_KEY[1]: TL_MATERIAL_KEY[1],
   THERMOELASTIC_FORMULATION_KEY[1]: THERMOELASTIC_MATERIAL_KEY[1],
+  PHASE_FIELD_FORMULATION_KEY[1]: PHASE_FIELD_MATERIAL_KEY[1],
 }
 
 
@@ -290,6 +305,7 @@ _FORMULATION_GEOMETRIES = {
   THERMOELASTIC_FORMULATION_KEY[1]: frozenset(
     (_TRIA3_GEOMETRY.geometry_interpolation,)
   ),
+  PHASE_FIELD_FORMULATION_KEY[1]: frozenset((_QUAD4_GEOMETRY.geometry_interpolation,)),
 }
 _BREADTH_DESCRIPTOR_KEYS = frozenset(
   (
@@ -1358,6 +1374,8 @@ def q8_descriptor_metadata(kind: str, name: str) -> dict[str, object]:
 def _qualified_descriptor_metadata(key: RegistryKey) -> dict[str, object]:
   if key in (THERMOELASTIC_FORMULATION_KEY, THERMOELASTIC_MATERIAL_KEY):
     return _thermoelastic_builder.thermoelastic_descriptor_metadata(*key)
+  if key in (PHASE_FIELD_FORMULATION_KEY, PHASE_FIELD_MATERIAL_KEY):
+    return _phase_field_builder.phase_field_descriptor_metadata(*key)
   if key in (TL_FORMULATION_KEY, TL_MATERIAL_KEY):
     return finite_strain_descriptor_metadata(*key)
   if key == PLASTIC_MATERIAL_KEY:
@@ -1697,6 +1715,9 @@ def _required_keys(selection: ContinuumSelection) -> tuple[RegistryKey, ...]:
     elif formulation == THERMOELASTIC_FORMULATION_KEY[1]:
       keys.add(THERMOELASTIC_FORMULATION_KEY)
       keys.add(THERMOELASTIC_MATERIAL_KEY)
+    elif formulation == PHASE_FIELD_FORMULATION_KEY[1]:
+      keys.add(PHASE_FIELD_FORMULATION_KEY)
+      keys.add(PHASE_FIELD_MATERIAL_KEY)
   return tuple(sorted(keys))
 
 
@@ -1732,6 +1753,8 @@ def capture_registry(
       )
     elif formulation == THERMOELASTIC_FORMULATION_KEY[1]:
       selected = THERMOELASTIC_FORMULATION_KEY, THERMOELASTIC_MATERIAL_KEY
+    elif formulation == PHASE_FIELD_FORMULATION_KEY[1]:
+      selected = PHASE_FIELD_FORMULATION_KEY, PHASE_FIELD_MATERIAL_KEY
     sources.setdefault(selected[0], region_selection.region.source)
     sources.setdefault(selected[1], region_selection.material.source)
   for key in required:
@@ -2624,6 +2647,16 @@ def compile_operator(
 ) -> tuple[IncidenceEntityBlock, CompiledOperator]:
   """Compile the concrete payload and return it behind the open operator header."""
   formulation = selection.region.formulation
+  if formulation == PHASE_FIELD_FORMULATION_KEY[1]:
+    return _phase_field_builder.compile_q4_at2_phase_field_operator(
+      selection,
+      coordinates=coordinates,
+      node_dense=node_dense,
+      spaces=spaces,
+      snapshot=snapshot,
+      index_dtype=index_dtype,
+      geometry_relative_tolerance=geometry_relative_tolerance,
+    )
   if formulation == THERMOELASTIC_FORMULATION_KEY[1]:
     return _thermoelastic_builder.compile_t3_thermoelastic_operator(
       selection,

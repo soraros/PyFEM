@@ -1421,3 +1421,70 @@ dense residual/tangent/reactions and rollback, source-remapped field/component
 order, factorization reuse, and two nondimensional Riks cycles against independent
 dense predictors/corrections. The characterization pins landed before production
 as commit `b070a67`.
+
+
+### 2026-11-12 — NX10-2 fresh Q4 AT2 spectral response and accepted history
+
+The new consumer changes no lifecycle or channel invariant: it adds one typed
+operator over the NX10-1 multiport plan and stores irreversible history in the
+existing accepted/trial owner. The forcing evidence was M134's bounded design:
+legacy PhaseField accepted-row aliasing and inconsistent `p,u` tangents are
+negative controls, not numerical or architectural oracles. AT1, a legacy port,
+a volumetric/deviatoric split, universal coupled symmetry, and a fictitious
+variational-unloading derivative were considered and rejected. The chosen slice
+is plane-strain Q4 AT2 with `d=0` intact, `d=1` broken,
+`g=(1-d)^2+eta`, and exact Macaulay/eigenvalue conventions:
+
+```text
+psi± = lambda/2 <tr(eps)>±^2 + mu tr(eps±^2),
+H_trial = max(H_accepted, psi+),
+sigma = g sigma+ + sigma-,
+R_u = int B.T sigma dA,
+R_d = int N [-2(1-d)H + Gc d/ell] + Gc ell grad(N).T grad(d) dA.
+```
+
+Input strain is engineering `[xx,yy,gamma]`, with `gamma/2` in the tensor;
+stress and tangent use physical shear. Integration uses physical Q4 Jacobian
+weights, including scale/translation normalization. The independent frozen-H
+uniform potential and solution are
+
+```text
+V = A [(1-d)^2 H + Gc d^2/(2 ell)],
+d* = 2H / (2H + Gc/ell).
+```
+
+On active history, `K_du=K_ud.T` because `dH=sigma+ : deps`; on inactive history,
+`K_du=0` although `K_ud` generally remains nonzero. Thus no universal symmetry or
+single global energy gradient is claimed. Every displacement/phase coefficient
+is central-FD checked on active mixed tension/shear, inactive mixed tension/shear,
+and pure hydrostatic compression. A blind-transposition control fails on the
+inactive mixed branch. Full elastic energy equals split energy at M134's exact
+oracle: `psi+=0.018207403819453783`, `psi-=0.0012965961805462163`, and
+`d*=0.004831847578506099` for the stated parameters.
+
+Each evaluation allocates fresh history and never aliases accepted rows. The
+one-float quadrature state is annotated `monotone-nondecreasing` and uses the
+stock byte-exact versioned codec. Out-of-range phase values return
+`REJECT_ITERATION` with accepted bytes unchanged for the existing retry/cutback
+protocol. Initial crack declarations fail compilation explicitly. Tangent
+requests at zero eigenvalue/trace or `psi+=H` fail with typed
+`PhaseFieldPreparationError` codes; those kinks are excluded from the
+consistent-tangent claim, while repeated nonzero hydrostatic eigenvalues use the
+smooth limit.
+
+The actual nonlinear driver, not a synthetic scheduler, solves the fully
+prescribed affine Q4 with free phase and natural zero flux. All nodes match the
+independent `d*`; the `1.0 -> 0.25 -> 0.75 -> 1.5` path commits
+`H,H,H,2.25H`. A rejected scale-2 trial followed by an accepted scale-1.5
+cutback commits `2.25H` and never leaks `4H`. Evaluation-order independence,
+rejected-trial byte identity, scaled/translated Q4 response, state roundtrip, and
+the complete 144-entry one-element multiport COO are pinned in
+`test_v3_phase_field.py` and `test_v3_multifield_execution.py`.
+
+On the reference x86_64 environment with Python 3.13.11, NumPy 2.3.5, Numba
+0.62.1, and SciPy 1.18.0, a 4,096-point mixed-strain spectral evaluation cost a
+20.9 ms median, 5.11 microseconds per point. Nine batched samples versus five
+per-row Python-loop samples gave a 2.49 s loop median and 119x batched speedup;
+every energy, stress, tangent, and eigenvalue matched the loop within
+`2e-14`. This is a direct batched-kernel cost measurement, not a general crack
+benchmark or a claim of end-to-end fracture performance.
